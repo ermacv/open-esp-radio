@@ -6724,11 +6724,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ("protocols/ieee80211/wire/src/ap/profile.rs", 1, BY_STEP_3),
     ("protocols/ieee80211/wire/src/beacon.rs", 4, BY_STEP_3),
     ("protocols/ieee80211/wire/src/bip.rs", 4, BY_STEP_3),
-    (
-        "protocols/ieee80211/wire/src/block_ack/frame.rs",
-        19,
-        BY_STEP_3,
-    ),
     ("protocols/ieee80211/wire/src/ccmp.rs", 16, BY_STEP_3),
     (
         "protocols/ieee80211/wire/src/ccmp/protected.rs",
@@ -7957,16 +7952,6 @@ const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
     (
         "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::ApSaeFault::InvalidSession",
         3,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaRequest",
-        2,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaResponse",
-        2,
         BY_STEP_3,
     ),
     (

@@ -106,7 +106,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             // with `initiator = false`.
             BlockAckAction::Delba {
                 tid,
-                initiator: false,
+                initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
                 ..
             } if tid == AP_TX_BLOCK_ACK_TID => {
                 peer.tx_block_ack.stop(tid);

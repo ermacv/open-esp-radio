@@ -74,12 +74,14 @@ impl PendingRxBlockAck {
     /// A response with another dialog or TID returns the unchanged request.
     pub fn reply(self, response: AddbaResponse) -> Result<RxBlockAckReply, Self> {
         let BlockAckAction::AddbaRequest {
-            dialog_token, tid, ..
+            dialog_token,
+            parameters,
+            ..
         } = self.action
         else {
             return Err(self);
         };
-        if response.dialog_token != dialog_token || response.tid != tid {
+        if response.dialog_token != dialog_token || response.tid != parameters.tid() {
             return Err(self);
         }
         let Some(body) = response.encode() else {
@@ -95,8 +97,7 @@ impl PendingRxBlockAck {
     pub fn decline(self) -> Result<RxBlockAckReply, Self> {
         let BlockAckAction::AddbaRequest {
             dialog_token,
-            tid,
-            window,
+            parameters,
             timeout_tu,
             ..
         } = self.action
@@ -106,8 +107,8 @@ impl PendingRxBlockAck {
         self.reply(AddbaResponse {
             dialog_token,
             status: AddbaStatus::RequestDeclined,
-            tid,
-            window,
+            tid: parameters.tid(),
+            window: parameters.window(),
             timeout_tu,
             amsdu: false,
         })

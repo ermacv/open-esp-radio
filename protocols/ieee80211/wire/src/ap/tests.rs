@@ -292,11 +292,10 @@ fn ap_action_frame_and_parser_preserve_per_peer_addba_identity() {
             peer: parsed_peer,
             action: BlockAckAction::AddbaResponse {
                 dialog_token: 7,
-                tid: 0,
-                window: 32,
+                parameters,
                 ..
             },
-        }) if parsed_peer == peer
+        }) if parsed_peer == peer && (parameters.tid(), parameters.window()) == (0, 32)
     ));
 }
 

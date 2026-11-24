@@ -23,11 +23,14 @@ fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckActi
     BlockAckAction::AddbaResponse {
         dialog_token,
         status,
-        tid,
-        immediate: true,
-        amsdu: false,
-        window,
         timeout_tu: 0,
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+            tid,
+            window,
+        )
+        .unwrap(),
     }
 }
 
@@ -278,11 +281,17 @@ fn the_recipient_s_delba_ends_the_agreement_and_receive_actions_pass_by() {
         reason: 37,
     };
     assert!(
-        !tx.on_action(initiator(true), at(2)),
+        !tx.on_action(
+            initiator(oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator),
+            at(2)
+        ),
         "the AP's own agreement"
     );
     assert!(tx.operational(0).is_some());
-    assert!(tx.on_action(initiator(false), at(2)));
+    assert!(tx.on_action(
+        initiator(oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient),
+        at(2)
+    ));
     assert_eq!(tx.operational(0), None);
     assert_eq!(
         tx.poll(at(2), SendRoom::Free),
@@ -291,12 +300,15 @@ fn the_recipient_s_delba_ends_the_agreement_and_receive_actions_pass_by() {
     );
     let request = BlockAckAction::AddbaRequest {
         dialog_token: 1,
-        tid: 0,
-        amsdu: false,
-        immediate: true,
-        window: 64,
         timeout_tu: 0,
         starting_sequence: SequenceNumber::ZERO,
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+            0,
+            64,
+        )
+        .unwrap(),
     };
     assert!(!tx.on_action(request, at(2)));
 }

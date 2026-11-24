@@ -37,11 +37,14 @@ fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckActi
     BlockAckAction::AddbaResponse {
         dialog_token,
         status,
-        tid,
-        immediate: true,
-        amsdu: true,
-        window,
         timeout_tu: 7,
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
+            tid,
+            window,
+        )
+        .unwrap(),
     }
 }
 

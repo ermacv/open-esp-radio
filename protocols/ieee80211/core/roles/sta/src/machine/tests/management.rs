@@ -318,9 +318,9 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
             Some(BlockAckAction::AddbaResponse {
                 dialog_token: 17,
                 status: 37,
-                tid: 15,
+                parameters,
                 ..
-            })
+            }) if parameters.tid() == 15
         ));
         world.receive(clock.now(), &request);
         assert_eq!(

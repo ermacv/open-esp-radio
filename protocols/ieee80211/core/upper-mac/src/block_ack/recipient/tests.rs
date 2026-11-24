@@ -5,10 +5,13 @@ type VirtualClock = oer_portable_time_virtual::VirtualClock<8>;
 fn request(tid: u8, timeout_tu: u16) -> RxAddbaRequest {
     RxAddbaRequest::from_action(BlockAckAction::AddbaRequest {
         dialog_token: 17,
-        tid,
-        immediate: true,
-        amsdu: true,
-        window: 64,
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
+            tid,
+            64,
+        )
+        .unwrap(),
         timeout_tu,
         starting_sequence: SequenceNumber::new(4094).unwrap(),
     })
@@ -67,11 +70,9 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 17,
             status: 0,
-            tid: 3,
-            window: 8,
-            amsdu: true,
+            parameters,
             ..
-        })
+        }) if (parameters.tid(), parameters.window(), parameters.amsdu()) == (3, 8, true)
     ));
 }
 
@@ -95,7 +96,7 @@ fn amsdus_are_granted_only_when_requested_and_the_backend_delivers_them() {
             oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(
                 &negotiation.response().encode().unwrap()
             ),
-            Some(BlockAckAction::AddbaResponse { amsdu, .. }) if amsdu == granted
+            Some(BlockAckAction::AddbaResponse { parameters, .. }) if parameters.amsdu() == granted
         ));
         // A retried identical request repeats the same grant; the session
         // compares what was requested, not what was granted.
@@ -179,17 +180,17 @@ fn reorder_wraparound_duplicate_and_delba_return_each_owner_once() {
     assert_eq!(released(&release), [3, 1, 0]);
     assert!(!receiver.peer_delba(BlockAckAction::Delba {
         tid: 0,
-        initiator: false,
+        initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
         reason: 37,
     }));
     assert!(!receiver.peer_delba(BlockAckAction::Delba {
         tid: 1,
-        initiator: true,
+        initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
         reason: 37,
     }));
     assert!(receiver.peer_delba(BlockAckAction::Delba {
         tid: 0,
-        initiator: true,
+        initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
         reason: 37,
     }));
     receiver.ingest(clock.now(), frame(3, 4), gap).unwrap();

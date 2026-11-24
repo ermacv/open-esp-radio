@@ -286,8 +286,10 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
     let reply = view.next_reply().unwrap();
     assert_eq!((reply.place, reply.association), (ReplyPlace::Bank(0), 7));
     match parse_block_ack_action(&reply.body).unwrap() {
-        BlockAckAction::AddbaResponse { status, tid, .. } => {
-            assert_eq!((status, tid), (status_code::SUCCESS, 3));
+        BlockAckAction::AddbaResponse {
+            status, parameters, ..
+        } => {
+            assert_eq!((status, parameters.tid()), (status_code::SUCCESS, 3));
         }
         other => panic!("expected an ADDBA Response, got {other:?}"),
     }
@@ -330,8 +332,10 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
     );
     let reply = view.next_reply().unwrap();
     match parse_block_ack_action(&reply.body).unwrap() {
-        BlockAckAction::AddbaResponse { status, window, .. } => {
-            assert_eq!((status, window), (status_code::SUCCESS, 16));
+        BlockAckAction::AddbaResponse {
+            status, parameters, ..
+        } => {
+            assert_eq!((status, parameters.window()), (status_code::SUCCESS, 16));
         }
         other => panic!("expected an ADDBA Response, got {other:?}"),
     }
@@ -472,7 +476,7 @@ fn inactivity_ends_the_agreement_with_a_delba_and_returns_its_slot() {
         parse_block_ack_action(&reply.body),
         Some(BlockAckAction::Delba {
             tid: 2,
-            initiator: false,
+            initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
             ..
         })
     ));
@@ -813,12 +817,15 @@ fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
 fn request_for(dialog_token: u8, tid: u8, window: u16) -> BlockAckAction {
     BlockAckAction::AddbaRequest {
         dialog_token,
-        tid,
-        immediate: true,
-        amsdu: false,
-        window,
         timeout_tu: 0,
         starting_sequence: SequenceNumber::new(100).unwrap(),
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+            tid,
+            window,
+        )
+        .unwrap(),
     }
 }
 

@@ -224,10 +224,7 @@ impl TxBlockAckSession {
         let BlockAckAction::AddbaResponse {
             dialog_token: response_dialog_token,
             status,
-            tid,
-            immediate,
-            amsdu,
-            window,
+            parameters,
             timeout_tu,
         } = action
         else {
@@ -243,6 +240,13 @@ impl TxBlockAckSession {
         if response_dialog_token != dialog_token {
             return Err(TxBlockAckError::UnexpectedResponse);
         }
+        let (tid, immediate, amsdu, window) = (
+            parameters.tid(),
+            parameters.policy()
+                == oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            parameters.amsdu(),
+            parameters.window(),
+        );
 
         if status != 0 {
             self.phase = TxBlockAckPhase::Idle;

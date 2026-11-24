@@ -7,12 +7,15 @@ fn parses_all_block_ack_action_bodies() {
         parse_block_ack_action(&[3, 0, 7, 0x87, 0x07, 0, 0, 0x30, 0x12]),
         Some(BlockAckAction::AddbaRequest {
             dialog_token: 7,
-            tid: 1,
-            immediate: true,
-            amsdu: true,
-            window: 30,
             timeout_tu: 0,
             starting_sequence: seq(0x123),
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::Supported,
+                1,
+                30
+            )
+            .unwrap(),
         })
     );
     assert_eq!(
@@ -20,18 +23,21 @@ fn parses_all_block_ack_action_bodies() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 7,
             status: 0,
-            tid: 1,
-            immediate: true,
-            amsdu: false,
-            window: 30,
             timeout_tu: 5,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::NotSupported,
+                1,
+                30
+            )
+            .unwrap(),
         })
     );
     assert_eq!(
         parse_block_ack_action(&[3, 2, 0, 0x58, 39, 0]),
         Some(BlockAckAction::Delba {
             tid: 5,
-            initiator: true,
+            initiator: crate::block_ack::frame::DelbaInitiator::Originator,
             reason: 39,
         })
     );
@@ -65,11 +71,14 @@ fn successful_response_narrows_the_window_and_disables_amsdu() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 137,
             status: 0,
-            tid: 0,
-            immediate: true,
-            amsdu: false,
-            window: 16,
             timeout_tu: 0,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::NotSupported,
+                0,
+                16
+            )
+            .unwrap(),
         })
     );
 }
@@ -83,11 +92,14 @@ fn declined_response_preserves_request_identity_without_claiming_success() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 23,
             status: ADDBA_STATUS_REQUEST_DECLINED,
-            tid: 6,
-            immediate: true,
-            amsdu: false,
-            window: 64,
             timeout_tu: 0,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::NotSupported,
+                6,
+                64
+            )
+            .unwrap(),
         })
     );
 }
@@ -143,12 +155,15 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
         parse_block_ack_action(&body),
         Some(BlockAckAction::AddbaRequest {
             dialog_token: 7,
-            tid: 15,
-            immediate: true,
-            amsdu: true,
-            window: 1023,
             timeout_tu: 12,
             starting_sequence: sequence,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::Supported,
+                15,
+                1023
+            )
+            .unwrap(),
         })
     );
     assert_eq!(
@@ -193,11 +208,14 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 9,
             status: 0,
-            tid: 5,
-            immediate: true,
-            amsdu: true,
-            window: 64,
             timeout_tu: 0x1234,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::Supported,
+                5,
+                64
+            )
+            .unwrap(),
         })
     );
     assert_eq!(
@@ -229,7 +247,7 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
         parse_block_ack_action(&delba),
         Some(BlockAckAction::Delba {
             tid: 6,
-            initiator: false,
+            initiator: crate::block_ack::frame::DelbaInitiator::Recipient,
             reason: 39,
         })
     );
