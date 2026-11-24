@@ -32,13 +32,12 @@ pub trait TxKey {
     /// # Errors
     ///
     /// The key's numbers are spent; nothing was drawn.
-    fn draw(&self) -> Result<CcmpPacketNumber, PacketNumbersSpent>;
+    fn draw(&mut self) -> Result<CcmpPacketNumber, PacketNumbersSpent>;
 }
 
 impl<K> TxKey for InstalledCcmpTxKey<K> {
-    fn draw(&self) -> Result<CcmpPacketNumber, PacketNumbersSpent> {
-        self.packet_numbers()
-            .allocate()
+    fn draw(&mut self) -> Result<CcmpPacketNumber, PacketNumbersSpent> {
+        self.allocate()
             .map_err(|CcmpTxPacketNumberError::Exhausted| PacketNumbersSpent)
     }
 }

@@ -87,11 +87,11 @@ fn station_frames_and_data_draw_one_packet_number_space_of_the_link() {
         let data = |world: &mut World<'_>| {
             world
                 .link
-                .as_ref()
+                .as_mut()
                 .unwrap()
-                .key()
+                .numbers_and_key()
+                .1
                 .unwrap()
-                .packet_numbers()
                 .allocate()
                 .unwrap()
                 .value()

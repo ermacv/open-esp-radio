@@ -647,7 +647,7 @@ struct Record<'w> {
     deauthentications: &'w mut Vec<u16>,
     submitted: &'w mut Vec<StaTxTag>,
     packet_numbers: &'w mut Vec<u64>,
-    pairwise: &'w Option<EngineKey>,
+    pairwise: &'w mut Option<EngineKey>,
     link: &'w mut Option<TestLink>,
     on: u8,
 }
@@ -672,7 +672,7 @@ macro_rules! record {
             deauthentications: &mut $world.deauthentications,
             submitted: &mut $world.submitted,
             packet_numbers: &mut $world.packet_numbers,
-            pairwise: &$world.pairwise,
+            pairwise: &mut $world.pairwise,
             link: &mut $world.link,
             on: $world.arbiter.channel().map_or(0, |c| c.channel().number()),
         }
@@ -710,13 +710,14 @@ fn transmitted(record: Record<'_>, mut transmit: StaTransmit<'_, Caps>, sealing:
     // the link's holder for the link's frames, the port for the station's.
     if keyed {
         let key = match transmit.number {
-            crate::link::FrameNumber::Link { .. } => {
-                record.link.as_ref().and_then(|link| link.key())
-            }
-            crate::link::FrameNumber::Open => record.pairwise.as_ref(),
+            crate::link::FrameNumber::Link { .. } => record
+                .link
+                .as_mut()
+                .and_then(|link| link.numbers_and_key().1),
+            crate::link::FrameNumber::Open => record.pairwise.as_mut(),
         };
         let numbered = key
-            .and_then(|key| key.packet_numbers().allocate().ok())
+            .and_then(|key| key.allocate().ok())
             .expect("a protected frame goes under the engine's key");
         record.packet_numbers.push(numbered.value());
     }

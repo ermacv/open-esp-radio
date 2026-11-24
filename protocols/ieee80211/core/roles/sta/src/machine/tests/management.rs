@@ -444,11 +444,11 @@ fn a_protected_deauthentication_after_the_links_return_draws_the_keys_next_packe
         // Data drew the link key's packet numbers up to here.
         let data = world
             .link
-            .as_ref()
+            .as_mut()
             .unwrap()
-            .key()
+            .numbers_and_key()
+            .1
             .unwrap()
-            .packet_numbers()
             .allocate()
             .unwrap()
             .value();

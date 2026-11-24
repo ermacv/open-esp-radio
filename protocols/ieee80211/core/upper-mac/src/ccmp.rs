@@ -8,7 +8,7 @@ use core::num::NonZeroU8;
 use crate::packet_number::{PacketNumberCandidate, PacketNumberFrontier, advance};
 
 use oer_protocols_ieee80211_wire::ccmp::{
-    CCMP_HEADER_LEN, CcmpHeader, CcmpKeyId, CcmpPacketNumber, CcmpReceiveSequenceError, GroupKeyId,
+    CcmpHeader, CcmpKeyId, CcmpPacketNumber, CcmpReceiveSequenceError, GroupKeyId,
 };
 
 mod replay;
@@ -65,8 +65,20 @@ impl<K> InstalledCcmpTxKey<K> {
     pub const fn key(&self) -> &K {
         &self.key
     }
+    /// The key's packet numbers, to read: the last handed out, the step,
+    /// whether one more is available.
     pub const fn packet_numbers(&self) -> &CcmpTxPacketNumber {
         &self.packet_numbers
+    }
+
+    /// Hand out the packet number of the next MPDU this key protects: the
+    /// one door that spends a number.
+    ///
+    /// # Errors
+    ///
+    /// The key's numbers are spent; nothing was handed out.
+    pub fn allocate(&mut self) -> Result<CcmpPacketNumber, CcmpTxPacketNumberError> {
+        self.packet_numbers.allocate()
     }
     pub fn into_key(self) -> K {
         self.key
@@ -109,14 +121,14 @@ impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
 /// without wrapping or changing state.
 #[derive(Debug, Eq, PartialEq)]
 pub struct CcmpTxPacketNumber {
-    last: core::cell::Cell<CcmpPacketNumber>,
+    last: CcmpPacketNumber,
     step: CcmpPacketNumberStep,
 }
 
 impl CcmpTxPacketNumber {
     const fn new(step: CcmpPacketNumberStep) -> Self {
         Self {
-            last: core::cell::Cell::new(CcmpPacketNumber::ZERO),
+            last: CcmpPacketNumber::ZERO,
             step,
         }
     }
@@ -126,15 +138,12 @@ impl CcmpTxPacketNumber {
     /// change continues from its last PN this way.
     #[cfg(test)]
     const fn continuing_after(step: CcmpPacketNumberStep, last: CcmpPacketNumber) -> Self {
-        Self {
-            last: core::cell::Cell::new(last),
-            step,
-        }
+        Self { last, step }
     }
 
     /// The last PN handed out; zero before the first.
-    pub fn last(&self) -> CcmpPacketNumber {
-        self.last.get()
+    pub const fn last(&self) -> CcmpPacketNumber {
+        self.last
     }
 
     pub const fn step(&self) -> CcmpPacketNumberStep {
@@ -145,46 +154,15 @@ impl CcmpTxPacketNumber {
     /// drawn, so a caller checks it before it changes anything else of the
     /// MPDU it numbers.
     pub fn available(&self) -> bool {
-        advance(self.last.get(), u64::from(self.step.get())).is_ok()
+        advance(self.last, u64::from(self.step.get())).is_ok()
     }
 
     /// Allocate the PN of the next MPDU.
-    pub fn allocate(&self) -> Result<CcmpPacketNumber, CcmpTxPacketNumberError> {
-        let next = advance(self.last.get(), u64::from(self.step.get()))
+    fn allocate(&mut self) -> Result<CcmpPacketNumber, CcmpTxPacketNumberError> {
+        let next = advance(self.last, u64::from(self.step.get()))
             .map_err(|_| CcmpTxPacketNumberError::Exhausted)?;
-        self.last.set(next);
+        self.last = next;
         Ok(next)
-    }
-
-    /// Reserve all fresh MPDU numbers of a batch before handing it to a backend.
-    /// On exhaustion no number is consumed, including when only a prefix fits.
-    pub fn allocate_batch<const N: usize>(
-        &self,
-    ) -> Result<[CcmpPacketNumber; N], CcmpTxPacketNumberError> {
-        let count = u64::try_from(N).map_err(|_| CcmpTxPacketNumberError::Exhausted)?;
-        let distance = count
-            .checked_mul(u64::from(self.step.get()))
-            .ok_or(CcmpTxPacketNumberError::Exhausted)?;
-        let final_number =
-            advance(self.last.get(), distance).map_err(|_| CcmpTxPacketNumberError::Exhausted)?;
-        let mut numbers = [CcmpPacketNumber::ZERO; N];
-        let mut current = self.last.get();
-        for number in &mut numbers {
-            current = advance(current, u64::from(self.step.get()))
-                .map_err(|_| CcmpTxPacketNumberError::Exhausted)?;
-            *number = current;
-        }
-        self.last.set(final_number);
-        Ok(numbers)
-    }
-
-    /// Allocate the PN of the next MPDU and encode its CCMP header.
-    pub fn next_header(
-        &self,
-        key_id: CcmpKeyId,
-    ) -> Result<[u8; CCMP_HEADER_LEN], CcmpTxPacketNumberError> {
-        let packet_number = self.allocate()?;
-        Ok(CcmpHeader::new(packet_number, key_id).encode())
     }
 }
 

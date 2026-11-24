@@ -245,6 +245,12 @@ fn stale_peers_refuse_numbers_and_each_peer_numbers_from_one() {
     );
     // Restoring a removed peer continues its numbers.
     let restored = table.restore_removed(removed).unwrap();
+    // The old name of the slot's new occupant numbers nothing.
+    assert_ne!(restored, first);
+    assert_eq!(
+        table.allocate_tx_packet_number(first),
+        Err(EspNowEncryptedPeerError::Stale(first))
+    );
     assert_eq!(table.allocate_tx_packet_number(restored), Ok(pn(3)));
     assert_eq!(table.get(restored).unwrap().last_tx_packet_number, 3);
 }

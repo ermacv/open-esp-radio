@@ -2609,7 +2609,7 @@ where
         } = running;
         // The link's transmit key exists while the port's key is
         // installed; a key's command stops the intake.
-        let key = match interface {
+        let mut key = match interface {
             Interface::Idle {
                 key: StationKey::Installed(_, transmit),
                 ..
@@ -2617,7 +2617,7 @@ where
             | Interface::Agreeing {
                 key: StationKey::Installed(_, transmit),
                 ..
-            } => Some(&*transmit),
+            } => Some(transmit),
             _ => None,
         };
         let hold = hold.tid().map(QueueId::of_tid);
@@ -2646,7 +2646,7 @@ where
                 &link.port,
                 msdu,
                 &mut link.numbers,
-                key,
+                key.as_deref_mut(),
                 turn.now,
             ) {
                 Intake::Taken(_) => moved = moved.saturating_add(1),
