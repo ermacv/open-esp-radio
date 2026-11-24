@@ -20,7 +20,7 @@ use super::{
 };
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    Ieee80211Capabilities, RxCryptoStatus, RxEvidence, RxHead, RxHeader, RxMetadata,
+    Aggregation, Ieee80211Capabilities, RxCryptoStatus, RxEvidence, RxHead, RxHeader, RxMetadata,
     SupportedBlockAck, Tid,
 };
 use oer_protocols_ieee80211_wire::{
@@ -48,8 +48,7 @@ pub enum RxBlockAckEvent {
     /// a physical aggregate or member count. `bytes` is the port's MPDU
     /// length, `None` when it does not fit.
     Contained {
-        ampdu: RxEvidence<bool>,
-        s_mpdu: RxEvidence<bool>,
+        aggregation: RxEvidence<Aggregation>,
         bytes: Option<u32>,
     },
     /// One reorder decision of the agreement for `tid`. `released` counts
@@ -997,8 +996,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
         report(events, || {
             let common = meta.common();
             RxBlockAckEvent::Contained {
-                ampdu: common.ampdu,
-                s_mpdu: common.s_mpdu,
+                aggregation: common.aggregation,
                 bytes: u32::try_from(view.bytes.len()).ok(),
             }
         });

@@ -97,8 +97,7 @@ fn receive_metadata_keeps_absence_and_provenance_distinct() {
         rate: RxEvidence::HardwareObserved(11_u8),
         rssi_dbm: RxEvidence::HardwareObserved(-47),
         crypto: RxEvidence::Unavailable,
-        s_mpdu: RxEvidence::Unavailable,
-        ampdu: RxEvidence::Unavailable,
+        aggregation: RxEvidence::Unavailable,
         amsdu: RxEvidence::Unavailable,
     };
     assert!(staged.channel.is_available());
@@ -106,16 +105,15 @@ fn receive_metadata_keeps_absence_and_provenance_distinct() {
 
     let validated = MacRxMetadata {
         crypto: RxEvidence::ProtocolValidated(RxCryptoStatus::DecryptedAndIntegrityVerified),
-        s_mpdu: RxEvidence::HardwareObserved(true),
+        aggregation: RxEvidence::HardwareObserved(Aggregation::SMpdu),
         amsdu: RxEvidence::ProtocolValidated(false),
         ..staged
     };
     assert_ne!(validated.crypto, staged.crypto);
     assert_eq!(
-        validated.s_mpdu.as_ref(),
-        RxEvidence::HardwareObserved(&true)
+        validated.aggregation.as_ref(),
+        RxEvidence::HardwareObserved(&Aggregation::SMpdu)
     );
-    assert_eq!(validated.ampdu, RxEvidence::Unavailable);
     assert_eq!(validated.amsdu, RxEvidence::ProtocolValidated(false));
 }
 

@@ -8028,24 +8028,9 @@ fn k0_print() {
 /// a type alias (`type Flag = bool`). The list only shrinks.
 const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
     (
-        "protocols/ieee80211/contracts/port/src/contract.rs::MacRxMetadata",
-        3,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/contracts/port/src/rx.rs::RxMeta",
-        3,
-        BY_STEP_3,
-    ),
-    (
         "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::ApSaeFault::InvalidSession",
         3,
         BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::RxBlockAckEvent::Contained",
-        2,
-        BY_STEP_13,
     ),
     (
         "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaRequest",

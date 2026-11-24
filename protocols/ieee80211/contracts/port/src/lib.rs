@@ -121,7 +121,9 @@ pub use owner::{
     SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck, SupportedChannel,
     SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
-pub use rx::{LinkMetric, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata};
+pub use rx::{
+    Aggregation, LinkMetric, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata,
+};
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
     Protection, RETRY_STAGES, RateSample, RetryPlan, RetryStage, SingleEnd, SingleOutcome,

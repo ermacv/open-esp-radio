@@ -102,6 +102,21 @@ pub trait SignalMetadata: RxMetadata {
     fn link_metric(&self) -> LinkMetric;
 }
 
+/// How a received MPDU was carried in its PPDU (IEEE Std 802.11-2020, 10.12,
+/// A-MPDU operation). One state: an S-MPDU is carried in an A-MPDU too.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Aggregation {
+    /// Not carried in an A-MPDU.
+    Single,
+    /// Carried in an A-MPDU and not an S-MPDU. This does not state how
+    /// many MPDUs the A-MPDU carried. HT supplies an RXVECTOR Aggregation
+    /// bit; the VHT and HE PPDU formats carry every MPDU in an A-MPDU.
+    Ampdu,
+    /// A VHT or HE S-MPDU: the sole MPDU of an A-MPDU, its delimiter's EOF
+    /// bit set. Not a synonym for [`Aggregation::Single`].
+    SMpdu,
+}
+
 /// Portable metadata of one received MPDU.
 ///
 /// The backend publishes the physical fields it observed and leaves the
@@ -125,12 +140,8 @@ pub struct RxMeta {
     pub timestamp: RxEvidence<Ieee80211Stamp>,
     /// Encryption and integrity status, with its provenance.
     pub crypto: RxEvidence<RxCryptoStatus>,
-    /// Whether this is an IEEE VHT/HE S-MPDU: the sole MPDU of an A-MPDU,
-    /// its delimiter's EOF bit set. Not a synonym for a non-aggregated MPDU.
-    pub s_mpdu: RxEvidence<bool>,
-    /// Whether the MPDU was carried in an A-MPDU. An S-MPDU is carried in
-    /// one, so it has both `s_mpdu` and `ampdu` true.
-    pub ampdu: RxEvidence<bool>,
+    /// How the MPDU was carried in its PPDU, with its provenance.
+    pub aggregation: RxEvidence<Aggregation>,
     /// Whether the MPDU carries an A-MSDU payload.
     pub amsdu: RxEvidence<bool>,
 }
@@ -145,8 +156,7 @@ impl RxMeta {
             noise_floor_dbm: RxEvidence::Unavailable,
             timestamp: RxEvidence::Unavailable,
             crypto: RxEvidence::Unavailable,
-            s_mpdu: RxEvidence::Unavailable,
-            ampdu: RxEvidence::Unavailable,
+            aggregation: RxEvidence::Unavailable,
             amsdu: RxEvidence::Unavailable,
         }
     }
