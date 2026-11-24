@@ -583,3 +583,37 @@ fn maximal_mpdu_lengths_align_without_overflow_and_leave_the_last_unpadded() {
     assert_eq!(request.aggregate_length(1 << 63), 65_539);
     assert_eq!(request.aggregate_length(0), 0);
 }
+
+/// A subframe sent alone that reaches its retry limit while fresh fails
+/// without being discarded: the exchange still ends incomplete.
+#[test]
+fn a_fresh_subframe_alone_at_its_retry_limit_ends_the_exchange_incomplete() {
+    let mut planner = planner();
+    let (mut exchange, _) = planner.begin(ampdu_request(2), &Ladder).unwrap();
+    exchange.set_block_ack(BlockAckAgreement::NotOperational);
+    let individual = attempt(planner.complete(
+        &mut exchange,
+        &completion(TxStatus::Success, report(100, 0b01)),
+        now(10),
+        fresh,
+        &Ladder,
+    ));
+    assert_eq!(individual.content, AttemptContent::Subframe { index: 1 });
+    let mut at = 20;
+    let status = loop {
+        match planner.complete(
+            &mut exchange,
+            &completion(TxStatus::AckTimeout, None),
+            now(at),
+            fresh,
+            &Ladder,
+        ) {
+            TxStep::Done(TxReport::Ampdu(status)) => break status,
+            TxStep::Attempt(_) => at += 10,
+            _ => panic!("the subframe goes alone again or the exchange ends"),
+        }
+        assert!(at < 10_000, "the retry limit ends the subframe");
+    };
+    assert_eq!(status.individual_retries.failed(), 1);
+    assert_eq!(status.result, MacAmpduTxResult::Incomplete);
+}

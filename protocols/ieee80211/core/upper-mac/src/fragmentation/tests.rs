@@ -447,7 +447,7 @@ fn fresh_ordinary_wrap_replaces_stale_fragment_completion_identity() {
     let ordinary_identity =
         parse_open_data_identity(DataInterfaceRole::Station, &ordinary[..25]).unwrap();
     assert_eq!(
-        state.admit_unfragmented(ordinary_identity, RetrySubfield::Clear, Some(at(3))),
+        state.admit_unfragmented(ordinary_identity, RetrySubfield::Clear, Some(at(10))),
         Ok(OpenDataUnfragmentedAdmission::Admitted { expired: 0 })
     );
     assert_eq!(
@@ -635,4 +635,218 @@ fn a_ccmp_fragment_retry_keeps_its_original_pn_and_bytes() {
         ),
         Ok(OpenDataDefragmentation::Complete { .. })
     ));
+}
+
+const HEAD: [u8; 9] = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
+const TAIL: [u8; 1] = [2];
+
+fn epoch(generation: u64) -> FragmentAdmissionEpoch {
+    FragmentAdmissionEpoch::OpenAssociation(generation)
+}
+
+/// Fragment `number` of sequence `sequence`: the head with More, the tail
+/// last.
+fn part(sequence: u16, number: u8, retry: RetrySubfield) -> ([u8; 64], usize) {
+    let (more, payload): (MoreFragments, &[u8]) = if number == 0 {
+        (MoreFragments::More, &HEAD)
+    } else {
+        (MoreFragments::Last, &TAIL)
+    };
+    (
+        fragment(
+            DataInterfaceRole::Station,
+            sequence,
+            number,
+            more,
+            retry,
+            payload,
+        ),
+        payload.len(),
+    )
+}
+
+fn identity(sequence: u16) -> OpenDataFragmentIdentity {
+    let (frame, length) = part(sequence, 0, RetrySubfield::Clear);
+    parsed(DataInterfaceRole::Station, &frame, length).identity()
+}
+
+fn take<const C: usize>(
+    state: &mut OpenDataDefragmenter<C, 32>,
+    sequence: u16,
+    number: u8,
+    retry: RetrySubfield,
+    generation: u64,
+    now: u64,
+) -> Result<OpenDataDefragmentation<()>, OpenDataReassemblyError> {
+    let (frame, length) = part(sequence, number, retry);
+    state.ingest_in_epoch(
+        parsed(DataInterfaceRole::Station, &frame, length),
+        epoch(generation),
+        at(now),
+        |_| (),
+    )
+}
+
+/// A completed train of `sequence` in `generation`, its fragments at `now`
+/// and after: time only moves on.
+fn complete<const C: usize>(
+    state: &mut OpenDataDefragmenter<C, 32>,
+    sequence: u16,
+    generation: u64,
+    now: u64,
+) {
+    take(state, sequence, 0, RetrySubfield::Clear, generation, now).unwrap();
+    assert!(matches!(
+        take(
+            state,
+            sequence,
+            1,
+            RetrySubfield::Clear,
+            generation,
+            now + 1
+        ),
+        Ok(OpenDataDefragmentation::Complete { .. })
+    ));
+}
+
+/// Only the exact train, by identity and epoch, is discarded.
+#[test]
+fn discard_removes_only_its_exact_train() {
+    let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
+    take(&mut state, 5, 0, RetrySubfield::Clear, 1, 1).unwrap();
+    assert!(!state.discard(identity(5), epoch(2)), "another epoch");
+    assert!(!state.discard(identity(6), epoch(1)), "another identity");
+    assert_eq!(state.active_contexts(), 1);
+    assert!(state.discard(identity(5), epoch(1)));
+    assert_eq!(state.active_contexts(), 0);
+    assert!(!state.discard(identity(5), epoch(1)), "gone");
+}
+
+/// An ordinary MPDU meets an active train: of its own train and epoch it
+/// contradicts it; of its sequence space in another epoch it is another
+/// identity; of another space it passes, without needing the clock.
+#[test]
+fn an_ordinary_mpdu_against_an_active_train() {
+    let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
+    take(&mut state, 5, 0, RetrySubfield::Clear, 1, 1).unwrap();
+    let admit = |state: &mut OpenDataDefragmenter<2, 32>, sequence, generation, now| {
+        state.admit_unfragmented_in_epoch(
+            identity(sequence),
+            epoch(generation),
+            RetrySubfield::Clear,
+            now,
+        )
+    };
+    assert_eq!(
+        admit(&mut state, 5, 1, Some(at(2))),
+        Err(OpenDataReassemblyError::MoreFragmentsMismatch)
+    );
+    assert_eq!(
+        admit(&mut state, 5, 2, Some(at(2))),
+        Err(OpenDataReassemblyError::IdentityMismatch)
+    );
+    assert_eq!(
+        admit(&mut state, 6, 1, None),
+        Ok(OpenDataUnfragmentedAdmission::Admitted { expired: 0 })
+    );
+}
+
+/// An ordinary MPDU meets completed trains: its retry of the exact train is
+/// a duplicate; of its space in another epoch, another identity; of another
+/// space it passes, without the clock; a fresh one clears only its own
+/// space's fingerprint.
+#[test]
+fn an_ordinary_mpdu_against_completed_trains() {
+    let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
+    complete(&mut state, 5, 1, 1);
+    complete(&mut state, 6, 1, 3);
+    let admit = |state: &mut OpenDataDefragmenter<2, 32>, sequence, generation, retry, now| {
+        state.admit_unfragmented_in_epoch(identity(sequence), epoch(generation), retry, now)
+    };
+    assert_eq!(
+        admit(&mut state, 5, 1, RetrySubfield::Set, Some(at(10))),
+        Ok(OpenDataUnfragmentedAdmission::Duplicate { expired: 0 })
+    );
+    assert_eq!(
+        admit(&mut state, 5, 2, RetrySubfield::Set, Some(at(10))),
+        Err(OpenDataReassemblyError::IdentityMismatch)
+    );
+    assert_eq!(
+        admit(&mut state, 7, 1, RetrySubfield::Set, None),
+        Ok(OpenDataUnfragmentedAdmission::Admitted { expired: 0 })
+    );
+    assert_eq!(
+        admit(&mut state, 7, 1, RetrySubfield::Set, Some(at(10))),
+        Ok(OpenDataUnfragmentedAdmission::Admitted { expired: 0 })
+    );
+    // A fresh ordinary MPDU of sequence 5 clears 5's fingerprint, not 6's.
+    assert_eq!(
+        admit(&mut state, 5, 1, RetrySubfield::Clear, None),
+        Ok(OpenDataUnfragmentedAdmission::Admitted { expired: 0 })
+    );
+    assert_eq!(
+        admit(&mut state, 5, 1, RetrySubfield::Set, Some(at(10))),
+        Ok(OpenDataUnfragmentedAdmission::Admitted { expired: 0 })
+    );
+    assert_eq!(
+        admit(&mut state, 6, 1, RetrySubfield::Set, Some(at(10))),
+        Ok(OpenDataUnfragmentedAdmission::Duplicate { expired: 0 })
+    );
+}
+
+/// A fragment meets the trains it does not belong to: a retried head of a
+/// new sequence starts its train beside an active or a completed one; an
+/// orphan of a new sequence is an orphan; the retries of a completed
+/// train's fragments are duplicates.
+#[test]
+fn a_fragment_against_trains_of_other_sequences() {
+    let mut state = OpenDataDefragmenter::<3, 32>::new(Duration::from_micros(100));
+    complete(&mut state, 5, 1, 1);
+    take(&mut state, 6, 0, RetrySubfield::Clear, 1, 3).unwrap();
+    assert!(matches!(
+        take(&mut state, 7, 0, RetrySubfield::Set, 1, 4),
+        Ok(OpenDataDefragmentation::Buffered { .. })
+    ));
+    assert_eq!(
+        take(&mut state, 8, 1, RetrySubfield::Clear, 1, 5),
+        Err(OpenDataReassemblyError::Orphan { fragment_number: 1 })
+    );
+    for number in [0, 1] {
+        assert_eq!(
+            take(&mut state, 5, number, RetrySubfield::Set, 1, 6),
+            Ok(OpenDataDefragmentation::Duplicate { expired: 0 }),
+            "fragment {number}"
+        );
+    }
+}
+
+/// A fresh head of a sequence supersedes that sequence's completed
+/// fingerprint in another slot: a retry of the old head's bytes is then
+/// checked against the new train, and refused.
+#[test]
+fn a_fresh_head_supersedes_its_sequence_s_completed_fingerprint() {
+    let mut state = OpenDataDefragmenter::<3, 32>::new(Duration::from_micros(100));
+    complete(&mut state, 5, 1, 1);
+    let other_head = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 9];
+    let fresh = fragment(
+        DataInterfaceRole::Station,
+        5,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &other_head,
+    );
+    assert!(matches!(
+        state.ingest_in_epoch(
+            parsed(DataInterfaceRole::Station, &fresh, other_head.len()),
+            epoch(1),
+            at(5),
+            |_| ()
+        ),
+        Ok(OpenDataDefragmentation::Buffered { .. })
+    ));
+    assert_eq!(
+        take(&mut state, 5, 0, RetrySubfield::Set, 1, 6),
+        Err(OpenDataReassemblyError::RetryPayloadMismatch { fragment_number: 0 })
+    );
 }

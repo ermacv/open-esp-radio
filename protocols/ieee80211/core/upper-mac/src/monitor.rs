@@ -81,13 +81,8 @@ impl MonitorChannelSequence {
     }
 
     /// How many channels the cycle visits; at least one.
-    pub const fn len(self) -> usize {
+    pub const fn count(self) -> usize {
         self.length.get()
-    }
-
-    /// Never: a sequence holds at least one channel.
-    pub const fn is_empty(self) -> bool {
-        self.length.get() == 0
     }
 
     pub const fn first(self) -> Ghz2_4Channel {

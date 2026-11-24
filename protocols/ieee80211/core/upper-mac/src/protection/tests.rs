@@ -400,3 +400,25 @@ fn every_he_txop_is_protected_while_the_bss_advertises_a_threshold() {
         Protection::None
     );
 }
+
+/// Turning the local threshold off ends the length rule.
+#[test]
+fn a_threshold_turned_off_protects_no_long_mpdu() {
+    let mut policy = policy(
+        ErpProtection::NONE,
+        HtProtectionMode::None,
+        basic(OFDM_BASIC),
+    );
+    let budget = Budget(u16::MAX);
+    let long = mpdu(OFDM24, TxReceiver::Individual, 2_347);
+    assert_eq!(
+        policy.select(long, &budget).reasons,
+        TxProtectionReasons::LENGTH
+    );
+    policy.set_rts_threshold(RtsThreshold::Off);
+    assert_eq!(policy.rts_threshold(), RtsThreshold::Off);
+    assert_eq!(
+        policy.select(long, &budget).reasons,
+        TxProtectionReasons::default()
+    );
+}
