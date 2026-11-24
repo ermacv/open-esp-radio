@@ -250,3 +250,23 @@ fn ampdu_parameters_name_the_maximum_length_and_spacing() {
         assert_eq!(parameters.spacing().get(), 6);
     }
 }
+
+/// A peer's HT capabilities answer from their own bits: HT-Greenfield,
+/// the 20 MHz short guard interval, and the 40 MHz one only with 40 MHz.
+#[test]
+fn a_peer_s_ht_capability_bits_each_answer_alone() {
+    let peer = |info: [u8; 2]| {
+        let mut element = [0_u8; HT_CAPABILITY_IE_LEN];
+        element[..4].copy_from_slice(&[45, 26, info[0], info[1]]);
+        element[5] = 0xff;
+        ht_peer_capabilities(&element).unwrap()
+    };
+    // Bit 1 40 MHz, bit 4 Greenfield, bit 5 SGI 20, bit 6 SGI 40.
+    assert!(peer([0x10, 0]).supports_greenfield());
+    assert!(!peer([0x00, 0]).supports_greenfield());
+    assert!(peer([0x20, 0]).supports_short_guard_interval(ChannelWidth::Mhz20));
+    assert!(!peer([0x00, 0]).supports_short_guard_interval(ChannelWidth::Mhz20));
+    assert!(peer([0x42, 0]).supports_short_guard_interval(ChannelWidth::Mhz40Above));
+    assert!(!peer([0x40, 0]).supports_short_guard_interval(ChannelWidth::Mhz40Above));
+    assert!(!peer([0x02, 0]).supports_short_guard_interval(ChannelWidth::Mhz40Below));
+}

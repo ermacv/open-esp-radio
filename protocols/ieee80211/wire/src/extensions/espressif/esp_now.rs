@@ -1064,4 +1064,118 @@ mod tests {
         let mut small = [0_u8; 299];
         assert!(parsed.action().copy_payload(&mut small).is_err());
     }
+
+    /// Frame Control octet and bit pairs an ESP-NOW frame refuses: version,
+    /// another subtype, To DS, From DS, More Fragments, Power Management,
+    /// More Data, Order; and a fragment number in Sequence Control.
+    const REFUSED: [(usize, u8); 9] = [
+        (0, 0x01),
+        (0, 0x10),
+        (1, 0x01),
+        (1, 0x02),
+        (1, 0x04),
+        (1, 0x10),
+        (1, 0x20),
+        (1, 0x80),
+        (22, 0x01),
+    ];
+
+    #[test]
+    fn each_refused_frame_control_bit_refuses_an_unprotected_frame() {
+        let mut bytes = [0_u8; 64];
+        let len = EspNowV1Frame::new(
+            EspNowDestination::Broadcast,
+            source(),
+            SequenceNumber::ZERO,
+            EspNowRandomValue::new([1, 2, 3, 4]),
+            &[7; 9],
+        )
+        .unwrap()
+        .encode(&mut bytes)
+        .unwrap();
+        assert!(EspNowV1Frame::parse(&bytes[..len]).is_ok());
+        for (octet, bit) in REFUSED {
+            let mut refused = bytes;
+            refused[octet] ^= bit;
+            assert!(
+                EspNowV1Frame::parse(&refused[..len]).is_err(),
+                "v1, octet {octet} bit {bit:#04x}"
+            );
+        }
+        let mut protected = bytes;
+        protected[1] |= 0x40;
+        assert_eq!(
+            EspNowV1Frame::parse(&protected[..len]).err(),
+            Some(EspNowV1WireError::ProtectedFrameUnsupported)
+        );
+
+        let mut bytes = [0_u8; 64];
+        let len = EspNowV2Frame::new(
+            EspNowDestination::Broadcast,
+            source(),
+            SequenceNumber::ZERO,
+            EspNowRandomValue::new([1, 2, 3, 4]),
+            &[7; 9],
+        )
+        .unwrap()
+        .encode(&mut bytes)
+        .unwrap();
+        assert!(EspNowV2Frame::parse(&bytes[..len]).is_ok());
+        for (octet, bit) in REFUSED {
+            let mut refused = bytes;
+            refused[octet] ^= bit;
+            assert!(
+                EspNowV2Frame::parse(&refused[..len]).is_err(),
+                "v2, octet {octet} bit {bit:#04x}"
+            );
+        }
+    }
+
+    #[test]
+    fn each_refused_frame_control_bit_refuses_a_protected_envelope() {
+        let mut frame = std::vec![0_u8; ESP_NOW_MANAGEMENT_HEADER_LEN];
+        frame[..2].copy_from_slice(&[0xd0, 0x40]);
+        frame[4..10].copy_from_slice(&[2, 0, 0, 0, 0, 2]);
+        frame[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+        frame[16..22].copy_from_slice(&BROADCAST_ADDRESS);
+        // CCMP header: PN 1, Extended IV, key 0.
+        frame.extend_from_slice(&[1, 0, 0, 0x20, 0, 0, 0, 0]);
+        frame.extend_from_slice(&[0; ESP_NOW_V1_ACTION_OVERHEAD]);
+        frame.extend_from_slice(&[0; ESP_NOW_CCMP_MIC_LEN]);
+        assert!(EspNowProtectedV1Envelope::parse(&frame).is_ok());
+        for (octet, bit) in REFUSED {
+            let mut refused = frame.clone();
+            refused[octet] ^= bit;
+            assert!(
+                EspNowProtectedV1Envelope::parse(&refused).is_err(),
+                "octet {octet} bit {bit:#04x}"
+            );
+        }
+        let mut open = frame.clone();
+        open[1] &= !0x40;
+        assert_eq!(
+            EspNowProtectedV1Envelope::parse(&open).err(),
+            Some(EspNowProtectedV1WireError::ProtectionRequired)
+        );
+    }
+
+    /// Every wire error names itself: its text is never empty.
+    #[test]
+    fn a_wire_error_s_text_names_it() {
+        let control = crate::frame::FrameControlFields::from_bytes([0xd1, 0x00]);
+        let texts = [
+            std::format!("{}", EspNowV1WireError::UnsupportedFrameControl(control)),
+            std::format!(
+                "{}",
+                EspNowProtectedV1WireError::UnsupportedFrameControl(control)
+            ),
+            std::format!(
+                "{}",
+                v2::EspNowV2WireError::UnsupportedFrameControl(control)
+            ),
+        ];
+        for text in texts {
+            assert!(text.contains("d1"), "{text}");
+        }
+    }
 }

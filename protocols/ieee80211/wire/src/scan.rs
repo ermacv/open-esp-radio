@@ -570,6 +570,29 @@ mod record_tests {
         ScanRecord::new(Bssid::new(IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap()).unwrap())
     }
 
+    /// A 40 MHz BSS needs both the HT capability's 40 MHz bit and the HT
+    /// operation's, on its own primary channel; its secondary is the
+    /// operation's offset.
+    #[test]
+    fn a_secondary_channel_needs_40_mhz_on_both_elements() {
+        let with = |capability_info: u8, primary: u8, operation_info: u8| {
+            let mut record = record();
+            let mut capability = [0_u8; HT_CAPABILITY_IE_LEN];
+            capability[..4].copy_from_slice(&[45, 26, capability_info, 0]);
+            let mut operation = [0_u8; HT_OPERATION_IE_LEN];
+            operation[..4].copy_from_slice(&[61, 22, primary, operation_info]);
+            record.ht_capability_ie = Some(capability);
+            record.ht_operation_ie = Some(operation);
+            record.secondary_channel(6)
+        };
+        // Operation info: secondary offset in bits 0-1, width in bit 2.
+        assert_eq!(with(0x02, 6, 0x05), Some(HtSecondaryChannel::Above));
+        assert_eq!(with(0x02, 6, 0x07), Some(HtSecondaryChannel::Below));
+        assert_eq!(with(0x00, 6, 0x05), None, "no 40 MHz capability");
+        assert_eq!(with(0x02, 6, 0x01), None, "no 40 MHz operation");
+        assert_eq!(with(0x02, 7, 0x05), None, "another primary channel");
+    }
+
     #[test]
     fn privacy_is_the_capability_s_bit_and_rsn_an_element_counted() {
         let mut record = record();

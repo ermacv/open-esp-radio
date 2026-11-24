@@ -836,3 +836,73 @@ fn wmm_is_accepted_by_a_wmm_element_ht_or_he_alone() {
     assert!(response(Present, Absent, ResponseHeElements::NONE).wmm());
     assert!(response(Absent, Absent, he).wmm());
 }
+
+/// A response matches the security selected from the scan by its Privacy
+/// bit alone: set for CCMP, clear for Open.
+#[test]
+fn a_response_matches_its_security_by_privacy() {
+    use crate::scan::ElementPresence::Absent;
+    let response = |privacy| AssociationResponse {
+        capability_info: crate::management::CapabilityInformation::from_bytes([0; 2])
+            .with_privacy(privacy),
+        status_code: 0,
+        association_id: 1,
+        ht_capability: Absent,
+        he: ResponseHeElements::NONE,
+        wmm_element: Absent,
+        wmm_parameters: None,
+        association_comeback_tu: None,
+    };
+    assert!(response(true).matches_security(LinkProtection::Ccmp));
+    assert!(!response(true).matches_security(LinkProtection::Open));
+    assert!(response(false).matches_security(LinkProtection::Open));
+    assert!(!response(false).matches_security(LinkProtection::Ccmp));
+}
+
+/// An Open, non-HT Association Request: its header, Capability Information
+/// and Listen Interval at their places, and the length it wrote.
+#[test]
+fn an_association_request_writes_its_fixed_fields_and_its_length() {
+    // A beacon of BSSID: no SSID, one supported rate, 1 Mb/s basic.
+    let mut beacon = std::vec![0_u8; 24];
+    beacon[..2].copy_from_slice(&[0x80, 0x00]);
+    beacon[4..10].copy_from_slice(&[0xff; 6]);
+    beacon[10..16].copy_from_slice(&BSSID);
+    beacon[16..22].copy_from_slice(&BSSID);
+    beacon.extend_from_slice(&[0; 8]);
+    beacon.extend_from_slice(&[100, 0, 0x01, 0x00]);
+    beacon.extend_from_slice(&[0, 0, 1, 1, 0x82]);
+    let record = crate::scan::parse_management(&beacon).unwrap();
+    let capabilities = AssociationCapabilities {
+        ht: HtCapabilityElements {
+            mhz20: [0; 28],
+            mhz40: [0; 28],
+        },
+        ht_with_he: [0; 28],
+        he: [0; 24],
+        he_extended: None,
+        wmm: [0; 9],
+    };
+    let mut output = [0xa5_u8; 128];
+    let length = AssociationRequest {
+        source: crate::address::OwnAddress::new(
+            crate::address::IndividualAddress::new(LOCAL).unwrap(),
+        ),
+        access_point: &record,
+        sequence_number: seq(2),
+        listen_interval: 10,
+        phy: AssociationPhyElements::NonHt,
+        security: &SelectedRsn::OPEN,
+    }
+    .encode(&mut output, &capabilities)
+    .unwrap();
+    assert!(length > 28, "{length}");
+    assert_eq!(&output[..2], &[0x00, 0x00], "Association Request");
+    assert_eq!(&output[4..10], &BSSID);
+    assert_eq!(&output[10..16], &LOCAL);
+    // ESS, and Privacy clear for Open.
+    assert_eq!(output[24] & 0x11, 0x01);
+    assert_eq!(&output[26..28], &[10, 0]);
+    assert!(output[length..].iter().all(|octet| *octet == 0xa5));
+    assert_ne!(output[length - 1], 0xa5);
+}
