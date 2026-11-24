@@ -76,6 +76,26 @@ pub enum ElementPresence {
     Present,
 }
 
+/// How often a frame carries an element it may carry once: not at all,
+/// once with its record (header and value), or more than once.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ElementOccurrence<'a> {
+    Absent,
+    Once(&'a [u8]),
+    Repeated,
+}
+
+impl<'a> ElementOccurrence<'a> {
+    /// The occurrence after one more copy, `record`.
+    #[must_use]
+    pub const fn and(self, record: &'a [u8]) -> Self {
+        match self {
+            Self::Absent => Self::Once(record),
+            Self::Once(_) | Self::Repeated => Self::Repeated,
+        }
+    }
+}
+
 /// A value offered to a [`ScanRecord`] setter that its buffer cannot hold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScanRecordError {
@@ -410,7 +430,9 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     let bssid = Bssid::new(IndividualAddress::new([b0, b1, b2, b3, b4, b5])?)?;
     let mut record = ScanRecord::new(bssid);
     record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
-    record.beacon_interval_tu = u16::from_le_bytes([i0, i1]);
+    record.beacon_interval_tu = crate::management::BeaconIntervalField::from_bytes([i0, i1])
+        .time_units()
+        .get();
     record.capability_info = crate::management::CapabilityInformation::from_bytes([c0, c1]);
 
     while let Ok(&element_header) = elements.array::<2>() {

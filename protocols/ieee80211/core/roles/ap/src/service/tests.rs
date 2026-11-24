@@ -100,10 +100,11 @@ fn association_security_with_rsnxe<'a>(
             [0; 2],
         )
         .with_privacy(true),
-        rsn_ie: Some(rsn_ie),
-        rsn_ie_count: 1,
-        rsnxe,
-        rsnxe_count: u8::from(rsnxe.is_some()),
+        rsn_ie: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Once(rsn_ie),
+        rsnxe: match rsnxe {
+            Some(rsnxe) => oer_protocols_ieee80211_wire::scan::ElementOccurrence::Once(rsnxe),
+            None => oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
+        },
         legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
         information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
     }
@@ -319,10 +320,8 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
         capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
             [0; 2],
         ),
-        rsn_ie: None,
-        rsn_ie_count: 0,
-        rsnxe: None,
-        rsnxe_count: 0,
+        rsn_ie: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
+        rsnxe: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
         legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
         information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
     };
@@ -411,10 +410,8 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
                     oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
                         [0; 2],
                     ),
-                rsn_ie: None,
-                rsn_ie_count: 0,
-                rsnxe: None,
-                rsnxe_count: 0,
+                rsn_ie: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
+                rsnxe: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
                 legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
                 information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
             },
@@ -498,10 +495,8 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
                     oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
                         [0; 2],
                     ),
-                rsn_ie: None,
-                rsn_ie_count: 0,
-                rsnxe: None,
-                rsnxe_count: 0,
+                rsn_ie: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
+                rsnxe: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
                 legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
                 information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
             },
@@ -1739,10 +1734,8 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
         capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
             [0; 2],
         ),
-        rsn_ie: None,
-        rsn_ie_count: 0,
-        rsnxe: None,
-        rsnxe_count: 0,
+        rsn_ie: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
+        rsnxe: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
         legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
         information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
     };
@@ -2637,10 +2630,8 @@ fn refused_on_both_bss_kinds(
         capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
             [0; 2],
         ),
-        rsn_ie: None,
-        rsn_ie_count: 0,
-        rsnxe: None,
-        rsnxe_count: 0,
+        rsn_ie: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
+        rsnxe: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
         legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
         information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
     };
@@ -2695,10 +2686,8 @@ fn a_buffered_unicast_completion_counts_only_against_the_release_in_flight() {
         capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
             [0; 2],
         ),
-        rsn_ie: None,
-        rsn_ie_count: 0,
-        rsnxe: None,
-        rsnxe_count: 0,
+        rsn_ie: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
+        rsnxe: oer_protocols_ieee80211_wire::scan::ElementOccurrence::Absent,
         legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
         information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
     };
@@ -2762,4 +2751,42 @@ fn a_buffered_unicast_completion_counts_only_against_the_release_in_flight() {
         Ok(1)
     );
     assert_eq!(status(&service), (1, BufferedRelease::Idle));
+}
+
+/// An Open BSS refuses an association request carrying an RSN element or
+/// an RSN Extension element, each alone.
+#[test]
+fn an_open_bss_refuses_each_security_element_alone() {
+    use oer_protocols_ieee80211_wire::scan::ElementOccurrence;
+    let open = ApAssociationSecurityObservation {
+        capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            [0; 2],
+        ),
+        rsn_ie: ElementOccurrence::Absent,
+        rsnxe: ElementOccurrence::Absent,
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
+    };
+    let admit = |security| {
+        admit_association_security::<oer_protocols_ieee80211_wire::security::spp::Interface>(
+            ApSecurityPolicy::Open,
+            security,
+        )
+    };
+    assert_eq!(admit(open), Ok(AssociationSecurity::Open));
+    for security in [
+        ApAssociationSecurityObservation {
+            rsn_ie: ElementOccurrence::Once(&WPA2_RSN),
+            ..open
+        },
+        ApAssociationSecurityObservation {
+            rsnxe: ElementOccurrence::Once(&[244, 1, 0x20]),
+            ..open
+        },
+    ] {
+        assert_eq!(
+            admit(security),
+            Err(ApAssociationSecurityError::InvalidElements)
+        );
+    }
 }

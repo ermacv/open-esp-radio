@@ -514,10 +514,10 @@ pub enum ApManagementRequest<'a> {
 pub struct ApAssociationSecurityObservation<'a> {
     /// The request's Capability Information field.
     pub capability: crate::management::CapabilityInformation,
-    pub rsn_ie: Option<&'a [u8]>,
-    pub rsn_ie_count: u8,
-    pub rsnxe: Option<&'a [u8]>,
-    pub rsnxe_count: u8,
+    /// The RSN element (IEEE Std 802.11-2020, 9.4.2.24).
+    pub rsn_ie: crate::scan::ElementOccurrence<'a>,
+    /// The RSN Extension element (IEEE Std 802.11-2020, 9.4.2.241).
+    pub rsnxe: crate::scan::ElementOccurrence<'a>,
     /// A legacy WPA vendor IE (00:50:f2:01). It is never an acceptable
     /// substitute for RSN and makes a mixed request invalid.
     pub legacy_wpa: crate::scan::ElementPresence,
@@ -570,7 +570,7 @@ pub fn parse_ap_management_request<'a>(
         b4,
         b5,
         sc0,
-        _sc1,
+        sc1,
     ] = *header;
     let destination = [d0, d1, d2, d3, d4, d5];
     let peer = [p0, p1, p2, p3, p4, p5];
@@ -586,8 +586,7 @@ pub fn parse_ap_management_request<'a>(
             || frame_control.ds() != 0
             || frame_control.more_fragments()
             || frame_control.protected())
-            || crate::sequence::SequenceControl::from_bytes((sc0 as u16).to_le_bytes()).fragment()
-                != 0
+            || crate::sequence::SequenceControl::from_bytes([sc0, sc1]).fragment() != 0
             || crate::address::AddressFlags::from_bytes([peer[0]]).group()
             || peer == [0; 6]
             || (destination != access_point && destination != [0xff; 6])
@@ -628,11 +627,11 @@ pub fn parse_ap_management_request<'a>(
     match subtype {
         11 => {
             let mut reader = oer_portable_wire::Reader::new(management_body);
-            let &[a0, a1, t0, t1, s0, s1] = reader.array().ok()?;
+            let fields = crate::management::AuthenticationFields::from_bytes(reader.read().ok()?);
             let body = reader.remaining();
-            let algorithm = u16::from_le_bytes([a0, a1]);
-            let transaction = u16::from_le_bytes([t0, t1]);
-            let status = u16::from_le_bytes([s0, s1]);
+            let algorithm = fields.algorithm().get();
+            let transaction = fields.transaction().get();
+            let status = fields.status_code().get();
             match algorithm {
                 OPEN_SYSTEM_AUTHENTICATION_ALGORITHM => (transaction == 1 && status == 0)
                     .then_some(ApManagementRequest::OpenAuthentication { peer }),
@@ -647,18 +646,14 @@ pub fn parse_ap_management_request<'a>(
         }
         0 => {
             let mut reader = oer_portable_wire::Reader::new(management_body);
-            let &[c0, c1, _listen0, _listen1] = reader.array().ok()?;
+            let capabilities =
+                crate::management::CapabilityInformation::from_bytes(reader.read().ok()?);
+            let _listen_interval: [u8; 2] = reader.read().ok()?;
             let information_elements = reader.remaining();
-            let capabilities = u16::from_le_bytes([c0, c1]);
             let ht_capabilities = ht_peer_capabilities(information_elements);
             Some(ApManagementRequest::Association {
                 peer,
-                security: association_security_observation(
-                    information_elements,
-                    crate::management::CapabilityInformation::from_bytes(
-                        capabilities.to_le_bytes(),
-                    ),
-                ),
+                security: association_security_observation(information_elements, capabilities),
                 maximum_legacy_rate_500kbps: maximum_ap_legacy_rate(profile, information_elements),
                 ht_capabilities,
                 qos: if ht_capabilities.is_some() || supports_wmm(information_elements) {
@@ -666,11 +661,7 @@ pub fn parse_ap_management_request<'a>(
                 } else {
                     crate::data::PeerQos::NonQos
                 },
-                preamble: if crate::management::CapabilityInformation::from_bytes(
-                    capabilities.to_le_bytes(),
-                )
-                .short_preamble()
-                {
+                preamble: if capabilities.short_preamble() {
                     crate::phy::DsssPreamble::Short
                 } else {
                     crate::phy::DsssPreamble::Long
@@ -679,8 +670,9 @@ pub fn parse_ap_management_request<'a>(
         }
         10 | 12 => {
             let mut reader = oer_portable_wire::Reader::new(management_body);
-            let reason = reader.array().ok()?;
-            let reason = u16::from_le_bytes(*reason);
+            let reason = crate::management::ReasonCodeField::from_bytes(reader.read().ok()?)
+                .code()
+                .get();
             if subtype == 10 {
                 Some(ApManagementRequest::Disassociation { peer, reason })
             } else {
@@ -820,10 +812,8 @@ fn association_security_observation(
     let mut remaining = oer_portable_wire::Reader::new(bytes);
     let mut observation = ApAssociationSecurityObservation {
         capability,
-        rsn_ie: None,
-        rsn_ie_count: 0,
-        rsnxe: None,
-        rsnxe_count: 0,
+        rsn_ie: crate::scan::ElementOccurrence::Absent,
+        rsnxe: crate::scan::ElementOccurrence::Absent,
         legacy_wpa: crate::scan::ElementPresence::Absent,
         information_elements: crate::scan::ElementList::Complete,
     };
@@ -841,12 +831,10 @@ fn association_security_observation(
             break;
         };
         if id == 48 {
-            observation.rsn_ie_count = observation.rsn_ie_count.saturating_add(1);
-            observation.rsn_ie.get_or_insert(record);
+            observation.rsn_ie = observation.rsn_ie.and(record);
         }
         if id == 244 {
-            observation.rsnxe_count = observation.rsnxe_count.saturating_add(1);
-            observation.rsnxe.get_or_insert(record);
+            observation.rsnxe = observation.rsnxe.and(record);
         }
         if id == 221 && length >= 4 && matches!(record, [_, _, 0x00, 0x50, 0xf2, 0x01, ..]) {
             observation.legacy_wpa = crate::scan::ElementPresence::Present;
@@ -890,9 +878,13 @@ pub fn write_open_authentication_response(
     );
     crate::encoding::FrameParts([
         header.as_slice(),
-        &0_u16.to_le_bytes(),
-        &2_u16.to_le_bytes(),
-        &status.to_le_bytes(),
+        // Open System, the second frame of its exchange.
+        &crate::management::AuthenticationFields::of(
+            OPEN_SYSTEM_AUTHENTICATION_ALGORITHM,
+            2,
+            status,
+        )
+        .to_bytes(),
     ])
     .write(output)
     .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
@@ -917,9 +909,12 @@ pub fn write_sae_authentication(
     );
     crate::encoding::FrameParts([
         header.as_slice(),
-        &SAE_AUTHENTICATION_ALGORITHM.to_le_bytes(),
-        &transaction.to_le_bytes(),
-        &status.to_le_bytes(),
+        &crate::management::AuthenticationFields::of(
+            SAE_AUTHENTICATION_ALGORITHM,
+            transaction,
+            status,
+        )
+        .to_bytes(),
         body,
     ])
     .write(output)
@@ -951,18 +946,18 @@ pub fn write_ht_association_response_frame_for_security(
             required: AP_ASSOCIATION_RESPONSE_LEN,
         })?;
     frame.fill(0);
-    crate::encoding::write_array::<0, _, _>(
-        frame,
-        &management_header(
-            ASSOCIATION_RESPONSE_FRAME_CONTROL,
-            access_point,
-            peer,
-            management_sequence,
-        ),
+    let Some((header, rest)) = frame.split_first_chunk_mut::<MANAGEMENT_HEADER_LEN>() else {
+        return Err(ApAssociationResponseError::OutputTooSmall {
+            required: AP_ASSOCIATION_RESPONSE_LEN,
+        });
+    };
+    *header = management_header(
+        ASSOCIATION_RESPONSE_FRAME_CONTROL,
+        access_point,
+        peer,
+        management_sequence,
     );
-    let Some(body) =
-        frame[MANAGEMENT_HEADER_LEN..].first_chunk_mut::<AP_ASSOCIATION_RESPONSE_BODY_LEN>()
-    else {
+    let Some(body) = rest.first_chunk_mut::<AP_ASSOCIATION_RESPONSE_BODY_LEN>() else {
         return Err(ApAssociationResponseError::OutputTooSmall {
             required: AP_ASSOCIATION_RESPONSE_LEN,
         });
@@ -979,9 +974,7 @@ pub fn write_ht_association_response_frame_for_security(
     if security.link_protection() == LinkProtection::Open {
         crate::encoding::write_array::<0, _, _>(
             body,
-            &profile
-                .capabilities(security.link_protection())
-                .to_le_bytes(),
+            &profile.capabilities(security.link_protection()).to_bytes(),
         );
     }
     MANAGEMENT_HEADER_LEN
@@ -1004,9 +997,12 @@ pub fn write_ap_peer_disconnect(
     }
     .frame_control();
     let header = management_header(frame_control, access_point, peer, management_sequence);
-    crate::encoding::FrameParts([header.as_slice(), &reason.to_le_bytes()])
-        .write(output)
-        .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
+    crate::encoding::FrameParts([
+        header.as_slice(),
+        &crate::management::ReasonCodeField::of(reason).to_bytes(),
+    ])
+    .write(output)
+    .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
 }
 
 /// Association Response, management subtype 1 (IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1).
@@ -1063,8 +1059,8 @@ pub fn write_ht_association_response(
     let ht_operation = ht_operation_ie(channel, protection.ht);
     let erp = [42, 1, protection.erp_information()];
     crate::encoding::FrameParts([
-        &profile.capabilities(LinkProtection::Ccmp).to_le_bytes(),
-        &status.to_le_bytes(),
+        &profile.capabilities(LinkProtection::Ccmp).to_bytes(),
+        &crate::management::StatusCodeField::of(status).to_bytes(),
         &encoded_association_id.to_bytes(),
         &[1, 8],
         profile.legacy_rates.supported(),
@@ -1218,7 +1214,7 @@ pub fn observe_ap_null_data_power_save_for_access_point(
             b4,
             b5,
             sequence0,
-            _,
+            sequence1,
         ],
     ) = <&[u8; STA_NULL_DATA_FRAME_LEN]>::try_from(frame)
     else {
@@ -1228,8 +1224,7 @@ pub fn observe_ap_null_data_power_save_for_access_point(
     if frame_control.with_retry(false).with_power_management(false) != NULL_DATA_TO_DS_FRAME_CONTROL
         || [r0, r1, r2, r3, r4, r5] != access_point
         || [b0, b1, b2, b3, b4, b5] != access_point
-        || crate::sequence::SequenceControl::from_bytes((sequence0 as u16).to_le_bytes()).fragment()
-            != 0
+        || crate::sequence::SequenceControl::from_bytes([sequence0, sequence1]).fragment() != 0
     {
         return None;
     }

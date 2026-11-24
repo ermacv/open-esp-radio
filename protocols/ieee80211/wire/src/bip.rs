@@ -26,14 +26,29 @@ pub const IPN_MAX: u64 = (1 << 48) - 1;
 
 /// The IPN six little-endian octets carry.
 pub const fn ipn_from_bytes(bytes: [u8; IPN_LEN]) -> u64 {
-    let [b0, b1, b2, b3, b4, b5] = bytes;
-    u64::from_le_bytes([b0, b1, b2, b3, b4, b5, 0, 0])
+    IpnField::from_bytes(bytes).value().get()
 }
 
 /// The six little-endian octets of an IPN; its bits above 48 are dropped.
 pub const fn ipn_to_bytes(value: u64) -> [u8; IPN_LEN] {
-    let [b0, b1, b2, b3, b4, b5, _, _] = value.to_le_bytes();
-    [b0, b1, b2, b3, b4, b5]
+    IpnField::from_bytes([0; IPN_LEN])
+        .with_value(oer_portable_wire::U64::from_low_bits(value))
+        .to_bytes()
+}
+
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.54 (Management MIC element:
+    /// a six-octet IPN).
+    pub struct IpnField[6] (little) {
+        pub value, with_value: (u64) = 0..48;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.54 (Management MIC element:
+    /// Key ID, two octets).
+    pub struct KeyIdField[2] (little) {
+        pub key_id, with_key_id: (u16) = 0..16;
+    }
 }
 const MANAGEMENT_HEADER_LEN: usize = 24;
 const AAD_LEN: usize = 2 + 3 * 6;
@@ -113,7 +128,7 @@ impl<'a> BipFrame<'a> {
             aad: aad(header),
             body,
             mme_before_mic: before_mic,
-            key_id: u16::from_le_bytes([key_low, key_high]),
+            key_id: KeyIdField::from_bytes([key_low, key_high]).key_id().get(),
             packet_number: ipn_from_bytes(ipn),
             mic,
         })
@@ -182,7 +197,10 @@ impl<'a> BipProtection<'a> {
         let (body, element) = covered
             .split_last_chunk_mut::<{ MANAGEMENT_MIC_ELEMENT_LEN - BIP_MIC_LEN }>()
             .ok_or(BipFormatError::Truncated)?;
-        let [k0, k1] = key_id.to_le_bytes();
+        // Sixteen bits of sixteen: nothing is cut.
+        let [k0, k1] = KeyIdField::from_bytes([0; 2])
+            .with_key_id(oer_portable_wire::U16::from_low_bits(key_id))
+            .to_bytes();
         let [i0, i1, i2, i3, i4, i5] = ipn_to_bytes(packet_number);
         *element = [
             MANAGEMENT_MIC_ELEMENT_ID,

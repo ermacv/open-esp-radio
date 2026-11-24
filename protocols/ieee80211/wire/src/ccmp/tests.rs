@@ -1,14 +1,6 @@
 use super::*;
 
 #[test]
-fn ccmp_header_uses_the_recovered_48_bit_layout() {
-    assert_eq!(
-        ccmp_header(0x4433_2211, 0x8877_6655, 0x80),
-        [0x11, 0x22, 0, 0xa0, 0x33, 0x44, 0x55, 0x66]
-    );
-}
-
-#[test]
 fn strict_header_round_trip_rejects_reserved_encodings() {
     let packet_number = CcmpPacketNumber::new(0x6655_4433_2211).unwrap();
     let header = CcmpHeader::new(packet_number, CcmpKeyId::new(2).unwrap());

@@ -596,10 +596,8 @@ fn association_retains_the_highest_common_advertised_legacy_rate() {
                     association[24],
                     association[25],
                 ]),
-                rsn_ie: Some(&association[39..42]),
-                rsn_ie_count: 1,
-                rsnxe: None,
-                rsnxe_count: 0,
+                rsn_ie: crate::scan::ElementOccurrence::Once(&association[39..42]),
+                rsnxe: crate::scan::ElementOccurrence::Absent,
                 legacy_wpa: crate::scan::ElementPresence::Absent,
                 information_elements: crate::scan::ElementList::Complete,
             },
@@ -629,10 +627,11 @@ fn association_retains_exact_rsnxe_and_duplicate_count() {
     else {
         panic!("association request must parse");
     };
-    assert_eq!(security.rsn_ie, Some(&association[28..31]));
-    assert_eq!(security.rsn_ie_count, 1);
-    assert_eq!(security.rsnxe, Some(&association[31..34]));
-    assert_eq!(security.rsnxe_count, 2);
+    assert_eq!(
+        security.rsn_ie,
+        crate::scan::ElementOccurrence::Once(&association[28..31])
+    );
+    assert_eq!(security.rsnxe, crate::scan::ElementOccurrence::Repeated);
     assert_eq!(
         security.information_elements,
         crate::scan::ElementList::Complete
@@ -991,4 +990,26 @@ fn the_largest_association_id_is_written_and_read_whole() {
             association_id: 0x3fff
         })
     );
+}
+
+/// A Null data frame names the access point as Receiver Address and BSSID;
+/// either one of another address refuses it alone.
+#[test]
+fn null_data_names_the_access_point_in_both_addresses() {
+    const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 1];
+    let mut frame = [0_u8; STA_NULL_DATA_FRAME_LEN];
+    // Null, To DS, Power Management (IEEE Std 802.11-2020, 9.2.4.1).
+    frame[..2].copy_from_slice(&[0x48, 0x11]);
+    frame[4..10].copy_from_slice(&ACCESS_POINT);
+    frame[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 2]);
+    frame[16..22].copy_from_slice(&ACCESS_POINT);
+    assert!(observe_ap_null_data_power_save_for_access_point(&frame, ACCESS_POINT).is_some());
+    for address in [4, 16] {
+        let mut other = frame;
+        other[address + 5] = 9;
+        assert!(
+            observe_ap_null_data_power_save_for_access_point(&other, ACCESS_POINT).is_none(),
+            "address at {address}"
+        );
+    }
 }
