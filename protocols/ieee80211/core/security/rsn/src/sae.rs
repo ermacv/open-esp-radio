@@ -28,7 +28,7 @@ use p256::{
     AffinePoint, FieldBytes, FieldElement, ProjectivePoint, Scalar,
     elliptic_curve::{
         Field, PrimeField,
-        bigint::{Encoding, NonZero, U256, U384},
+        bigint::{NonZero, U256, U384},
         group::Group,
         ops::Reduce,
         point::{AffineCoordinates, DecompressPoint},
@@ -224,7 +224,7 @@ impl SaePasswordElement {
         peer: [u8; 6],
     ) -> Result<Self, SaeError> {
         let key = max_min(local, peer);
-        let prime = P256_MODULUS.to_be_bytes();
+        let prime = crate::crypto::octets_of_u256(P256_MODULUS);
         let mut found = Choice::from(0);
         let mut x_bytes = [0_u8; SAE_PRIME_LEN];
         let mut seed_odd = Choice::from(0);
@@ -269,7 +269,8 @@ impl SaePasswordElement {
 
 /// u = value mod p for a 48-octet H2E value.
 fn reduce_wide(value: &[u8; H2E_PWD_VALUE_LEN]) -> CtOption<FieldElement> {
-    let reduced = U384::from_be_bytes(*value).rem(&WIDE_MODULUS).to_be_bytes();
+    let reduced =
+        crate::crypto::octets_of_u384(crate::crypto::u384_of_octets(*value).rem(&WIDE_MODULUS));
     let mut low = [0; SAE_PRIME_LEN];
     for (target, source) in low.iter_mut().rev().zip(reduced.iter().rev()) {
         *target = *source;
@@ -349,7 +350,7 @@ impl SaePasswordToken {
     pub fn password_element(&self, local: [u8; 6], peer: [u8; 6]) -> SaePasswordElement {
         let hash = hmac_sha256(&[0; 32], &[&max_min(local, peer)]);
 
-        let value = U256::from_be_bytes(hash)
+        let value = crate::crypto::u256_of_octets(hash)
             .rem(&ORDER_MINUS_ONE)
             .wrapping_add(&U256::ONE);
         SaePasswordElement(self.0.mul(<Scalar as Reduce<U256>>::reduce(value)))
@@ -478,7 +479,7 @@ impl SaeComebackTokens {
         let (slot, pending) = self.pending_index(station);
         let pending = u16::conditional_select(&pending, &1, pending.ct_eq(&0));
         self.set_pending(slot, pending);
-        let index = pending.to_be_bytes();
+        let index = TokenIndex::of(pending).to_bytes();
         let mut token = hmac_sha256(&self.key, &[&station, &index]);
         for (target, source) in token.iter_mut().zip(index) {
             *target = source;
@@ -518,7 +519,7 @@ impl SaeComebackTokens {
         let mac = hmac_sha256(&self.key, &[&station, index_bytes]);
         let [_, _, mac_tail @ ..] = &mac;
         let (slot, pending) = self.pending_index(station);
-        if pending == 0 || pending.to_be_bytes() != *index_bytes {
+        if pending == 0 || TokenIndex::from_bytes(*index_bytes).value() != pending {
             return false;
         }
         if !bool::from(mac_tail.ct_eq(tail)) {
@@ -677,7 +678,7 @@ impl SaeKeys {
         hmac_sha256(
             &self.kck,
             &[
-                &send_confirm.to_le_bytes(),
+                &oer_protocols_ieee80211_wire::sae::SaeField::of(send_confirm).to_bytes(),
                 &first.scalar,
                 &first.element,
                 &second.scalar,
@@ -707,6 +708,20 @@ impl SaeKeys {
         } else {
             Err(SaeError::ConfirmMismatch)
         }
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// An anti-clogging token's first two octets: its pending index,
+    /// big-endian, as this crate's tokens carry it.
+    struct TokenIndex[2] (big) {
+        value, with_value: {u16} = 0..16;
+    }
+}
+
+impl TokenIndex {
+    const fn of(value: u16) -> Self {
+        Self::from_bytes([0; 2]).with_value(value)
     }
 }
 

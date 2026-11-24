@@ -21,8 +21,6 @@ pub const IPN_LEN: usize = 6;
 const MANAGEMENT_MIC_BODY_LEN: usize = 2 + IPN_LEN + BIP_MIC_LEN;
 /// The Management MIC element of BIP-CMAC-128.
 pub const MANAGEMENT_MIC_ELEMENT_LEN: usize = 2 + MANAGEMENT_MIC_BODY_LEN;
-/// The largest IPN: six octets.
-pub const IPN_MAX: u64 = (1 << 48) - 1;
 
 /// The IPN six little-endian octets carry.
 pub const fn ipn_from_bytes(bytes: [u8; IPN_LEN]) -> oer_portable_wire::U64<48> {
@@ -63,8 +61,6 @@ pub enum BipFormatError {
     NotManagement,
     /// The frame does not end with a BIP-CMAC-128 Management MIC element.
     MissingManagementMic,
-    /// An IPN above six octets.
-    PacketNumberOutOfRange,
 }
 
 /// `header`, when it begins a protocol-version-0 management frame.
@@ -173,13 +169,8 @@ impl<'a> BipProtection<'a> {
         buffer: &'a mut [u8],
         length: usize,
         key_id: u16,
-        packet_number: u64,
+        packet_number: oer_portable_wire::U64<48>,
     ) -> Result<Self, BipFormatError> {
-        // The one entry of a caller's IPN: `rsn` and the cipher keep a
-        // `u64` until their half of the typed path.
-        let Some(packet_number) = oer_portable_wire::U64::<48>::new(packet_number) else {
-            return Err(BipFormatError::PacketNumberOutOfRange);
-        };
         let protected = length
             .checked_add(MANAGEMENT_MIC_ELEMENT_LEN)
             .ok_or(BipFormatError::Truncated)?;

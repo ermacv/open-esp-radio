@@ -6754,23 +6754,8 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/crypto.rs",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/crypto/pbkdf2.rs",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/kdf.rs",
-        2,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/sae.rs",
-        7,
-        BY_FINAL_CRATES,
+        4,
+        "a door in its home: the octet string of a number and back, RFC 8017 4.1 (I2OSP) and 4.2 (OS2IP) (tasks/403)",
     ),
     ("protocols/network/core/src/dhcp.rs", 3, BY_FINAL_CRATES),
     (
@@ -10462,12 +10447,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::too_many_arguments",
         1,
         "unknown, to read",
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs",

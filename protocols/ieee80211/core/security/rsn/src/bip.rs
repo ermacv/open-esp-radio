@@ -169,7 +169,7 @@ impl BipTransmitter {
             engine,
             self.key_id,
             &self.key,
-            candidate.packet_number().0.get(),
+            candidate.packet_number().0,
             frame,
             length,
         )
