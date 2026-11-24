@@ -6753,7 +6753,7 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         1,
         BY_STEP_3,
     ),
-    ("protocols/ieee80211/wire/src/frame.rs", 7, BY_STEP_3),
+    ("protocols/ieee80211/wire/src/frame.rs", 6, BY_STEP_3),
     ("protocols/ieee80211/wire/src/ftm.rs", 19, BY_STEP_3),
     ("protocols/ieee80211/wire/src/he.rs", 11, BY_STEP_3),
     ("protocols/ieee80211/wire/src/ht.rs", 6, BY_STEP_3),
@@ -8518,30 +8518,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/ieee80211/wire/src/ap.rs::ApAssociationSecurityObservation.rsnxe",
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/frame.rs::AddressFields.address3",
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/frame.rs::AddressFields.address4",
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/frame.rs::AddressFields.sequence_control",
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/frame.rs::AddressFields.transmitter",
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/frame.rs::DecodedHeader.address4",
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/frame.rs::MacHeader.address4",
         BY_STEP_3,
     ),
     (

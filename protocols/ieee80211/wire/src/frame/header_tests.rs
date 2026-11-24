@@ -185,10 +185,18 @@ fn a_three_address_qos_data_frame_has_no_address4() {
     assert_eq!(fields.address3(), Some(address_at(&frame, 16)));
     assert_eq!(
         fields.sequence_control(),
-        Some(u16::from_le_bytes([22, 23]))
+        Some(SequenceControl::from_bytes([22, 23]))
     );
     assert_eq!(fields.address4(), None);
     assert_eq!(fields.addresses().count(), 3);
+    assert_eq!(
+        fields.rest(),
+        AfterReceiver::Three {
+            transmitter: address_at(&frame, 10),
+            address3: address_at(&frame, 16),
+            sequence_control: SequenceControl::from_bytes([22, 23]),
+        }
+    );
 }
 
 #[test]

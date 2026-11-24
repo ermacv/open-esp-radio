@@ -157,10 +157,30 @@ impl FrameControl {
 pub struct AddressFields {
     control: FrameControlFields,
     receiver: [u8; 6],
-    transmitter: Option<[u8; 6]>,
-    address3: Option<[u8; 6]>,
-    sequence_control: Option<u16>,
-    address4: Option<[u8; 6]>,
+    rest: AfterReceiver,
+}
+
+/// The fields after Address 1, as the frame's layout holds them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AfterReceiver {
+    /// A control frame of Address 1 alone: CTS, Ack, Control Wrapper.
+    Nothing,
+    /// A control frame that carries a TA.
+    Transmitter([u8; 6]),
+    /// A management frame, or a data frame without Address 4: Addresses 2
+    /// and 3 and Sequence Control.
+    Three {
+        transmitter: [u8; 6],
+        address3: [u8; 6],
+        sequence_control: SequenceControl,
+    },
+    /// A data frame with both To DS and From DS set: Address 4 as well.
+    Four {
+        transmitter: [u8; 6],
+        address3: [u8; 6],
+        sequence_control: SequenceControl,
+        address4: [u8; 6],
+    },
 }
 
 /// Why a frame's address fields cannot be read.
@@ -173,6 +193,15 @@ pub enum AddressFieldsError {
     /// A frame type or control subtype whose address layout this view does
     /// not know.
     UnknownLayout,
+}
+
+/// The layout Frame Control decides, before any field it governs is read.
+#[derive(Clone, Copy)]
+enum AddressLayout {
+    Receiver,
+    Transmitter,
+    Three,
+    Four,
 }
 
 impl AddressFields {
@@ -188,15 +217,12 @@ impl AddressFields {
         // governs is read: an unknown layout is refused as such, however
         // short the frame.
         let layout = match control.kind() {
-            FrameType::Management => AddressLayout::ThreeAddress { address4: false },
-            FrameType::Data => AddressLayout::ThreeAddress {
-                address4: control.to_ds() && control.from_ds(),
-            },
+            FrameType::Management => AddressLayout::Three,
+            FrameType::Data if control.to_ds() && control.from_ds() => AddressLayout::Four,
+            FrameType::Data => AddressLayout::Three,
             FrameType::Control => match control_layout(control.control_subtype()) {
-                ControlLayout::ReceiverAndTransmitter => {
-                    AddressLayout::Control { transmitter: true }
-                }
-                ControlLayout::Receiver => AddressLayout::Control { transmitter: false },
+                ControlLayout::ReceiverAndTransmitter => AddressLayout::Transmitter,
+                ControlLayout::Receiver => AddressLayout::Receiver,
                 ControlLayout::Unknown => return Err(AddressFieldsError::UnknownLayout),
             },
             FrameType::Extension | FrameType::Reserved(_) => {
@@ -205,30 +231,30 @@ impl AddressFields {
         };
         let _duration: [u8; 2] = reader.read().map_err(truncated)?;
         let receiver = reader.read().map_err(truncated)?;
-        let mut fields = Self {
+        // A struct expression evaluates its fields in the order written: the
+        // order of the fields in the frame.
+        let rest = match layout {
+            AddressLayout::Receiver => AfterReceiver::Nothing,
+            AddressLayout::Transmitter => {
+                AfterReceiver::Transmitter(reader.read().map_err(truncated)?)
+            }
+            AddressLayout::Three => AfterReceiver::Three {
+                transmitter: reader.read().map_err(truncated)?,
+                address3: reader.read().map_err(truncated)?,
+                sequence_control: SequenceControl::from_bytes(reader.read().map_err(truncated)?),
+            },
+            AddressLayout::Four => AfterReceiver::Four {
+                transmitter: reader.read().map_err(truncated)?,
+                address3: reader.read().map_err(truncated)?,
+                sequence_control: SequenceControl::from_bytes(reader.read().map_err(truncated)?),
+                address4: reader.read().map_err(truncated)?,
+            },
+        };
+        Ok(Self {
             control,
             receiver,
-            transmitter: None,
-            address3: None,
-            sequence_control: None,
-            address4: None,
-        };
-        match layout {
-            AddressLayout::ThreeAddress { address4 } => {
-                fields.transmitter = Some(reader.read().map_err(truncated)?);
-                fields.address3 = Some(reader.read().map_err(truncated)?);
-                fields.sequence_control =
-                    Some(u16::from_le_bytes(reader.read().map_err(truncated)?));
-                if address4 {
-                    fields.address4 = Some(reader.read().map_err(truncated)?);
-                }
-            }
-            AddressLayout::Control { transmitter: true } => {
-                fields.transmitter = Some(reader.read().map_err(truncated)?);
-            }
-            AddressLayout::Control { transmitter: false } => {}
-        }
-        Ok(fields)
+            rest,
+        })
     }
 
     pub const fn control(&self) -> FrameControlFields {
@@ -240,47 +266,64 @@ impl AddressFields {
         self.receiver
     }
 
+    /// The fields after Address 1.
+    pub const fn rest(&self) -> AfterReceiver {
+        self.rest
+    }
+
     /// Address 2, in management and data frames and in a control frame
     /// carrying a TA.
     pub const fn transmitter(&self) -> Option<[u8; 6]> {
-        self.transmitter
+        match self.rest {
+            AfterReceiver::Nothing => None,
+            AfterReceiver::Transmitter(transmitter)
+            | AfterReceiver::Three { transmitter, .. }
+            | AfterReceiver::Four { transmitter, .. } => Some(transmitter),
+        }
     }
 
     /// Address 3, in management and data frames.
     pub const fn address3(&self) -> Option<[u8; 6]> {
-        self.address3
+        match self.rest {
+            AfterReceiver::Nothing | AfterReceiver::Transmitter(_) => None,
+            AfterReceiver::Three { address3, .. } | AfterReceiver::Four { address3, .. } => {
+                Some(address3)
+            }
+        }
     }
 
     /// Sequence Control, in management and data frames.
-    pub const fn sequence_control(&self) -> Option<u16> {
-        self.sequence_control
+    pub const fn sequence_control(&self) -> Option<SequenceControl> {
+        match self.rest {
+            AfterReceiver::Nothing | AfterReceiver::Transmitter(_) => None,
+            AfterReceiver::Three {
+                sequence_control, ..
+            }
+            | AfterReceiver::Four {
+                sequence_control, ..
+            } => Some(sequence_control),
+        }
     }
 
     /// Address 4, in a data frame with both To DS and From DS set.
     pub const fn address4(&self) -> Option<[u8; 6]> {
-        self.address4
+        match self.rest {
+            AfterReceiver::Four { address4, .. } => Some(address4),
+            _ => None,
+        }
     }
 
     /// Every address the frame holds, in field order.
     pub fn addresses(&self) -> impl Iterator<Item = [u8; 6]> {
         [
             Some(self.receiver),
-            self.transmitter,
-            self.address3,
-            self.address4,
+            self.transmitter(),
+            self.address3(),
+            self.address4(),
         ]
         .into_iter()
         .flatten()
     }
-}
-
-/// The address fields a known frame layout holds after Address 1.
-#[derive(Clone, Copy)]
-enum AddressLayout {
-    /// Addresses 2 and 3 and Sequence Control, then Address 4 when set.
-    ThreeAddress { address4: bool },
-    /// Address 2 when set.
-    Control { transmitter: bool },
 }
 
 /// The addresses a control frame of one subtype carries.
