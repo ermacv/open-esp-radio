@@ -429,7 +429,11 @@ AES-128 engine the composition supplies through its callbacks
 handshake takes it and a connected rekey's in the action turn that follows;
 the AES-CMAC EAPOL-Key MIC of PSK-SHA256 and SAE; and the CCMP and BIP of
 received protected management frames. A refusal drops such a frame like one
-that does not verify and leaves its replay state unchanged. The machine stays sans-IO: it names
+that does not verify and leaves its replay state unchanged. An engine held in
+the station's callbacks is debt by the rule of
+[`docs/architecture.md`, "Ownership"](../../../../../docs/architecture.md#ownership),
+removed when the roles are written (the plan's step "the radio's controller
+and the roles"). The machine stays sans-IO: it names
 no hardware type, and a composition may supply a software block or a chip's
 accelerator behind the same trait. An engine's refusal fails the unwrap like
 key data that fails its integrity check. No unwrap is in flight across

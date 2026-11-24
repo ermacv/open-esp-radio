@@ -22,6 +22,12 @@ execute its typed transmit and key-install requests.
 | `pmksa` | The PMKSA cache of both roles: per peer and, for a station, per SSID |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
 
+The authenticator's Message 3 wrap names its engine (software AES): that
+form is debt by the rule of
+[`docs/architecture.md`, "Ownership"](../../../../../docs/architecture.md#ownership),
+removed when the roles are written (the plan's step "the radio's controller
+and the roles").
+
 `oer-protocols-ieee80211-core-security-cipher` owns CCMP and BIP-CMAC-128 over the
 caller's AES-128 engine, and the software AES-128 block primitive with its
 key-unwrap engine; the CCM, AES-CMAC and RFC 3394 algorithms are
