@@ -1,19 +1,19 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans a probe with the area it reads (tasks/312)"
+    reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
 )]
 #![cfg_attr(
     target_arch = "riscv32",
     expect(
         clippy::cast_sign_loss,
-        reason = "R2 cleans a probe with the area it reads (tasks/312)"
+        reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
     )
 )]
 #![cfg_attr(
     target_arch = "riscv32",
     expect(
         clippy::let_underscore_must_use,
-        reason = "R2 cleans a probe with the area it reads (tasks/312)"
+        reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
     )
 )]
 #![cfg_attr(target_arch = "riscv32", no_main)]
@@ -31,7 +31,7 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "R2 cleans a probe with the area it reads (tasks/323)"
+    reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
 )]
 
 //! Case C's sender (`tasks/154`, `159`, cell E of `161`): frames to the

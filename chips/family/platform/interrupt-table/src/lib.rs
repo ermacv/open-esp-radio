@@ -1,6 +1,6 @@
 #![expect(
     clippy::fn_params_excessive_bools,
-    reason = "the platform's step, in the stand campaign"
+    reason = "step 7: P, a level's task"
 )]
 #![cfg_attr(
     test,
@@ -77,10 +77,7 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
-)]
+#![expect(clippy::arithmetic_side_effects, reason = "step 7: P, a level's task")]
 
 mod binding;
 pub use binding::{BindFault, BindFaultCode, BindFaultKind, Quarantined};

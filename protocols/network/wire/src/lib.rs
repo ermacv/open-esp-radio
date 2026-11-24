@@ -1,6 +1,6 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R4 cleans the wire (tasks/312)"
+    reason = "step 3: R3, R4 and R5 on the final crates"
 )]
 #![no_std]
 #![forbid(unsafe_code)]

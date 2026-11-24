@@ -2,12 +2,12 @@
     any(feature = "chip", test),
     expect(
         clippy::fn_params_excessive_bools,
-        reason = "the platform's step, in the stand campaign"
+        reason = "step 14: step 7 with the rest of P"
     )
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 14: step 7 with the rest of P"
 )]
 #![cfg_attr(
     test,
@@ -30,13 +30,13 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+    reason = "step 14: step 7 with the rest of P"
 )]
 #![cfg_attr(
     all(target_arch = "riscv32", feature = "chip"),
     expect(
         clippy::indexing_slicing,
-        reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+        reason = "step 14: step 7 with the rest of P"
     )
 )]
 

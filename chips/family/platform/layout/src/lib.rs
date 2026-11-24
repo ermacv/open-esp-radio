@@ -2,7 +2,7 @@
     feature = "build",
     expect(
         clippy::cast_possible_truncation,
-        reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+        reason = "step 16b: the boot's and the family drivers' rows"
     )
 )]
 #![no_std]
@@ -19,7 +19,7 @@
 #![expect(
     clippy::arithmetic_side_effects,
     clippy::indexing_slicing,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 
 //! Staged-boot layout contract of the Espressif chips.

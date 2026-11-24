@@ -7,7 +7,7 @@
 //! uses.
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 14: step 7 with the rest of P"
 )]
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]

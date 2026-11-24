@@ -1,7 +1,7 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "the family's drivers and facts, in the stand campaign"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 //! Espressif platform watchdog owners over a chip's typed watchdog registers.
 //!

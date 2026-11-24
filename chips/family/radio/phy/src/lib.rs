@@ -1,18 +1,18 @@
 #![expect(
     clippy::fn_params_excessive_bools,
-    reason = "the PHY, after the Wi-Fi path"
+    reason = "step 16: the PHY's procedures in the one-loop form"
 )]
 #![cfg_attr(
     test,
     expect(
         clippy::struct_excessive_bools,
-        reason = "the PHY, after the Wi-Fi path"
+        reason = "step 16: the PHY's procedures in the one-loop form"
     )
 )]
 //! PHY analog and PBus operations over chip-owned register ports.
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 16: the PHY's procedures in the one-loop form"
 )]
 #![no_std]
 #![forbid(unsafe_code)]

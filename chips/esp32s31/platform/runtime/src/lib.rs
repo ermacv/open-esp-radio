@@ -1,10 +1,10 @@
 #![expect(
     clippy::fn_params_excessive_bools,
-    reason = "the platform's step, in the stand campaign"
+    reason = "step 15: the exception path as one module"
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 15: the exception path as one module"
 )]
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]

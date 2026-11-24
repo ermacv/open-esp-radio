@@ -1,11 +1,11 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "the family's drivers and facts, in the stand campaign"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 //! Espressif bootstrap sequences over a chip's typed register traits.
 //!

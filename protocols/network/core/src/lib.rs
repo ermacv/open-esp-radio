@@ -1,6 +1,6 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
+    reason = "step 3: R3, R4 and R5 on the final crates"
 )]
 #![cfg_attr(
     test,

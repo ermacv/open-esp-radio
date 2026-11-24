@@ -5,19 +5,19 @@
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+    reason = "step 16: the PHY's procedures in the one-loop form"
 )]
 #![expect(
     clippy::cast_possible_wrap,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+    reason = "step 16: the PHY's procedures in the one-loop form"
 )]
 #![expect(
     clippy::cast_sign_loss,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+    reason = "step 16: the PHY's procedures in the one-loop form"
 )]
 #![expect(
     clippy::let_underscore_must_use,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+    reason = "step 16: the PHY's procedures in the one-loop form"
 )]
 #![no_std]
 #![forbid(unsafe_code)]
@@ -50,7 +50,7 @@
     clippy::expect_used,
     clippy::indexing_slicing,
     clippy::panic,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/323)"
+    reason = "step 16: the PHY's procedures in the one-loop form"
 )]
 
 //! Source-only ESP32-S31 shared RF/PHY ownership frontier.

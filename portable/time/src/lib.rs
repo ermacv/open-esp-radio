@@ -1,7 +1,4 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "step 7: P, a level's task")]
 #![cfg_attr(
     test,
     expect(

@@ -1,6 +1,6 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R4 cleans the wire (tasks/312)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 #![no_std]
 #![forbid(unsafe_code)]
