@@ -10,6 +10,45 @@ use crate::Akm;
 mod pbkdf2;
 pub use pbkdf2::PmkDerivation;
 
+/// The octet string of a 256-bit number, most significant octet first.
+///
+/// SOURCE: RFC 8017, 4.1 (I2OSP), as IEEE Std 802.11-2020, 12.4.4.2.1
+/// converts a field element to octets.
+pub(crate) fn octets_of_u256(value: p256::U256) -> [u8; 32] {
+    p256::elliptic_curve::bigint::Encoding::to_be_bytes(&value)
+}
+
+/// The 256-bit number of an octet string, most significant octet first.
+///
+/// SOURCE: RFC 8017, 4.2 (OS2IP).
+pub(crate) fn u256_of_octets(octets: [u8; 32]) -> p256::U256 {
+    <p256::U256 as p256::elliptic_curve::bigint::Encoding>::from_be_bytes(octets)
+}
+
+/// The octet string of a 384-bit number, most significant octet first.
+///
+/// SOURCE: RFC 8017, 4.1 (I2OSP).
+pub(crate) fn octets_of_u384(value: p256::elliptic_curve::bigint::U384) -> [u8; 48] {
+    p256::elliptic_curve::bigint::Encoding::to_be_bytes(&value)
+}
+
+/// The 384-bit number of an octet string, most significant octet first.
+///
+/// SOURCE: RFC 8017, 4.2 (OS2IP).
+pub(crate) fn u384_of_octets(octets: [u8; 48]) -> p256::elliptic_curve::bigint::U384 {
+    <p256::elliptic_curve::bigint::U384 as p256::elliptic_curve::bigint::Encoding>::from_be_bytes(
+        octets,
+    )
+}
+
+oer_portable_wire::bitfield! {
+    /// The binding's length of the association security IEs: a 64-bit
+    /// big-endian count of octets, as this crate's binding defines it.
+    struct BindingLength[8] (big) {
+        value, with_value: {u64} = 0..64;
+    }
+}
+
 pub const PSK_PASSPHRASE_MIN_LEN: usize = 8;
 pub const PSK_PASSPHRASE_MAX_LEN: usize = 63;
 pub const PSK_SSID_MAX_LEN: usize = 32;
@@ -132,7 +171,13 @@ impl Pmk {
     fn association_security_binding_mac(&self, association_security_ies: &[u8]) -> Hmac<Sha1> {
         let mut mac = crate::mac::sha1(&self.0);
         mac.update(RSN_ASSOCIATION_SECURITY_BINDING_LABEL);
-        mac.update(&(association_security_ies.len() as u64).to_be_bytes());
+        // `usize` is at most 64 bits on every target: the widening is lossless.
+        let length = association_security_ies.len() as u64;
+        mac.update(
+            &BindingLength::from_bytes([0; 8])
+                .with_value(length)
+                .to_bytes(),
+        );
         mac.update(association_security_ies);
         mac
     }

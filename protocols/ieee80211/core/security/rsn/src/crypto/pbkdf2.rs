@@ -75,7 +75,9 @@ impl State {
             hmac(
                 self.password.as_slice(),
                 self.ssid.as_slice(),
-                &self.block.to_be_bytes(),
+                &BlockIndex::from_bytes([0; 4])
+                    .with_value(self.block)
+                    .to_bytes(),
             )
         } else {
             hmac(self.password.as_slice(), &self.previous, &[])
@@ -202,5 +204,13 @@ mod tests {
                 Err(PskDerivationError::InvalidSsidLength)
             ));
         }
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// PBKDF2's block index INT(i): a four-octet big-endian integer.
+    /// SOURCE: RFC 8018, 5.2 (PBKDF2, step 3).
+    struct BlockIndex[4] (big) {
+        value, with_value: {u32} = 0..32;
     }
 }

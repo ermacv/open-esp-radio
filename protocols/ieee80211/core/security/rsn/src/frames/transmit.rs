@@ -5,6 +5,15 @@ use crate::AkmKeys;
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
 use oer_protocols_ieee80211_wire::eapol::{EapolEncodeError, EapolKeyBuffer, EapolKeyFields};
 
+/// The Key Length field these EAPOL-Key frames carry: `RSN_GTK_LEN`
+/// octets (IEEE Std 802.11-2020, 12.7.2).
+const GTK_KEY_LENGTH: u16 = 16;
+const _: () = {
+    if GTK_KEY_LENGTH as usize != RSN_GTK_LEN {
+        panic!("the Key Length field names the GTK's length");
+    }
+};
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RsnTxFrame<const N: usize = RSN_TX_EAPOL_CAPACITY> {
     interface: RsnInterface,
@@ -28,7 +37,7 @@ impl<const N: usize> RsnTxFrame<N> {
                 .with_descriptor_version(akm.key_descriptor_version())
                 .with_pairwise(true)
                 .with_ack(true),
-            RSN_GTK_LEN as u16,
+            GTK_KEY_LENGTH,
             replay_counter,
             authenticator_nonce,
             [0; 8],
@@ -93,7 +102,7 @@ impl<const N: usize> RsnTxFrame<N> {
                 .with_mic(true)
                 .with_secure(true)
                 .with_encrypted_key_data(true),
-            RSN_GTK_LEN as u16,
+            GTK_KEY_LENGTH,
             replay_counter,
             authenticator_nonce,
             key_rsc,
@@ -163,7 +172,7 @@ impl<const N: usize> RsnTxFrame<N> {
                 .with_mic(true)
                 .with_secure(true)
                 .with_encrypted_key_data(true),
-            RSN_GTK_LEN as u16,
+            GTK_KEY_LENGTH,
             replay_counter,
             [0; 32],
             key_rsc,

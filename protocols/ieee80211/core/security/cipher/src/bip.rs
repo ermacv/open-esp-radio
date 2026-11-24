@@ -48,9 +48,7 @@ impl<'a> BipFrame<'a> {
                 |error| match error {
                     BipFormatError::MissingManagementMic => BipError::MissingManagementMic,
                     BipFormatError::NotManagement => BipError::NotManagement,
-                    BipFormatError::Truncated | BipFormatError::PacketNumberOutOfRange => {
-                        BipError::Truncated
-                    }
+                    BipFormatError::Truncated => BipError::Truncated,
                 },
             )?;
         if frame.key_id() != u16::from(key_id) {
@@ -92,7 +90,7 @@ pub fn protect<E: Aes128Engine>(
     engine: &mut E,
     key_id: u8,
     key: &[u8; RSN_IGTK_LEN],
-    packet_number: u64,
+    packet_number: oer_portable_wire::U64<48>,
     frame: &mut [u8],
     length: usize,
 ) -> Result<usize, BipProtectError> {

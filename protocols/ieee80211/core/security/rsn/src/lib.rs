@@ -1,4 +1,10 @@
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![cfg_attr(
     test,
     expect(
