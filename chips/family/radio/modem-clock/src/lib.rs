@@ -4,7 +4,7 @@
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 4: D1, D2 and D3, the PHY without quarantine"
 )]
 //! Chip-neutral shared modem clock reference-count planner.
 //!

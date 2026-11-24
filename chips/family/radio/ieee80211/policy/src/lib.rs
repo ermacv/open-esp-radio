@@ -1,14 +1,14 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 3: R3, R4 and R5 on the final crates"
 )]
 #![expect(
     clippy::cast_possible_wrap,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 3: R3, R4 and R5 on the final crates"
 )]
 #![expect(
     clippy::cast_sign_loss,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 3: R3, R4 and R5 on the final crates"
 )]
 #![no_std]
 #![forbid(unsafe_code)]

@@ -105,7 +105,8 @@ is gone both fail, so every list only shrinks:
   The packages outside the Wi-Fi path not yet clean, by the list
   `DEFERRED_BOOL_LINTS`, each with its two counts (a record) and what
   cleans it, expect the lints at their crate root with that step as the
-  reason; the list only shrinks and is emptied after the stand campaign.
+  reason; the list only shrinks, each package emptied by the step of the
+  plan that writes its code last.
   The PAC alone, whose generated setters take a bit's value as a `bool`,
   expects `fn_params_excessive_bools` at its crate root for good; no other
   package has a `bool` parameter. `SILENCED` counts each expectation.

@@ -1,6 +1,6 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
+    reason = "step 9: 5.5, transmit on the DMA memory contract"
 )]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
@@ -15,7 +15,7 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "R3 cleans the cores and the contracts (tasks/323)"
+    reason = "step 9: 5.5, transmit on the DMA memory contract"
 )]
 
 //! Audited storage primitives for radio pipelines.

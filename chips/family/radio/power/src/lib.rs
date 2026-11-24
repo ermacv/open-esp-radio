@@ -1,7 +1,7 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "no package yet: the radio system and Bluetooth"
+    reason = "step 4: D1, D2 and D3, the PHY without quarantine"
 )]
 //! Shared RF membership, epoch, power and clock drivers over chip-owned ports.
 #![no_std]

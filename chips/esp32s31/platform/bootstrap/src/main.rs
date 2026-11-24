@@ -2,7 +2,7 @@
     target_arch = "riscv32",
     expect(
         clippy::cast_possible_truncation,
-        reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+        reason = "step 16b: the boot's and the family drivers' rows"
     )
 )]
 #![cfg_attr(target_arch = "riscv32", no_main, no_std)]

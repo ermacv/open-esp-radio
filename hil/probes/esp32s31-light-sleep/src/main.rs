@@ -14,7 +14,7 @@
     target_arch = "riscv32",
     expect(
         clippy::arithmetic_side_effects,
-        reason = "R2 cleans a probe with the area it reads (tasks/323)"
+        reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
     )
 )]
 

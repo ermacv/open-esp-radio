@@ -1,6 +1,6 @@
 #![expect(
     clippy::struct_excessive_bools,
-    reason = "the family's drivers and facts, in the stand campaign"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 #![no_std]
 #![forbid(unsafe_code)]
@@ -15,7 +15,7 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 
 //! The USB Serial/JTAG console of Espressif chips, over the registers the

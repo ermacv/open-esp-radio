@@ -1,6 +1,6 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 //! ESP32-S31 chip knowledge: the tables and pure functions the HAL, the
 //! drivers and the host tools share, without hardware access.

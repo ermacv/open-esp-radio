@@ -17,7 +17,7 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "R3 cleans the cores and the contracts (tasks/323)"
+    reason = "step 14: step 7 with the rest of P"
 )]
 
 use std::{

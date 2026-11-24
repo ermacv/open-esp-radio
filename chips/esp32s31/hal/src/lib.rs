@@ -1,23 +1,23 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "the HAL's register images, in the stand campaign"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 #![expect(
     clippy::cast_possible_wrap,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 #![expect(
     clippy::cast_sign_loss,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 #![expect(
     clippy::let_underscore_must_use,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
@@ -39,7 +39,7 @@
     clippy::indexing_slicing,
     clippy::panic,
     clippy::unreachable,
-    reason = "R2 cleans the HAL and the PHY by area (tasks/323)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 
 //! ESP32-S31 register transactions and affine radio ownership.

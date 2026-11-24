@@ -18,7 +18,7 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "R3 cleans the cores and the contracts (tasks/323)"
+    reason = "step 16b: the boot's and the family drivers' rows"
 )]
 
 use std::{process::ExitCode, time::Duration};

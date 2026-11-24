@@ -49,7 +49,7 @@ type Deviation = (&'static str, &'static str, &'static str);
 const KNOWN_INSTRUMENTATION_FEATURES: &[Deviation] = &[(
     "chips/esp32s31/radio/phy",
     "radio-health",
-    "PHY observations move to the observer (#848, instrumentation PHY stage)",
+    "step 4: D1, D2 and D3, the PHY's observations move to the observer",
 )];
 
 fn root() -> PathBuf {

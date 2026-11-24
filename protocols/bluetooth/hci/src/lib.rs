@@ -1,6 +1,6 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
+    reason = "Bluetooth LE's own plan, outside this plan"
 )]
 #![no_std]
 #![forbid(unsafe_code)]

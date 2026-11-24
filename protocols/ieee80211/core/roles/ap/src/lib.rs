@@ -1,10 +1,10 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
+    reason = "step 13: step 6 with C, the radio's controller"
 )]
 #![expect(
     clippy::let_underscore_must_use,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
+    reason = "step 13: step 6 with C, the radio's controller"
 )]
 #![no_std]
 #![forbid(unsafe_code)]

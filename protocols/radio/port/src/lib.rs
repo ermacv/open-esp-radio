@@ -1,10 +1,10 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
+    reason = "step 4: D1, D2 and D3, the PHY without quarantine"
 )]
 #![expect(
     clippy::let_underscore_must_use,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
+    reason = "step 4: D1, D2 and D3, the PHY without quarantine"
 )]
 #![no_std]
 #![forbid(unsafe_code)]
