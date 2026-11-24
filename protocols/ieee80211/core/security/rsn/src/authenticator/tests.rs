@@ -674,3 +674,37 @@ fn every_built_message1_of_a_full_window_is_awaited() {
         );
     }
 }
+
+/// While Message 4 is awaited, a repeat of the verified Message 2 is
+/// ignored, and a Message 2 with another SNonce is refused as peer input:
+/// neither builds Message 3 again.
+#[test]
+fn a_second_message2_is_ignored_with_its_snonce_and_refused_with_another() {
+    let mut handshake = awaiting_message4();
+    let key_data = key_data();
+    assert!(matches!(
+        handshake.on_eapol(
+            &pmk(),
+            message2(&STATION_RSN, &ptk()),
+            material(&key_data, 0),
+            &mut SoftwareAes128
+        ),
+        Ok(RsnApEapol::None)
+    ));
+    let rsn = OwnedRsnIe::<64>::try_copy(&STATION_RSN).unwrap();
+    let other = RsnTxFrame::<512>::message2(Akm::Psk, AP, REPLAY, [0x23; 32], &rsn)
+        .unwrap()
+        .authenticate(&ptk(), &mut SoftwareAes128)
+        .unwrap();
+    let other = OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, other.as_bytes())
+        .unwrap();
+    assert!(matches!(
+        handshake.on_eapol(&pmk(), other, material(&key_data, 0), &mut SoftwareAes128),
+        Err(RsnApError::Rejected(RsnStateError::UnexpectedMessage))
+    ));
+    // Message 3's window is as it was.
+    assert_eq!(
+        handshake.latest().map(|t| t.replay_counter),
+        Some(REPLAY + 1)
+    );
+}

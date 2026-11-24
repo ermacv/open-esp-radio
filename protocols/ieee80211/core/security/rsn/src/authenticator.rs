@@ -453,7 +453,17 @@ impl RsnApHandshake {
             replay_counter,
             retransmission: false,
         };
-        let built = self.message3(&ptk, transmit, &material, engine);
+        let built = message3(
+            Message3Facts {
+                akm: self.akm,
+                supplicant: self.supplicant,
+                authenticator_nonce: self.authenticator_nonce,
+                ptk: &ptk,
+                transmit,
+            },
+            &material,
+            engine,
+        );
         // A frame that fails to build leaves its counter spent.
         self.last_counter = replay_counter;
         let frame = match built {
@@ -512,42 +522,48 @@ impl RsnApHandshake {
         material: Message3Material<'_, K>,
         engine: &mut E,
     ) -> Result<RsnApRetransmit<N>, RsnApError> {
-        match &self.phase {
-            Phase::AwaitingMessage2 { .. } => {
+        let Self {
+            akm,
+            supplicant,
+            authenticator_nonce,
+            last_counter,
+            phase,
+            ..
+        } = self;
+        match phase {
+            Phase::AwaitingMessage2 {
+                awaited, latest, ..
+            } => {
                 // The counter after this one stays free for Message 3.
-                let replay_counter = self
-                    .last_counter
+                let replay_counter = last_counter
                     .checked_add(1)
                     .filter(|counter| *counter != u64::MAX)
                     .ok_or(RsnApError::ReplayCounterExhausted)?;
-                self.last_counter = replay_counter;
+                *last_counter = replay_counter;
                 let transmit = RsnTransmit {
                     message: RsnTxMessage::PairwiseMessage1,
                     replay_counter,
                     retransmission: true,
                 };
                 let mut frame = RsnTxFrame::authenticator_message1(
-                    self.akm,
-                    self.supplicant,
+                    *akm,
+                    *supplicant,
                     replay_counter,
-                    self.authenticator_nonce,
+                    *authenticator_nonce,
                 );
                 frame.retransmission = true;
-                if let Phase::AwaitingMessage2 {
-                    awaited, latest, ..
-                } = &mut self.phase
-                {
-                    awaited.record(replay_counter);
-                    *latest = transmit;
-                }
+                awaited.record(replay_counter);
+                *latest = transmit;
                 Ok(RsnApRetransmit::Message1(frame, transmit))
             }
             Phase::Keyed {
                 ptk,
-                stage: KeyedStage::AwaitingMessage4 { .. },
+                stage:
+                    KeyedStage::AwaitingMessage4 {
+                        awaited, latest, ..
+                    },
             } => {
-                let replay_counter = self
-                    .last_counter
+                let replay_counter = last_counter
                     .checked_add(1)
                     .ok_or(RsnApError::ReplayCounterExhausted)?;
                 let transmit = RsnTransmit {
@@ -555,24 +571,26 @@ impl RsnApHandshake {
                     replay_counter,
                     retransmission: true,
                 };
-                let built = self.message3(ptk, transmit, &material, engine);
-                self.last_counter = replay_counter;
+                let built = message3(
+                    Message3Facts {
+                        akm: *akm,
+                        supplicant: *supplicant,
+                        authenticator_nonce: *authenticator_nonce,
+                        ptk,
+                        transmit,
+                    },
+                    &material,
+                    engine,
+                );
+                // A frame that fails to build leaves its counter spent.
+                *last_counter = replay_counter;
                 let frame = match built {
                     Ok(frame) => frame,
                     Err(Message3Failure::Wrap(error)) => return Err(RsnApError::KeyWrap(error)),
                     Err(Message3Failure::Step(error)) => return Err(error),
                 };
-                if let Phase::Keyed {
-                    stage:
-                        KeyedStage::AwaitingMessage4 {
-                            awaited, latest, ..
-                        },
-                    ..
-                } = &mut self.phase
-                {
-                    awaited.record(replay_counter);
-                    *latest = transmit;
-                }
+                awaited.record(replay_counter);
+                *latest = transmit;
                 Ok(RsnApRetransmit::Message3(frame, transmit))
             }
             Phase::Keyed {
@@ -581,38 +599,52 @@ impl RsnApHandshake {
             } => Ok(RsnApRetransmit::Authorized),
         }
     }
+}
 
-    /// Message 3 of `transmit` under `ptk`: its key data wrapped under the
-    /// KEK and its MIC computed, both on `engine`.
-    fn message3<const N: usize, const K: usize, E: Aes128Engine>(
-        &self,
-        ptk: &Ptk,
-        transmit: RsnTransmit,
-        material: &Message3Material<'_, K>,
-        engine: &mut E,
-    ) -> Result<RsnTxFrame<N>, Message3Failure> {
-        let plaintext = KeyData::<RSN_KEY_DATA_CAPACITY>::try_copy(material.key_data.as_bytes())
-            .map_err(|_| Message3Failure::Wrap(KeyWrapError::CapacityExceeded))?;
-        let wrapped = wrap_now(
-            engine,
-            KeyWrapRequest::new(Aes128Key::copy_from(ptk.kek()), plaintext),
-        )
-        .into_wrapped()
-        .map_err(Message3Failure::Wrap)?;
-        let mut frame = RsnTxFrame::message3(
-            self.akm,
-            self.supplicant,
-            transmit.replay_counter,
-            self.authenticator_nonce,
-            material.group_packet_number.receive_sequence(),
-            wrapped.as_bytes(),
-        )
-        .map_err(|error| Message3Failure::Step(RsnApError::Frame(error)))?;
-        frame.retransmission = transmit.retransmission;
-        frame
-            .authenticate(ptk, engine)
-            .map_err(|error| Message3Failure::Step(RsnApError::Engine(error)))
-    }
+/// What Message 3 is built from beside its material.
+struct Message3Facts<'a> {
+    akm: Akm,
+    supplicant: [u8; 6],
+    authenticator_nonce: [u8; RSN_NONCE_LEN],
+    ptk: &'a Ptk,
+    transmit: RsnTransmit,
+}
+
+/// Message 3 of `facts.transmit` under `facts.ptk`: its key data wrapped
+/// under the KEK and its MIC computed, both on `engine`.
+fn message3<const N: usize, const K: usize, E: Aes128Engine>(
+    facts: Message3Facts<'_>,
+    material: &Message3Material<'_, K>,
+    engine: &mut E,
+) -> Result<RsnTxFrame<N>, Message3Failure> {
+    let Message3Facts {
+        akm,
+        supplicant,
+        authenticator_nonce,
+        ptk,
+        transmit,
+    } = facts;
+    let plaintext = KeyData::<RSN_KEY_DATA_CAPACITY>::try_copy(material.key_data.as_bytes())
+        .map_err(|_| Message3Failure::Wrap(KeyWrapError::CapacityExceeded))?;
+    let wrapped = wrap_now(
+        engine,
+        KeyWrapRequest::new(Aes128Key::copy_from(ptk.kek()), plaintext),
+    )
+    .into_wrapped()
+    .map_err(Message3Failure::Wrap)?;
+    let mut frame = RsnTxFrame::message3(
+        akm,
+        supplicant,
+        transmit.replay_counter,
+        authenticator_nonce,
+        material.group_packet_number.receive_sequence(),
+        wrapped.as_bytes(),
+    )
+    .map_err(|error| Message3Failure::Step(RsnApError::Frame(error)))?;
+    frame.retransmission = transmit.retransmission;
+    frame
+        .authenticate(ptk, engine)
+        .map_err(|error| Message3Failure::Step(RsnApError::Engine(error)))
 }
 
 /// Why Message 3 was not built: a wrap failure, which ends a first build,

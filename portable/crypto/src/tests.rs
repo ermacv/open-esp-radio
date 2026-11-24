@@ -90,12 +90,13 @@ fn wrap_refuses_data_outside_rfc3394_and_its_capacity() {
 fn a_refused_wrap_loads_no_key_or_clears_its_buffer() {
     let mut loaded = false;
     let response =
-        rfc3394::wrap::<test_engine::Engine, 32>(KeyData::try_copy(&[0; 8]).unwrap(), || {
+        rfc3394::wrap::<test_engine::Engine, 32>(KeyData::try_copy(&[0xa5; 8]).unwrap(), || {
             loaded = true;
             Ok(test_engine::Engine::new(&RFC3394_4_1_KEK))
         });
     assert_eq!(response.wrapped(), Err(KeyWrapError::InvalidLength));
     assert!(!loaded);
+    assert!(erased(&response));
     for refuse_from in [0, 1, 5, 11] {
         let response = rfc3394::wrap::<test_engine::Engine, 32>(
             KeyData::try_copy(&RFC3394_4_1_KEY_DATA).unwrap(),
@@ -111,6 +112,7 @@ fn a_refused_wrap_loads_no_key_or_clears_its_buffer() {
             Err(KeyWrapError::Engine(test_engine::REFUSAL)),
             "{refuse_from}"
         );
+        assert!(erased(&response), "{refuse_from}");
         assert_eq!(
             response.into_wrapped().err(),
             Some(KeyWrapError::Engine(test_engine::REFUSAL))
@@ -124,6 +126,7 @@ fn a_refused_wrap_loads_no_key_or_clears_its_buffer() {
         response.wrapped(),
         Err(KeyWrapError::Engine(test_engine::REFUSAL))
     );
+    assert!(erased(&response));
     // Twelve blocks (two semiblocks, six passes) wrap the vector.
     let response = rfc3394::wrap::<test_engine::Engine, 32>(
         KeyData::try_copy(&RFC3394_4_1_KEY_DATA).unwrap(),
@@ -300,4 +303,9 @@ fn a_length_refusal_loads_no_key() {
     });
     assert_eq!(response.plaintext(), Err(KeyUnwrapError::InvalidLength));
     assert_eq!(loads, 0);
+}
+
+/// Whether a response's whole buffer, beyond its length too, is zero.
+fn erased<const N: usize>(response: &crate::KeyWrapResponse<N>) -> bool {
+    response.data.len == 0 && response.data.bytes.iter().all(|byte| *byte == 0)
 }

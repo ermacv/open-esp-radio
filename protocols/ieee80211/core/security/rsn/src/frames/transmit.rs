@@ -225,12 +225,14 @@ impl<const N: usize> RsnTxFrame<N> {
             return Err(RsnFrameError::ZeroNonce);
         }
         let packet = EapolKeyBuffer::encode(&EapolKeyFields {
-            protocol_version,
-            key_information: key_info,
-            key_length,
-            replay_counter,
-            nonce,
-            key_rsc,
+            fixed: EapolKeyFixedFields {
+                protocol_version,
+                key_information: key_info,
+                key_length,
+                replay_counter,
+                nonce,
+                key_rsc,
+            },
             key_data,
         })
         .map_err(|error| match error {

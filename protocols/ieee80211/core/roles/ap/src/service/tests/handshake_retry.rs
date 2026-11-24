@@ -444,3 +444,40 @@ fn a_message3_retry_that_failed_to_build_is_not_awaited() {
         ApWpa2Progress::AuthorizePeer
     ));
 }
+
+/// An ended handshake holds no response window: its retry owner is
+/// disarmed, no alarm is held and nothing is due later.
+#[test]
+fn an_ended_handshake_holds_no_retry() {
+    let mut storage = AccessPointPeerStorage::new();
+    let mut service = service(&mut storage);
+    let gtk = gtk_numbers();
+    begin(&mut service);
+    assert!(service.next_wpa2_retry_deadline().is_some());
+    // The association named `WPA2_RSN`; Message 2 names other IEs.
+    assert!(matches!(
+        service
+            .on_eapol(
+                PEER,
+                signed_message2(&SUPPLICANT_RSN, &[], ANONCE, SNONCE),
+                &gtk
+            )
+            .unwrap(),
+        ApWpa2Progress::DeauthenticatePeer
+    ));
+    assert_eq!(service.next_wpa2_retry_deadline(), None);
+    assert_eq!(
+        service
+            .checked_peer(PEER)
+            .unwrap()
+            .wpa2_retry
+            .pending_message(),
+        None
+    );
+    assert!(matches!(
+        service
+            .take_due_wpa2_retry::<512, _>(at(60_000_000), &gtk)
+            .unwrap(),
+        ApWpa2RetryProgress::None
+    ));
+}
