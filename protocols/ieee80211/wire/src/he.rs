@@ -1142,7 +1142,7 @@ oer_portable_wire::bitfield! {
         pub beamformed, with_beamformed: bool = 14..15;
         pub mcs, with_mcs: u8 = 15..19;
         pub dcm, with_dcm: bool = 19..20;
-        pub coding, with_coding: [SigBCoding] = 20..21;
+        pub coding, with_coding: (SigBCoding) = 20..21;
     }
 }
 oer_portable_wire::bitfield! {
@@ -1152,14 +1152,14 @@ oer_portable_wire::bitfield! {
         pub station_id, with_station_id: u16 = 0..11;
         pub spatial_configuration, with_spatial_configuration: u8 = 11..15;
         pub mcs, with_mcs: u8 = 15..19;
-        pub coding, with_coding: [SigBCoding] = 20..21;
+        pub coding, with_coding: (SigBCoding) = 20..21;
     }
 }
 oer_portable_wire::bitfield! {
     /// The Coding subfield of an HE-SIG-B user field: BCC or LDPC.
     /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field, Table
     /// 27-28 and Table 27-29).
-    pub enum SigBCoding: u8 { Bcc = 0, Ldpc = 1 }
+    pub enum SigBCoding: u8 [1] { Bcc = 0, Ldpc = 1 }
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.4 (Supported HE-MCS And NSS Set field).

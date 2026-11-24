@@ -40,6 +40,15 @@ pub enum AddbaRequestError {
     InvalidWindow(u16),
 }
 
+impl From<AddbaParametersError> for AddbaRequestError {
+    fn from(error: AddbaParametersError) -> Self {
+        match error {
+            AddbaParametersError::TidOutOfRange(tid) => Self::InvalidTid(tid),
+            AddbaParametersError::WindowOutOfRange(window) => Self::InvalidWindow(window),
+        }
+    }
+}
+
 /// Encode an immediate-policy ADDBA Request action body.
 ///
 /// The session owner supplies the dialog token, timeout and starting sequence;
@@ -52,15 +61,12 @@ pub fn encode_addba_request(
     amsdu: AmsduSupport,
     starting_sequence: SequenceNumber,
 ) -> Result<[u8; ADDBA_ACTION_BODY_LEN], AddbaRequestError> {
-    if tid > 15 {
-        return Err(AddbaRequestError::InvalidTid(tid));
-    }
-    if window == 0 || window > 0x03ff {
+    let parameters = AddbaParameters::immediate(amsdu, tid, window)?;
+    // A request names the buffer it asks for: zero is no buffer.
+    if window == 0 {
         return Err(AddbaRequestError::InvalidWindow(window));
     }
-    let [p0, p1] = AddbaParameters::immediate(amsdu, tid, window)
-        .ok_or(AddbaRequestError::InvalidTid(tid))?
-        .to_bytes();
+    let [p0, p1] = parameters.to_bytes();
     let [t0, t1] = BlockAckTimeout::of(timeout_tu).to_bytes();
     let [s0, s1] = starting_sequence.sequence_control().to_bytes();
     // SOURCE: IEEE Std 802.11-2020, 9.6.5.2 (ADDBA Request frame format):
@@ -202,6 +208,15 @@ pub enum RxAddbaResponseError {
     InvalidWindow(u16),
 }
 
+impl From<AddbaParametersError> for RxAddbaResponseError {
+    fn from(error: AddbaParametersError) -> Self {
+        match error {
+            AddbaParametersError::TidOutOfRange(tid) => Self::InvalidTid(tid),
+            AddbaParametersError::WindowOutOfRange(window) => Self::InvalidWindow(window),
+        }
+    }
+}
+
 /// Write one successful immediate BlockAck response into an owned action body.
 ///
 /// A-MSDU is deliberately not advertised by the initial strict RX path.
@@ -215,13 +230,13 @@ pub fn write_successful_addba_response(
     let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
         return Err(RxAddbaResponseError::InvalidBodyLength(length));
     };
-    if tid > 15 {
-        return Err(RxAddbaResponseError::InvalidTid(tid));
-    }
-    if window == 0 || window > 0x03ff {
+    let written =
+        encode_addba_response(dialog_token, 0, tid, window, 0, AmsduSupport::NotSupported)?;
+    // A successful agreement has a buffer: zero is none.
+    if window == 0 {
         return Err(RxAddbaResponseError::InvalidWindow(window));
     }
-    *body = encode_addba_response(dialog_token, 0, tid, window, 0, AmsduSupport::NotSupported)?;
+    *body = written;
     Ok(())
 }
 
@@ -243,12 +258,6 @@ pub fn write_declined_addba_response(
     let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
         return Err(RxAddbaResponseError::InvalidBodyLength(length));
     };
-    if tid > 15 {
-        return Err(RxAddbaResponseError::InvalidTid(tid));
-    }
-    if requested_window > 0x03ff {
-        return Err(RxAddbaResponseError::InvalidWindow(requested_window));
-    }
     *body = encode_addba_response(
         dialog_token,
         ADDBA_STATUS_REQUEST_DECLINED,
@@ -277,12 +286,7 @@ pub fn encode_addba_response(
     timeout_tu: u16,
     amsdu: AmsduSupport,
 ) -> Result<[u8; ADDBA_ACTION_BODY_LEN], RxAddbaResponseError> {
-    if tid > 15 {
-        return Err(RxAddbaResponseError::InvalidTid(tid));
-    }
-    let [p0, p1] = AddbaParameters::immediate(amsdu, tid, window)
-        .ok_or(RxAddbaResponseError::InvalidWindow(window))?
-        .to_bytes();
+    let [p0, p1] = AddbaParameters::immediate(amsdu, tid, window)?.to_bytes();
     let [s0, s1] = crate::management::StatusCodeField::of(status).to_bytes();
     let [t0, t1] = BlockAckTimeout::of(timeout_tu).to_bytes();
     Ok([
@@ -380,48 +384,62 @@ oer_portable_wire::bitfield! {
     /// The Block Ack Policy subfield of a Block Ack Parameter Set.
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.14 (Block Ack Parameter Set
     /// field).
-    pub enum BlockAckPolicy: u8 { Delayed = 0, Immediate = 1 }
+    pub enum BlockAckPolicy: u8 [1] { Delayed = 0, Immediate = 1 }
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.14 (Block Ack Parameter Set
     /// field).
     pub struct AddbaParameters[2] (little) {
         pub amsdu, with_amsdu: bool = 0..1;
-        pub policy, with_policy: [BlockAckPolicy] = 1..2;
+        pub policy, with_policy: (BlockAckPolicy) = 1..2;
         pub tid, with_tid: u8 = 2..6;
         pub window, with_window: u16 = 6..16;
     }
 }
 
+/// Why a Block Ack Parameter Set cannot hold a value (IEEE Std
+/// 802.11-2020, 9.4.1.14: a four-bit TID, a ten-bit Buffer Size).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddbaParametersError {
+    TidOutOfRange(u8),
+    WindowOutOfRange(u16),
+}
+
 impl AddbaParameters {
     /// The parameters of an agreement under `policy` for `tid` and
-    /// `window`; `None` for a TID wider than four bits or a window wider
-    /// than ten.
+    /// `window`.
+    ///
+    /// # Errors
+    ///
+    /// A TID wider than four bits or a window wider than ten.
     pub const fn new(
         policy: BlockAckPolicy,
         amsdu: AmsduSupport,
         tid: u8,
         window: u16,
-    ) -> Option<Self> {
-        let parameters = match Self::from_bytes([0; 2])
+    ) -> Result<Self, AddbaParametersError> {
+        let parameters = Self::from_bytes([0; 2])
             .with_amsdu(matches!(amsdu, AmsduSupport::Supported))
-            .with_policy(policy)
-        {
-            Ok(parameters) => parameters,
-            Err(_) => return None,
-        };
-        let parameters = match parameters.with_tid(tid) {
-            Ok(parameters) => parameters,
-            Err(_) => return None,
+            .with_policy(policy);
+        let Ok(parameters) = parameters.with_tid(tid) else {
+            return Err(AddbaParametersError::TidOutOfRange(tid));
         };
         match parameters.with_window(window) {
-            Ok(parameters) => Some(parameters),
-            Err(_) => None,
+            Ok(parameters) => Ok(parameters),
+            Err(_) => Err(AddbaParametersError::WindowOutOfRange(window)),
         }
     }
 
     /// An immediate agreement's parameters; [`Self::new`].
-    pub const fn immediate(amsdu: AmsduSupport, tid: u8, window: u16) -> Option<Self> {
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::new`].
+    pub const fn immediate(
+        amsdu: AmsduSupport,
+        tid: u8,
+        window: u16,
+    ) -> Result<Self, AddbaParametersError> {
         Self::new(BlockAckPolicy::Immediate, amsdu, tid, window)
     }
 }

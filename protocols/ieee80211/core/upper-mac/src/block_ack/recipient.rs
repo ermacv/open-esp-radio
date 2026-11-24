@@ -7,7 +7,9 @@ use super::{RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease};
 use core::num::NonZeroU64;
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::{
-    block_ack::frame::{ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_addba_response},
+    block_ack::frame::{
+        ADDBA_ACTION_BODY_LEN, BlockAckAction, BlockAckPolicy, encode_addba_response,
+    },
     sequence::SequenceNumber,
     status::status_code,
     tsf::time_units_micros,
@@ -20,14 +22,6 @@ pub enum AddbaStatus {
     Success = status_code::SUCCESS,
     RequestDeclined = status_code::REQUEST_DECLINED,
     InvalidParameters = status_code::INVALID_PARAMETERS,
-}
-
-/// The Block Ack Policy subfield of a Block Ack Parameter Set (IEEE Std
-/// 802.11-2020, 9.4.1.14).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BlockAckPolicy {
-    Immediate,
-    Delayed,
 }
 
 /// The A-MSDU Supported subfield of a Block Ack Parameter Set (IEEE Std
@@ -76,12 +70,7 @@ impl RxAddbaRequest {
             } => Some(Self {
                 dialog_token,
                 tid: parameters.tid(),
-                policy: match parameters.policy() {
-                    oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate => {
-                        BlockAckPolicy::Immediate
-                    }
-                    _ => BlockAckPolicy::Delayed,
-                },
+                policy: parameters.policy(),
                 amsdu: if parameters.amsdu() {
                     Amsdu::Permitted
                 } else {

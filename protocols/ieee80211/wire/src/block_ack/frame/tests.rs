@@ -296,3 +296,79 @@ fn an_addba_response_holds_tid_15_and_refuses_16() {
         Err(RxAddbaResponseError::InvalidTid(16))
     );
 }
+
+/// The Parameter Set names why it refuses: a TID past four bits or a
+/// window past ten, each at its first value out.
+#[test]
+fn the_parameter_set_names_its_refusal() {
+    let new = |tid, window| {
+        AddbaParameters::new(
+            BlockAckPolicy::Delayed,
+            AmsduSupport::Supported,
+            tid,
+            window,
+        )
+    };
+    let largest = new(15, 0x03ff).unwrap();
+    assert_eq!(largest.tid(), 15);
+    assert_eq!(largest.window(), 0x03ff);
+    assert_eq!(largest.policy(), BlockAckPolicy::Delayed);
+    assert!(largest.amsdu());
+    assert_eq!(new(16, 1), Err(AddbaParametersError::TidOutOfRange(16)));
+    assert_eq!(
+        new(0, 0x0400),
+        Err(AddbaParametersError::WindowOutOfRange(0x0400))
+    );
+    // The TID is the first refusal of two.
+    assert_eq!(
+        new(16, 0x0400),
+        Err(AddbaParametersError::TidOutOfRange(16))
+    );
+}
+
+/// Each encoder's error is the Parameter Set's reason; a zero window is
+/// refused where an agreement needs a buffer, and written in a refusal.
+#[test]
+fn each_encoder_reports_the_parameter_reason() {
+    let sequence = SequenceNumber::new(0).unwrap();
+    let request =
+        |tid, window| encode_addba_request(1, tid, window, 0, AmsduSupport::NotSupported, sequence);
+    assert_eq!(request(16, 0), Err(AddbaRequestError::InvalidTid(16)));
+    assert_eq!(
+        request(0, 0x0400),
+        Err(AddbaRequestError::InvalidWindow(0x0400))
+    );
+    assert_eq!(request(0, 0), Err(AddbaRequestError::InvalidWindow(0)));
+    assert!(request(15, 0x03ff).is_ok());
+
+    let mut body = [0_u8; ADDBA_ACTION_BODY_LEN];
+    assert_eq!(
+        write_successful_addba_response(&mut body, 1, 16, 0),
+        Err(RxAddbaResponseError::InvalidTid(16))
+    );
+    assert_eq!(
+        write_successful_addba_response(&mut body, 1, 0, 0x0400),
+        Err(RxAddbaResponseError::InvalidWindow(0x0400))
+    );
+    assert_eq!(
+        write_successful_addba_response(&mut body, 1, 0, 0),
+        Err(RxAddbaResponseError::InvalidWindow(0))
+    );
+    // A refused write leaves the body as it was.
+    assert_eq!(body, [0; ADDBA_ACTION_BODY_LEN]);
+
+    assert_eq!(
+        write_declined_addba_response(&mut body, 1, 16, 1),
+        Err(RxAddbaResponseError::InvalidTid(16))
+    );
+    assert_eq!(
+        write_declined_addba_response(&mut body, 1, 0, 0x0400),
+        Err(RxAddbaResponseError::InvalidWindow(0x0400))
+    );
+    assert_eq!(body, [0; ADDBA_ACTION_BODY_LEN]);
+    write_declined_addba_response(&mut body, 1, 0, 0).unwrap();
+    assert!(matches!(
+        parse_block_ack_action(&body),
+        Some(BlockAckAction::AddbaResponse { parameters, .. }) if parameters.window() == 0
+    ));
+}

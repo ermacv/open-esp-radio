@@ -32,13 +32,10 @@ impl FrameControl {
     pub const fn fields(self) -> FrameControlFields {
         self.0
     }
-    const DATA: u16 = 2;
-    const MANAGEMENT: u16 = 0;
-
     /// `field`, when it is a data or management frame of version 0.
     pub const fn new(fields: FrameControlFields) -> Option<Self> {
-        let kind = fields.kind().encoding() as u16;
-        if fields.version() == 0 && (kind == Self::DATA || kind == Self::MANAGEMENT) {
+        if fields.version() == 0 && matches!(fields.kind(), FrameType::Data | FrameType::Management)
+        {
             Some(Self(fields))
         } else {
             None
@@ -72,11 +69,11 @@ impl FrameControl {
     }
     /// A data frame.
     pub const fn is_data(self) -> bool {
-        self.fields().kind().encoding() as u16 == Self::DATA
+        matches!(self.fields().kind(), FrameType::Data)
     }
     /// A management frame.
     pub const fn is_management_frame(self) -> bool {
-        self.fields().kind().encoding() as u16 == Self::MANAGEMENT
+        matches!(self.fields().kind(), FrameType::Management)
     }
     /// Payload has CCMP protection.
     pub const fn protected(self) -> bool {
@@ -110,11 +107,11 @@ impl FrameControl {
     }
 
     pub const fn is_qos_data(self) -> bool {
-        self.fields().kind().encoding() as u16 == Self::DATA && self.fields().qos()
+        matches!(self.fields().kind(), FrameType::Data) && self.fields().qos()
     }
 
     pub const fn is_four_address(self) -> bool {
-        self.fields().kind().encoding() as u16 == Self::DATA && self.fields().ds() == 3
+        matches!(self.fields().kind(), FrameType::Data) && self.fields().ds() == 3
     }
 
     /// Whether the frame carries an HT Control field: the Order bit of a
@@ -122,7 +119,7 @@ impl FrameControl {
     /// requests strictly ordered service instead.
     pub const fn has_ht_control(self) -> bool {
         self.fields().order()
-            && (self.is_qos_data() || self.fields().kind().encoding() as u16 == Self::MANAGEMENT)
+            && (self.is_qos_data() || matches!(self.fields().kind(), FrameType::Management))
     }
 }
 
@@ -215,9 +212,7 @@ impl AddressFields {
                 ControlLayout::Receiver => AddressLayout::Receiver,
                 ControlLayout::Unknown => return Err(AddressFieldsError::UnknownLayout),
             },
-            FrameType::Extension | FrameType::Reserved(_) => {
-                return Err(AddressFieldsError::UnknownLayout);
-            }
+            FrameType::Extension => return Err(AddressFieldsError::UnknownLayout),
         };
         let _duration: [u8; 2] = reader.read().map_err(truncated)?;
         let receiver = reader.read().map_err(truncated)?;
@@ -786,7 +781,7 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1 (Frame Control field).
     pub struct FrameControlFields[2] (little) {
         pub version, with_version: u8 = 0..2;
-        pub kind, with_kind: [FrameType] = 2..4;
+        pub kind, with_kind: (FrameType) = 2..4;
         pub subtype, with_subtype: u16 = 4..8;
         pub management_subtype, with_management_subtype: [ManagementSubtype] = 4..8, view;
         pub control_subtype, with_control_subtype: [ControlSubtype] = 4..8, view;
@@ -858,7 +853,7 @@ oer_portable_wire::bitfield! {
 
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype subfields).
-    pub enum FrameType: u8 { Management = 0, Control = 1, Data = 2, Extension = 3 }
+    pub enum FrameType: u8 [2] { Management = 0, Control = 1, Data = 2, Extension = 3 }
 }
 
 oer_portable_wire::bitfield! {
@@ -933,10 +928,10 @@ impl FrameControlFields {
         Self::of_kind(FrameType::Control, subtype.encoding())
     }
     const fn of_kind(kind: FrameType, subtype: u8) -> Option<Self> {
-        let Ok(fields) = Self::from_bytes([0; 2]).with_kind(kind) else {
-            return None;
-        };
-        match fields.with_subtype(subtype as u16) {
+        match Self::from_bytes([0; 2])
+            .with_kind(kind)
+            .with_subtype(subtype as u16)
+        {
             Ok(fields) => Some(fields),
             Err(_) => None,
         }

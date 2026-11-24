@@ -418,3 +418,47 @@ fn aligned_words_to_write_land_on_every_octet_in_order() {
         }
     }
 }
+
+crate::bitfield! {
+    enum Quarter: u8 [2] { Second = 1, First = 0, Fourth = 3, Third = 2 }
+}
+crate::bitfield! {
+    struct Quarters[1] (little) {
+        low, with_low: (Quarter) = 0..2;
+        rest, with_rest: u8 = 2..6;
+        high, with_high: (Quarter) = 6..8;
+    }
+}
+
+/// A closed enum's every value decodes to its name and back, whatever the
+/// declaration order; its field's setter cannot refuse and keeps the other
+/// bits.
+#[test]
+fn a_closed_enum_field_reads_and_writes_every_value() {
+    let names = [
+        (0, Quarter::First),
+        (1, Quarter::Second),
+        (2, Quarter::Third),
+        (3, Quarter::Fourth),
+    ];
+    for (value, name) in names {
+        let proved = crate::U8::<2>::new(value).unwrap();
+        assert_eq!(Quarter::from_encoding(proved), name);
+        assert_eq!(name.encoding(), proved);
+        for (high_value, high) in names {
+            let written = Quarters::from_bytes([0])
+                .with_rest(0b1111)
+                .unwrap()
+                .with_low(name)
+                .with_high(high);
+            assert_eq!(
+                written.to_bytes(),
+                [value | 0b0011_1100 | (high_value << 6)]
+            );
+            assert_eq!(written.low(), name);
+            assert_eq!(written.high(), high);
+            assert_eq!(written.rest(), 0b1111);
+        }
+    }
+    assert_eq!(Quarter::BITS, 2);
+}
