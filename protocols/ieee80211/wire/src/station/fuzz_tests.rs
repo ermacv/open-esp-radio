@@ -10,9 +10,9 @@ const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
 const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
 
 /// A management header from the access point to this station.
-fn from_access_point(frame_control: u16, body: &[u8]) -> Vec<u8> {
+fn from_access_point(frame_control: crate::frame::FrameControlFields, body: &[u8]) -> Vec<u8> {
     let mut frame = Vec::from([0_u8; MANAGEMENT_HEADER_LEN]);
-    frame[..2].copy_from_slice(&frame_control.to_le_bytes());
+    frame[..2].copy_from_slice(&frame_control.to_bytes());
     frame[4..10].copy_from_slice(&LOCAL);
     frame[10..16].copy_from_slice(&BSSID);
     frame[16..22].copy_from_slice(&BSSID);

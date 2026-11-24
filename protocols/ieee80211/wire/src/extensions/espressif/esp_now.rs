@@ -141,7 +141,7 @@ impl fmt::Display for EspNowVersionError {
 
 impl core::error::Error for EspNowVersionError {}
 
-const ACTION_FRAME_CONTROL: u16 = 0x00d0;
+const ACTION_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0xd0, 0x00]);
 const BROADCAST_ADDRESS: [u8; 6] = [0xff; 6];
 const VENDOR_ELEMENT_FIXED_BODY_LEN: usize = 5;
 const CCMP_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;
@@ -549,12 +549,10 @@ impl<'payload> EspNowV1Frame<'payload> {
             .split_first_chunk_mut::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
             .ok_or(EspNowV1WireError::OutputTooSmall { required })?;
         header.fill(0);
-        let frame_control = FrameControlFields::from_raw(ACTION_FRAME_CONTROL)
-            .with_retry(self.retry)
-            .raw();
+        let frame_control = ACTION_FRAME_CONTROL.with_retry(self.retry);
         let mut writer = oer_portable_wire::Writer::new(header);
         let too_small = |_| EspNowV1WireError::OutputTooSmall { required };
-        writer.u16_le(frame_control).map_err(too_small)?;
+        writer.write(&frame_control.to_bytes()).map_err(too_small)?;
         writer.u16_le(0).map_err(too_small)?;
         writer.write(&self.destination.bytes()).map_err(too_small)?;
         writer.write(&self.source.bytes()).map_err(too_small)?;
@@ -575,18 +573,17 @@ impl<'payload> EspNowV1Frame<'payload> {
                 minimum: ESP_NOW_MANAGEMENT_HEADER_LEN,
             })?;
         let action = reader.remaining();
-        let frame_control = u16::from_le_bytes([header[0], header[1]]);
-        if FrameControlFields::from_raw(frame_control).version() != 0
-            || FrameControlFields::from_raw(frame_control).type_and_subtype()
-                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
-            || FrameControlFields::from_raw(frame_control).ds() != 0
-            || (FrameControlFields::from_raw(frame_control).power_management()
-                || FrameControlFields::from_raw(frame_control).more_data()
-                || FrameControlFields::from_raw(frame_control).order())
+        let frame_control = FrameControlFields::from_bytes([header[0], header[1]]);
+        if frame_control.version() != 0
+            || frame_control.type_and_subtype() != ACTION_FRAME_CONTROL.type_and_subtype()
+            || frame_control.ds() != 0
+            || (frame_control.power_management()
+                || frame_control.more_data()
+                || frame_control.order())
         {
             return Err(EspNowV1WireError::UnsupportedFrameControl(frame_control));
         }
-        if FrameControlFields::from_raw(frame_control).protected() {
+        if frame_control.protected() {
             return Err(EspNowV1WireError::ProtectedFrameUnsupported);
         }
 
@@ -603,9 +600,7 @@ impl<'payload> EspNowV1Frame<'payload> {
         }
         let sequence_control =
             crate::sequence::SequenceControl::from_bytes([header[22], header[23]]);
-        if FrameControlFields::from_raw(frame_control).more_fragments()
-            || sequence_control.fragment() != 0
-        {
+        if frame_control.more_fragments() || sequence_control.fragment() != 0 {
             return Err(EspNowV1WireError::FragmentedFrame(
                 sequence_control.fragment(),
             ));
@@ -615,7 +610,7 @@ impl<'payload> EspNowV1Frame<'payload> {
             destination,
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
-            retry: FrameControlFields::from_raw(frame_control).retry(),
+            retry: frame_control.retry(),
             action,
         })
     }
@@ -670,20 +665,20 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             });
         }
 
-        let frame_control = u16::from_le_bytes([management_header[0], management_header[1]]);
-        if FrameControlFields::from_raw(frame_control).version() != 0
-            || FrameControlFields::from_raw(frame_control).type_and_subtype()
-                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
-            || FrameControlFields::from_raw(frame_control).ds() != 0
-            || (FrameControlFields::from_raw(frame_control).power_management()
-                || FrameControlFields::from_raw(frame_control).more_data()
-                || FrameControlFields::from_raw(frame_control).order())
+        let frame_control =
+            FrameControlFields::from_bytes([management_header[0], management_header[1]]);
+        if frame_control.version() != 0
+            || frame_control.type_and_subtype() != ACTION_FRAME_CONTROL.type_and_subtype()
+            || frame_control.ds() != 0
+            || (frame_control.power_management()
+                || frame_control.more_data()
+                || frame_control.order())
         {
             return Err(EspNowProtectedV1WireError::UnsupportedFrameControl(
                 frame_control,
             ));
         }
-        if !FrameControlFields::from_raw(frame_control).protected() {
+        if !frame_control.protected() {
             return Err(EspNowProtectedV1WireError::ProtectionRequired);
         }
 
@@ -717,9 +712,7 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             management_header[22],
             management_header[23],
         ]);
-        if FrameControlFields::from_raw(frame_control).more_fragments()
-            || sequence_control.fragment() != 0
-        {
+        if frame_control.more_fragments() || sequence_control.fragment() != 0 {
             return Err(EspNowProtectedV1WireError::FragmentedFrame(
                 sequence_control.fragment(),
             ));
@@ -745,7 +738,7 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             destination,
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
-            retry: FrameControlFields::from_raw(frame_control).retry(),
+            retry: frame_control.retry(),
             key_id: crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]])
                 .key_id()
                 .get(),
@@ -803,7 +796,7 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
 pub enum EspNowProtectedV1WireError {
     FrameTooShort { minimum: usize },
     FrameTooLong { maximum: usize, actual: usize },
-    UnsupportedFrameControl(u16),
+    UnsupportedFrameControl(FrameControlFields),
     ProtectionRequired,
     EncryptedBroadcastUnsupported,
     InvalidDestination(EspNowAddressError),
@@ -830,7 +823,8 @@ impl fmt::Display for EspNowProtectedV1WireError {
             ),
             Self::UnsupportedFrameControl(frame_control) => write!(
                 formatter,
-                "unsupported protected ESP-NOW frame-control value {frame_control:#06x}"
+                "unsupported protected ESP-NOW frame-control value {:02x?}",
+                frame_control.to_bytes()
             ),
             Self::ProtectionRequired => {
                 formatter.write_str("protected ESP-NOW envelope requires the Protected flag")
@@ -896,7 +890,7 @@ pub enum EspNowV1WireError {
     InvalidDestination(EspNowAddressError),
     InvalidSource(EspNowAddressError),
     InvalidBssid,
-    UnsupportedFrameControl(u16),
+    UnsupportedFrameControl(FrameControlFields),
     ProtectedFrameUnsupported,
     FragmentedFrame(u8),
     UnsupportedActionCategory(u8),
@@ -928,7 +922,8 @@ impl fmt::Display for EspNowV1WireError {
             Self::InvalidBssid => formatter.write_str("ESP-NOW v1 BSSID is not broadcast"),
             Self::UnsupportedFrameControl(frame_control) => write!(
                 formatter,
-                "unsupported ESP-NOW frame-control value {frame_control:#06x}"
+                "unsupported ESP-NOW frame-control value {:02x?}",
+                frame_control.to_bytes()
             ),
             Self::ProtectedFrameUnsupported => {
                 formatter.write_str("protected ESP-NOW frames are outside the v1 plaintext profile")

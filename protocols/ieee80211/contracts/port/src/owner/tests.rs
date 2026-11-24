@@ -1,5 +1,5 @@
 use super::*;
-use oer_protocols_ieee80211_wire::frame::MacHeader;
+use oer_protocols_ieee80211_wire::frame::{FrameControlFields, MacHeader};
 
 const A: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const B: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -67,10 +67,10 @@ fn a_receiver_address_is_individual_or_group_by_its_group_bit() {
 
 #[test]
 fn a_frame_control_is_a_data_or_management_frame_of_version_zero() {
-    assert!(FrameControl::new(0x0008).is_some()); // data
-    assert!(FrameControl::new(0x0080).is_some()); // beacon
-    assert!(FrameControl::new(0x0084).is_none()); // BlockAckReq, a control frame
-    assert!(FrameControl::new(0x0009).is_none()); // protocol version 1
+    assert!(FrameControl::new(FrameControlFields::from_bytes([0x08, 0x00])).is_some()); // data
+    assert!(FrameControl::new(FrameControlFields::from_bytes([0x80, 0x00])).is_some()); // beacon
+    assert!(FrameControl::new(FrameControlFields::from_bytes([0x84, 0x00])).is_none()); // BlockAckReq, a control frame
+    assert!(FrameControl::new(FrameControlFields::from_bytes([0x09, 0x00])).is_none()); // protocol version 1
     assert!(Tid::new(15).is_some());
     assert!(Tid::new(16).is_none());
 }

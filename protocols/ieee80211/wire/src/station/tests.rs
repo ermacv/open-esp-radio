@@ -18,7 +18,7 @@ fn msdu(frame: &[u8]) -> MsduParts<'_> {
 
 fn authentication_response(status_code: u16) -> [u8; 30] {
     let mut frame = [0_u8; 30];
-    frame[0..2].copy_from_slice(&OPEN_AUTHENTICATION_FRAME_CONTROL.to_le_bytes());
+    frame[0..2].copy_from_slice(&OPEN_AUTHENTICATION_FRAME_CONTROL.to_bytes());
     frame[4..10].copy_from_slice(&LOCAL);
     frame[10..16].copy_from_slice(&BSSID);
     frame[16..22].copy_from_slice(&BSSID);
@@ -227,7 +227,7 @@ fn disconnect_parser_checks_receiver_bss_geometry_and_protection() {
         ),
     ] {
         let mut frame = [0_u8; MANAGEMENT_HEADER_LEN + 2];
-        frame[..2].copy_from_slice(&control.to_le_bytes());
+        frame[..2].copy_from_slice(&control.to_bytes());
         frame[4..10].copy_from_slice(&LOCAL);
         frame[10..16].copy_from_slice(&BSSID);
         frame[16..22].copy_from_slice(&BSSID);
@@ -247,7 +247,8 @@ fn disconnect_parser_checks_receiver_bss_geometry_and_protection() {
         }
         for bits in [1, 4, 8, 0x100, 0x200, 0x400, 0x4000] {
             let mut invalid = frame;
-            invalid[..2].copy_from_slice(&(control | bits).to_le_bytes());
+            invalid[..2]
+                .copy_from_slice(&(u16::from_le_bytes(control.to_bytes()) | bits).to_le_bytes());
             assert_eq!(parse_sta_disconnect(&invalid, local, bssid), None);
         }
         for length in 0..frame.len() {

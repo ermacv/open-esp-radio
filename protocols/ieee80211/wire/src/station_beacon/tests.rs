@@ -7,7 +7,7 @@ const BSSID: [u8; 6] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25];
 
 fn beacon(tim: &[u8]) -> std::vec::Vec<u8> {
     let mut frame = std::vec![0_u8; FIXED_BEACON_LENGTH];
-    frame[..2].copy_from_slice(&BEACON_FRAME_CONTROL.to_le_bytes());
+    frame[..2].copy_from_slice(&BEACON_FRAME_CONTROL.to_bytes());
     frame[4..10].fill(0xff);
     frame[10..16].copy_from_slice(&BSSID);
     frame[16..22].copy_from_slice(&BSSID);

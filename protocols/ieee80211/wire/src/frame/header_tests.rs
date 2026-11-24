@@ -16,7 +16,7 @@ fn qos() -> QosControl {
 /// The octets of a data or management header whose Frame Control is `raw`,
 /// with every field its type holds.
 fn header_octets(raw: u16) -> Option<std::vec::Vec<u8>> {
-    let control = FrameControl::new(raw)?;
+    let control = FrameControl::new(FrameControlFields::from_bytes(raw.to_le_bytes()))?;
     let mut octets = std::vec::Vec::new();
     octets.extend(raw.to_le_bytes());
     octets.extend(0x5634_u16.to_le_bytes());
@@ -46,7 +46,11 @@ fn every_valid_header_shape_round_trips_and_leaves_its_tail_untouched() {
             continue;
         };
         let header = MacHeader::decode(&expected).unwrap();
-        assert_eq!(header.control().get(), raw, "control {raw:#06x}");
+        assert_eq!(
+            header.control().fields().to_bytes(),
+            raw.to_le_bytes(),
+            "control {raw:#06x}"
+        );
         let mut out = [0xa5; 40];
         assert_eq!(
             header.encode(&mut out),
@@ -121,7 +125,7 @@ fn a_header_s_layout_is_the_one_its_frame_control_names() {
     assert!(ordered.control().fields().order());
     // A management frame's DS bits and its subtype's bit B7 are its own.
     let action_no_ack = MacHeader::decode(&header_octets(0x03e0).unwrap()).unwrap();
-    assert_eq!(action_no_ack.control().get(), 0x03e0);
+    assert_eq!(action_no_ack.control().fields().to_bytes(), [0xe0, 0x03]);
     assert_eq!(action_no_ack.address4(), None);
     // Only a QoS data header has a QoS Control to change.
     let plain = MacHeader::decode(&header_octets(0x0008).unwrap()).unwrap();
@@ -168,15 +172,15 @@ fn the_qos_field_places_each_subfield() {
 #[test]
 fn named_subtypes_round_trip_through_the_frame_control_field() {
     let beacon = FrameControlFields::management(ManagementSubtype::Beacon).unwrap();
-    assert_eq!(beacon.raw(), 0x0080);
+    assert_eq!(beacon.to_bytes(), [0x80, 0x00]);
     assert!(beacon.is_management(ManagementSubtype::Beacon));
     assert!(!beacon.is_management(ManagementSubtype::ProbeResponse));
     assert!(!beacon.is_control(ControlSubtype::BlockAck));
     let request = FrameControlFields::control(ControlSubtype::BlockAckRequest).unwrap();
-    assert_eq!(request.raw(), 0x0084);
+    assert_eq!(request.to_bytes(), [0x84, 0x00]);
     assert!(request.is_control(ControlSubtype::BlockAckRequest));
     assert_eq!(
-        FrameControlFields::from_raw(0x00d0 | 0x4000).management_subtype(),
+        FrameControlFields::from_bytes([0xd0, 0x40]).management_subtype(),
         ManagementSubtype::Action
     );
     // A reserved encoding wider than the subtype is refused.
@@ -357,7 +361,7 @@ fn every_control_subtype_has_a_known_or_refused_layout() {
 /// 802.11-2020, 9.2.4.1.3, Table 9-1).
 #[test]
 fn a_null_and_a_qos_null_are_the_data_frames_with_no_body() {
-    let control = |byte: u8| FrameControl::new(u16::from(byte)).unwrap();
+    let control = |byte: u8| FrameControl::new(FrameControlFields::from_bytes([byte, 0])).unwrap();
     // Type in bits 2-3, subtype in bits 4-7.
     assert!(control(0x48).is_null_data(), "Null");
     assert!(control(0xc8).is_null_data(), "QoS Null");
@@ -376,7 +380,7 @@ fn a_decoded_header_reads_each_field_from_its_place() {
     // QoS data, both DS bits, Order: Address 4, QoS Control, HT Control.
     let octets = header_octets(0x8388).unwrap();
     let decoded = DecodedHeader::decode(&octets).unwrap();
-    assert_eq!(decoded.control().get(), 0x8388);
+    assert_eq!(decoded.control().fields().to_bytes(), [0x88, 0x83]);
     assert_eq!(decoded.duration(), 0x5634);
     assert_eq!(decoded.receiver(), [0xff; 6]);
     assert_eq!(decoded.transmitter(), A);

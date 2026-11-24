@@ -18,8 +18,8 @@ pub const STA_NULL_DATA_FRAME_LEN: usize = 24;
 /// Largest Association ID assigned to an infrastructure BSS station.
 pub const STA_MAX_ASSOCIATION_ID: u16 = 2_007;
 
-const NULL_DATA_TO_DS_FRAME_CONTROL: u16 = 0x0148;
-const POWER_MANAGEMENT_BIT: u16 = 0x1000;
+const NULL_DATA_TO_DS_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0x48, 0x01]);
 
 /// Nonzero association identifier of an infrastructure BSS station.
 ///
@@ -84,13 +84,11 @@ impl StaNullDataFrame {
                 required: STA_NULL_DATA_FRAME_LEN,
             })?;
         frame.fill(0);
-        let frame_control = NULL_DATA_TO_DS_FRAME_CONTROL
-            | if matches!(self.power_management, StaPowerManagement::PowerSave) {
-                POWER_MANAGEMENT_BIT
-            } else {
-                0
-            };
-        crate::encoding::write_array::<0, _, _>(frame, &frame_control.to_le_bytes());
+        let frame_control = NULL_DATA_TO_DS_FRAME_CONTROL.with_power_management(matches!(
+            self.power_management,
+            StaPowerManagement::PowerSave
+        ));
+        crate::encoding::write_array::<0, _, _>(frame, &frame_control.to_bytes());
         crate::encoding::write_array::<4, _, _>(frame, &self.bssid.get());
         crate::encoding::write_array::<10, _, _>(frame, &self.station_address.get());
         crate::encoding::write_array::<16, _, _>(frame, &self.bssid.get());

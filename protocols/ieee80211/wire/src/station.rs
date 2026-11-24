@@ -18,14 +18,20 @@ use crate::{
     sequence::SequenceNumber,
 };
 
-const OPEN_AUTHENTICATION_FRAME_CONTROL: u16 = 0x00b0;
+const OPEN_AUTHENTICATION_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0xb0, 0x00]);
 #[cfg(test)]
-const DISASSOCIATION_FRAME_CONTROL: u16 = 0x00a0;
-const DEAUTHENTICATION_FRAME_CONTROL: u16 = 0x00c0;
-const ACTION_FRAME_CONTROL: u16 = 0x00d0;
+const DISASSOCIATION_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0xa0, 0x00]);
+const DEAUTHENTICATION_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0xc0, 0x00]);
+const ACTION_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0xd0, 0x00]);
 /// Frame Control Protected Frame bit.
-const ASSOCIATION_REQUEST_FRAME_CONTROL: u16 = 0x0000;
-const ASSOCIATION_RESPONSE_FRAME_CONTROL: u16 = 0x0010;
+const ASSOCIATION_REQUEST_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0x00, 0x00]);
+const ASSOCIATION_RESPONSE_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0x10, 0x00]);
 const OPEN_SYSTEM_ALGORITHM: u16 = 0;
 const OPEN_SYSTEM_REQUEST_SEQUENCE: u16 = 1;
 const OPEN_SYSTEM_RESPONSE_SEQUENCE: u16 = 2;
@@ -90,14 +96,14 @@ pub(crate) fn validate_peer(bssid: [u8; 6]) -> Result<(), StationFrameError> {
 }
 
 fn management_header(
-    frame_control: u16,
+    frame_control: crate::frame::FrameControlFields,
     destination: [u8; 6],
     source: [u8; 6],
     bssid: [u8; 6],
     sequence_number: SequenceNumber,
 ) -> [u8; MANAGEMENT_HEADER_LEN] {
     let mut frame = [0; MANAGEMENT_HEADER_LEN];
-    crate::encoding::write_array::<0, _, _>(&mut frame, &frame_control.to_le_bytes());
+    crate::encoding::write_array::<0, _, _>(&mut frame, &frame_control.to_bytes());
     crate::encoding::write_array::<4, _, _>(&mut frame, &destination);
     crate::encoding::write_array::<10, _, _>(&mut frame, &source);
     crate::encoding::write_array::<16, _, _>(&mut frame, &bssid);
@@ -110,7 +116,7 @@ fn management_header(
 
 /// The fields of a received management header the station parsers match.
 struct ReceivedManagementHeader {
-    frame_control: u16,
+    frame_control: crate::frame::FrameControlFields,
     receiver: [u8; 6],
     transmitter: [u8; 6],
     bssid: [u8; 6],
@@ -155,7 +161,7 @@ fn split_received_management(frame: &[u8]) -> Option<(ReceivedManagementHeader, 
     ] = *header;
     Some((
         ReceivedManagementHeader {
-            frame_control: u16::from_le_bytes([c0, c1]),
+            frame_control: crate::frame::FrameControlFields::from_bytes([c0, c1]),
             receiver: [r0, r1, r2, r3, r4, r5],
             transmitter: [t0, t1, t2, t3, t4, t5],
             bssid: [b0, b1, b2, b3, b4, b5],

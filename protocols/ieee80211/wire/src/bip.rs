@@ -57,7 +57,7 @@ fn management(
     header: &[u8; MANAGEMENT_HEADER_LEN],
 ) -> Result<&[u8; MANAGEMENT_HEADER_LEN], BipFormatError> {
     let [f0, f1, ..] = *header;
-    FrameControl::new(u16::from_le_bytes([f0, f1]))
+    FrameControl::new(crate::frame::FrameControlFields::from_bytes([f0, f1]))
         .filter(|control| control.is_management_frame())
         .map(|_| header)
         .ok_or(BipFormatError::NotManagement)

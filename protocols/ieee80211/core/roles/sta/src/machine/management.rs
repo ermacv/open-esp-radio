@@ -8,7 +8,7 @@ use oer_protocols_ieee80211_core_security_rsn::{
 use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, OwnAddress},
-    frame::{DecodedHeader, FrameControlFields, ManagementSubtype},
+    frame::{DecodedHeader, ManagementSubtype},
     management::{BROADCAST_ADDRESS, MANAGEMENT_HEADER_LEN},
     management_protection::SaQuery,
 };
@@ -60,7 +60,7 @@ impl ManagementProtection {
     ) -> Option<ManagementEvent> {
         let header = DecodedHeader::decode(frame)?;
         let control = header.control();
-        let fields = FrameControlFields::from_raw(control.get());
+        let fields = control.fields();
         let disconnect = fields.is_management(ManagementSubtype::Disassociation)
             || fields.is_management(ManagementSubtype::Deauthentication);
         let action = fields.is_management(ManagementSubtype::Action);

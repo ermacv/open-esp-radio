@@ -9,7 +9,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use super::{CCMP_HEADER_LEN, CcmpHeader, CcmpHeaderError};
-use crate::frame::{DecodedHeader, FrameControlFields, QosControl};
+use crate::frame::{DecodedHeader, QosControl};
 use crate::security::Spp;
 use crate::sequence::SequenceControl;
 
@@ -128,7 +128,8 @@ impl<'a> ProtectedMpdu<'a> {
         // Retry, Power Management and More Data are masked in every frame;
         // a data frame also masks its subtype bits 4 to 6, QoS data its
         // Order bit. Protected stays set.
-        let fields = FrameControlFields::from_bytes(control.get().to_le_bytes())
+        let fields = control
+            .fields()
             .with_retry(false)
             .with_power_management(false)
             .with_more_data(false);

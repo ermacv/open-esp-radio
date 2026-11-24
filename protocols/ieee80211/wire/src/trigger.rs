@@ -347,7 +347,7 @@ impl TriggerCommonInfo {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TriggerFrame<'a> {
-    pub frame_control: u16,
+    pub frame_control: FrameControlFields,
     pub duration: u16,
     pub receiver_address: [u8; 6],
     pub transmitter_address: [u8; 6],
@@ -512,8 +512,8 @@ pub fn parse_trigger_frame(frame: &[u8]) -> Result<TriggerFrame<'_>, TriggerPars
         .array::<TRIGGER_COMMON_INFO_LEN>()
         .map_err(|_| truncated)?;
     let user_info_and_padding = reader.remaining();
-    let frame_control = u16::from_le_bytes(frame_control);
-    if FrameControlFields::from_bytes(frame_control.to_le_bytes()).type_and_subtype() != 9 {
+    let frame_control = FrameControlFields::from_bytes(frame_control);
+    if frame_control.type_and_subtype() != 9 {
         return Err(TriggerParseError::NotTriggerFrame);
     }
     Ok(TriggerFrame {

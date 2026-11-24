@@ -6,13 +6,14 @@ use crate::frame::FrameControlFields;
 
 use crate::sequence::SequenceNumber;
 
-const NDPA_FRAME_CONTROL: u16 = 0x0054;
+const NDPA_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0x54, 0x00]);
 const NDPA_HEADER_SIZE: usize = 17;
 const HE_STA_INFO_SIZE: usize = 4;
 #[cfg(test)]
 const HE_MARKER: u8 = NdpaToken::from_bytes([0]).with_he(true).to_bytes()[0];
 const AID11_MASK: u32 = 0x07ff;
-const ACTION_NO_ACK_FRAME_CONTROL: u16 = 0x00e0;
+const ACTION_NO_ACK_FRAME_CONTROL: FrameControlFields =
+    FrameControlFields::from_bytes([0xe0, 0x00]);
 const MANAGEMENT_HEADER_SIZE: usize = 24;
 const HE_ACTION_CATEGORY: u8 = 30;
 const HE_COMPRESSED_BEAMFORMING_AND_CQI_ACTION: u8 = 0;
@@ -66,10 +67,8 @@ impl<'a> HeNdpa<'a> {
         if stations.len() < HE_STA_INFO_SIZE {
             return Err(HeNdpaError::TooShort);
         }
-        let frame_control = u16::from_le_bytes([header[0], header[1]]);
-        if FrameControlFields::from_raw(frame_control).type_and_subtype()
-            != FrameControlFields::from_raw(NDPA_FRAME_CONTROL).type_and_subtype()
-        {
+        let frame_control = FrameControlFields::from_bytes([header[0], header[1]]);
+        if frame_control.type_and_subtype() != NDPA_FRAME_CONTROL.type_and_subtype() {
             return Err(HeNdpaError::NotNdpa);
         }
         if !NdpaToken::from_bytes([header[16]]).he() {
@@ -81,8 +80,8 @@ impl<'a> HeNdpa<'a> {
         Ok(Self { header, stations })
     }
 
-    pub const fn frame_control(self) -> u16 {
-        u16::from_le_bytes([self.header[0], self.header[1]])
+    pub const fn frame_control(self) -> FrameControlFields {
+        FrameControlFields::from_bytes([self.header[0], self.header[1]])
     }
 
     pub const fn duration(self) -> u16 {
@@ -199,7 +198,7 @@ impl HeNdpaEncoding<'_> {
             .split_at_mut_checked(NDPA_HEADER_SIZE)
             .ok_or(HeNdpaEncodingError::OutputTooShort)?;
         let header: [&[u8]; 5] = [
-            &NDPA_FRAME_CONTROL.to_le_bytes(),
+            &NDPA_FRAME_CONTROL.to_bytes(),
             &self.duration.to_le_bytes(),
             &self.receiver_address,
             &self.transmitter_address,
@@ -283,10 +282,8 @@ impl<'a> HeCompressedBeamformingReport<'a> {
             .array::<MANAGEMENT_HEADER_SIZE>()
             .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
         let action = reader.remaining();
-        let frame_control = u16::from_le_bytes([header[0], header[1]]);
-        if FrameControlFields::from_raw(frame_control).type_and_subtype()
-            != FrameControlFields::from_raw(ACTION_NO_ACK_FRAME_CONTROL).type_and_subtype()
-        {
+        let frame_control = FrameControlFields::from_bytes([header[0], header[1]]);
+        if frame_control.type_and_subtype() != ACTION_NO_ACK_FRAME_CONTROL.type_and_subtype() {
             return Err(HeCompressedBeamformingReportError::NotActionNoAck);
         }
         let mut reader = oer_portable_wire::Reader::new(action);

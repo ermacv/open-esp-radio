@@ -44,7 +44,7 @@ fn decode_all(bytes: &[u8]) {
     if let Some(header) = DecodedHeader::decode(bytes) {
         let control = header.control();
         let _ = (
-            control.get(),
+            control.fields(),
             control.with_protected(FrameProtection::Protected),
             control.with_retry(Retry::Retransmission),
             control.retry(),

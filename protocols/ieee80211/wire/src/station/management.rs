@@ -87,7 +87,7 @@ pub enum StaManagementSubtype {
 }
 
 impl StaManagementSubtype {
-    const fn frame_control(self) -> u16 {
+    const fn frame_control(self) -> FrameControlFields {
         match self {
             Self::Action => ACTION_FRAME_CONTROL,
             Self::Deauthentication => DEAUTHENTICATION_FRAME_CONTROL,
@@ -152,9 +152,7 @@ impl StaProtectedManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
         validate_peer(self.bssid.get())?;
         let header = management_header(
-            FrameControlFields::from_raw(self.subtype.frame_control())
-                .with_protected(true)
-                .raw(),
+            self.subtype.frame_control().with_protected(true),
             self.bssid.get(),
             self.source.get(),
             self.bssid.get(),
@@ -222,8 +220,8 @@ pub fn parse_sae_authentication(
     bssid: [u8; 6],
 ) -> Option<SaeAuthentication<'_>> {
     let (header, [algorithm, transaction, status_code], body) = split_received_management(frame)?;
-    if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
-        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL).type_and_subtype()
+    if header.frame_control.type_and_subtype()
+        != OPEN_AUTHENTICATION_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
@@ -249,8 +247,8 @@ pub fn parse_open_authentication_response(
     bssid: [u8; 6],
 ) -> Option<OpenAuthenticationResponse> {
     let (header, [algorithm, transaction, status_code], _) = split_received_management(frame)?;
-    if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
-        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL).type_and_subtype()
+    if header.frame_control.type_and_subtype()
+        != OPEN_AUTHENTICATION_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid

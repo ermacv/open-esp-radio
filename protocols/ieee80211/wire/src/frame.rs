@@ -4,15 +4,10 @@
 
 use crate::sequence::SequenceControl;
 
-/// Plain station-to-DS Data frame control.
-pub const DATA_TO_DS: u16 = 0x0108;
-/// QoS station-to-DS Data frame control.
-pub const QOS_DATA_TO_DS: u16 = 0x0188;
-
 /// The Frame Control field of a data or management frame of protocol
 /// version 0: never a control frame, whose kinds have their own buffers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FrameControl(u16);
+pub struct FrameControl(FrameControlFields);
 
 /// The Protected Frame subfield of a Frame Control field: the frame body
 /// is encapsulated by a cryptographic protocol, or not (IEEE Std
@@ -33,26 +28,21 @@ pub enum Retry {
 }
 
 impl FrameControl {
-    const fn fields(self) -> FrameControlFields {
-        FrameControlFields::from_bytes(self.0.to_le_bytes())
+    /// The field's subfields.
+    pub const fn fields(self) -> FrameControlFields {
+        self.0
     }
     const DATA: u16 = 2;
     const MANAGEMENT: u16 = 0;
 
     /// `field`, when it is a data or management frame of version 0.
-    pub const fn new(field: u16) -> Option<Self> {
-        let fields = FrameControlFields::from_bytes(field.to_le_bytes());
+    pub const fn new(fields: FrameControlFields) -> Option<Self> {
         let kind = fields.kind().encoding() as u16;
         if fields.version() == 0 && (kind == Self::DATA || kind == Self::MANAGEMENT) {
-            Some(Self(field))
+            Some(Self(fields))
         } else {
             None
         }
-    }
-
-    /// The field.
-    pub const fn get(self) -> u16 {
-        self.0
     }
 
     /// Select the Protected Frame subfield while retaining the validated
@@ -74,7 +64,7 @@ impl FrameControl {
 
     /// The field of `fields`, which keep a validated frame kind.
     const fn of_fields(fields: FrameControlFields) -> Self {
-        Self(u16::from_le_bytes(fields.to_bytes()))
+        Self(fields)
     }
     /// This MPDU repeats an earlier transmission.
     pub const fn retry(self) -> bool {
@@ -417,7 +407,7 @@ impl<'a> DecodedHeader<'a> {
     /// Decode the complete MAC/QoS/HT-Control header.
     pub fn decode(frame: &'a [u8]) -> Option<Self> {
         let mut reader = oer_portable_wire::Reader::new(frame);
-        let control = FrameControl::new(reader.u16_le().ok()?)?;
+        let control = FrameControl::new(FrameControlFields::from_bytes(reader.read().ok()?))?;
         let fields = control.fields();
         let duration = reader.u16_le().ok()?;
         let address1 = reader.read().ok()?;
@@ -913,9 +903,6 @@ mod fuzz_tests;
 mod header_tests;
 
 impl FrameControlFields {
-    pub const fn from_raw(raw: u16) -> Self {
-        Self::from_bytes(raw.to_le_bytes())
-    }
     /// The Frame Control field of a protocol-version-0 management frame of
     /// `subtype`, every flag clear; `None` for a reserved encoding wider
     /// than the four-bit subtype.
@@ -946,9 +933,6 @@ impl FrameControlFields {
     pub const fn is_control(self, subtype: ControlSubtype) -> bool {
         matches!(self.kind(), FrameType::Control)
             && self.control_subtype().encoding() == subtype.encoding()
-    }
-    pub const fn raw(self) -> u16 {
-        u16::from_le_bytes(self.to_bytes())
     }
     pub const fn to_ds(self) -> bool {
         DsDirection::from_bytes([self.ds() as u8]).to_ds()

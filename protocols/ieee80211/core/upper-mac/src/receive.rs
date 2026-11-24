@@ -7,7 +7,7 @@ use oer_protocols_ieee80211_wire::{
     address::{AddressFlags, Bssid, OwnAddress},
     ccmp::CcmpHeader,
     data::{MsduParts, decapsulate_payload},
-    frame::{DecodedHeader, FrameControlFields},
+    frame::DecodedHeader,
 };
 
 /// Why an RX frame or one of its MSDUs was refused.
@@ -51,7 +51,7 @@ impl<'a> AdmittedData<'a> {
         replay: Option<&mut CcmpRxReplayEpoch>,
     ) -> Result<Self, RxDropReason> {
         let control = header.control();
-        let fields = FrameControlFields::from_raw(control.get());
+        let fields = control.fields();
         if !control.is_data() || fields.no_data() || !fields.from_ds() || fields.to_ds() {
             return Err(RxDropReason::FrameKind);
         }
@@ -105,7 +105,7 @@ impl<'a> AdmittedData<'a> {
         replay: Option<&mut CcmpRxReplayEpoch>,
     ) -> Result<Self, RxDropReason> {
         let control = header.control();
-        let fields = FrameControlFields::from_raw(control.get());
+        let fields = control.fields();
         if !control.is_data() || fields.no_data() || fields.from_ds() || !fields.to_ds() {
             return Err(RxDropReason::FrameKind);
         }

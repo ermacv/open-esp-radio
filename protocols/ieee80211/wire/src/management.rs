@@ -6,7 +6,8 @@ pub const MANAGEMENT_HEADER_LEN: usize = 24;
 pub const MAX_SSID_LEN: usize = 32;
 pub const MAX_SUPPORTED_RATES_LEN: usize = 24;
 
-const PROBE_REQUEST_FRAME_CONTROL: u16 = 0x0040;
+const PROBE_REQUEST_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0x40, 0x00]);
 pub const BROADCAST_ADDRESS: [u8; 6] = [0xff; 6];
 const SSID_ELEMENT_ID: u8 = 0;
 const SUPPORTED_RATES_ELEMENT_ID: u8 = 1;
@@ -66,7 +67,7 @@ impl ProbeRequest<'_> {
         let mut header = [0; MANAGEMENT_HEADER_LEN];
         crate::encoding::write_array::<0, _, _>(
             &mut header,
-            &PROBE_REQUEST_FRAME_CONTROL.to_le_bytes(),
+            &PROBE_REQUEST_FRAME_CONTROL.to_bytes(),
         );
         crate::encoding::write_array::<4, _, _>(&mut header, &self.destination);
         crate::encoding::write_array::<10, _, _>(&mut header, &self.source);

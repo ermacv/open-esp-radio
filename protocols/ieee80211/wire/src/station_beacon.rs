@@ -8,7 +8,7 @@
 
 use crate::frame::FrameControlFields;
 
-const BEACON_FRAME_CONTROL: u16 = 0x0080;
+const BEACON_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0x80, 0x00]);
 const FIXED_BEACON_LENGTH: usize = 36;
 const TIM_ELEMENT_ID: u8 = 5;
 const HT_OPERATION_ELEMENT_ID: u8 = 61;
@@ -146,10 +146,8 @@ pub fn parse_sta_beacon(
         c0,
         c1,
     ] = *header;
-    let frame_control = u16::from_le_bytes([fc0, fc1]);
-    if FrameControlFields::from_raw(frame_control).type_and_subtype()
-        != FrameControlFields::from_raw(BEACON_FRAME_CONTROL).type_and_subtype()
-    {
+    let frame_control = FrameControlFields::from_bytes([fc0, fc1]);
+    if frame_control.type_and_subtype() != BEACON_FRAME_CONTROL.type_and_subtype() {
         return Err(StaBeaconError::NotBeacon);
     }
     if [a0, a1, a2, a3, a4, a5] != expected_bssid || [b0, b1, b2, b3, b4, b5] != expected_bssid {
