@@ -437,3 +437,42 @@ fn a_security_error_s_text_names_it() {
         assert!(!std::format!("{error}").is_empty(), "{error:?}");
     }
 }
+
+/// A removed peer whose address was installed again, in the lower free
+/// slot, is refused as a duplicate: it comes back whole, its key and its
+/// packet-number spaces, and the table is as before the call.
+#[test]
+fn restoring_over_a_reinstalled_address_is_a_duplicate() {
+    let mut table = EspNowEncryptedPeerTable::<2>::new(channel());
+    let lower = table.install(peer(2, 1)).unwrap();
+    let upper = table.install(peer(3, 2)).unwrap();
+    assert_eq!(table.allocate_tx_packet_number(upper), Ok(pn(1)));
+    table
+        .prepare_rx_replay(upper, pn(40))
+        .unwrap()
+        .commit_authenticated();
+    table.remove(lower).unwrap();
+    let removed = table.remove(upper).unwrap();
+    let again = table.install(peer(3, 3)).unwrap();
+    assert_eq!(again.index(), lower.index());
+    let before = table.get(again).unwrap();
+
+    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
+    assert_eq!(
+        error,
+        EspNowEncryptedPeerError::Duplicate(peer(3, 0).destination())
+    );
+    assert_eq!(removed.previous_id(), upper);
+    assert_eq!(removed.config().lmk().expose_secret(), &[2; 16]);
+    assert_eq!(removed.state.key.packet_numbers().last().value(), 1);
+    assert_eq!(highest_authenticated(&removed.state.replay), Some(40));
+
+    assert_eq!(table.len(), 1);
+    assert_eq!(table.get(again), Ok(before));
+    assert_eq!(table.lmk(again).unwrap().expose_secret(), &[3; 16]);
+    assert_eq!(table.find(peer(3, 0).destination()), Some(again));
+    assert!(matches!(
+        table.slots[upper.index()],
+        EspNowEncryptedPeerSlot::Vacant { generation } if generation == upper.generation()
+    ));
+}
