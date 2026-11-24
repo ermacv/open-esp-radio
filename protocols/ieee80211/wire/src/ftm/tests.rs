@@ -317,29 +317,86 @@ fn each_reserved_timestamp_bit_refuses_a_measurement() {
     }
 }
 
-/// Every Burst Duration and Format And Bandwidth code reads back as
-/// itself through its field; the timestamp holds 48 bits.
+/// Every Burst Duration and Format And Bandwidth name has its standard
+/// code, and the code reads back as the name; the timestamp holds 48 bits.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.167 (FTM Parameters element: the
+/// Burst Duration and Format And Bandwidth field encodings).
 #[test]
 fn the_codes_and_the_timestamp_fill_their_fields() {
-    for duration in [
-        FtmBurstDuration::Micros250,
-        FtmBurstDuration::Millis128,
-        FtmBurstDuration::NoPreference,
-    ] {
-        assert_eq!(
-            FtmBurstDuration::from_wire(duration.wire().get()),
-            Ok(duration)
-        );
+    use FtmBurstDuration as D;
+    use FtmFormatAndBandwidth as F;
+    let durations = [
+        (D::Micros250, 2),
+        (D::Micros500, 3),
+        (D::Millis1, 4),
+        (D::Millis2, 5),
+        (D::Millis4, 6),
+        (D::Millis8, 7),
+        (D::Millis16, 8),
+        (D::Millis32, 9),
+        (D::Millis64, 10),
+        (D::Millis128, 11),
+        (D::NoPreference, 15),
+    ];
+    let formats = [
+        (F::NoPreference, 0),
+        (F::NonHt5Mhz, 4),
+        (F::NonHt10Mhz, 6),
+        (F::NonHt20Mhz, 8),
+        (F::HtMixed20Mhz, 9),
+        (F::Vht20Mhz, 10),
+        (F::HtMixed40Mhz, 11),
+        (F::Vht40Mhz, 12),
+        (F::Vht80Mhz, 13),
+        (F::Vht80Plus80Mhz, 14),
+        (F::Vht160MhzSeparateLos, 15),
+        (F::Vht160MhzSingleLo, 16),
+        (F::Dmg2160Mhz, 31),
+    ];
+    // A name added to either enum and missing from its table stops this
+    // test from building.
+    const fn listed_duration(duration: D) {
+        match duration {
+            D::Micros250
+            | D::Micros500
+            | D::Millis1
+            | D::Millis2
+            | D::Millis4
+            | D::Millis8
+            | D::Millis16
+            | D::Millis32
+            | D::Millis64
+            | D::Millis128
+            | D::NoPreference => {}
+        }
     }
-    for format in [
-        FtmFormatAndBandwidth::NoPreference,
-        FtmFormatAndBandwidth::Vht160MhzSingleLo,
-        FtmFormatAndBandwidth::Dmg2160Mhz,
-    ] {
-        assert_eq!(
-            FtmFormatAndBandwidth::from_wire(format.wire().get()),
-            Ok(format)
-        );
+    const fn listed_format(format: F) {
+        match format {
+            F::NoPreference
+            | F::NonHt5Mhz
+            | F::NonHt10Mhz
+            | F::NonHt20Mhz
+            | F::HtMixed20Mhz
+            | F::Vht20Mhz
+            | F::HtMixed40Mhz
+            | F::Vht40Mhz
+            | F::Vht80Mhz
+            | F::Vht80Plus80Mhz
+            | F::Vht160MhzSeparateLos
+            | F::Vht160MhzSingleLo
+            | F::Dmg2160Mhz => {}
+        }
+    }
+    for (duration, code) in durations {
+        listed_duration(duration);
+        assert_eq!(duration.wire().get(), code, "{duration:?}");
+        assert_eq!(FtmBurstDuration::from_wire(code), Ok(duration));
+    }
+    for (format, code) in formats {
+        listed_format(format);
+        assert_eq!(format.wire().get(), code, "{format:?}");
+        assert_eq!(FtmFormatAndBandwidth::from_wire(code), Ok(format));
     }
     let highest = FtmTimestampPs::new(FTM_TIMESTAMP_MASK).unwrap();
     assert_eq!(FtmTimestampPs::decode(highest.encode()), highest);
