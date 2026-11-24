@@ -2,15 +2,14 @@
 
 `oer-protocols-hil-agent` holds the HIL target logic that does not
 depend on the chip: the request intake (`base`), the console and the
-image's handlers it calls (`console`, `serve`) and the reset-retained
-post-mortem codec. The
+image's handlers it calls (`console`, `serve`). The
 [HIL agent on the application entry](../../../hil/agent/README.md)
 composes these modules with the library's executor and console. Host tests exercise the same compiled code the
 firmware links.
 
 | Feature | Modules |
 | --- | --- |
-| none | `base`, `console`, `serve`, `postmortem` |
+| none | `base`, `console`, `serve` |
 
 ## Image keys
 

@@ -1,4 +1,3 @@
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
 #![forbid(unsafe_code)]
 //! Chip-independent HIL target logic.
 //!
@@ -17,7 +16,6 @@
 
 pub mod base;
 pub mod console;
-pub mod postmortem;
 pub mod serve;
 
 #[cfg(test)]

@@ -40,7 +40,7 @@ tools/regulatory/generate/
 tools/test/{layers, ui-cases}/
 tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
     provenance, scenario, scenario-cli}/
-portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort,
+portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv,
     sync, time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
 protocols/bluetooth/hci/
