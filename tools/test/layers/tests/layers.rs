@@ -6409,11 +6409,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         2,
         BY_CONTROLLER,
     ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/monitor.rs",
-        1,
-        BY_FINAL_CRATES,
-    ),
     ("protocols/network/core/src/block.rs", 1, BY_FINAL_CRATES),
     ("protocols/network/core/src/dhcp.rs", 1, BY_FINAL_CRATES),
     ("protocols/network/runtime/src/service.rs", 1, BY_PUMP),
@@ -8332,68 +8327,20 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_FINAL_CRATES,
     ),
     (
-        "protocols/ieee80211/core/upper-mac/src/aggregate.rs::AmpduRun.previous",
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Header.association",
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/originator.rs::Agreement.alarm",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/originator.rs::Agreement.due",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckNegotiation.inactivity",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckSession.gap",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckSession.inactivity",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/reorder.rs::RxReorderRelease.rejected",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/fragmentation/reassembly.rs::ReassemblySlot.identity",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/monitor.rs::MonitorFilter.any_address",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/monitor.rs::MonitorFilter.minimum_rssi_dbm",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/protection.rs::ProtectionPolicy.rts_length_threshold",
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/ieee80211/core/upper-mac/src/tx.rs::PublicationReport.ack_snr_db",
-        BY_FINAL_CRATES,
+        "correct: the hardware's ACK SNR, absent when it reports none (tasks/422)",
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/tx.rs::TxExchange.ack_snr_db",
-        BY_FINAL_CRATES,
+        "correct: the hardware's ACK SNR, absent when it reports none (tasks/422)",
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacAmpduTxStatus.ack_snr_db",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacIndividualRetries.final_rate",
-        BY_FINAL_CRATES,
+        "correct: the hardware's ACK SNR, absent when it reports none (tasks/422)",
     ),
     (
         "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ds_channel",

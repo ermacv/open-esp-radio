@@ -8,7 +8,7 @@ fn ampdu_status_joins_block_ack_and_individual_retries() {
         aggregate_attempts: 2,
         aggregate_rate: 7_u8,
         block_acknowledged_subframes: 2,
-        individual_retries: MacIndividualRetries::NONE,
+        individual_retries: MacIndividualRetries::None,
         ack_snr_db: None,
     };
     assert_eq!(status.delivered_subframes(), 2);
@@ -30,6 +30,9 @@ fn ampdu_status_joins_block_ack_and_individual_retries() {
     }
     assert_eq!(delivered.delivered_subframes(), 4);
     assert_eq!(delivered.total_publication_attempts(), 5);
-    assert_eq!(delivered.individual_retries.final_rate, Some(5));
+    assert!(matches!(
+        delivered.individual_retries,
+        MacIndividualRetries::Made { final_rate: 5, .. }
+    ));
     assert!(delivered.fully_delivered());
 }

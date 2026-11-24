@@ -131,7 +131,23 @@ pub struct RxBlockAckNegotiation {
     starting_sequence: SequenceNumber,
     requested_window: u16,
     requested_amsdu: Amsdu,
-    inactivity: Option<NonZeroU64>,
+    inactivity: Inactivity,
+}
+
+/// The agreement's inactivity deadline (Block Ack Timeout): off when the
+/// agreement names no timeout, or at a nonzero microsecond instant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Inactivity {
+    Off,
+    At(NonZeroU64),
+}
+
+/// The reorder gap's wait: idle while no hole is open, or until a nonzero
+/// microsecond instant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GapWait {
+    Idle,
+    Until(NonZeroU64),
 }
 
 impl RxBlockAckNegotiation {
@@ -178,7 +194,7 @@ impl RxBlockAckNegotiation {
             return Err(response);
         }
         let inactivity = if timeout_tu == 0 {
-            None
+            Inactivity::Off
         } else {
             let Some(deadline) = now
                 .checked_add(inactivity_duration(timeout_tu))
@@ -186,7 +202,7 @@ impl RxBlockAckNegotiation {
             else {
                 return Err(response);
             };
-            Some(deadline)
+            Inactivity::At(deadline)
         };
         response.status = AddbaStatus::Success;
         // Buffer Size zero asks for the HT default of 64 positions.
@@ -224,8 +240,8 @@ pub enum RxBlockAckError {
 pub struct RxBlockAckSession<A, const WINDOW: usize, const SLOTS: usize> {
     agreement: A,
     reorder: RxReorderBuffer<WINDOW, SLOTS>,
-    inactivity: Option<NonZeroU64>,
-    gap: Option<NonZeroU64>,
+    inactivity: Inactivity,
+    gap: GapWait,
     starting_sequence: SequenceNumber,
     requested_window: u16,
     requested_amsdu: Amsdu,
@@ -246,7 +262,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
                 agreement,
                 reorder,
                 inactivity: negotiation.inactivity,
-                gap: None,
+                gap: GapWait::Idle,
                 starting_sequence: negotiation.starting_sequence,
                 requested_window: negotiation.requested_window,
                 requested_amsdu: negotiation.requested_amsdu,
@@ -310,17 +326,22 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
     pub fn deadline(&self) -> Option<Instant> {
         // Both deadlines are nonzero microsecond instants; the sooner wins.
         match (self.inactivity, self.gap) {
-            (Some(inactivity), Some(gap)) => Some(Instant::from_micros(inactivity.min(gap).get())),
-            (Some(deadline), None) | (None, Some(deadline)) => {
+            (Inactivity::At(inactivity), GapWait::Until(gap)) => {
+                Some(Instant::from_micros(inactivity.min(gap).get()))
+            }
+            (Inactivity::At(deadline), GapWait::Idle)
+            | (Inactivity::Off, GapWait::Until(deadline)) => {
                 Some(Instant::from_micros(deadline.get()))
             }
-            (None, None) => None,
+            (Inactivity::Off, GapWait::Idle) => None,
         }
     }
 
     pub fn expired(&self, now: Instant) -> bool {
-        self.inactivity
-            .is_some_and(|deadline| now.as_micros() >= deadline.get())
+        match self.inactivity {
+            Inactivity::Off => false,
+            Inactivity::At(deadline) => now.as_micros() >= deadline.get(),
+        }
     }
 
     /// Whether an MPDU of `sequence` would be retained, not released at
@@ -382,9 +403,9 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
     /// The same hole keeps its original deadline under later RX traffic.
     fn update_gap(&mut self, next: NonZeroU64) {
         if self.reorder.occupied() == 0 {
-            self.gap = None;
-        } else {
-            self.gap.get_or_insert(next);
+            self.gap = GapWait::Idle;
+        } else if self.gap == GapWait::Idle {
+            self.gap = GapWait::Until(next);
         }
     }
 
@@ -393,15 +414,14 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         now: Instant,
         gap_timeout: Duration,
     ) -> Result<Option<RxReorderRelease<WINDOW>>, RxBlockAckError> {
-        if self
-            .gap
-            .is_none_or(|deadline| now.as_micros() < deadline.get())
-        {
-            return Ok(None);
+        match self.gap {
+            GapWait::Idle => return Ok(None),
+            GapWait::Until(deadline) if now.as_micros() < deadline.get() => return Ok(None),
+            GapWait::Until(_) => {}
         }
         let next = gap_deadline(now, gap_timeout)?;
         let released = self.reorder.expire_gap();
-        self.gap = None;
+        self.gap = GapWait::Idle;
         self.update_gap(next);
         Ok(Some(released))
     }
@@ -419,7 +439,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         let released = self.reorder.move_window_to(starting_sequence);
         self.inactivity = inactivity;
         if released.is_some() {
-            self.gap = None;
+            self.gap = GapWait::Idle;
             self.update_gap(next);
         }
         Ok(released)
@@ -430,13 +450,13 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         (self.agreement, self.reorder.stop())
     }
 
-    fn next_inactivity(&self, now: Instant) -> Result<Option<NonZeroU64>, RxBlockAckError> {
+    fn next_inactivity(&self, now: Instant) -> Result<Inactivity, RxBlockAckError> {
         if self.timeout_tu == 0 {
-            Ok(None)
+            Ok(Inactivity::Off)
         } else {
             now.checked_add(inactivity_duration(self.timeout_tu))
                 .and_then(|at| NonZeroU64::new(at.as_micros()))
-                .map(Some)
+                .map(Inactivity::At)
                 .ok_or(RxBlockAckError::DeadlineOverflow)
         }
     }

@@ -1206,7 +1206,9 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         // Every individually addressed HE PPDU of a BSS that advertises an
         // HE TXOP Duration RTS Threshold goes behind RTS/CTS, its retries
         // and an aggregate alike: the plane estimates no TXOP duration.
-        let mut policy = oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::new(None);
+        let mut policy = oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::new(
+            oer_protocols_ieee80211_core_upper_mac::protection::RtsThreshold::Off,
+        );
         policy.install_bss(link.protection);
         let protect = |rate: &oer_protocols_ieee80211_contracts_port::PortRate<'id, K>| {
             policy.every_he_txop_protection(rate.get())

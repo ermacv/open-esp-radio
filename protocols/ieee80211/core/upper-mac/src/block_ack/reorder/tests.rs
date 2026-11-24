@@ -40,7 +40,7 @@ fn immediate_ingest_avoids_a_release_list_only_without_a_buffered_successor() {
     );
     assert_eq!(reorder.next_sequence(), seq(101));
     assert_eq!(reorder.try_ingest_immediate(frame(103, 64)), Ok(None));
-    assert!(reorder.ingest(frame(102, 2)).unwrap().buffered);
+    assert!(reorder.ingest(frame(102, 2)).unwrap().received == Received::Buffered);
     assert_eq!(reorder.try_ingest_immediate(frame(101, 64)), Ok(None));
     let release = reorder.ingest(frame(101, 64)).unwrap();
     assert!(releases(&release, &[frame(101, 64), frame(102, 2)]));
@@ -50,8 +50,8 @@ fn immediate_ingest_avoids_a_release_list_only_without_a_buffered_successor() {
 fn a_gap_is_buffered_and_then_released_in_sequence_order() {
     let mut reorder = Buffer::new(seq(100), 64).unwrap();
     assert_eq!(reorder.retains_on_ingest(seq(102)), Ok(true));
-    assert!(reorder.ingest(frame(102, 2)).unwrap().buffered);
-    assert!(reorder.ingest(frame(101, 1)).unwrap().buffered);
+    assert!(reorder.ingest(frame(102, 2)).unwrap().received == Received::Buffered);
+    assert!(reorder.ingest(frame(101, 1)).unwrap().received == Received::Buffered);
     assert_eq!(reorder.retains_on_ingest(seq(100)), Ok(false));
     let release = reorder.ingest(frame(100, 0)).unwrap();
     assert!(releases(
@@ -70,7 +70,7 @@ fn a_window_advance_releases_buffered_frames_and_counts_the_missing() {
     assert!(releases(&release, &[frame(2, 2), frame(31, 31)]));
     let advance = 1000 - 64 + 1;
     assert_eq!(release.missing, advance - 2);
-    assert!(release.buffered);
+    assert_eq!(release.received, Received::Buffered);
     assert_eq!(reorder.next_sequence(), seq(advance));
 }
 
@@ -93,7 +93,7 @@ fn sequence_wrap_and_stale_rejection_are_unambiguous() {
     let release = reorder.ingest(frame(0x0fff, 0)).unwrap();
     assert!(releases(&release, &[frame(0x0fff, 0), frame(0, 1)]));
     let stale = reorder.ingest(frame(0x0fff, 2)).unwrap();
-    assert_eq!(stale.rejected, Some(frame(0x0fff, 2)));
+    assert_eq!(stale.received, Received::Rejected(frame(0x0fff, 2)));
     assert_eq!(reorder.retains_on_ingest(seq(0x0fff)), Ok(false));
 }
 
@@ -109,7 +109,7 @@ fn retention_prediction_matches_window_advance_and_duplicate_edges() {
 
     let mut singleton = RxReorderBuffer::<WINDOW, 1>::new(seq(10), 1).unwrap();
     assert_eq!(singleton.retains_on_ingest(seq(20)), Ok(false));
-    assert!(!singleton.ingest(frame(20, 0)).unwrap().buffered);
+    assert!(singleton.ingest(frame(20, 0)).unwrap().received != Received::Buffered);
 }
 
 #[test]
@@ -153,7 +153,7 @@ fn a_small_capacity_reorders_within_its_window() {
     let release = reorder.ingest(frame(5, 7)).unwrap();
     assert!(releases(&release, &[frame(4093, 3)]));
     assert_eq!(release.missing, 2);
-    assert!(release.buffered);
+    assert_eq!(release.received, Received::Buffered);
     assert_eq!(reorder.next_sequence(), seq(4094));
     // 4094 completes the run through the buffered 4095.
     let release = reorder.ingest(frame(4094, 4)).unwrap();
@@ -224,8 +224,8 @@ fn a_stale_first_aggregate_rebases_the_window() {
 #[test]
 fn a_non_power_of_two_window_keeps_distinct_sequences_across_wrap() {
     let mut reorder = RxReorderBuffer::<3, 3>::new(seq(4094), 3).unwrap();
-    assert!(reorder.ingest(frame(4095, 1)).unwrap().buffered);
-    assert!(reorder.ingest(frame(0, 2)).unwrap().buffered);
+    assert!(reorder.ingest(frame(4095, 1)).unwrap().received == Received::Buffered);
+    assert!(reorder.ingest(frame(0, 2)).unwrap().received == Received::Buffered);
     let release = reorder.ingest(frame(4094, 0)).unwrap();
     assert!(releases(
         &release,
@@ -264,7 +264,7 @@ fn one_input_returns_a_full_window_without_losing_or_repeating_any_slot() {
                             slot: offset as u8,
                         })
                         .unwrap();
-                    assert!(release.buffered);
+                    assert_eq!(release.received, Received::Buffered);
                     assert_eq!(release.iter().count(), 0);
                 }
                 let release = reorder
@@ -279,7 +279,7 @@ fn one_input_returns_a_full_window_without_losing_or_repeating_any_slot() {
                     slot: (offset % N) as u8,
                 });
                 assert!(release.iter().eq(expected));
-                assert!(!release.buffered);
+                assert_ne!(release.received, Received::Buffered);
                 assert_eq!(release.missing, first_offset as u16);
                 assert_eq!(reorder.occupied(), 0);
                 assert_eq!(
@@ -311,7 +311,8 @@ fn every_drain_returns_all_retained_slots_at_the_capacity_boundary() {
                         slot: offset as u8,
                     })
                     .unwrap()
-                    .buffered
+                    .received
+                    == Received::Buffered
             );
         }
         let release = match operation {
@@ -353,7 +354,7 @@ fn every_drain_returns_all_retained_slots_at_the_capacity_boundary() {
 fn every_refusal_preserves_the_window_and_its_retained_slot() {
     for refused in [frame(103, 7), frame(102, 6), frame(104, 34)] {
         let mut reorder = Buffer::new(seq(100), 8).unwrap();
-        assert!(reorder.ingest(frame(102, 7)).unwrap().buffered);
+        assert!(reorder.ingest(frame(102, 7)).unwrap().received == Received::Buffered);
         assert!(reorder.ingest(refused).is_err());
         assert_eq!(reorder.next_sequence(), seq(100));
         assert_eq!(reorder.occupied(), 1);

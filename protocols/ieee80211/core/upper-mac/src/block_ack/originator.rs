@@ -128,15 +128,24 @@ pub enum TxBlockAckResponseDisposition {
 struct Agreement {
     tid: u8,
     session: TxBlockAckSession,
-    alarm: Option<TxBlockAckAlarm>,
-    /// When the next negotiation is due; [`Instant::EPOCH`] at once.
-    due: Option<Instant>,
+    negotiation: Negotiation,
     /// Negotiations left; a peer's answer ends them.
     attempts: u8,
+}
+
+/// Where a TID's negotiation stands.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Negotiation {
+    /// None waits, none is out.
+    Idle,
+    /// The next one is due at this instant; [`Instant::EPOCH`] at once.
+    Due(Instant),
+    /// One is out, its response awaited until the alarm.
+    Awaiting(TxBlockAckAlarm),
     /// The peer refused the TID or its attempts ran out: [`TxBlockAckOriginator::queue`]
     /// offers it no more until [`TxBlockAckOriginator::queue_initial`] or
     /// [`TxBlockAckOriginator::stop_all`].
-    closed: bool,
+    Closed,
 }
 
 /// One peer's TX Block Ack agreements, at most `TIDS`.
@@ -180,10 +189,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             *place = Some(Agreement {
                 tid,
                 session,
-                alarm: None,
-                due: None,
+                negotiation: Negotiation::Idle,
                 attempts: 0,
-                closed: false,
             });
         }
         Ok(Self {
@@ -221,9 +228,15 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     pub fn queue_initial(&mut self, retry: TxBlockAckRetry) {
         self.retry_interval = retry.interval;
         for agreement in self.agreements.iter_mut().flatten() {
-            agreement.due = (retry.attempts != 0).then_some(Instant::EPOCH);
             agreement.attempts = retry.attempts;
-            agreement.closed = false;
+            // A negotiation already out keeps its alarm.
+            if !matches!(agreement.negotiation, Negotiation::Awaiting(_)) {
+                agreement.negotiation = if retry.attempts == 0 {
+                    Negotiation::Idle
+                } else {
+                    Negotiation::Due(Instant::EPOCH)
+                };
+            }
         }
     }
 
@@ -235,16 +248,14 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         let Some(agreement) = self.agreement_mut(tid) else {
             return false;
         };
-        if agreement.closed
+        if agreement.negotiation != Negotiation::Idle
             || retry.attempts == 0
-            || agreement.due.is_some()
-            || agreement.alarm.is_some()
             || agreement.session.is_awaiting()
             || agreement.session.operational().is_some()
         {
             return false;
         }
-        agreement.due = Some(Instant::EPOCH);
+        agreement.negotiation = Negotiation::Due(Instant::EPOCH);
         agreement.attempts = retry.attempts;
         self.retry_interval = retry.interval;
         true
@@ -257,10 +268,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         match self.agreement_mut(tid) {
             Some(agreement) => {
                 agreement.session.stop();
-                agreement.alarm = None;
-                agreement.due = None;
+                agreement.negotiation = Negotiation::Closed;
                 agreement.attempts = 0;
-                agreement.closed = true;
                 true
             }
             None => false,
@@ -270,7 +279,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// Whether `tid` is closed to [`Self::queue`].
     pub fn is_closed(&self, tid: u8) -> bool {
         self.agreement(tid)
-            .is_some_and(|agreement| agreement.closed)
+            .is_some_and(|agreement| agreement.negotiation == Negotiation::Closed)
     }
 
     /// Whether a negotiation waits to be sent, due or not.
@@ -278,7 +287,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         self.agreements
             .iter()
             .flatten()
-            .any(|agreement| agreement.due.is_some())
+            .any(|agreement| matches!(agreement.negotiation, Negotiation::Due(_)))
     }
 
     /// When the earliest waiting negotiation is due.
@@ -286,7 +295,10 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         self.agreements
             .iter()
             .flatten()
-            .filter_map(|agreement| agreement.due)
+            .filter_map(|agreement| match agreement.negotiation {
+                Negotiation::Due(due) => Some(due),
+                Negotiation::Idle | Negotiation::Awaiting(_) | Negotiation::Closed => None,
+            })
             .min()
     }
 
@@ -294,12 +306,10 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// order; taking it uses one of its attempts. The caller then
     /// [`Self::begin`]s it.
     pub fn take_pending(&mut self, now: Instant) -> Option<u8> {
-        let agreement = self
-            .agreements
-            .iter_mut()
-            .flatten()
-            .find(|agreement| agreement.due.is_some_and(|due| due <= now))?;
-        agreement.due = None;
+        let agreement = self.agreements.iter_mut().flatten().find(
+            |agreement| matches!(agreement.negotiation, Negotiation::Due(due) if due <= now),
+        )?;
+        agreement.negotiation = Negotiation::Idle;
         agreement.attempts = agreement.attempts.saturating_sub(1);
         Some(agreement.tid)
     }
@@ -324,7 +334,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
                 TxBlockAckDialogToken::from_value(token),
             )
             .map_err(|error| TxBlockAckOriginatorError::Session { tid, error })?;
-        agreement.alarm = Some(request.alarm);
+        agreement.negotiation = Negotiation::Awaiting(request.alarm);
         self.next_dialog_token = self.dialog_tokens.next(token);
         Ok(request)
     }
@@ -335,7 +345,6 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         let interval = self.retry_interval;
         if let Some(agreement) = self.agreement_mut(tid) {
             agreement.session.stop();
-            agreement.alarm = None;
             agreement.retry(now, interval);
         }
     }
@@ -374,10 +383,12 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             .session
             .on_response_action(action)
             .map_err(|error| TxBlockAckOriginatorError::Session { tid, error })?;
-        agreement.alarm = None;
-        agreement.due = None;
         agreement.attempts = 0;
-        agreement.closed = matches!(response, TxBlockAckResponse::Rejected(_));
+        agreement.negotiation = if matches!(response, TxBlockAckResponse::Rejected(_)) {
+            Negotiation::Closed
+        } else {
+            Negotiation::Idle
+        };
         Ok(TxBlockAckResponseDisposition::Matched(
             TxBlockAckOriginatorResponse { tid, response },
         ))
@@ -389,10 +400,13 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     pub fn expire_next(&mut self, now: Instant) -> Option<u8> {
         let interval = self.retry_interval;
         for agreement in self.agreements.iter_mut().flatten() {
-            let Some(alarm) = agreement.alarm.filter(|alarm| now >= alarm.deadline) else {
+            let Negotiation::Awaiting(alarm) = agreement.negotiation else {
                 continue;
             };
-            agreement.alarm = None;
+            if now < alarm.deadline {
+                continue;
+            }
+            agreement.negotiation = Negotiation::Idle;
             if agreement.session.on_alarm(alarm) {
                 agreement.retry(now, interval);
                 return Some(agreement.tid);
@@ -407,7 +421,10 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         match self.agreement_mut(tid) {
             Some(agreement) => {
                 agreement.session.stop();
-                agreement.alarm = None;
+                // A queued attempt or a closed TID stays as it is.
+                if let Negotiation::Awaiting(_) = agreement.negotiation {
+                    agreement.negotiation = Negotiation::Idle;
+                }
                 true
             }
             None => false,
@@ -419,14 +436,14 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     pub fn stop_all(&mut self) -> u8 {
         let mut active = 0_u8;
         for agreement in self.agreements.iter_mut().flatten() {
-            if agreement.session.operational().is_some() || agreement.alarm.is_some() {
+            if agreement.session.operational().is_some()
+                || matches!(agreement.negotiation, Negotiation::Awaiting(_))
+            {
                 active = active.saturating_add(1);
             }
             agreement.session.stop();
-            agreement.alarm = None;
-            agreement.due = None;
+            agreement.negotiation = Negotiation::Idle;
             agreement.attempts = 0;
-            agreement.closed = false;
         }
         active
     }
@@ -496,7 +513,10 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     }
 
     pub fn alarm(&self, tid: u8) -> Option<TxBlockAckAlarm> {
-        self.agreement(tid)?.alarm
+        match self.agreement(tid)?.negotiation {
+            Negotiation::Awaiting(alarm) => Some(alarm),
+            Negotiation::Idle | Negotiation::Due(_) | Negotiation::Closed => None,
+        }
     }
 
     /// The earliest negotiation deadline.
@@ -504,8 +524,10 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         self.agreements
             .iter()
             .flatten()
-            .filter_map(|agreement| agreement.alarm)
-            .map(|alarm| alarm.deadline)
+            .filter_map(|agreement| match agreement.negotiation {
+                Negotiation::Awaiting(alarm) => Some(alarm.deadline),
+                Negotiation::Idle | Negotiation::Due(_) | Negotiation::Closed => None,
+            })
             .min()
     }
 }
@@ -514,8 +536,11 @@ impl Agreement {
     /// Queue the next attempt `interval` after `now`, while one remains.
     /// The last one closes the TID.
     fn retry(&mut self, now: Instant, interval: Duration) {
-        self.due = (self.attempts != 0).then(|| now.saturating_add(interval));
-        self.closed = self.attempts == 0;
+        self.negotiation = if self.attempts == 0 {
+            Negotiation::Closed
+        } else {
+            Negotiation::Due(now.saturating_add(interval))
+        };
     }
 }
 

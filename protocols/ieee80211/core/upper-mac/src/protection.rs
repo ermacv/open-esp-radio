@@ -70,19 +70,37 @@ pub use bss::{
 };
 use oer_protocols_ieee80211_contracts_port::Protection;
 
+/// The local dot11RTSThreshold: off, or the MPDU length above which an
+/// individually addressed MPDU is protected.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RtsThreshold {
+    Off,
+    At(RtsLengthThreshold),
+}
+
+impl RtsThreshold {
+    /// Whether an MPDU of `length` octets exceeds the threshold.
+    pub fn exceeded_by(self, length: u32) -> bool {
+        match self {
+            Self::Off => false,
+            Self::At(threshold) => length > u32::from(threshold.bytes()),
+        }
+    }
+}
+
 /// BSS requirements plus the local length threshold of one transmitter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProtectionPolicy {
     bss: BssProtection,
-    rts_length_threshold: Option<RtsLengthThreshold>,
+    rts_threshold: RtsThreshold,
 }
 
 impl ProtectionPolicy {
     /// A transmitter outside any BSS, with its local length threshold.
-    pub const fn new(rts_length_threshold: Option<RtsLengthThreshold>) -> Self {
+    pub const fn new(rts_threshold: RtsThreshold) -> Self {
         Self {
             bss: BssProtection::UNPROTECTED,
-            rts_length_threshold,
+            rts_threshold,
         }
     }
 
@@ -90,8 +108,8 @@ impl ProtectionPolicy {
         self.bss
     }
 
-    pub const fn rts_length_threshold(self) -> Option<RtsLengthThreshold> {
-        self.rts_length_threshold
+    pub const fn rts_threshold(self) -> RtsThreshold {
+        self.rts_threshold
     }
 
     /// Replace the BSS facts, keeping the local length threshold.
@@ -99,9 +117,9 @@ impl ProtectionPolicy {
         self.bss = bss;
     }
 
-    /// Replace the local dot11RTSThreshold; `None` disables the length rule.
-    pub fn set_rts_length_threshold(&mut self, threshold: Option<RtsLengthThreshold>) {
-        self.rts_length_threshold = threshold;
+    /// Replace the local dot11RTSThreshold.
+    pub fn set_rts_threshold(&mut self, threshold: RtsThreshold) {
+        self.rts_threshold = threshold;
     }
 
     /// Leave the BSS: no BSS requirement remains.
@@ -135,9 +153,7 @@ impl ProtectionPolicy {
         // The length threshold applies to one MPDU; an aggregate is protected
         // only by the BSS rules above.
         let length = match ppdu.psdu {
-            TxPsdu::Mpdu { length } => self
-                .rts_length_threshold
-                .is_some_and(|threshold| length > u32::from(threshold.bytes())),
+            TxPsdu::Mpdu { length } => self.rts_threshold.exceeded_by(length),
             TxPsdu::Ampdu { .. } => false,
         };
         let erp = self.bss.erp.use_protection() && non_dsss;

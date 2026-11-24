@@ -1205,7 +1205,9 @@ fn he_publication(link: DataLink, rate: PhyRate, frames: u8) -> Vec<Protection> 
 #[test]
 fn a_finite_he_txop_threshold_protects_every_he_ppdu_and_its_retries() {
     let rts = |rate| {
-        let mut policy = oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::new(None);
+        let mut policy = oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::new(
+            oer_protocols_ieee80211_core_upper_mac::protection::RtsThreshold::Off,
+        );
         policy.install_bss(he_link(Some(64)).protection);
         policy.every_he_txop_protection(rate)
     };

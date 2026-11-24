@@ -1,7 +1,7 @@
 use oer_protocols_ieee80211_wire::phy::LegacyRate;
 
 use super::*;
-use crate::protection::RtsLengthThreshold;
+use crate::protection::{RtsLengthThreshold, RtsThreshold};
 use crate::retry::AckFailureAccounting;
 
 const LIMITS: RetryLimits = RetryLimits {
@@ -38,7 +38,7 @@ fn planner() -> TxPlanner {
     TxPlanner::new(
         LIMITS,
         AMPDU_POLICY,
-        ProtectionPolicy::new(Some(RtsLengthThreshold::new(1_000))),
+        ProtectionPolicy::new(RtsThreshold::At(RtsLengthThreshold::new(1_000))),
         crate::protection::ProtectEveryHeTxop,
     )
 }
@@ -263,7 +263,7 @@ fn one_missing_subframe_leaves_the_aggregate_for_an_individual_retry() {
     };
     assert_eq!(status.result, MacAmpduTxResult::Delivered);
     assert_eq!(status.block_acknowledged_subframes, 2);
-    assert_eq!(status.individual_retries.transmitted, 1);
+    assert_eq!(status.individual_retries.transmitted(), 1);
     assert!(status.fully_delivered());
 }
 
@@ -493,7 +493,7 @@ fn an_aged_subframe_alone_is_discarded_behind_a_block_ack_request() {
         panic!("nothing is left to send");
     };
     assert_eq!(status.result, MacAmpduTxResult::Incomplete);
-    assert_eq!(status.individual_retries.failed, 1);
+    assert_eq!(status.individual_retries.failed(), 1);
 }
 
 #[test]

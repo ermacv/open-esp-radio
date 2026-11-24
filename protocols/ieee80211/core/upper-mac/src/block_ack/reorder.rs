@@ -94,10 +94,21 @@ pub struct RxReorderRelease<const WINDOW_CAPACITY: usize> {
     frames: [Option<RxReorderMpdu>; WINDOW_CAPACITY],
     /// Sequence numbers the window moved past without an MPDU.
     pub missing: u16,
-    /// A received MPDU behind the window: the caller discards it.
-    pub rejected: Option<RxReorderMpdu>,
-    /// Whether the received MPDU stays buffered after the operation.
-    pub buffered: bool,
+    /// What became of the MPDU this operation received.
+    pub received: Received,
+}
+
+/// What became of the MPDU an operation received.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Received {
+    /// The operation received none: a gap's timeout, a window move, a flush.
+    Nothing,
+    /// It is released, in order, among the operation's frames.
+    Released,
+    /// It stays buffered in the window.
+    Buffered,
+    /// It lies behind the window: the caller discards it.
+    Rejected(RxReorderMpdu),
 }
 
 impl<const WINDOW_CAPACITY: usize> RxReorderRelease<WINDOW_CAPACITY> {
@@ -105,8 +116,7 @@ impl<const WINDOW_CAPACITY: usize> RxReorderRelease<WINDOW_CAPACITY> {
         Self {
             frames: [None; WINDOW_CAPACITY],
             missing: 0,
-            rejected: None,
-            buffered: false,
+            received: Received::Nothing,
         }
     }
 
@@ -314,7 +324,7 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         let distance = self.next_sequence.forward_distance(frame.sequence);
         if distance >= SequenceNumber::HALF_SPACE {
             let mut release = RxReorderRelease::empty();
-            release.rejected = Some(frame);
+            release.received = Received::Rejected(frame);
             return Ok(release);
         }
         if self.has_sequence(frame.sequence) {
@@ -374,10 +384,11 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         range.transfer(position, out, owned, &mut missing, &mut self.occupied);
         if released {
             *out = Some(frame);
+            release.received = Received::Released;
         } else {
             *owned = Some(frame);
             self.occupied |= Self::bit(position);
-            release.buffered = true;
+            release.received = Received::Buffered;
         }
         release.missing = missing;
         let original_start = self.next_sequence;

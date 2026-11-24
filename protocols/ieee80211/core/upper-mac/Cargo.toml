@@ -15,6 +15,7 @@ oer-protocols-ieee80211-contracts-port = { path = "../../contracts/port" }
 oer-protocols-ieee80211-wire = { path = "../../wire" }
 oer-protocols-ieee80211-contracts-security = { path = "../../contracts/security" }
 oer-portable-time = { path = "../../../../portable/time" }
+oer-portable-wire = { path = "../../../../portable/wire" }
 
 [lints]
 workspace = true

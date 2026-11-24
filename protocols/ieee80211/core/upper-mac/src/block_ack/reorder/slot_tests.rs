@@ -36,7 +36,7 @@ fn immediate_ingest_avoids_a_release_list_only_without_a_buffered_successor() {
     assert_eq!(reorder.try_ingest_immediate(frame(103, 64)), Ok(None));
     assert_eq!(reorder.next_sequence(), SequenceNumber::new(101).unwrap());
 
-    assert!(reorder.ingest(frame(102, 2)).unwrap().buffered);
+    assert!(reorder.ingest(frame(102, 2)).unwrap().received == Received::Buffered);
     assert_eq!(reorder.try_ingest_immediate(frame(101, 64)), Ok(None));
     let release = reorder.ingest(frame(101, 64)).unwrap();
     assert_eq!(
@@ -53,12 +53,12 @@ fn gap_is_buffered_and_then_released_in_sequence_order() {
         reorder.retains_on_ingest(SequenceNumber::new(102).unwrap()),
         Ok(true)
     );
-    assert!(reorder.ingest(frame(102, 2)).unwrap().buffered);
+    assert!(reorder.ingest(frame(102, 2)).unwrap().received == Received::Buffered);
     assert_eq!(
         reorder.retains_on_ingest(SequenceNumber::new(101).unwrap()),
         Ok(true)
     );
-    assert!(reorder.ingest(frame(101, 1)).unwrap().buffered);
+    assert!(reorder.ingest(frame(101, 1)).unwrap().received == Received::Buffered);
     assert_eq!(
         reorder.retains_on_ingest(SequenceNumber::new(100).unwrap()),
         Ok(false)
@@ -83,7 +83,7 @@ fn window_advance_releases_owned_frames_and_counts_missing_without_long_loop() {
     );
     let expected_advance = 1000 - 64 + 1;
     assert_eq!(release.missing, expected_advance - 2);
-    assert!(release.buffered);
+    assert_eq!(release.received, Received::Buffered);
     assert_eq!(
         reorder.next_sequence(),
         SequenceNumber::new(expected_advance).unwrap()
@@ -119,7 +119,7 @@ fn sequence_wrap_and_stale_rejection_are_unambiguous() {
         [frame(0x0fff, 0), frame(0, 1)]
     );
     let stale = reorder.ingest(frame(0x0fff, 2)).unwrap();
-    assert_eq!(stale.rejected, Some(frame(0x0fff, 2)));
+    assert_eq!(stale.received, Received::Rejected(frame(0x0fff, 2)));
     assert_eq!(
         reorder.retains_on_ingest(SequenceNumber::new(0x0fff).unwrap()),
         Ok(false)
@@ -146,7 +146,7 @@ fn retention_prediction_matches_window_advance_and_duplicate_edges() {
         singleton.retains_on_ingest(SequenceNumber::new(20).unwrap()),
         Ok(false)
     );
-    assert!(!singleton.ingest(frame(20, 0)).unwrap().buffered);
+    assert!(singleton.ingest(frame(20, 0)).unwrap().received != Received::Buffered);
 }
 
 #[test]
@@ -223,7 +223,7 @@ fn a_block_ack_request_releases_frames_before_its_start_then_the_run_from_it() {
     let mut state = RxReorderBuffer::<64, 40>::new(SequenceNumber::new(10).unwrap(), 8).unwrap();
     // 10 and 11 are missing; 12, 14 and 15 are buffered.
     for (sequence, slot) in [(12, 2), (14, 4), (15, 5)] {
-        assert!(state.ingest(frame(sequence, slot)).unwrap().buffered);
+        assert!(state.ingest(frame(sequence, slot)).unwrap().received == Received::Buffered);
     }
     let release = state
         .move_window_to(SequenceNumber::new(13).unwrap())
@@ -247,7 +247,7 @@ fn a_block_ack_request_releases_frames_before_its_start_then_the_run_from_it() {
 #[test]
 fn a_block_ack_request_at_or_behind_the_window_start_is_ignored() {
     let mut state = RxReorderBuffer::<64, 40>::new(SequenceNumber::new(100).unwrap(), 8).unwrap();
-    assert!(state.ingest(frame(102, 2)).unwrap().buffered);
+    assert!(state.ingest(frame(102, 2)).unwrap().received == Received::Buffered);
     assert!(
         state
             .move_window_to(SequenceNumber::new(100).unwrap())

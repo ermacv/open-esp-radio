@@ -99,10 +99,8 @@ impl AmpduLimits {
                     .min(usize::from(self.port.max_subframes))
                     .min(usize::from(MAX_AMPDU_SUBFRAMES)),
                 maximum: self.peer_max_length().min(port_length),
-                length: 0,
-                previous: None,
+                built: Built::Empty,
                 minimum_subframe_bytes,
-                frames: 0,
             })
     }
 }
@@ -114,17 +112,29 @@ pub struct AmpduRun {
     limits: AmpduLimits,
     limit: usize,
     maximum: u32,
-    length: u32,
-    previous: Option<(u32, u32)>,
+    built: Built,
     minimum_subframe_bytes: u32,
-    frames: usize,
+}
+
+/// What a run holds so far.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Built {
+    /// No frame yet.
+    Empty,
+    /// `frames` frames of `length` octets, the last one's PSDU and empty
+    /// delimiters in `last`.
+    Started {
+        length: u32,
+        last: (u32, u32),
+        frames: usize,
+    },
 }
 
 impl AmpduRun {
     /// Admit the next frame, an Ethernet-II frame of `ethernet_len` octets:
     /// `false`, admitting nothing, when it would exceed a limit.
     pub fn admit(&mut self, ethernet_len: usize) -> bool {
-        if self.frames == self.limit {
+        if self.frames() == self.limit {
             return false;
         }
         let Some(psdu) = subframe_bound(ethernet_len).and_then(|subframe| subframe.checked_sub(4))
@@ -134,7 +144,11 @@ impl AmpduRun {
         let Some(delimiters) = ampdu::empty_delimiters(psdu, self.minimum_subframe_bytes) else {
             return false;
         };
-        let Some(length) = ampdu::length_after_append(self.length, self.previous, psdu) else {
+        let (built, last) = match self.built {
+            Built::Empty => (0, None),
+            Built::Started { length, last, .. } => (length, Some(last)),
+        };
+        let Some(length) = ampdu::length_after_append(built, last, psdu) else {
             return false;
         };
         if length > self.maximum
@@ -154,18 +168,23 @@ impl AmpduRun {
         {
             return false;
         }
-        let Some(frames) = self.frames.checked_add(1) else {
+        let Some(frames) = self.frames().checked_add(1) else {
             return false;
         };
-        self.length = length;
-        self.previous = Some((psdu, delimiters));
-        self.frames = frames;
+        self.built = Built::Started {
+            length,
+            last: (psdu, delimiters),
+            frames,
+        };
         true
     }
 
     /// The frames admitted.
     pub const fn frames(&self) -> usize {
-        self.frames
+        match self.built {
+            Built::Empty => 0,
+            Built::Started { frames, .. } => frames,
+        }
     }
 }
 
