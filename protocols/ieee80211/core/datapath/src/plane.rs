@@ -1015,7 +1015,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         link: &P::Link,
         msdu: OutboundMsdu<P::Memory>,
         numbers: &mut TxNumbers,
-        key: Option<&T>,
+        key: Option<&mut T>,
         now: Instant,
     ) -> Intake<P::Memory> {
         let refused = |msdu: OutboundMsdu<P::Memory>, reason| Intake::Refused {
@@ -1043,7 +1043,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         if (header.peer_qos() == PeerQos::Qos) != numbers.qos() {
             return refused(msdu, IntakeRefusal::Numbering);
         }
-        if let (DataProtection::Ccmp(()), None) = (protection, key) {
+        if let (DataProtection::Ccmp(()), None) = (protection, &key) {
             return refused(msdu, IntakeRefusal::NoKey);
         }
         let Some(payload) = msdu.length.checked_sub(ETHERNET_HEADER_LEN) else {

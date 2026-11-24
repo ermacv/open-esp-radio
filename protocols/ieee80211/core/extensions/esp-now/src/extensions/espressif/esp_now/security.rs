@@ -734,9 +734,8 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         // The allocator starts after zero, so every number it hands out is
         // an ESP-NOW packet number.
         let packet_number = self
-            .state(peer)?
+            .state_mut(peer)?
             .key
-            .packet_numbers()
             .allocate()
             .ok()
             .and_then(|next| EspNowCcmpPacketNumber::new(next.value()).ok());
@@ -780,6 +779,20 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         peer: EspNowEncryptedPeerId,
     ) -> Result<&EspNowEncryptedPeerState, EspNowEncryptedPeerError> {
         match self.slots.get(peer.index) {
+            Some(EspNowEncryptedPeerSlot::Occupied { generation, state })
+                if *generation == peer.generation =>
+            {
+                Ok(state)
+            }
+            Some(_) | None => Err(EspNowEncryptedPeerError::Stale(peer)),
+        }
+    }
+
+    fn state_mut(
+        &mut self,
+        peer: EspNowEncryptedPeerId,
+    ) -> Result<&mut EspNowEncryptedPeerState, EspNowEncryptedPeerError> {
+        match self.slots.get_mut(peer.index) {
             Some(EspNowEncryptedPeerSlot::Occupied { generation, state })
                 if *generation == peer.generation =>
             {

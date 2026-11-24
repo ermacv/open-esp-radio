@@ -196,7 +196,7 @@ impl<'id> World<'id> {
             &link,
             msdu,
             &mut numbers,
-            self.key.as_ref(),
+            self.key.as_mut(),
             now,
         );
         let (_, sequences) = numbers.into_parts();
@@ -916,7 +916,7 @@ fn shared_spaces(model: Installed<'_>) {
 struct Spent;
 
 impl TxKey for Spent {
-    fn draw(&self) -> Result<CcmpPacketNumber, crate::numbers::PacketNumbersSpent> {
+    fn draw(&mut self) -> Result<CcmpPacketNumber, crate::numbers::PacketNumbersSpent> {
         Err(crate::numbers::PacketNumbersSpent)
     }
 }
@@ -932,7 +932,7 @@ fn spent_key(model: Installed<'_>) {
             SequenceCounter::new(SequenceNumber::ZERO),
             Some(world.sequences),
         ),
-        Some(&Spent),
+        Some(&mut Spent),
         now,
     ) else {
         panic!("a key whose numbers are spent refuses the MSDU");
@@ -951,7 +951,7 @@ fn numbering(model: Installed<'_>) {
         &ModelLink { protected: false },
         msdu(0, BE),
         &mut numbers,
-        None::<&InstalledCcmpTxKey<TestKey>>,
+        None::<&mut InstalledCcmpTxKey<TestKey>>,
         now,
     ) else {
         panic!("a QoS template refuses the station's non-QoS space");

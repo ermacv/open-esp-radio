@@ -431,8 +431,8 @@ impl<P> LinkHandover<P> {
     }
 
     /// The numbers and the key together, to draw a data MPDU's from.
-    pub fn numbers_and_key(&mut self) -> (&mut TxNumbers, Option<&P>) {
-        (&mut self.numbers, self.key.as_ref())
+    pub fn numbers_and_key(&mut self) -> (&mut TxNumbers, Option<&mut P>) {
+        (&mut self.numbers, self.key.as_mut())
     }
 
     /// The link's receive admission.
