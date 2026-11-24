@@ -173,15 +173,25 @@ impl EspNowPmkOwner {
         Ok((EspNowPmkId { generation: next }, old))
     }
 
-    /// Remove the key `current` names; the place is empty after it.
+    /// Remove the key `current` names; the place is empty after it. A
+    /// refusal moves nothing.
     pub fn remove(&mut self, current: EspNowPmkId) -> Result<EspNowPmk, EspNowPmkError> {
+        if !matches!(
+            self.place,
+            PmkPlace::Installed { generation, .. } if generation == current.generation
+        ) {
+            return Err(EspNowPmkError::Stale(current));
+        }
         let empty = PmkPlace::Empty {
             generation: current.generation,
         };
         match core::mem::replace(&mut self.place, empty) {
-            PmkPlace::Installed { generation, key } if generation == current.generation => Ok(key),
-            other => {
-                self.place = other;
+            PmkPlace::Installed { key, .. } => Ok(key),
+            // The check above found the key installed; the language cannot
+            // carry that into this match, so this arm answers what it would
+            // see: no key of `current`.
+            vacant @ PmkPlace::Empty { .. } => {
+                self.place = vacant;
                 Err(EspNowPmkError::Stale(current))
             }
         }
@@ -628,52 +638,41 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &mut self,
         removed: EspNowRemovedEncryptedPeer,
     ) -> Result<EspNowEncryptedPeerId, EspNowEncryptedPeerRestoreFailure> {
-        let Some(slot) = self.slots.get(removed.index) else {
+        // A slot occupied since the removal has a later generation: install
+        // and restore both advance it, so the generation alone refuses it.
+        let duplicate = self.find(removed.config().destination).is_some();
+        let home = self.home_channel;
+        let Some(slot) = self
+            .slots
+            .get_mut(removed.index)
+            .filter(|slot| slot.generation() == removed.generation)
+        else {
             return Err(EspNowEncryptedPeerRestoreFailure {
-                error: EspNowEncryptedPeerError::Stale(EspNowEncryptedPeerId {
-                    index: removed.index,
-                    generation: removed.generation,
-                }),
+                error: EspNowEncryptedPeerError::Stale(removed.previous_id()),
                 removed,
             });
         };
-        if slot.generation() != removed.generation || slot.occupant().is_some() {
-            return Err(EspNowEncryptedPeerRestoreFailure {
-                error: EspNowEncryptedPeerError::Stale(EspNowEncryptedPeerId {
-                    index: removed.index,
-                    generation: removed.generation,
-                }),
-                removed,
-            });
-        }
         let Some(generation) = removed.generation.checked_add(1) else {
             return Err(EspNowEncryptedPeerRestoreFailure {
                 error: EspNowEncryptedPeerError::GenerationExhausted,
                 removed,
             });
         };
-        if removed.config().channel != self.home_channel {
+        if removed.config().channel != home {
             return Err(EspNowEncryptedPeerRestoreFailure {
                 error: EspNowEncryptedPeerError::ChannelMismatch {
                     peer: removed.config().channel,
-                    home: self.home_channel,
+                    home,
                 },
                 removed,
             });
         }
-        if self.find(removed.config().destination).is_some() {
+        if duplicate {
             return Err(EspNowEncryptedPeerRestoreFailure {
                 error: EspNowEncryptedPeerError::Duplicate(removed.config().destination),
                 removed,
             });
         }
-
-        let Some(slot) = self.slots.get_mut(removed.index) else {
-            return Err(EspNowEncryptedPeerRestoreFailure {
-                error: EspNowEncryptedPeerError::Stale(removed.previous_id()),
-                removed,
-            });
-        };
         let EspNowRemovedEncryptedPeer {
             index,
             generation: _,

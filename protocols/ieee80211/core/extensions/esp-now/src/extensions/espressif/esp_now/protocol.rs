@@ -577,11 +577,9 @@ impl<const N: usize> EspNowProtocol<N> {
                 history: [None; ESP_NOW_RX_DUPLICATE_HISTORY_CAPACITY],
             };
         }
-        let peer_count = slots.iter().filter(|slot| slot.peer.is_some()).count();
         Ok(EspNowRxEpoch {
             config: self.config,
             slots,
-            peer_count,
         })
     }
 
@@ -618,12 +616,7 @@ impl<const N: usize> EspNowProtocol<N> {
                 return false;
             }
         }
-        epoch.peer_count
-            == epoch
-                .slots
-                .iter()
-                .filter(|slot| slot.peer.is_some())
-                .count()
+        true
     }
 
     /// Resolve a peer, validate the payload, then consume one shared station
@@ -802,16 +795,11 @@ fn validate_active_binding(
 pub struct EspNowRxEpoch<const N: usize = ESP_NOW_DEFAULT_PEER_CAPACITY> {
     config: EspNowConfig,
     slots: [EspNowRxPeerSlot; N],
-    peer_count: usize,
 }
 
 impl<const N: usize> EspNowRxEpoch<N> {
     pub const fn config(&self) -> EspNowConfig {
         self.config
-    }
-
-    pub const fn peer_count(&self) -> usize {
-        self.peer_count
     }
 
     /// Return the configured PHY identity retained beside one admitted peer.

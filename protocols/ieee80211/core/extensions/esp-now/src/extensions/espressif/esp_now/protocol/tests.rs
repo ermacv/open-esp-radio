@@ -115,20 +115,24 @@ fn rx_snapshot_keeps_sparse_home_unicast_slots_and_validates_ownership() {
     let epoch = protocol
         .begin_rx_epoch(config.station(), config.home_channel())
         .unwrap();
-    assert_eq!(epoch.peer_count(), 1);
+    assert_eq!(
+        epoch
+            .slots
+            .iter()
+            .filter(|slot| slot.peer.is_some())
+            .count(),
+        1
+    );
     assert!(protocol.owns_rx_epoch(&epoch));
     assert_eq!(epoch.peer_phy_mode(last), Some(EspNowPhyMode::LegacyDsss1M));
     assert_eq!(epoch.peer_phy_mode(first), None);
     protocol.remove_peer(last).unwrap();
     assert!(!protocol.owns_rx_epoch(&epoch));
     let empty = EspNowProtocol::<0>::new(config);
-    assert_eq!(
-        empty
-            .begin_rx_epoch(config.station(), config.home_channel())
-            .unwrap()
-            .peer_count(),
-        0
-    );
+    let epoch = empty
+        .begin_rx_epoch(config.station(), config.home_channel())
+        .unwrap();
+    assert!(empty.owns_rx_epoch(&epoch));
 }
 
 #[test]
