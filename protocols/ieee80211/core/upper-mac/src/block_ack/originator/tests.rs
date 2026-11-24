@@ -601,3 +601,30 @@ fn a_negotiation_is_queued_awaited_and_expires_only_at_its_deadline() {
     );
     assert_eq!(originator.expire_next(deadline), Some(7));
 }
+
+/// A second `queue_initial` leaves a negotiation already out alone: its
+/// alarm stays, nothing for its TID is due, and the other TIDs are queued.
+/// Its attempts are the new policy's, so its expiry queues a retry.
+#[test]
+fn queue_initial_keeps_a_negotiation_already_out() {
+    let mut originator = originator(32, 0);
+    originator.queue_initial(TxBlockAckRetry {
+        attempts: 1,
+        interval: RETRY.interval,
+    });
+    let at = Instant::from_micros(1_000);
+    assert_eq!(originator.take_pending(at), Some(0));
+    originator.begin(0, sequence(0), at).unwrap();
+    let alarm = originator.alarm(0).unwrap();
+    originator.queue_initial(RETRY);
+    assert_eq!(originator.alarm(0), Some(alarm), "its alarm stays");
+    assert_eq!(originator.take_pending(at), Some(7));
+    assert_eq!(originator.take_pending(at), Some(5));
+    assert_eq!(originator.take_pending(at), None, "nothing due for TID 0");
+    assert_eq!(originator.expire_next(alarm.deadline), Some(0));
+    assert!(!originator.is_closed(0), "the new attempts remain");
+    assert_eq!(
+        originator.next_pending_deadline(),
+        Some(alarm.deadline.saturating_add(RETRY.interval))
+    );
+}

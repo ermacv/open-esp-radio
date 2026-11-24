@@ -31,6 +31,33 @@ fn in_order_frames_are_released_immediately() {
     assert_eq!(reorder.occupied(), 0);
 }
 
+/// What became of the received MPDU: one in order is released, with the
+/// run behind it; an operation that received none, a gap's timeout or a
+/// stop, says so.
+#[test]
+fn an_in_order_mpdu_is_released_and_an_operation_without_one_received_nothing() {
+    let mut reorder = Buffer::new(seq(10), 64).unwrap();
+    assert_eq!(
+        reorder.ingest(frame(10, 0)).unwrap().received,
+        Received::Released
+    );
+    assert_eq!(
+        reorder.ingest(frame(12, 2)).unwrap().received,
+        Received::Buffered
+    );
+    let run = reorder.ingest(frame(11, 1)).unwrap();
+    assert_eq!(run.received, Received::Released);
+    assert!(releases(&run, &[frame(11, 1), frame(12, 2)]));
+    reorder.ingest(frame(14, 4)).unwrap();
+    let expired = reorder.expire_gap();
+    assert_eq!(expired.received, Received::Nothing);
+    assert!(releases(&expired, &[frame(14, 4)]));
+    reorder.ingest(frame(16, 6)).unwrap();
+    let stopped = reorder.stop();
+    assert_eq!(stopped.received, Received::Nothing);
+    assert!(releases(&stopped, &[frame(16, 6)]));
+}
+
 #[test]
 fn immediate_ingest_avoids_a_release_list_only_without_a_buffered_successor() {
     let mut reorder = RxReorderBuffer::<WINDOW, 65>::new(seq(100), 16).unwrap();
