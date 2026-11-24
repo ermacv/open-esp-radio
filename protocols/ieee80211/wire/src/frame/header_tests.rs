@@ -369,3 +369,40 @@ fn a_null_and_a_qos_null_are_the_data_frames_with_no_body() {
         "a deauthentication, subtype 12"
     );
 }
+
+/// A decoded header's every field is the one at its place in the octets.
+#[test]
+fn a_decoded_header_reads_each_field_from_its_place() {
+    // QoS data, both DS bits, Order: Address 4, QoS Control, HT Control.
+    let octets = header_octets(0x8388).unwrap();
+    let decoded = DecodedHeader::decode(&octets).unwrap();
+    assert_eq!(decoded.control().get(), 0x8388);
+    assert_eq!(decoded.duration(), 0x5634);
+    assert_eq!(decoded.receiver(), [0xff; 6]);
+    assert_eq!(decoded.transmitter(), A);
+    assert_eq!(decoded.address3(), B);
+    assert_eq!(decoded.sequence_control().to_bytes(), [0x9a, 0x78]);
+    assert_eq!(decoded.address4(), Some([4, 3, 2, 1, 0, 9]));
+    assert_eq!(decoded.qos(), Some(qos()));
+    assert_eq!(decoded.ht_control(), Some([0x10, 0x20, 0x30, 0x40]));
+    assert_eq!(decoded.body(), &[] as &[u8]);
+    assert_eq!(decoded.header(), MacHeader::decode(&octets).unwrap());
+}
+
+/// The builders by value change their field and keep every other.
+#[test]
+fn a_builder_changes_its_field_alone() {
+    let header = MacHeader::decode(&header_octets(0x0388).unwrap()).unwrap();
+    let changed = header
+        .with_address1(A)
+        .with_address3(A)
+        .with_sequence_control(SequenceControl::from_bytes([1, 2]))
+        .with_protected(FrameProtection::Protected);
+    assert_eq!(changed.address1(), A);
+    assert_eq!(changed.address2(), header.address2());
+    assert_eq!(changed.address3(), A);
+    assert_eq!(changed.sequence_control().to_bytes(), [1, 2]);
+    assert!(changed.control().protected());
+    assert_eq!(changed.layout(), header.layout());
+    assert_eq!(changed.duration(), header.duration());
+}
