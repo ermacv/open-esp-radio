@@ -149,6 +149,10 @@ impl<const N: usize> PrefixLength<N> {
 
     /// The length as a 16-bit count. It is lossless: an array of at most
     /// `u16::MAX` octets is checked when `N` is chosen.
+    ///
+    /// ```compile_fail,E0080
+    /// let _ = oer_portable_wire::PrefixLength::<65536>::ZERO.to_u16();
+    /// ```
     pub const fn to_u16(self) -> u16 {
         const {
             if N > u16::MAX as usize {
@@ -163,6 +167,11 @@ impl<const N: usize> PrefixLength<N> {
     /// This prefix placed after `PREFIX` octets, in an array of `M`
     /// octets that holds `PREFIX + N`: the shifted length cannot exceed `M`,
     /// which is checked when the constants are chosen.
+    ///
+    /// ```compile_fail,E0080
+    /// // Four octets after a head of three do not fit six.
+    /// let _ = oer_portable_wire::PrefixLength::<4>::ZERO.after::<3, 6>();
+    /// ```
     pub const fn after<const PREFIX: usize, const M: usize>(self) -> PrefixLength<M> {
         const {
             match PREFIX.checked_add(N) {

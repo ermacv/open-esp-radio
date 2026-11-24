@@ -1216,3 +1216,60 @@ fn a_refused_message4_mic_ends_the_handshake() {
         Err(RsnStaEnd::Engine(_))
     ));
 }
+
+/// After a Group Message 1 is installed, a newer one is a new rekey, not a
+/// repeat of the installed one.
+#[test]
+fn a_newer_group_message1_after_an_installed_one_installs() {
+    let pmk = test_pmk();
+    let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
+    let frame = |counter, key| {
+        RsnTxFrame::<512>::group_message1(
+            crate::Akm::Psk,
+            LOCAL,
+            counter,
+            [9; 8],
+            software_wrap(ptk.kek(), &group_kde(1, key))
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap()
+        .authenticate(&ptk, &mut SoftwareAes128)
+        .unwrap()
+    };
+    let mut connected = connected(pmk.derive_ptk(crate::Akm::Psk, context()));
+    let GroupStep::Install(first) = group_message1(&mut connected, owned(&frame(3, 0x6a))).unwrap()
+    else {
+        panic!("the first Group Message 1 installs")
+    };
+    connected.complete_group_key_install(first).unwrap();
+    let GroupStep::Install(second) =
+        group_message1(&mut connected, owned(&frame(4, 0x6b))).unwrap()
+    else {
+        panic!("a newer Group Message 1 installs")
+    };
+    assert_eq!(second.replay_counter(), 4);
+    assert_eq!(second.group().key().as_bytes(), &[0x6b; 16]);
+    connected.complete_group_key_install(second).unwrap();
+    assert_eq!(connected.replay_counter(), 4);
+}
+
+/// A Message 1 under the accepted counter with another ANonce restarts:
+/// only the same counter and ANonce together are a repeat.
+#[test]
+fn a_message1_with_another_anonce_under_the_same_counter_restarts() {
+    let pmk = test_pmk();
+    let mut handshake = handshake();
+    let message1 =
+        |nonce| owned(&RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, 5, nonce).unwrap());
+    assert!(matches!(
+        process(&mut handshake, message1(ANONCE), &pmk),
+        Ok(RsnStaEapol::Transmit(_))
+    ));
+    let RsnStaEapol::Transmit(restart) =
+        process(&mut handshake, message1([0x44; 32]), &pmk).unwrap()
+    else {
+        panic!("another ANonce restarts")
+    };
+    assert!(!restart.retransmission());
+}

@@ -477,6 +477,26 @@ impl<const N: usize> EapolKeyBuffer<N> {
     /// `key_data`, with a zero Key MIC. It cannot refuse: a Key Data of at
     /// most `K` octets fits the buffer and the body's 16-bit length, which
     /// is checked when `N` and `K` are chosen.
+    ///
+    /// ```compile_fail,E0080
+    /// // A Key Data bound past the 16-bit body length, though the buffer
+    /// // holds it.
+    /// use oer_protocols_ieee80211_wire::eapol::{EapolKeyBuffer, EapolKeyFixedFields, KeyInformation};
+    /// let fields = EapolKeyFixedFields {
+    ///     protocol_version: 2,
+    ///     key_information: KeyInformation::from_raw(0),
+    ///     key_length: 0,
+    ///     replay_counter: 0,
+    ///     nonce: [0; 32],
+    ///     key_rsc: [0; 8],
+    /// };
+    /// let key_data = [0; 65_500];
+    /// let _ = EapolKeyBuffer::<65_700>::encode_with_bounded_key_data(
+    ///     &fields,
+    ///     &key_data,
+    ///     oer_portable_wire::PrefixLength::ZERO,
+    /// );
+    /// ```
     pub fn encode_with_bounded_key_data<const K: usize>(
         fields: &EapolKeyFixedFields,
         key_data: &[u8; K],
