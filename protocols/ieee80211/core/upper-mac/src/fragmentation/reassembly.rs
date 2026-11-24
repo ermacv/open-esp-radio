@@ -95,10 +95,20 @@ impl<'frame, const CONTEXTS: usize, const CAPACITY: usize>
     }
 }
 
+/// What a reassembly slot holds.
+#[derive(Clone, Copy)]
+enum Train {
+    /// Nothing.
+    Free,
+    /// An incomplete MSDU's fragments.
+    Assembling(OpenDataFragmentIdentity),
+    /// A completed MSDU, kept as the fingerprint its retries must match.
+    Completed(OpenDataFragmentIdentity),
+}
+
 struct ReassemblySlot<const CAPACITY: usize> {
-    identity: Option<OpenDataFragmentIdentity>,
+    train: Train,
     admission_epoch: FragmentAdmissionEpoch,
-    completed: bool,
     expected_fragment: u8,
     final_fragment: u8,
     started_at: Instant,
@@ -127,9 +137,8 @@ impl RetainedFragment {
 impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
     const fn new() -> Self {
         Self {
-            identity: None,
+            train: Train::Free,
             admission_epoch: FragmentAdmissionEpoch::OpenAssociation(0),
-            completed: false,
             expected_fragment: 0,
             final_fragment: 0,
             started_at: Instant::EPOCH,
@@ -140,9 +149,8 @@ impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
     }
 
     fn clear(&mut self) {
-        self.identity = None;
+        self.train = Train::Free;
         self.admission_epoch = FragmentAdmissionEpoch::OpenAssociation(0);
-        self.completed = false;
         self.expected_fragment = 0;
         self.final_fragment = 0;
         self.started_at = Instant::EPOCH;
@@ -164,12 +172,25 @@ impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
             .ok_or(OpenDataReassemblyError::ReassembledTooLarge { capacity: CAPACITY })
     }
 
+    /// The train the slot holds, assembling or completed.
+    const fn identity(&self) -> Option<OpenDataFragmentIdentity> {
+        match self.train {
+            Train::Free => None,
+            Train::Assembling(identity) | Train::Completed(identity) => Some(identity),
+        }
+    }
+
+    /// Whether the slot keeps a completed train's retry fingerprint.
+    const fn is_completed(&self) -> bool {
+        matches!(self.train, Train::Completed(_))
+    }
+
     fn is_active(&self) -> bool {
-        self.identity.is_some() && !self.completed
+        matches!(self.train, Train::Assembling(_))
     }
 
     fn verify_retry(&self, fragment: OpenDataFragment<'_>) -> Result<(), OpenDataReassemblyError> {
-        let final_fragment = if self.completed {
+        let final_fragment = if self.is_completed() {
             self.final_fragment
         } else {
             self.expected_fragment.saturating_sub(1)
@@ -180,7 +201,7 @@ impl<const CAPACITY: usize> ReassemblySlot<CAPACITY> {
                 observed: fragment.fragment_number(),
             });
         }
-        let expected_more = fragment.fragment_number() < final_fragment || !self.completed;
+        let expected_more = fragment.fragment_number() < final_fragment || !self.is_completed();
         if fragment.more_fragments() != expected_more {
             return Err(OpenDataReassemblyError::MoreFragmentsMismatch);
         }
@@ -241,7 +262,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         let mut discarded = 0_usize;
         for slot in &mut self.slots {
             if slot
-                .identity
+                .identity()
                 .is_some_and(|identity| identity.transmitter_address() == transmitter)
             {
                 // At most one per slot, so at most CONTEXTS.
@@ -259,7 +280,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         admission_epoch: FragmentAdmissionEpoch,
     ) -> bool {
         let Some(slot) = self.slots.iter_mut().find(|slot| {
-            slot.identity == Some(identity) && slot.admission_epoch == admission_epoch
+            slot.identity() == Some(identity) && slot.admission_epoch == admission_epoch
         }) else {
             return false;
         };
@@ -295,14 +316,14 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         let relevant_active = self.slots.iter().any(|slot| {
             slot.is_active()
                 && slot
-                    .identity
+                    .identity()
                     .is_some_and(|active| active.same_sequence_space(identity))
         });
         let relevant_completed = retry
             && self.slots.iter().any(|slot| {
-                slot.completed
+                slot.is_completed()
                     && slot
-                        .identity
+                        .identity()
                         .is_some_and(|entry| entry.same_sequence_space(identity))
             });
         let expired = match now {
@@ -314,7 +335,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         };
         if self.slots.iter().any(|slot| {
             slot.is_active()
-                && slot.identity == Some(identity)
+                && slot.identity() == Some(identity)
                 && slot.admission_epoch == admission_epoch
         }) {
             return Err(OpenDataReassemblyError::MoreFragmentsMismatch);
@@ -322,15 +343,15 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         if self.slots.iter().any(|slot| {
             slot.is_active()
                 && slot
-                    .identity
+                    .identity()
                     .is_some_and(|active| active.same_sequence_space(identity))
         }) {
             return Err(OpenDataReassemblyError::IdentityMismatch);
         }
         if retry
             && self.slots.iter().any(|slot| {
-                slot.completed
-                    && slot.identity == Some(identity)
+                slot.is_completed()
+                    && slot.identity() == Some(identity)
                     && slot.admission_epoch == admission_epoch
             })
         {
@@ -343,9 +364,9 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         }
         if retry
             && self.slots.iter().any(|slot| {
-                slot.completed
+                slot.is_completed()
                     && slot
-                        .identity
+                        .identity()
                         .is_some_and(|entry| entry.same_sequence_space(identity))
             })
         {
@@ -359,9 +380,9 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
             // would then reject the new ordinary MPDU's retry before the
             // role-local duplicate filter can recognize it.
             for slot in &mut self.slots {
-                if slot.completed
+                if slot.is_completed()
                     && slot
-                        .identity
+                        .identity()
                         .is_some_and(|entry| entry.same_sequence_space(identity))
                 {
                     slot.clear();
@@ -432,17 +453,17 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
 
         if fragment.retry() {
             if let Some(slot) = self.slots.iter().find(|slot| {
-                slot.completed
-                    && slot.identity == Some(identity)
+                slot.is_completed()
+                    && slot.identity() == Some(identity)
                     && slot.admission_epoch == admission_epoch
             }) {
                 slot.verify_retry(fragment)?;
                 return Ok(OpenDataFragmentPreflight::Duplicate { expired });
             }
             if self.slots.iter().any(|slot| {
-                slot.completed
+                slot.is_completed()
                     && slot
-                        .identity
+                        .identity()
                         .is_some_and(|entry| entry.same_sequence_space(identity))
             }) {
                 return Err(OpenDataReassemblyError::IdentityMismatch);
@@ -451,7 +472,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
 
         let exact = self.slots.iter().find(|slot| {
             slot.is_active()
-                && slot.identity == Some(identity)
+                && slot.identity() == Some(identity)
                 && slot.admission_epoch == admission_epoch
         });
         if fragment.fragment_number() == 0
@@ -466,7 +487,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
             && self.slots.iter().any(|slot| {
                 slot.is_active()
                     && slot
-                        .identity
+                        .identity()
                         .is_some_and(|active| active.same_sequence_space(identity))
             })
         {
@@ -477,7 +498,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 if self.slots.iter().any(|slot| {
                     slot.is_active()
                         && slot
-                            .identity
+                            .identity()
                             .is_some_and(|active| active.same_sequence_space(identity))
                 }) {
                     return Err(OpenDataReassemblyError::IdentityMismatch);
@@ -522,7 +543,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         let identity = fragment.identity();
         let is_exact = |slot: &ReassemblySlot<CAPACITY>| {
             slot.is_active()
-                && slot.identity == Some(identity)
+                && slot.identity() == Some(identity)
                 && slot.admission_epoch == admission_epoch
         };
         if fragment.fragment_number() != 0 {
@@ -558,7 +579,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
                 ether_type,
                 payload,
             });
-            slot.completed = true;
+            slot.train = Train::Completed(identity);
             slot.final_fragment = fragment.fragment_number();
             slot.started_at = now;
             return Ok(OpenDataDefragmentation::Complete { expired, value });
@@ -568,19 +589,19 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         let same_sequence = self.slots.iter().position(|slot| {
             slot.is_active()
                 && slot
-                    .identity
+                    .identity()
                     .is_some_and(|active| active.same_sequence_space(identity))
         });
         // The slot to reuse, and whether its train is reported as evicted.
         let (index, reports_eviction) = if let Some(index) = exact.or(same_sequence) {
             (index, true)
-        } else if let Some(index) = self.slots.iter().position(|slot| slot.identity.is_none()) {
+        } else if let Some(index) = self.slots.iter().position(|slot| slot.identity().is_none()) {
             (index, false)
         } else if let Some(index) = self
             .slots
             .iter()
             .enumerate()
-            .filter(|(_, slot)| slot.completed)
+            .filter(|(_, slot)| slot.is_completed())
             .min_by_key(|(index, slot)| (slot.started_at, *index))
             .map(|(index, _)| index)
         {
@@ -599,9 +620,9 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         };
         for (other_index, slot) in self.slots.iter_mut().enumerate() {
             if other_index != index
-                && slot.completed
+                && slot.is_completed()
                 && slot
-                    .identity
+                    .identity()
                     .is_some_and(|entry| entry.same_sequence_space(identity))
             {
                 slot.clear();
@@ -609,12 +630,12 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         }
         let slot = self.slot_mut(index)?;
         let evicted = if reports_eviction {
-            slot.identity
+            slot.identity()
         } else {
             None
         };
         slot.clear();
-        slot.identity = Some(identity);
+        slot.train = Train::Assembling(identity);
         slot.admission_epoch = admission_epoch;
         slot.expected_fragment = 1;
         slot.started_at = now;
@@ -638,7 +659,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
     fn expire(&mut self, now: Instant) -> u8 {
         let mut expired = 0_u8;
         for slot in &mut self.slots {
-            if slot.identity.is_some() && timestamp_expired(now, slot.started_at, self.timeout) {
+            if slot.identity().is_some() && timestamp_expired(now, slot.started_at, self.timeout) {
                 expired = expired.saturating_add(u8::from(slot.is_active()));
                 slot.clear();
             }

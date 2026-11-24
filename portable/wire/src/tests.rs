@@ -291,7 +291,7 @@ fn owned_prefix_lengths_refuse_overlong_input_and_borrow_exactly() {
     }
     assert!(crate::PrefixLength::<5>::new(6).is_none());
     assert!(crate::PrefixLength::<5>::new(usize::MAX).is_none());
-    assert_eq!(crate::PrefixLength::<0>::ZERO.borrow(&[]), &[]);
+    assert_eq!(crate::PrefixLength::<0>::ZERO.borrow::<u8>(&[]), &[]);
 }
 
 #[test]
@@ -527,4 +527,14 @@ fn a_prefix_length_is_its_16_bit_count() {
         crate::PrefixLength::<65535>::new(65535).unwrap().to_u16(),
         u16::MAX
     );
+}
+
+/// A prefix of any items, not only octets, is its admitted length.
+#[test]
+fn a_prefix_of_items_is_its_admitted_length() {
+    let mut items = [10_u16, 20, 30, 40];
+    let prefix = crate::PrefixLength::<4>::new(2).unwrap();
+    assert_eq!(prefix.borrow(&items), &[10, 20]);
+    prefix.borrow_mut(&mut items)[1] = 21;
+    assert_eq!(items, [10, 21, 30, 40]);
 }

@@ -71,7 +71,7 @@ pub use ampdu::{
     AmpduAttemptResult, AmpduRetryDecision, AmpduRetryError, AmpduRetryPolicy, AmpduRetryState,
     BlockAckAgreement,
 };
-pub use protection::{HeTxopRtsBudget, ProtectEveryHeTxop, ProtectionPolicy};
+pub use protection::{HeTxopRtsBudget, ProtectEveryHeTxop, ProtectionPolicy, RtsThreshold};
 pub use retry::{
     AckFailureAccounting, MpduRetryState, RateLadder, RetryDecision, RetryLimits, RetryOutcome,
 };

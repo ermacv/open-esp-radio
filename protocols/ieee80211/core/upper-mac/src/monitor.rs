@@ -38,7 +38,7 @@ pub const MONITOR_CHANNEL_SEQUENCE_CAPACITY: usize = 14;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MonitorChannelSequence {
     channels: [Ghz2_4Channel; MONITOR_CHANNEL_SEQUENCE_CAPACITY],
-    length: u8,
+    length: oer_portable_wire::PrefixLength<MONITOR_CHANNEL_SEQUENCE_CAPACITY>,
     dwell_millis: NonZeroU16,
 }
 
@@ -50,12 +50,12 @@ impl MonitorChannelSequence {
         let Some(&first) = channels.first() else {
             return Err(MonitorChannelSequenceError::Empty);
         };
-        if channels.len() > MONITOR_CHANNEL_SEQUENCE_CAPACITY {
+        let Some(length) = oer_portable_wire::PrefixLength::new(channels.len()) else {
             return Err(MonitorChannelSequenceError::TooMany {
                 requested: channels.len(),
                 capacity: MONITOR_CHANNEL_SEQUENCE_CAPACITY,
             });
-        }
+        };
         for (index, &channel) in channels.iter().enumerate() {
             if channels
                 .iter()
@@ -71,27 +71,23 @@ impl MonitorChannelSequence {
         }
         Ok(Self {
             channels: stored,
-            length: channels.len() as u8,
+            length,
             dwell_millis,
         })
     }
 
     pub fn channels(&self) -> &[Ghz2_4Channel] {
-        self.channels
-            .get(..usize::from(self.length))
-            .unwrap_or_default()
+        self.length.borrow(&self.channels)
     }
 
-    pub const fn len(self) -> u8 {
-        self.length
-    }
-
-    pub const fn is_empty(self) -> bool {
-        self.length == 0
+    /// How many channels the cycle visits; at least one.
+    pub const fn count(self) -> usize {
+        self.length.get()
     }
 
     pub const fn first(self) -> Ghz2_4Channel {
-        self.channels[0]
+        let [first, ..] = self.channels;
+        first
     }
 
     pub const fn dwell(self) -> NonZeroU16 {
@@ -205,16 +201,34 @@ impl MonitorFrameTypeMask {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MonitorFilter {
     frame_types: MonitorFrameTypeMask,
-    minimum_rssi_dbm: Option<i8>,
-    any_address: Option<[u8; 6]>,
+    minimum_rssi: RssiFloor,
+    address: AddressMatch,
+}
+
+/// The RSSI a monitored frame must reach.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RssiFloor {
+    /// Any frame, with or without RSSI evidence.
+    Any,
+    /// A frame whose RSSI is observed and at least this many dBm.
+    AtLeast(i8),
+}
+
+/// The address a monitored frame must hold.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddressMatch {
+    /// Any frame.
+    Any,
+    /// A frame one of whose address fields is this address.
+    Exactly([u8; 6]),
 }
 
 impl MonitorFilter {
     pub const fn all() -> Self {
         Self {
             frame_types: MonitorFrameTypeMask::ALL,
-            minimum_rssi_dbm: None,
-            any_address: None,
+            minimum_rssi: RssiFloor::Any,
+            address: AddressMatch::Any,
         }
     }
 
@@ -224,12 +238,12 @@ impl MonitorFilter {
     }
 
     pub const fn minimum_rssi_dbm(mut self, minimum_rssi_dbm: i8) -> Self {
-        self.minimum_rssi_dbm = Some(minimum_rssi_dbm);
+        self.minimum_rssi = RssiFloor::AtLeast(minimum_rssi_dbm);
         self
     }
 
     pub const fn any_address(mut self, address: [u8; 6]) -> Self {
-        self.any_address = Some(address);
+        self.address = AddressMatch::Exactly(address);
         self
     }
 
@@ -237,12 +251,12 @@ impl MonitorFilter {
         self.frame_types
     }
 
-    pub const fn selected_minimum_rssi_dbm(self) -> Option<i8> {
-        self.minimum_rssi_dbm
+    pub const fn selected_minimum_rssi(self) -> RssiFloor {
+        self.minimum_rssi
     }
 
-    pub const fn selected_any_address(self) -> Option<[u8; 6]> {
-        self.any_address
+    pub const fn selected_address(self) -> AddressMatch {
+        self.address
     }
 
     pub fn accepts<Rate>(self, frame: &MonitorFrame<'_, Rate>) -> bool {
@@ -253,7 +267,7 @@ impl MonitorFilter {
         if !self.frame_types.contains(frame_type) {
             return false;
         }
-        if let Some(minimum) = self.minimum_rssi_dbm {
+        if let RssiFloor::AtLeast(minimum) = self.minimum_rssi {
             let observed = match frame.metadata.rssi_dbm {
                 RxEvidence::HardwareObserved(value) | RxEvidence::ProtocolValidated(value) => value,
                 RxEvidence::Unavailable => return false,
@@ -262,8 +276,10 @@ impl MonitorFilter {
                 return false;
             }
         }
-        self.any_address
-            .is_none_or(|address| frame_contains_address(frame.bytes, address))
+        match self.address {
+            AddressMatch::Any => true,
+            AddressMatch::Exactly(address) => frame_contains_address(frame.bytes, address),
+        }
     }
 }
 

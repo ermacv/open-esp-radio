@@ -162,13 +162,15 @@ fn reorder_wraparound_duplicate_and_delba_return_each_owner_once() {
         receiver
             .ingest(clock.now(), frame(0, 0), gap)
             .unwrap()
-            .buffered
+            .received
+            == crate::block_ack::Received::Buffered
     );
     assert!(
         receiver
             .ingest(clock.now(), frame(4095, 1), gap)
             .unwrap()
-            .buffered
+            .received
+            == crate::block_ack::Received::Buffered
     );
     assert!(matches!(
         receiver.ingest(clock.now(), frame(0, 2), gap),

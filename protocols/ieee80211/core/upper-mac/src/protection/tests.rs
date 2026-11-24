@@ -35,7 +35,7 @@ fn basic(rates: ([u8; 8], [u8; 4])) -> BasicRates {
 }
 
 fn policy(erp: ErpProtection, ht: HtProtectionMode, basic_rates: BasicRates) -> ProtectionPolicy {
-    let mut policy = ProtectionPolicy::new(Some(RtsLengthThreshold::new(2346)));
+    let mut policy = ProtectionPolicy::new(RtsThreshold::At(RtsLengthThreshold::new(2346)));
     policy.install_bss(BssProtection {
         erp,
         ht,
@@ -277,7 +277,7 @@ fn every_basic_set_selects_the_required_control_rate() {
 
 #[test]
 fn the_length_threshold_protects_only_long_individual_mpdus() {
-    let policy = ProtectionPolicy::new(Some(RtsLengthThreshold::new(2346)));
+    let policy = ProtectionPolicy::new(RtsThreshold::At(RtsLengthThreshold::new(2346)));
     let rate = PhyRate::Legacy(LegacyRate::Ofdm54M);
     let select = |ppdu| policy.select(ppdu, &ProtectEveryHeTxop);
     assert_eq!(
@@ -313,7 +313,7 @@ fn the_he_txop_budget_protects_individual_he_ppdus_above_it() {
     let mut bss = policy.bss();
     bss.he_txop_rts_threshold = HeTxopDurationRtsThreshold::new(64);
     policy.install_bss(bss);
-    policy.set_rts_length_threshold(None);
+    policy.set_rts_threshold(RtsThreshold::Off);
     let rate = PhyRate::He(he(7));
     let budget = Budget(1_000);
     assert_eq!(
@@ -356,8 +356,8 @@ fn leaving_the_bss_keeps_only_the_local_length_threshold() {
     policy.clear_bss();
     assert_eq!(policy.bss(), BssProtection::UNPROTECTED);
     assert_eq!(
-        policy.rts_length_threshold(),
-        Some(RtsLengthThreshold::new(2346))
+        policy.rts_threshold(),
+        RtsThreshold::At(RtsLengthThreshold::new(2346))
     );
     assert_eq!(TxReceiver::from_address1(&[0xff; 6]), TxReceiver::Group);
 }
@@ -398,5 +398,27 @@ fn every_he_txop_is_protected_while_the_bss_advertises_a_threshold() {
     assert_eq!(
         policy.every_he_txop_protection(ht(7, PpduBandwidth::Mhz20)),
         Protection::None
+    );
+}
+
+/// Turning the local threshold off ends the length rule.
+#[test]
+fn a_threshold_turned_off_protects_no_long_mpdu() {
+    let mut policy = policy(
+        ErpProtection::NONE,
+        HtProtectionMode::None,
+        basic(OFDM_BASIC),
+    );
+    let budget = Budget(u16::MAX);
+    let long = mpdu(OFDM24, TxReceiver::Individual, 2_347);
+    assert_eq!(
+        policy.select(long, &budget).reasons,
+        TxProtectionReasons::LENGTH
+    );
+    policy.set_rts_threshold(RtsThreshold::Off);
+    assert_eq!(policy.rts_threshold(), RtsThreshold::Off);
+    assert_eq!(
+        policy.select(long, &budget).reasons,
+        TxProtectionReasons::default()
     );
 }

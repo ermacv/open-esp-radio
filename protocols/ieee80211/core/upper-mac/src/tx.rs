@@ -453,7 +453,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
             rate: request.initial_rate,
             aggregate: 0,
             aggregate_attempts: 0,
-            individual: MacIndividualRetries::NONE,
+            individual: MacIndividualRetries::None,
             ack_snr_db: None,
             unanswered: false,
         };
@@ -743,7 +743,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
 
     fn finish_individual(&self, exchange: &mut TxExchange, aggregate: &AmpduRetryState) -> TxStep {
         let result =
-            if exchange.individual.failed == 0 && aggregate.discarded_original_indices() == 0 {
+            if exchange.individual.failed() == 0 && aggregate.discarded_original_indices() == 0 {
                 MacAmpduTxResult::Delivered
             } else {
                 MacAmpduTxResult::Incomplete
@@ -804,9 +804,10 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
         request: &RequestContext,
         length: u32,
     ) -> Result<MpduRetryState, TxPlanError> {
-        let frame_class = match self.protection.rts_length_threshold() {
-            Some(threshold) if length > u32::from(threshold.bytes()) => FrameClass::Long,
-            _ => FrameClass::Short,
+        let frame_class = if self.protection.rts_threshold().exceeded_by(length) {
+            FrameClass::Long
+        } else {
+            FrameClass::Short
         };
         MpduRetryState::new(self.retry_limits, request.mpdu_retry_limit, frame_class)
             .map_err(TxPlanError::Retry)

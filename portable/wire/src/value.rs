@@ -186,7 +186,7 @@ impl<const N: usize> PrefixLength<N> {
 
     /// The constructor is the bounds proof. Trimming an iterator's unused
     /// tail forms the exact slice without a panicking split or re-admission.
-    pub fn borrow(self, bytes: &[u8; N]) -> &[u8] {
+    pub fn borrow<T>(self, bytes: &[T; N]) -> &[T] {
         let mut prefix = bytes.iter();
         let mut unused = self.0..N;
         if unused.next().is_some() {
@@ -196,7 +196,7 @@ impl<const N: usize> PrefixLength<N> {
     }
 
     /// The same admitted prefix, exclusively borrowed for writing.
-    pub fn borrow_mut(self, bytes: &mut [u8; N]) -> &mut [u8] {
+    pub fn borrow_mut<T>(self, bytes: &mut [T; N]) -> &mut [T] {
         let mut prefix = bytes.iter_mut();
         let mut unused = self.0..N;
         if unused.next().is_some() {

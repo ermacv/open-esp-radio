@@ -45,7 +45,7 @@ pub use recipient::{
     RxBlockAckNegotiation, RxBlockAckSession,
 };
 pub use reorder::{
-    MAX_RX_REORDER_WINDOW, ResyncStart, RxReorderBuffer, RxReorderError, RxReorderMpdu,
+    MAX_RX_REORDER_WINDOW, Received, ResyncStart, RxReorderBuffer, RxReorderError, RxReorderMpdu,
     RxReorderRelease,
 };
 pub use session::{

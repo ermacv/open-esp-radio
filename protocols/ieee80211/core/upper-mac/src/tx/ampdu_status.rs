@@ -48,34 +48,73 @@ pub struct MacAmpduTxStatus<Rate = PhyRate> {
 /// missing HT MPDU, or every live missing MPDU once the BlockAck agreement
 /// ended.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacIndividualRetries<Rate = PhyRate> {
-    /// MPDUs whose individual transmission was acknowledged.
-    pub transmitted: u16,
-    /// MPDUs whose individual transmission ended unacknowledged.
-    pub failed: u16,
-    /// Hardware publications across every individual transmission.
-    pub attempts: u16,
-    /// Rate of the last individual transmission, if any was made.
-    pub final_rate: Option<Rate>,
+pub enum MacIndividualRetries<Rate = PhyRate> {
+    /// No MPDU was sent individually.
+    None,
+    /// Some were.
+    Made {
+        /// MPDUs whose individual transmission was acknowledged.
+        transmitted: u16,
+        /// MPDUs whose individual transmission ended unacknowledged.
+        failed: u16,
+        /// Hardware publications across every individual transmission.
+        attempts: u16,
+        /// Rate of the last individual transmission.
+        final_rate: Rate,
+    },
 }
 
 impl<Rate> MacIndividualRetries<Rate> {
-    pub const NONE: Self = Self {
-        transmitted: 0,
-        failed: 0,
-        attempts: 0,
-        final_rate: None,
-    };
-
     /// Account one finished individual transmission.
     pub fn record(&mut self, status: MacTxStatus<Rate>) {
-        if matches!(status.result, MacTxResult::Transmitted) {
-            self.transmitted = self.transmitted.saturating_add(1);
-        } else {
-            self.failed = self.failed.saturating_add(1);
+        let delivered = matches!(status.result, MacTxResult::Transmitted);
+        let (transmitted, failed, attempts) = match *self {
+            Self::None => (0, 0, 0),
+            Self::Made {
+                transmitted,
+                failed,
+                attempts,
+                ..
+            } => (transmitted, failed, attempts),
+        };
+        *self = Self::Made {
+            transmitted: if delivered {
+                transmitted.saturating_add(1)
+            } else {
+                transmitted
+            },
+            failed: if delivered {
+                failed
+            } else {
+                failed.saturating_add(1)
+            },
+            attempts: attempts.saturating_add(u16::from(status.attempts)),
+            final_rate: status.final_rate,
+        };
+    }
+
+    /// MPDUs whose individual transmission was acknowledged.
+    pub const fn transmitted(&self) -> u16 {
+        match self {
+            Self::None => 0,
+            Self::Made { transmitted, .. } => *transmitted,
         }
-        self.attempts = self.attempts.saturating_add(u16::from(status.attempts));
-        self.final_rate = Some(status.final_rate);
+    }
+
+    /// MPDUs whose individual transmission ended unacknowledged.
+    pub const fn failed(&self) -> u16 {
+        match self {
+            Self::None => 0,
+            Self::Made { failed, .. } => *failed,
+        }
+    }
+
+    /// Hardware publications across every individual transmission.
+    pub const fn attempts(&self) -> u16 {
+        match self {
+            Self::None => 0,
+            Self::Made { attempts, .. } => *attempts,
+        }
     }
 }
 
@@ -84,7 +123,7 @@ impl<Rate: Copy> MacAmpduTxStatus<Rate> {
     /// individual retry.
     pub const fn delivered_subframes(&self) -> u16 {
         self.block_acknowledged_subframes
-            .saturating_add(self.individual_retries.transmitted)
+            .saturating_add(self.individual_retries.transmitted())
     }
 
     pub const fn fully_delivered(&self) -> bool {
@@ -95,7 +134,7 @@ impl<Rate: Copy> MacAmpduTxStatus<Rate> {
     /// Aggregate and ordinary hardware publications made for the complete
     /// exchange.
     pub const fn total_publication_attempts(&self) -> u16 {
-        (self.aggregate_attempts as u16).saturating_add(self.individual_retries.attempts)
+        (self.aggregate_attempts as u16).saturating_add(self.individual_retries.attempts())
     }
 }
 

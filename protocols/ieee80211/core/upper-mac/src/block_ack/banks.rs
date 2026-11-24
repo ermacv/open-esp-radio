@@ -15,8 +15,8 @@
 use oer_portable_events::{EventSink, report};
 
 use super::{
-    AddbaResponse, AddbaStatus, AmsduInAmpdu, BankRoom, RxAddbaRequest, RxBlockAckNegotiation,
-    RxBlockAckSession, RxReorderMpdu, RxReorderRelease,
+    AddbaResponse, AddbaStatus, AmsduInAmpdu, BankRoom, Received, RxAddbaRequest,
+    RxBlockAckNegotiation, RxBlockAckSession, RxReorderMpdu, RxReorderRelease,
 };
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
@@ -485,7 +485,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
         report(events, || RxBlockAckEvent::Reordered {
             tid,
             cause,
-            held: u8::from(release.buffered),
+            held: u8::from(release.received == Received::Buffered),
             released: u8::try_from(release.iter().count()).unwrap_or(u8::MAX),
             missing: release.missing,
         });
@@ -1138,7 +1138,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
         );
         let tid = active.tid();
         match release {
-            Ok(release) if release.rejected.is_none() => {
+            Ok(release) if !matches!(release.received, Received::Rejected(_)) => {
                 if let Some(place) = self.frames.get_mut(slot) {
                     *place = Some(frame);
                 }
