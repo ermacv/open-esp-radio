@@ -960,3 +960,36 @@ fn a_ps_poll_needs_its_marker_and_a_nonzero_association_id() {
         );
     }
 }
+
+/// The largest association ID the 14-bit AID field holds is written whole
+/// with both marker bits, and read whole from a PS-Poll (IEEE Std
+/// 802.11-2020, 9.4.1.8).
+#[test]
+fn the_largest_association_id_is_written_and_read_whole() {
+    let mut body = [0; AP_ASSOCIATION_RESPONSE_BODY_LEN];
+    write_ht_association_response(
+        &TEST_ADVERTISEMENT,
+        &mut body,
+        0,
+        0x3fff,
+        crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
+        None,
+        ApBssProtection::default(),
+    )
+    .unwrap();
+    // Capability Information, Status Code, then the AID field.
+    assert_eq!(&body[4..6], &[0xff, 0xff]);
+
+    let peer = [1, 2, 3, 4, 5, 6];
+    let mut frame = [0_u8; 16];
+    frame[..2].copy_from_slice(&[0xa4, 0x00]);
+    frame[2..4].copy_from_slice(&body[4..6]);
+    frame[10..16].copy_from_slice(&peer);
+    assert_eq!(
+        observe_ap_power_save(&frame),
+        Some(ApPowerSaveObservation::PsPoll {
+            peer,
+            association_id: 0x3fff
+        })
+    );
+}
