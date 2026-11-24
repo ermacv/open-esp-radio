@@ -113,12 +113,14 @@ impl Advertisement {
         })
     }
 
-    pub const fn capabilities(&self, security: LinkProtection) -> u16 {
-        u16::from_le_bytes(
-            self.capability_information
-                .with_privacy(matches!(security, LinkProtection::Ccmp))
-                .to_bytes(),
-        )
+    /// The Capability Information field under `security`: its Privacy
+    /// subfield is the security mode's.
+    pub const fn capabilities(
+        &self,
+        security: LinkProtection,
+    ) -> crate::management::CapabilityInformation {
+        self.capability_information
+            .with_privacy(matches!(security, LinkProtection::Ccmp))
     }
 }
 

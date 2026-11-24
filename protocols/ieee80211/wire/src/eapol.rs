@@ -21,6 +21,8 @@ oer_portable_wire::bitfield! {
         pub request, with_request: bool = 11..12;
         pub encrypted_key_data, with_encrypted_key_data: bool = 12..13;
         pub smk_message, with_smk_message: bool = 13..14;
+        /// The whole field as one big-endian value.
+        pub value, with_value: (u16) = 0..16, view;
     }
 }
 
@@ -30,12 +32,46 @@ impl KeyInformation {
 
     /// The field whose big-endian value is `raw`.
     pub const fn from_raw(raw: u16) -> Self {
-        Self::from_bytes(raw.to_be_bytes())
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::EMPTY.with_value(oer_portable_wire::U16::from_low_bits(raw))
     }
 
     /// The field's big-endian value.
     pub const fn raw(self) -> u16 {
-        u16::from_be_bytes(self.to_bytes())
+        self.value().get()
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// A two-octet big-endian count: the EAPOL header's Packet Body Length
+    /// and an EAPOL-Key frame's Key Length and Key Data Length.
+    /// SOURCE: IEEE Std 802.1X-2020, 11.3 (EAPOL PDU, Packet Body Length);
+    /// IEEE Std 802.11-2020, 12.7.2, Figure 12-32 (EAPOL-Key frame).
+    pub struct EapolLength[2] (big) {
+        pub value, with_value: (u16) = 0..16;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 12.7.2, Figure 12-32 (EAPOL-Key frame:
+    /// Key Replay Counter, eight octets).
+    pub struct KeyReplayCounter[8] (big) {
+        pub value, with_value: (u64) = 0..64;
+    }
+}
+
+impl EapolLength {
+    /// The field holding `value`.
+    pub const fn of(value: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; 2]).with_value(oer_portable_wire::U16::from_low_bits(value))
+    }
+}
+
+impl KeyReplayCounter {
+    /// The field holding `value`.
+    pub const fn of(value: u64) -> Self {
+        // Sixty-four bits of sixty-four: nothing is cut.
+        Self::from_bytes([0; 8]).with_value(oer_portable_wire::U64::from_low_bits(value))
     }
 }
 
@@ -198,8 +234,8 @@ pub struct EapolKey<'a> {
     bytes: &'a [u8],
     protocol_version: u8,
     key_information: KeyInformation,
-    key_length: [u8; 2],
-    replay_counter: [u8; 8],
+    key_length: EapolLength,
+    replay_counter: KeyReplayCounter,
     nonce: &'a [u8; 32],
     key_iv: &'a [u8; 16],
     key_rsc: &'a [u8; 8],
@@ -224,8 +260,8 @@ impl<'a> EapolKey<'a> {
             reader.read::<EAPOL_HEADER_LEN>().map_err(truncated)?;
         let [descriptor] = reader.read::<1>().map_err(truncated)?;
         let key_information = KeyInformation::from_bytes(reader.read::<2>().map_err(truncated)?);
-        let key_length = reader.read::<2>().map_err(truncated)?;
-        let replay_counter = reader.read::<8>().map_err(truncated)?;
+        let key_length = EapolLength::from_bytes(reader.read().map_err(truncated)?);
+        let replay_counter = KeyReplayCounter::from_bytes(reader.read().map_err(truncated)?);
         let nonce = reader.array::<32>().map_err(truncated)?;
         let key_iv = reader.array::<16>().map_err(truncated)?;
         let key_rsc = reader.array::<8>().map_err(truncated)?;
@@ -236,7 +272,11 @@ impl<'a> EapolKey<'a> {
         if packet_type != EAPOL_PACKET_TYPE_KEY {
             return Err(EapolParseError::NotKeyPacket);
         }
-        let body_len = usize::from(u16::from_be_bytes([length_high, length_low]));
+        let body_len = usize::from(
+            EapolLength::from_bytes([length_high, length_low])
+                .value()
+                .get(),
+        );
         let packet_len = EAPOL_HEADER_LEN
             .checked_add(body_len)
             .ok_or(EapolParseError::LengthMismatch)?;
@@ -284,11 +324,11 @@ impl<'a> EapolKey<'a> {
     }
 
     pub const fn key_length(self) -> u16 {
-        u16::from_be_bytes(self.key_length)
+        self.key_length.value().get()
     }
 
     pub const fn replay_counter(self) -> u64 {
-        u64::from_be_bytes(self.replay_counter)
+        self.replay_counter.value().get()
     }
 
     pub const fn nonce(self) -> &'a [u8; 32] {
@@ -375,17 +415,17 @@ impl<const N: usize> EapolKeyBuffer<N> {
         let mut writer = oer_portable_wire::Writer::new(&mut bytes);
         for field in [
             &[fields.protocol_version, EAPOL_PACKET_TYPE_KEY][..],
-            &body_len.to_be_bytes(),
+            &EapolLength::of(body_len).to_bytes(),
             &[RSN_KEY_DESCRIPTOR_TYPE],
             &fields.key_information.to_bytes(),
-            &fields.key_length.to_be_bytes(),
-            &fields.replay_counter.to_be_bytes(),
+            &EapolLength::of(fields.key_length).to_bytes(),
+            &KeyReplayCounter::of(fields.replay_counter).to_bytes(),
             &fields.nonce,
             &[0; 16],
             &fields.key_rsc,
             &[0; 8],
             &ZERO_MIC,
-            &key_data_len.to_be_bytes(),
+            &EapolLength::of(key_data_len).to_bytes(),
             fields.key_data,
         ] {
             writer
@@ -487,7 +527,9 @@ impl<'a> IgtkKde<'a> {
         let (&packet_number, key) = rest.split_first_chunk::<6>()?;
         let key = <&[u8; 16]>::try_from(key).ok()?;
         Some(Self {
-            key_id: u16::from_le_bytes([id0, id1]),
+            key_id: crate::bip::KeyIdField::from_bytes([id0, id1])
+                .key_id()
+                .get(),
             packet_number,
             key,
         })
@@ -501,7 +543,10 @@ impl<'a> IgtkKde<'a> {
                 None => panic!("IGTK KDE geometry"),
             };
         let mut kde = [0; IGTK_KDE_LEN];
-        let id = self.key_id.to_le_bytes();
+        // Sixteen bits of sixteen: nothing is cut.
+        let id = crate::bip::KeyIdField::from_bytes([0; 2])
+            .with_key_id(oer_portable_wire::U16::from_low_bits(self.key_id))
+            .to_bytes();
         for (target, source) in kde.iter_mut().zip(
             HEADER
                 .iter()

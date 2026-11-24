@@ -5,6 +5,7 @@ use super::*;
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpTxPacketNumber, InstalledCcmpTxKey};
 use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
+use oer_protocols_ieee80211_wire::scan::ElementOccurrence;
 use oer_protocols_ieee80211_wire::security::{SppCapability, SppError, rsn::rsnx_capabilities};
 
 /// Why an association cannot use the advertised RSN profile.
@@ -47,20 +48,18 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         policy: ApSecurityPolicy,
         security: ApAssociationSecurityObservation<'_>,
     ) -> Result<AdmittedRsn, ApAssociationSecurityError> {
-        if !security.privacy()
-            || security.rsn_ie_count != 1
-            || security.rsnxe_count > 1
-            || security.rsnxe_count == 0 && security.rsnxe.is_some()
-            || security.rsnxe_count == 1 && security.rsnxe.is_none()
-        {
+        let (true, ElementOccurrence::Once(rsn_ie)) = (security.privacy(), security.rsn_ie) else {
             return Err(ApAssociationSecurityError::InvalidElements);
-        }
-        let rsn = validate_rsn_element(
-            security
-                .rsn_ie
-                .ok_or(ApAssociationSecurityError::InvalidElements)?,
-        )
-        .map_err(|_| ApAssociationSecurityError::InvalidElements)?;
+        };
+        let rsnxe = match security.rsnxe {
+            ElementOccurrence::Absent => None,
+            ElementOccurrence::Once(rsnxe) => Some(rsnxe),
+            ElementOccurrence::Repeated => {
+                return Err(ApAssociationSecurityError::InvalidElements);
+            }
+        };
+        let rsn = validate_rsn_element(rsn_ie)
+            .map_err(|_| ApAssociationSecurityError::InvalidElements)?;
         let spp = S::admit_ap(
             policy.spp_capability(),
             SppCapability::from_rsn(rsn.capabilities()).map_err(ApAssociationSecurityError::Spp)?,
@@ -93,7 +92,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                     .lists_akm(Akm::Sae)
                     .map_err(ApAssociationSecurityError::RetainedElement)? =>
             {
-                AssociationAkm::Sae(if security.rsnxe.is_some_and(announces_sae_h2e) {
+                AssociationAkm::Sae(if rsnxe.is_some_and(announces_sae_h2e) {
                     SaePwe::HashToElement
                 } else {
                     SaePwe::HuntingAndPecking
@@ -103,7 +102,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 return Err(ApAssociationSecurityError::InvalidElements);
             }
         };
-        let ies = OwnedAssociationSecurityIes::try_copy(rsn.owned(), security.rsnxe.unwrap_or(&[]))
+        let ies = OwnedAssociationSecurityIes::try_copy(rsn.owned(), rsnxe.unwrap_or(&[]))
             .map_err(|_| ApAssociationSecurityError::InvalidElements)?;
         let association = RsnAssociation {
             akm,
@@ -618,12 +617,10 @@ pub fn admit_association_security<S: SppScope>(
     }
     match policy.link_protection() {
         LinkProtection::Open => (!security.privacy()
-            && security.rsn_ie_count == 0
-            && security.rsn_ie.is_none()
-            && security.rsnxe_count == 0
-            && security.rsnxe.is_none())
-        .then_some(AssociationSecurity::Open)
-        .ok_or(ApAssociationSecurityError::InvalidElements),
+            && security.rsn_ie == ElementOccurrence::Absent
+            && security.rsnxe == ElementOccurrence::Absent)
+            .then_some(AssociationSecurity::Open)
+            .ok_or(ApAssociationSecurityError::InvalidElements),
         LinkProtection::Ccmp => {
             AccessPointService::<S>::validated_association_security(policy, security)
                 .map(|admitted| AssociationSecurity::Rsn(admitted.association))

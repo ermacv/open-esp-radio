@@ -74,7 +74,27 @@ pub const fn element_coordinates(
 ///
 /// SOURCE: IEEE Std 802.11-2020, 9.4.1.38 (Finite Cyclic Group field).
 pub const fn finite_cyclic_group_field(group: u16) -> [u8; SAE_FIELD_LEN] {
-    group.to_le_bytes()
+    SaeField::of(group).to_bytes()
+}
+
+oer_portable_wire::bitfield! {
+    /// A two-octet little-endian field of an SAE body: the Finite Cyclic
+    /// Group, a group of the Rejected Groups element, or the Send-Confirm.
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.38 (Finite Cyclic Group field),
+    /// 9.4.1.37 (Send-Confirm field) and 9.4.2.246 (Rejected Groups
+    /// element).
+    pub struct SaeField[2] (little) {
+        pub value, with_value: (u16) = 0..16;
+    }
+}
+
+impl SaeField {
+    /// The field holding `value`.
+    pub const fn of(value: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; SAE_FIELD_LEN])
+            .with_value(oer_portable_wire::U16::from_low_bits(value))
+    }
 }
 /// An SAE Commit body of group 19 without an anti-clogging token or
 /// optional elements: group, scalar and element.
@@ -313,8 +333,8 @@ impl<'a> SaeConfirm<'a> {
     pub fn encode(self) -> [u8; SAE_CONFIRM_LEN] {
         let mut body = [0; SAE_CONFIRM_LEN];
         for (target, source) in body.iter_mut().zip(
-            self.send_confirm
-                .to_le_bytes()
+            SaeField::of(self.send_confirm)
+                .to_bytes()
                 .iter()
                 .chain(self.confirm.iter()),
         ) {
@@ -354,7 +374,7 @@ fn extension_element(bytes: &[u8], extension: u8, minimum_length: u8) -> Option<
 /// Whether a Rejected Groups payload of little-endian groups names group 19.
 fn contains_offered_group(mut groups: &[u8]) -> bool {
     while let Some((group, rest)) = groups.split_first_chunk::<SAE_FIELD_LEN>() {
-        if *group == SAE_GROUP_P256.to_le_bytes() {
+        if SaeField::from_bytes(*group).value().get() == SAE_GROUP_P256 {
             return true;
         }
         groups = rest;
@@ -366,16 +386,14 @@ fn contains_offered_group(mut groups: &[u8]) -> bool {
 /// shorter than the field.
 pub fn finite_cyclic_group(body: &[u8]) -> Option<u16> {
     body.first_chunk::<SAE_FIELD_LEN>()
-        .copied()
-        .map(u16::from_le_bytes)
+        .map(|&field| SaeField::from_bytes(field).value().get())
 }
 
 /// The Send-Confirm field of an SAE Confirm body; `None` for a body shorter
 /// than the field.
 pub fn send_confirm(body: &[u8]) -> Option<u16> {
     body.first_chunk::<SAE_FIELD_LEN>()
-        .copied()
-        .map(u16::from_le_bytes)
+        .map(|&field| SaeField::from_bytes(field).value().get())
 }
 
 /// The three header octets of an Anti-Clogging Token Container carrying a

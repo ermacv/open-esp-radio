@@ -143,8 +143,8 @@ fn management(count: usize) {
                     ..
                 } => {
                     let _ = (
-                        security.rsn_ie.map(<[u8]>::len),
-                        security.rsnxe.map(<[u8]>::len),
+                        security.rsn_ie,
+                        security.rsnxe,
                         ht_capabilities.map(|ht| ht.highest_rx_mcs()),
                     );
                 }

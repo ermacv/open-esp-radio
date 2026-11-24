@@ -37,16 +37,27 @@ impl CcmpPacketNumber {
     }
 
     pub const fn from_header_bytes(bytes: [u8; CCMP_HEADER_LEN]) -> Self {
-        Self(u64::from_le_bytes([
-            bytes[0], bytes[1], bytes[4], bytes[5], bytes[6], bytes[7], 0, 0,
-        ]))
+        let [pn0, pn1, _, _, pn2, pn3, pn4, pn5] = bytes;
+        Self(
+            PacketNumberField::from_bytes([pn0, pn1, pn2, pn3, pn4, pn5])
+                .value()
+                .get(),
+        )
+    }
+
+    /// The six octets PN0 to PN5.
+    const fn field(self) -> PacketNumberField {
+        // `new` admits 48 bits alone: nothing is cut.
+        PacketNumberField::from_bytes([0; 6])
+            .with_value(oer_portable_wire::U64::from_low_bits(self.0))
     }
 
     /// Encode this packet number as an EAPOL-Key Key RSC: six little-endian
     /// octets and two zero octets, the inverse of
     /// [`Self::from_receive_sequence`].
     pub const fn receive_sequence(self) -> [u8; 8] {
-        self.0.to_le_bytes()
+        let [pn0, pn1, pn2, pn3, pn4, pn5] = self.field().to_bytes();
+        [pn0, pn1, pn2, pn3, pn4, pn5, 0, 0]
     }
 
     /// Decode the little-endian six-octet packet number carried by an EAPOL
@@ -55,10 +66,15 @@ impl CcmpPacketNumber {
     pub const fn from_receive_sequence(
         sequence: [u8; 8],
     ) -> Result<Self, CcmpReceiveSequenceError> {
-        if sequence[6] != 0 || sequence[7] != 0 {
+        let [pn0, pn1, pn2, pn3, pn4, pn5, high0, high1] = sequence;
+        if high0 != 0 || high1 != 0 {
             return Err(CcmpReceiveSequenceError::HighBitsSet);
         }
-        Ok(Self(u64::from_le_bytes(sequence)))
+        Ok(Self(
+            PacketNumberField::from_bytes([pn0, pn1, pn2, pn3, pn4, pn5])
+                .value()
+                .get(),
+        ))
     }
 }
 
@@ -194,23 +210,25 @@ impl CcmpHeader {
     }
 
     pub const fn parse(bytes: [u8; CCMP_HEADER_LEN]) -> Result<Self, CcmpHeaderError> {
-        if bytes[2] != 0 {
+        let [_, _, reserved, control, _, _, _, _] = bytes;
+        let control = CcmpKeyControl::from_bytes([control]);
+        if reserved != 0 {
             return Err(CcmpHeaderError::ReservedOctet);
         }
-        if !CcmpKeyControl::from_bytes([bytes[3]]).extended_iv() {
+        if !control.extended_iv() {
             return Err(CcmpHeaderError::ExtIvMissing);
         }
-        if CcmpKeyControl::from_bytes([bytes[3]]).reserved() != 0 {
+        if control.reserved() != 0 {
             return Err(CcmpHeaderError::ReservedKeyBits);
         }
         Ok(Self {
             packet_number: CcmpPacketNumber::from_header_bytes(bytes),
-            key_id: CcmpKeyId(CcmpKeyControl::from_bytes([bytes[3]]).key_id()),
+            key_id: CcmpKeyId(control.key_id()),
         })
     }
 
     pub const fn encode(self) -> [u8; CCMP_HEADER_LEN] {
-        let [p0, p1, p2, p3, p4, p5, _, _] = self.packet_number.value().to_le_bytes();
+        let [p0, p1, p2, p3, p4, p5] = self.packet_number.field().to_bytes();
         let control = CcmpKeyControl::from_bytes([0])
             .with_extended_iv(true)
             .with_key_id(self.key_id.0);
@@ -233,21 +251,14 @@ pub enum CcmpHeaderError {
     ReservedKeyBits,
 }
 
-pub const fn ccmp_header(low: u32, high: u32, key_id_bits: u8) -> [u8; CCMP_HEADER_LEN] {
-    let [p0, p1, p2, p3] = low.to_le_bytes();
-    let [p4, p5, _, _] = high.to_le_bytes();
-    [
-        p0,
-        p1,
-        0,
-        CcmpKeyControl::from_bytes([key_id_bits])
-            .with_extended_iv(true)
-            .to_bytes()[0],
-        p2,
-        p3,
-        p4,
-        p5,
-    ]
+oer_portable_wire::bitfield! {
+    /// A packet number's six octets, PN0 first.
+    /// SOURCE: IEEE Std 802.11-2020, 12.5.3.2 (CCMP MPDU format: PN0 to
+    /// PN5 of the 48-bit PN) and 12.7.2 (EAPOL-Key frames: a Key RSC's PN
+    /// in its first six octets).
+    pub struct PacketNumberField[6] (little) {
+        pub value, with_value: (u64) = 0..48;
+    }
 }
 
 oer_portable_wire::bitfield! {

@@ -596,10 +596,8 @@ fn association_retains_the_highest_common_advertised_legacy_rate() {
                     association[24],
                     association[25],
                 ]),
-                rsn_ie: Some(&association[39..42]),
-                rsn_ie_count: 1,
-                rsnxe: None,
-                rsnxe_count: 0,
+                rsn_ie: crate::scan::ElementOccurrence::Once(&association[39..42]),
+                rsnxe: crate::scan::ElementOccurrence::Absent,
                 legacy_wpa: crate::scan::ElementPresence::Absent,
                 information_elements: crate::scan::ElementList::Complete,
             },
@@ -629,10 +627,11 @@ fn association_retains_exact_rsnxe_and_duplicate_count() {
     else {
         panic!("association request must parse");
     };
-    assert_eq!(security.rsn_ie, Some(&association[28..31]));
-    assert_eq!(security.rsn_ie_count, 1);
-    assert_eq!(security.rsnxe, Some(&association[31..34]));
-    assert_eq!(security.rsnxe_count, 2);
+    assert_eq!(
+        security.rsn_ie,
+        crate::scan::ElementOccurrence::Once(&association[28..31])
+    );
+    assert_eq!(security.rsnxe, crate::scan::ElementOccurrence::Repeated);
     assert_eq!(
         security.information_elements,
         crate::scan::ElementList::Complete

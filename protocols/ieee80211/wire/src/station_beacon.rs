@@ -153,7 +153,9 @@ pub fn parse_sta_beacon(
     if [a0, a1, a2, a3, a4, a5] != expected_bssid || [b0, b1, b2, b3, b4, b5] != expected_bssid {
         return Err(StaBeaconError::ForeignBssid);
     }
-    let interval_tu = crate::management::BeaconIntervalField::from_bytes([i0, i1]).time_units();
+    let interval_tu = crate::management::BeaconIntervalField::from_bytes([i0, i1])
+        .time_units()
+        .get();
     if interval_tu == 0 {
         return Err(StaBeaconError::ZeroInterval);
     }

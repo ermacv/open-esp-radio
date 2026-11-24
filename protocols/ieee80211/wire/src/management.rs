@@ -268,7 +268,15 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.3 (Beacon Interval field), in
     /// time units.
     pub struct BeaconIntervalField[2] (little) {
-        pub time_units, with_time_units: u16 = 0..16;
+        pub time_units, with_time_units: (u16) = 0..16;
+    }
+}
+
+impl BeaconIntervalField {
+    /// The field holding `time_units`.
+    pub const fn of(time_units: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; 2]).with_time_units(oer_portable_wire::U16::from_low_bits(time_units))
     }
 }
 oer_portable_wire::bitfield! {

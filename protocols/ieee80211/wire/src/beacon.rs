@@ -166,6 +166,11 @@ impl<'bitmap> TimPartialVirtualBitmap<'bitmap> {
     clippy::too_many_arguments,
     reason = "the frame writer keeps the caller-owned local profile and independent 802.11 fields explicit"
 )]
+/// Beacon, management subtype 8, every flag clear (IEEE Std 802.11-2020,
+/// 9.2.4.1.3, Table 9-1).
+const BEACON_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0x80, 0x00]);
+
 pub fn write_ht_beacon(
     profile: &Advertisement,
     output: &mut [u8],
@@ -208,7 +213,7 @@ pub fn write_ht_beacon(
     let ht_operation = ht_operation_ie(channel, protection.ht);
     let (rsn, rsnx) = (security.rsne, security.rsnxe);
     let mut fixed = [0; MANAGEMENT_HEADER_LEN + BEACON_FIXED_BODY_LEN];
-    crate::encoding::write_array::<0, _, _>(&mut fixed, &0x0080_u16.to_le_bytes());
+    crate::encoding::write_array::<0, _, _>(&mut fixed, &BEACON_FRAME_CONTROL.to_bytes());
     fixed[4..10].fill(0xff);
     crate::encoding::write_array::<10, _, _>(&mut fixed, &access_point);
     crate::encoding::write_array::<16, _, _>(&mut fixed, &access_point);
@@ -216,9 +221,12 @@ pub fn write_ht_beacon(
         &mut fixed,
         &management_sequence.sequence_control().to_bytes(),
     );
-    crate::encoding::write_array::<32, _, _>(&mut fixed, &beacon_interval_tu.to_le_bytes());
+    crate::encoding::write_array::<32, _, _>(
+        &mut fixed,
+        &crate::management::BeaconIntervalField::of(beacon_interval_tu).to_bytes(),
+    );
     let capabilities = profile.capabilities(security.link_protection());
-    crate::encoding::write_array::<34, _, _>(&mut fixed, &capabilities.to_le_bytes());
+    crate::encoding::write_array::<34, _, _>(&mut fixed, &capabilities.to_bytes());
     let dsss = [3, 1, channel.number()];
     let erp = [ERP_ELEMENT_ID, 1, protection.erp_information()];
     // Bitmap offset zero plus two octets covers AID 1..=15 without aliasing
@@ -581,7 +589,7 @@ pub fn stamp(
         return None;
     }
     oer_portable_wire::Writer::new(bytes.get_mut(24..32)?)
-        .write(&0_u64.to_le_bytes())
+        .write(&crate::tsf::TsfTimestamp::from_micros(0).to_bytes())
         .ok()?;
     let timestamp = tsf;
 

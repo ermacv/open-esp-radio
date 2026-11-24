@@ -103,7 +103,12 @@ impl<'a> ProtectedMpdu<'a> {
     /// number, most significant octet first.
     pub fn nonce(&self, spp: Spp) -> [u8; CCMP_NONCE_LEN] {
         let [a0, a1, a2, a3, a4, a5] = self.header.transmitter();
-        let [_, _, p0, p1, p2, p3, p4, p5] = self.ccmp.packet_number().value().to_be_bytes();
+        // `CcmpPacketNumber::new` admits 48 bits alone: nothing is cut.
+        let [p0, p1, p2, p3, p4, p5] = NoncePacketNumber::from_bytes([0; 6])
+            .with_value(oer_portable_wire::U64::from_low_bits(
+                self.ccmp.packet_number().value(),
+            ))
+            .to_bytes();
         [
             self.nonce_flags(spp),
             a0,
@@ -195,6 +200,14 @@ impl<'a> ProtectedMpdu<'a> {
     }
 }
 
+oer_portable_wire::bitfield! {
+    /// The CCM nonce's packet number, PN5 first.
+    /// SOURCE: IEEE Std 802.11-2020, 12.5.3.3.4 (Construct CCM nonce,
+    /// Figure 12-18: PN5 to PN0).
+    pub struct NoncePacketNumber[6] (big) {
+        pub value, with_value: (u64) = 0..48;
+    }
+}
 oer_portable_wire::bitfield! {
     /// The CCM Nonce Flags octet: the priority (the TID of QoS data), the
     /// management bit, and with SPP A-MSDU the A-MSDU Present bit.
