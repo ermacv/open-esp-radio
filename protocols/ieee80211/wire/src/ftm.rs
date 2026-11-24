@@ -256,43 +256,40 @@ impl FtmRequestParameters {
     }
 
     pub fn encode_element(self) -> [u8; FTM_PARAMETERS_ELEMENT_LEN] {
-        let mut element = [0_u8; FTM_PARAMETERS_ELEMENT_LEN];
-        element[0] = FTM_PARAMETERS_ELEMENT_ID;
-        element[1] = FTM_PARAMETERS_FIELD_LEN as u8;
-        let mut fields = FtmParameterFields::from_bytes([0; 9]);
-        fields = fields.with_bursts(self.number_of_bursts_exponent);
-        fields = fields.with_duration(oer_portable_wire::U8::from_low_bits(
-            self.burst_duration.wire(),
-        ));
-        element[3] = fields.to_bytes()[1];
-        element[4] = self.min_delta_ftm_100us;
-        let partial_tsf = self.partial_tsf_timer.unwrap_or(0).to_le_bytes();
-        crate::encoding::write_array::<5, _, _>(&mut element, &partial_tsf);
-        fields = fields
+        // A request's Status Indication and Value are zero (9.4.2.167).
+        let fields = FtmParameterFields::from_bytes([0; 9])
+            .with_bursts(self.number_of_bursts_exponent)
+            .with_duration(oer_portable_wire::U8::from_low_bits(
+                self.burst_duration.wire(),
+            ))
+            .with_partial_tsf(oer_portable_wire::U16::from_low_bits(
+                self.partial_tsf_timer.unwrap_or(0),
+            ))
             .with_no_partial_tsf(self.partial_tsf_timer.is_none())
-            .with_asap(self.asap.bit());
-        fields = fields.with_ftms(self.ftms_per_burst);
-        element[7] = fields.to_bytes()[5];
-        fields = fields.with_bandwidth(oer_portable_wire::U8::from_low_bits(
-            self.format_and_bandwidth.wire(),
-        ));
-        element[8] = fields.to_bytes()[6];
-        crate::encoding::write_array::<9, _, _>(
-            &mut element,
-            &self.burst_period_100ms.to_le_bytes(),
-        );
-        element
+            .with_asap(self.asap.bit())
+            .with_ftms(self.ftms_per_burst)
+            .with_bandwidth(oer_portable_wire::U8::from_low_bits(
+                self.format_and_bandwidth.wire(),
+            ))
+            .with_burst_period(oer_portable_wire::U16::from_low_bits(
+                self.burst_period_100ms,
+            ))
+            .with_min_delta(oer_portable_wire::U8::from_low_bits(
+                self.min_delta_ftm_100us,
+            ));
+        parameters_element(fields)
     }
 
     pub fn decode_element(element: &[u8]) -> Result<Self, FtmParameterError> {
         let fields = parameter_fields(element)?;
-        if fields[0] != 0 {
+        let parsed = FtmParameterFields::from_bytes(fields);
+        if parsed.status() != 0 || parsed.retry() != 0 || parsed.status_reserved() {
             return Err(FtmParameterError::ReservedStatus);
         }
         if FtmParameterFields::from_bytes(fields).asap_capable() {
             return Err(FtmParameterError::RequestAsapCapableSet);
         }
-        let partial_tsf = u16::from_le_bytes([fields[3], fields[4]]);
+        let partial_tsf = parsed.partial_tsf().get();
         let partial_tsf_no_preference = FtmParameterFields::from_bytes(fields).no_partial_tsf();
         if partial_tsf_no_preference && partial_tsf != 0 {
             return Err(FtmParameterError::ReservedBitsSet);
@@ -300,7 +297,7 @@ impl FtmRequestParameters {
         Self::new(
             FtmParameterFields::from_bytes(fields).bursts().get(),
             FtmBurstDuration::from_wire(FtmParameterFields::from_bytes(fields).duration().get())?,
-            fields[2],
+            parsed.min_delta().get(),
             if !partial_tsf_no_preference {
                 Some(partial_tsf)
             } else {
@@ -315,7 +312,7 @@ impl FtmRequestParameters {
             FtmFormatAndBandwidth::from_wire(
                 FtmParameterFields::from_bytes(fields).bandwidth().get(),
             )?,
-            u16::from_le_bytes([fields[7], fields[8]]),
+            parsed.burst_period().get(),
         )
     }
 }
@@ -400,7 +397,8 @@ impl FtmResponseParameters {
             return Err(FtmParameterError::ResponseNoPreference);
         }
         let number_of_bursts_exponent = FtmParameterFields::from_bytes(fields).bursts().get();
-        let burst_period_100ms = u16::from_le_bytes([fields[7], fields[8]]);
+        let parsed = FtmParameterFields::from_bytes(fields);
+        let burst_period_100ms = parsed.burst_period().get();
         if number_of_bursts_exponent == 0 && burst_period_100ms != 0 {
             return Err(FtmParameterError::BurstPeriodReserved);
         }
@@ -408,8 +406,8 @@ impl FtmResponseParameters {
             status,
             number_of_bursts_exponent,
             burst_duration,
-            min_delta_ftm_100us: fields[2],
-            partial_tsf_timer: u16::from_le_bytes([fields[3], fields[4]]),
+            min_delta_ftm_100us: parsed.min_delta().get(),
+            partial_tsf_timer: parsed.partial_tsf().get(),
             asap_capable: if FtmParameterFields::from_bytes(fields).asap_capable() {
                 FtmAsapCapability::Capable
             } else {
@@ -431,43 +429,37 @@ impl FtmResponseParameters {
             .ok_or(FtmParameterError::ValueOutOfRange)?;
         let ftms = oer_portable_wire::U8::new(self.ftms_per_burst)
             .ok_or(FtmParameterError::ValueOutOfRange)?;
-        let mut element = [0_u8; FTM_PARAMETERS_ELEMENT_LEN];
-        element[0] = FTM_PARAMETERS_ELEMENT_ID;
-        element[1] = FTM_PARAMETERS_FIELD_LEN as u8;
-        element[2] = match self.status {
-            FtmResponseStatus::Success => 1,
-            FtmResponseStatus::Incapable => 2,
+        let (status, retry) = match self.status {
+            FtmResponseStatus::Success => (1, 0),
+            FtmResponseStatus::Incapable => (2, 0),
             FtmResponseStatus::Failed {
                 retry_after_seconds,
-            } => FtmParameterFields::from_bytes([3, 0, 0, 0, 0, 0, 0, 0, 0])
-                .with_retry(retry_after_seconds)
-                .map_err(|_| FtmParameterError::ValueOutOfRange)?
-                .to_bytes()[0],
+            } => (3, retry_after_seconds),
         };
-        let mut fields = FtmParameterFields::from_bytes([0; 9]);
-        fields = fields.with_bursts(bursts);
-        fields = fields.with_duration(oer_portable_wire::U8::from_low_bits(
-            self.burst_duration.wire(),
-        ));
-        element[3] = fields.to_bytes()[1];
-        element[4] = self.min_delta_ftm_100us;
-        crate::encoding::write_array::<5, _, _>(
-            &mut element,
-            &self.partial_tsf_timer.to_le_bytes(),
-        );
-        fields = fields
+        let fields = FtmParameterFields::from_bytes([0; 9])
+            .with_status(status)
+            .and_then(|fields| fields.with_retry(retry))
+            .map_err(|_| FtmParameterError::ValueOutOfRange)?
+            .with_min_delta(oer_portable_wire::U8::from_low_bits(
+                self.min_delta_ftm_100us,
+            ))
+            .with_bursts(bursts)
+            .with_duration(oer_portable_wire::U8::from_low_bits(
+                self.burst_duration.wire(),
+            ))
+            .with_partial_tsf(oer_portable_wire::U16::from_low_bits(
+                self.partial_tsf_timer,
+            ))
             .with_asap_capable(self.asap_capable.bit())
-            .with_asap(self.asap.bit());
-        fields = fields.with_ftms(ftms);
-        element[7] = fields.to_bytes()[5];
-        fields = fields.with_bandwidth(oer_portable_wire::U8::from_low_bits(
-            self.format_and_bandwidth.wire(),
-        ));
-        element[8] = fields.to_bytes()[6];
-        crate::encoding::write_array::<9, _, _>(
-            &mut element,
-            &self.burst_period_100ms.to_le_bytes(),
-        );
+            .with_asap(self.asap.bit())
+            .with_ftms(ftms)
+            .with_bandwidth(oer_portable_wire::U8::from_low_bits(
+                self.format_and_bandwidth.wire(),
+            ))
+            .with_burst_period(oer_portable_wire::U16::from_low_bits(
+                self.burst_period_100ms,
+            ));
+        let element = parameters_element(fields);
         Self::decode_element(&element)?;
         Ok(element)
     }
@@ -585,13 +577,15 @@ impl FtmTimestampPs {
         self.0
     }
 
-    fn decode([b0, b1, b2, b3, b4, b5]: [u8; 6]) -> Self {
-        Self(u64::from_le_bytes([b0, b1, b2, b3, b4, b5, 0, 0]))
+    fn decode(octets: [u8; 6]) -> Self {
+        Self(FtmTimestampField::from_bytes(octets).picoseconds().get())
     }
 
     fn encode(self) -> [u8; 6] {
-        let [b0, b1, b2, b3, b4, b5, _, _] = self.0.to_le_bytes();
-        [b0, b1, b2, b3, b4, b5]
+        // `new` admits 48 bits alone: nothing is cut.
+        FtmTimestampField::from_bytes([0; 6])
+            .with_picoseconds(oer_portable_wire::U64::from_low_bits(self.0))
+            .to_bytes()
     }
 }
 
@@ -653,12 +647,10 @@ impl<'a> FtmMeasurement<'a> {
         ) = validate_prefix::<FTM_MEASUREMENT_PREFIX_LEN>(body, FTM_MEASUREMENT_PUBLIC_ACTION)?;
         let tod = FtmTimestampPs::decode([d0, d1, d2, d3, d4, d5]);
         let toa = FtmTimestampPs::decode([a0, a1, a2, a3, a4, a5]);
-        let tod_error_wire = u16::from_le_bytes([e0, e1]);
-        let toa_error_wire = u16::from_le_bytes([g0, g1]);
-        if FtmTimestampErrorFields::from_bytes(tod_error_wire.to_le_bytes()).reserved() != 0
-            || FtmTimestampErrorFields::from_bytes(toa_error_wire.to_le_bytes()).reserved() != 0
-            || FtmTimestampErrorFields::from_bytes(toa_error_wire.to_le_bytes()).not_continuous()
-        {
+        let tod_error = FtmTimestampErrorFields::from_bytes([e0, e1]);
+        let toa_error = FtmTimestampErrorFields::from_bytes([g0, g1]);
+        let no_error = FtmTimestampErrorFields::from_bytes([0; 2]);
+        if tod_error.reserved() != 0 || toa_error.reserved() != 0 || toa_error.not_continuous() {
             return Err(FtmWireError::ReservedTimestampErrorBits);
         }
         let fields = FtmMeasurementFields {
@@ -667,25 +659,18 @@ impl<'a> FtmMeasurement<'a> {
             tod,
             toa,
             tod_error: FtmTodError {
-                max_error_exponent: FtmTimestampErrorFields::from_bytes(
-                    tod_error_wire.to_le_bytes(),
-                )
-                .exponent(),
-                not_continuous: FtmTimestampErrorFields::from_bytes(tod_error_wire.to_le_bytes())
-                    .not_continuous(),
+                max_error_exponent: tod_error.exponent(),
+                not_continuous: tod_error.not_continuous(),
             },
             toa_error: FtmToaError {
-                max_error_exponent: FtmTimestampErrorFields::from_bytes(
-                    toa_error_wire.to_le_bytes(),
-                )
-                .exponent(),
+                max_error_exponent: toa_error.exponent(),
             },
         };
         if fields.follow_up_dialog_token == 0
             && (fields.tod != FtmTimestampPs::ZERO
                 || fields.toa != FtmTimestampPs::ZERO
-                || tod_error_wire != 0
-                || toa_error_wire != 0)
+                || tod_error != no_error
+                || toa_error != no_error)
         {
             return Err(FtmWireError::ReservedTimestampFields);
         }
@@ -730,7 +715,10 @@ pub fn encode_measurement(
         .with_exponent(fields.tod_error.max_error_exponent)
         .map_err(|_| FtmWireError::ReservedTimestampErrorBits)?
         .to_bytes();
-    let [g0, g1] = u16::from(fields.toa_error.max_error_exponent).to_le_bytes();
+    let [g0, g1] = FtmTimestampErrorFields::from_bytes([0; 2])
+        .with_exponent(fields.toa_error.max_error_exponent)
+        .map_err(|_| FtmWireError::ReservedTimestampErrorBits)?
+        .to_bytes();
     *prefix = [
         PUBLIC_ACTION_CATEGORY,
         FTM_MEASUREMENT_PUBLIC_ACTION,
@@ -820,13 +808,43 @@ oer_portable_wire::bitfield! {
         pub status_reserved, with_status_reserved: bool = 7..8;
         pub bursts, with_bursts: (u8) = 8..12;
         pub duration, with_duration: (u8) = 12..16;
+        pub min_delta, with_min_delta: (u8) = 16..24;
+        pub partial_tsf, with_partial_tsf: (u16) = 24..40;
         pub no_partial_tsf, with_no_partial_tsf: bool = 40..41;
         pub asap_capable, with_asap_capable: bool = 41..42;
         pub asap, with_asap: bool = 42..43;
         pub ftms, with_ftms: (u8) = 43..48;
         pub bandwidth_reserved, with_bandwidth_reserved: u8 = 48..50;
         pub bandwidth, with_bandwidth: (u8) = 50..56;
+        pub burst_period, with_burst_period: (u16) = 56..72;
     }
+}
+oer_portable_wire::bitfield! {
+    /// A Time of Departure or Time of Arrival field: 48 bits, in
+    /// picoseconds.
+    /// SOURCE: IEEE Std 802.11-2020, 9.6.7.33 (Fine Timing Measurement
+    /// frame format).
+    pub struct FtmTimestampField[6] (little) {
+        pub picoseconds, with_picoseconds: (u64) = 0..48;
+    }
+}
+
+/// The FTM Parameters element holding `fields`.
+const fn parameters_element(fields: FtmParameterFields) -> [u8; FTM_PARAMETERS_ELEMENT_LEN] {
+    let [f0, f1, f2, f3, f4, f5, f6, f7, f8] = fields.to_bytes();
+    [
+        FTM_PARAMETERS_ELEMENT_ID,
+        FTM_PARAMETERS_FIELD_LEN as u8,
+        f0,
+        f1,
+        f2,
+        f3,
+        f4,
+        f5,
+        f6,
+        f7,
+        f8,
+    ]
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.6.7.33 (Fine Timing Measurement frame).

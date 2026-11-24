@@ -381,7 +381,7 @@ fn a_decoded_header_reads_each_field_from_its_place() {
     let octets = header_octets(0x8388).unwrap();
     let decoded = DecodedHeader::decode(&octets).unwrap();
     assert_eq!(decoded.control().fields().to_bytes(), [0x88, 0x83]);
-    assert_eq!(decoded.duration().value(), 0x5634);
+    assert_eq!(decoded.duration().value().get(), 0x5634);
     assert_eq!(decoded.receiver(), [0xff; 6]);
     assert_eq!(decoded.transmitter(), A);
     assert_eq!(decoded.address3(), B);

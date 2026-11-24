@@ -156,6 +156,9 @@ impl TriggerBasicDependentInfo {
 ///
 /// `encode` omits the FCS. A host injection interface or radio DMA owner must
 /// add it according to that interface's contract.
+/// A Trigger frame's Frame Control: control subtype 2, every flag clear.
+const TRIGGER_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0x24, 0x00]);
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BasicTriggerFrameEncoding {
     pub duration: u16,
@@ -185,8 +188,8 @@ impl BasicTriggerFrameEncoding {
         let user = self.user.to_bytes();
         let dependent = self.dependent.encode()?;
         let fields: [&[u8]; 7] = [
-            &0x0024_u16.to_le_bytes(),
-            &self.duration.to_le_bytes(),
+            &TRIGGER_FRAME_CONTROL.to_bytes(),
+            &crate::frame::DurationId::of(self.duration).to_bytes(),
             &self.receiver_address,
             &self.transmitter_address,
             &common,
@@ -518,7 +521,7 @@ pub fn parse_trigger_frame(frame: &[u8]) -> Result<TriggerFrame<'_>, TriggerPars
     }
     Ok(TriggerFrame {
         frame_control,
-        duration: u16::from_le_bytes(duration),
+        duration: crate::frame::DurationId::from_bytes(duration).value().get(),
         receiver_address,
         transmitter_address,
         common: parse_trigger_common_info(common)?,
@@ -629,14 +632,32 @@ pub fn parse_trigger_bfrp_dependent(bytes: &[u8]) -> Result<u8, TriggerParseErro
     Ok(b0)
 }
 
+/// A MU-BAR Trigger Dependent User Info: its BAR Control and BAR
+/// Information (the Starting Sequence Control) fields.
+///
+/// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22.5 (MU-BAR variant User Info).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TriggerMuBarDependentInfo {
-    pub bar_control: u16,
-    pub ack_policy: bool,
-    pub bar_type: u8,
-    pub tid: u8,
-    pub bar_information: u16,
-    pub starting_sequence_number: SequenceNumber,
+    pub bar_control: BarControlFields,
+    pub bar_information: crate::sequence::SequenceControl,
+}
+
+impl TriggerMuBarDependentInfo {
+    pub const fn ack_policy(self) -> bool {
+        self.bar_control.ack_policy()
+    }
+
+    pub const fn bar_type(self) -> u8 {
+        self.bar_control.bar_type()
+    }
+
+    pub const fn tid(self) -> u8 {
+        self.bar_control.tid().get()
+    }
+
+    pub const fn starting_sequence_number(self) -> SequenceNumber {
+        SequenceNumber::from_sequence_control(self.bar_information)
+    }
 }
 
 /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_MUBAR_DEPENDENT]: complete
@@ -645,19 +666,9 @@ pub fn parse_trigger_mu_bar_dependent(
     bytes: &[u8],
 ) -> Result<TriggerMuBarDependentInfo, TriggerParseError> {
     let [b0, b1, b2, b3] = *chunk::<TRIGGER_MU_BAR_DEPENDENT_LEN>(bytes)?;
-    let bar_control = u16::from_le_bytes([b0, b1]);
-    let bar_information = u16::from_le_bytes([b2, b3]);
     Ok(TriggerMuBarDependentInfo {
-        bar_control,
-        ack_policy: BarControlFields::from_bytes(bar_control.to_le_bytes()).ack_policy(),
-        bar_type: BarControlFields::from_bytes(bar_control.to_le_bytes()).bar_type(),
-        tid: BarControlFields::from_bytes(bar_control.to_le_bytes())
-            .tid()
-            .get(),
-        bar_information,
-        starting_sequence_number: SequenceNumber::from_sequence_control(
-            crate::sequence::SequenceControl::from_bytes([b2, b3]),
-        ),
+        bar_control: BarControlFields::from_bytes([b0, b1]),
+        bar_information: crate::sequence::SequenceControl::from_bytes([b2, b3]),
     })
 }
 

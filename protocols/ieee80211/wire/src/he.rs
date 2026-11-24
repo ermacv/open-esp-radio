@@ -41,30 +41,20 @@ pub enum HeResourceUnit {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HeMuSigBNonMimoUser {
     NonMuMimo,
-    Scheduled {
-        station_id: u16,
-        nsts: u8,
-        beamformed: bool,
-        mcs: u8,
-        dcm: bool,
-        ldpc: bool,
-    },
+    /// A scheduled user: the field's station ID, NSTS, TXBF, MCS, DCM and
+    /// Coding, read from it.
+    Scheduled(SigBNonMimoUserFields),
 }
 
 impl HeMuSigBNonMimoUser {
-    pub const fn decode(word: u32) -> Self {
-        let station_id = SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).station_id();
-        if station_id == 0x07fe {
+    /// The STA-ID that marks a user field not scheduled in this RU.
+    const NON_MU_MIMO_STATION_ID: u16 = 0x07fe;
+
+    pub const fn decode(fields: SigBNonMimoUserFields) -> Self {
+        if fields.station_id() == Self::NON_MU_MIMO_STATION_ID {
             Self::NonMuMimo
         } else {
-            Self::Scheduled {
-                station_id,
-                nsts: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).nsts(),
-                beamformed: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).beamformed(),
-                mcs: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).mcs(),
-                dcm: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).dcm(),
-                ldpc: SigBNonMimoUserFields::from_bytes(word.to_le_bytes()).ldpc(),
-            }
+            Self::Scheduled(fields)
         }
     }
 }
@@ -81,17 +71,16 @@ pub struct HeMuSigBMimoUser {
     pub station_id: u16,
     pub spatial_configuration: u8,
     pub mcs: u8,
-    pub ldpc: bool,
+    pub coding: SigBCoding,
 }
 
 impl HeMuSigBMimoUser {
-    pub const fn decode(word: u32) -> Self {
+    pub const fn decode(fields: SigBMimoUserFields) -> Self {
         Self {
-            station_id: SigBMimoUserFields::from_bytes(word.to_le_bytes()).station_id(),
-            spatial_configuration: SigBMimoUserFields::from_bytes(word.to_le_bytes())
-                .spatial_configuration(),
-            mcs: SigBMimoUserFields::from_bytes(word.to_le_bytes()).mcs(),
-            ldpc: SigBMimoUserFields::from_bytes(word.to_le_bytes()).ldpc(),
+            station_id: fields.station_id(),
+            spatial_configuration: fields.spatial_configuration(),
+            mcs: fields.mcs(),
+            coding: fields.coding(),
         }
     }
 }
@@ -239,11 +228,16 @@ pub enum HeMuSigBUser {
 }
 
 impl HeMuSigBUser {
-    pub const fn decode(word: u32, compression: SigBCompression) -> Self {
+    /// The user field in `octets`, as `compression` lays it out.
+    pub const fn decode(octets: [u8; 4], compression: SigBCompression) -> Self {
         if matches!(compression, SigBCompression::Compressed) {
-            Self::Mimo(HeMuSigBMimoUser::decode(word))
+            Self::Mimo(HeMuSigBMimoUser::decode(SigBMimoUserFields::from_bytes(
+                octets,
+            )))
         } else {
-            Self::NonMimo(HeMuSigBNonMimoUser::decode(word))
+            Self::NonMimo(HeMuSigBNonMimoUser::decode(
+                SigBNonMimoUserFields::from_bytes(octets),
+            ))
         }
     }
 }
@@ -532,8 +526,8 @@ pub enum HeMcsNssSupport {
 
 impl HeMcsNssSupport {
     /// The support the MCS/NSS `map` advertises for one spatial stream.
-    const fn one_stream_from_map(map: u16) -> Self {
-        match HeMcsMap::from_bytes(map.to_le_bytes()).nss1().get() {
+    const fn one_stream_from_map(map: HeMcsMap) -> Self {
+        match map.nss1().get() {
             0 => Self::Mcs0To7,
             1 => Self::Mcs0To9,
             2 => Self::Mcs0To11,
@@ -616,8 +610,8 @@ impl HeDcmConstellation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeCapabilities {
     pub phy: HePhyCapabilities,
-    pub receive_mcs_map: u16,
-    pub transmit_mcs_map: u16,
+    pub receive_mcs_map: HeMcsMap,
+    pub transmit_mcs_map: HeMcsMap,
 }
 
 impl HeCapabilities {
@@ -912,8 +906,10 @@ pub fn parse_he_capabilities(element: &[u8]) -> Result<HeCapabilities, HeElement
     let mut reader = oer_portable_wire::Reader::new(element);
     reader.take(9).map_err(|_| HeElementError::TooShort)?;
     let phy = HePhyCapabilities::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
-    let receive_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
-    let transmit_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
+    let receive_mcs_map =
+        HeMcsMap::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
+    let transmit_mcs_map =
+        HeMcsMap::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
     Ok(HeCapabilities {
         phy,
         receive_mcs_map,
@@ -1146,7 +1142,7 @@ oer_portable_wire::bitfield! {
         pub beamformed, with_beamformed: bool = 14..15;
         pub mcs, with_mcs: u8 = 15..19;
         pub dcm, with_dcm: bool = 19..20;
-        pub ldpc, with_ldpc: bool = 20..21;
+        pub coding, with_coding: [SigBCoding] = 20..21;
     }
 }
 oer_portable_wire::bitfield! {
@@ -1156,8 +1152,14 @@ oer_portable_wire::bitfield! {
         pub station_id, with_station_id: u16 = 0..11;
         pub spatial_configuration, with_spatial_configuration: u8 = 11..15;
         pub mcs, with_mcs: u8 = 15..19;
-        pub ldpc, with_ldpc: bool = 20..21;
+        pub coding, with_coding: [SigBCoding] = 20..21;
     }
+}
+oer_portable_wire::bitfield! {
+    /// The Coding subfield of an HE-SIG-B user field: BCC or LDPC.
+    /// SOURCE: IEEE Std 802.11ax-2021, 27.3.11.8 (HE-SIG-B field, Table
+    /// 27-28 and Table 27-29).
+    pub enum SigBCoding: u8 { Bcc = 0, Ldpc = 1 }
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.4 (Supported HE-MCS And NSS Set field).

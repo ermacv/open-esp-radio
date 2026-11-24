@@ -51,54 +51,72 @@ pub enum HeCompressedBeamformingReportError {
 /// FCS, subtracts 21 bytes, divides by four and walks station words from
 /// offset 17. Removing the FCS produces the equivalent checked geometry
 /// `(mpdu.len() - 17) / 4`.
+/// An HE NDP Announcement: its header's fields and its STA Info fields.
+///
+/// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.19 (VHT/HE NDP Announcement frame
+/// format): Frame Control, Duration, RA, TA, Sounding Dialog Token, then
+/// the STA Info fields.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeNdpa<'a> {
-    header: &'a [u8; NDPA_HEADER_SIZE],
+    frame_control: FrameControlFields,
+    duration: crate::frame::DurationId,
+    receiver: [u8; 6],
+    transmitter: [u8; 6],
+    token: NdpaToken,
     stations: &'a [u8],
 }
 
 impl<'a> HeNdpa<'a> {
     pub fn parse(mpdu: &'a [u8]) -> Result<Self, HeNdpaError> {
         let mut reader = oer_portable_wire::Reader::new(mpdu);
-        let header = reader
-            .array::<NDPA_HEADER_SIZE>()
-            .map_err(|_| HeNdpaError::TooShort)?;
+        let too_short = |_| HeNdpaError::TooShort;
+        let frame_control = FrameControlFields::from_bytes(reader.read().map_err(too_short)?);
+        let duration = crate::frame::DurationId::from_bytes(reader.read().map_err(too_short)?);
+        let receiver = reader.read().map_err(too_short)?;
+        let transmitter = reader.read().map_err(too_short)?;
+        let token = NdpaToken::from_bytes(reader.read().map_err(too_short)?);
         let stations = reader.remaining();
         if stations.len() < HE_STA_INFO_SIZE {
             return Err(HeNdpaError::TooShort);
         }
-        let frame_control = FrameControlFields::from_bytes([header[0], header[1]]);
         if frame_control.type_and_subtype() != NDPA_FRAME_CONTROL.type_and_subtype() {
             return Err(HeNdpaError::NotNdpa);
         }
-        if !NdpaToken::from_bytes([header[16]]).he() {
+        if !token.he() {
             return Err(HeNdpaError::NotHe);
         }
         if !stations.len().is_multiple_of(HE_STA_INFO_SIZE) {
             return Err(HeNdpaError::MisalignedStationInfo);
         }
-        Ok(Self { header, stations })
+        Ok(Self {
+            frame_control,
+            duration,
+            receiver,
+            transmitter,
+            token,
+            stations,
+        })
     }
 
     pub const fn frame_control(self) -> FrameControlFields {
-        FrameControlFields::from_bytes([self.header[0], self.header[1]])
+        self.frame_control
     }
 
     pub const fn duration(self) -> u16 {
-        u16::from_le_bytes([self.header[2], self.header[3]])
+        self.duration.value().get()
     }
 
-    pub fn receiver_address(self) -> &'a [u8] {
-        &self.header[4..10]
+    pub const fn receiver_address(self) -> [u8; 6] {
+        self.receiver
     }
 
-    pub fn transmitter_address(self) -> &'a [u8] {
-        &self.header[10..16]
+    pub const fn transmitter_address(self) -> [u8; 6] {
+        self.transmitter
     }
 
     /// Six-bit sounding-dialog token decoded by the complete blob leaf.
     pub const fn dialog_token(self) -> u8 {
-        NdpaToken::from_bytes([self.header[16]]).token()
+        self.token.token()
     }
 
     pub fn stations(self) -> HeNdpaStationIterator<'a> {
@@ -123,40 +141,41 @@ impl<'a> HeNdpa<'a> {
 /// an independent blob decoder or the 802.11 specification closes them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeNdpaStationInfo {
-    raw: u32,
+    fields: NdpaStationFields,
 }
 
 impl HeNdpaStationInfo {
     pub const fn association_id(self) -> u16 {
-        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).association_id()
+        self.fields.association_id()
     }
 
-    pub const fn raw(self) -> u32 {
-        self.raw
+    /// The STA Info field.
+    pub const fn fields(self) -> NdpaStationFields {
+        self.fields
     }
 
     pub const fn resource_unit_start_index(self) -> u8 {
-        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).resource_unit_start_index()
+        self.fields.resource_unit_start_index()
     }
 
     pub const fn resource_unit_end_index(self) -> u8 {
-        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).resource_unit_end_index()
+        self.fields.resource_unit_end_index()
     }
 
     pub const fn feedback_type_and_ng_encoding(self) -> u8 {
-        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).feedback_type_and_ng_encoding()
+        self.fields.feedback_type_and_ng_encoding()
     }
 
     pub const fn disambiguation(self) -> bool {
-        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).disambiguation()
+        self.fields.disambiguation()
     }
 
     pub const fn codebook_size(self) -> bool {
-        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).codebook_size()
+        self.fields.codebook_size()
     }
 
     pub const fn nc_encoding(self) -> u8 {
-        NdpaStationFields::from_bytes(self.raw.to_le_bytes()).nc_encoding()
+        self.fields.nc_encoding()
     }
 }
 
@@ -199,7 +218,7 @@ impl HeNdpaEncoding<'_> {
             .ok_or(HeNdpaEncodingError::OutputTooShort)?;
         let header: [&[u8]; 5] = [
             &NDPA_FRAME_CONTROL.to_bytes(),
-            &self.duration.to_le_bytes(),
+            &crate::frame::DurationId::of(self.duration).to_bytes(),
             &self.receiver_address,
             &self.transmitter_address,
             &[NdpaToken::from_bytes([0])
@@ -238,7 +257,7 @@ impl Iterator for HeNdpaStationIterator<'_> {
         let rest = reader.remaining();
         self.remaining = rest;
         Some(HeNdpaStationInfo {
-            raw: u32::from_le_bytes(*word),
+            fields: NdpaStationFields::from_bytes(*word),
         })
     }
 
@@ -259,16 +278,15 @@ impl ExactSizeIterator for HeNdpaStationIterator<'_> {}
 /// it owns only the fixed control word needed to qualify the hardware report.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeCompressedBeamformingReport<'a> {
-    header: &'a [u8; MANAGEMENT_HEADER_SIZE],
-    mimo_control: u64,
+    header: crate::management::ManagementHeader,
+    mimo_control: MimoControlFields,
     average_snr: &'a [u8],
     feedback_matrices: &'a [u8],
 }
 
 impl<'a> HeCompressedBeamformingReport<'a> {
     const fn control_fields(self) -> MimoControlFields {
-        let [c0, c1, c2, c3, c4, _, _, _] = self.mimo_control.to_le_bytes();
-        MimoControlFields::from_bytes([c0, c1, c2, c3, c4])
+        self.mimo_control
     }
 
     pub fn parse(mpdu: &'a [u8]) -> Result<Self, HeCompressedBeamformingReportError> {
@@ -282,25 +300,24 @@ impl<'a> HeCompressedBeamformingReport<'a> {
             .array::<MANAGEMENT_HEADER_SIZE>()
             .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
         let action = reader.remaining();
-        let frame_control = FrameControlFields::from_bytes([header[0], header[1]]);
-        if frame_control.type_and_subtype() != ACTION_NO_ACK_FRAME_CONTROL.type_and_subtype() {
+        let header = crate::management::ManagementHeader::from_bytes(header);
+        if header.frame_control.type_and_subtype() != ACTION_NO_ACK_FRAME_CONTROL.type_and_subtype()
+        {
             return Err(HeCompressedBeamformingReportError::NotActionNoAck);
         }
         let mut reader = oer_portable_wire::Reader::new(action);
         let &[category, action] = reader
             .array::<2>()
             .map_err(|_| HeCompressedBeamformingReportError::TooShort)?;
-        let control = reader.remaining();
-        let [c0, c1, c2, c3, c4] = *control
-            .first_chunk::<HE_MIMO_CONTROL_SIZE>()
-            .ok_or(HeCompressedBeamformingReportError::TooShort)?;
+        let mimo_control = MimoControlFields::from_bytes(
+            reader
+                .read()
+                .map_err(|_| HeCompressedBeamformingReportError::TooShort)?,
+        );
         if category != HE_ACTION_CATEGORY || action != HE_COMPRESSED_BEAMFORMING_AND_CQI_ACTION {
             return Err(HeCompressedBeamformingReportError::NotHeCompressedBeamformingAndCqi);
         }
-        let mimo_control = u64::from_le_bytes([c0, c1, c2, c3, c4, 0, 0, 0]);
-        let average_snr_len = (MimoControlFields::from_bytes([c0, c1, c2, c3, c4]).columns()
-            as usize)
-            .saturating_add(1);
+        let average_snr_len = usize::from(mimo_control.columns()).saturating_add(1);
         let mut reader = oer_portable_wire::Reader::new(rest);
         let average_snr = reader
             .take(average_snr_len)
@@ -314,22 +331,20 @@ impl<'a> HeCompressedBeamformingReport<'a> {
         })
     }
 
-    pub fn receiver_address(self) -> &'a [u8] {
-        &self.header[4..10]
+    pub const fn receiver_address(self) -> [u8; 6] {
+        self.header.receiver
     }
 
-    pub fn transmitter_address(self) -> &'a [u8] {
-        &self.header[10..16]
+    pub const fn transmitter_address(self) -> [u8; 6] {
+        self.header.transmitter
     }
 
     pub const fn sequence_number(self) -> SequenceNumber {
-        SequenceNumber::from_sequence_control(crate::sequence::SequenceControl::from_bytes([
-            self.header[22],
-            self.header[23],
-        ]))
+        SequenceNumber::from_sequence_control(self.header.sequence_control)
     }
 
-    pub const fn mimo_control(self) -> u64 {
+    /// The HE MIMO Control field.
+    pub const fn mimo_control(self) -> MimoControlFields {
         self.mimo_control
     }
 
