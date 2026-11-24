@@ -643,3 +643,34 @@ fn the_window_holds_only_the_latest_built_message3() {
         RsnApEapol::Authorized
     ));
 }
+
+/// Every built Message 1 of a full window stays awaited: the original and
+/// each retransmission, whichever the station answers.
+#[test]
+fn every_built_message1_of_a_full_window_is_awaited() {
+    let key_data = key_data();
+    let ptk = ptk();
+    for answered in 0..RSN_AP_REPLAY_WINDOW as u64 {
+        let mut handshake = handshake(&STATION_RSN);
+        for _ in 1..RSN_AP_REPLAY_WINDOW {
+            handshake
+                .retransmit::<512, _, _>(material(&key_data, 0), &mut SoftwareAes128)
+                .unwrap();
+        }
+        assert!(
+            matches!(
+                handshake
+                    .on_eapol(
+                        &pmk(),
+                        message2_at(&STATION_RSN, &ptk, REPLAY + answered),
+                        material(&key_data, 0),
+                        &mut SoftwareAes128
+                    )
+                    .unwrap(),
+                RsnApEapol::Message3(..)
+            ),
+            "the Message 1 under counter {} is awaited",
+            REPLAY + answered
+        );
+    }
+}

@@ -234,6 +234,8 @@ fn a_lost_message4_is_recovered_by_a_message3_under_a_larger_counter() {
         ApWpa2Progress::AuthorizePeer
     ));
     assert_eq!(service.next_wpa2_retry_deadline(), None);
+    // Message 4 verified: the peer may be authorized before its port opens.
+    assert!(service.wpa2_authorized(PEER).unwrap());
     // A duplicate after completion neither authorizes nor installs again.
     let again =
         OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, duplicate.as_bytes())
@@ -248,6 +250,7 @@ fn a_lost_message4_is_recovered_by_a_message3_under_a_larger_counter() {
         ApWpa2Progress::None
     ));
     assert!(service.is_authorized(PEER));
+    assert!(service.wpa2_authorized(PEER).unwrap());
 }
 
 #[test]

@@ -338,15 +338,10 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             ApHandshake::Absent => return Err(ApServiceError::WrongPeerPhase.into()),
         }
         // Message 3 is built in the step that verifies Message 2, so its key
-        // data is built before every received frame: while Message 2 is
-        // awaited with the IGTK's current IPN, which a built Message 3 then
-        // keeps for its retries; after it with the kept one.
-        let management_ipn = match &self.checked_peer(peer)?.handshake {
-            ApHandshake::Handshaking(handshake) if handshake.ptk().is_none() => {
-                self.igtk().map_or([0; 6], RsnIgtk::packet_number)
-            }
-            _ => self.message3_management_ipn(index)?,
-        };
+        // data is built before every received frame. Only a handshake that
+        // awaits Message 2 builds it, with the IGTK's current IPN, which the
+        // built Message 3 then keeps for its retries.
+        let management_ipn = self.igtk().map_or([0; 6], RsnIgtk::packet_number);
         let plain = self.message3_key_data(management_ipn)?;
         let (handshake, pmk) = self.handshake_and_pmk(peer)?;
         let step = match handshake.on_eapol(
