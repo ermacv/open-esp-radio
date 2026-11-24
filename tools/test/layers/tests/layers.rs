@@ -6375,11 +6375,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/ieee80211/core/security/rsn/src/state/supplicant.rs",
         1,
         BY_FINAL_CRATES,
@@ -8138,10 +8133,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.authenticator",
-        BY_CONTROLLER,
-    ),
-    (
         "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.ht",
         BY_CONTROLLER,
     ),
@@ -8346,14 +8337,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/security/rsn/src/authenticator.rs::RsnAuthenticator.association_security_binding",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/authenticator.rs::RsnAuthenticator.pending_ptk",
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.accepted_scalar",
         BY_FINAL_CRATES,
     ),
@@ -8379,10 +8362,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/sae.rs::SaeComebackTokens.key_drawn",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::RsnApState.latest_built",
         BY_FINAL_CRATES,
     ),
     (

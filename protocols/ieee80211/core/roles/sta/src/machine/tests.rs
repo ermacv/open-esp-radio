@@ -2494,12 +2494,7 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
             plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
             plain.extend_from_slice(&[0x99; 16]);
             plain.extend_from_slice(&[0xdd, 0]);
-            let wrapped =
-                oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-                    ptk.kek(),
-                    &plain,
-                )
-                .unwrap();
+            let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
@@ -2629,11 +2624,7 @@ fn wpa2_connected_by<'id, const G: usize>(
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
     plain.extend_from_slice(&[0x99; 16]);
     plain.extend_from_slice(&[0xdd, 0]);
-    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-        ptk.kek(),
-        &plain,
-    )
-    .unwrap();
+    let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
     let message3 =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -2700,11 +2691,7 @@ fn m4_refused_before_admission_never_completes_the_handshake() {
         plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
         plain.extend_from_slice(&[0x99; 16]);
         plain.extend_from_slice(&[0xdd, 0]);
-        let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-            ptk.kek(),
-            &plain,
-        )
-        .unwrap();
+        let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
         let message3 =
             RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                 .unwrap()
@@ -2748,11 +2735,7 @@ fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
             0x80, 0xe4,
         ]);
         plain.extend_from_slice(&[0xdd, 0]);
-        let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-            ptk.kek(),
-            &plain,
-        )
-        .unwrap();
+        let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
         let message3 = RsnTxFrame::<512>::message3(
             Akm::Psk,
             LOCAL,
@@ -2788,11 +2771,7 @@ fn group_message1(
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, key_id, 0x00]);
     plain.extend_from_slice(&[0x77; 16]);
     plain.extend_from_slice(&[0xdd, 0, 0, 0, 0, 0, 0, 0]);
-    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-        ptk.kek(),
-        &plain,
-    )
-    .unwrap();
+    let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
     let message =
         RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -3294,12 +3273,7 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
             plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
             plain.extend_from_slice(&[0x99; 16]);
             plain.extend_from_slice(&[0xdd, 0]);
-            let wrapped =
-                oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-                    ptk.kek(),
-                    &plain,
-                )
-                .unwrap();
+            let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
@@ -3851,12 +3825,7 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                 plain.extend_from_slice(&[0xdd, 22, 0, 0x0f, 0xac, 1, 1, 0]);
                 plain.extend_from_slice(&[0x99; 16]);
                 plain.extend_from_slice(&[0xdd, 0]);
-                let wrapped =
-                    oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-                        ptk.kek(),
-                        &plain,
-                    )
-                    .unwrap();
+                let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
                 let message3 = RsnTxFrame::<512>::message3(
                     Akm::Psk,
                     LOCAL,
@@ -4235,11 +4204,7 @@ fn retry_message3(
     plain.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 0x01, 0x01, 0x00]);
     plain.extend_from_slice(&[material; 16]);
     plain.extend_from_slice(&[0xdd, 0]);
-    let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-        ptk.kek(),
-        &plain,
-    )
-    .unwrap();
+    let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
     let message =
         RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, counter, ANONCE, [0; 8], wrapped.as_bytes())
             .unwrap()
@@ -5132,11 +5097,7 @@ fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
         while plain.len() % 8 != 0 {
             plain.push(if plain.len() == 76 { 0xdd } else { 0 });
         }
-        let wrapped = oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-            ptk.kek(),
-            &plain,
-        )
-        .unwrap();
+        let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
         let m3 =
             RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                 .unwrap()
@@ -5186,12 +5147,7 @@ fn the_pairwise_installation_names_the_associations_spp() {
             plain.extend_from_slice(&[0xdd, 22, 0, 0x0f, 0xac, 1, 1, 0]);
             plain.extend_from_slice(&[0x99; 16]);
             plain.extend_from_slice(&[0xdd, 0]);
-            let wrapped =
-                oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap(
-                    ptk.kek(),
-                    &plain,
-                )
-                .unwrap();
+            let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
             let message3 =
                 RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
                     .unwrap()
@@ -5692,4 +5648,24 @@ fn block_ack_agreements_need_both_qos_and_an_ht_format() {
             assert_eq!(super::block_ack_admission(connected), expected);
         }
     });
+}
+
+/// RFC 3394 wrap over the software engine, as a composition runs it.
+fn software_wrap(
+    kek: &[u8; 16],
+    plaintext: &[u8],
+) -> Result<
+    oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
+    oer_portable_crypto::rfc3394::KeyWrapError,
+> {
+    let plaintext = oer_portable_crypto::KeyData::try_copy(plaintext)
+        .map_err(|_| oer_portable_crypto::rfc3394::KeyWrapError::CapacityExceeded)?;
+    oer_portable_crypto::block::wrap_now(
+        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+        oer_portable_crypto::KeyWrapRequest::new(
+            oer_portable_crypto::Aes128Key::copy_from(kek),
+            plaintext,
+        ),
+    )
+    .into_wrapped()
 }

@@ -363,13 +363,19 @@ impl<'a> EapolKey<'a> {
 /// and Key Identifier are zero and its Key MIC is written afterwards.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EapolKeyFields<'a> {
+    pub fixed: EapolKeyFixedFields,
+    pub key_data: &'a [u8],
+}
+
+/// The fields of an EAPOL-Key packet before its Key Data.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EapolKeyFixedFields {
     pub protocol_version: u8,
     pub key_information: KeyInformation,
     pub key_length: u16,
     pub replay_counter: u64,
     pub nonce: [u8; 32],
     pub key_rsc: [u8; 8],
-    pub key_data: &'a [u8],
 }
 
 /// An EAPOL-Key packet these fields cannot make, or a buffer that cannot
@@ -390,6 +396,37 @@ pub struct EapolKeyBuffer<const N: usize> {
     length: oer_portable_wire::PrefixLength<N>,
 }
 
+/// The EAPOL header and the EAPOL-Key body before its Key Data, with a
+/// zero Key MIC: the one place the packet's layout is written.
+///
+/// SOURCE: IEEE Std 802.1X-2020, 11.3 (EAPOL PDU format); IEEE Std
+/// 802.11-2020, 12.7.2, Figure 12-32 (EAPOL-Key frame).
+fn fixed_part(
+    fields: &EapolKeyFixedFields,
+    body_len: u16,
+    key_data_len: u16,
+) -> [u8; EAPOL_KEY_PACKET_LEN] {
+    let layout = [
+        &[fields.protocol_version, EAPOL_PACKET_TYPE_KEY][..],
+        &EapolLength::of(body_len).to_bytes(),
+        &[RSN_KEY_DESCRIPTOR_TYPE],
+        &fields.key_information.to_bytes(),
+        &EapolLength::of(fields.key_length).to_bytes(),
+        &KeyReplayCounter::of(fields.replay_counter).to_bytes(),
+        &fields.nonce,
+        &[0; 16],
+        &fields.key_rsc,
+        &[0; 8],
+        &ZERO_MIC,
+        &EapolLength::of(key_data_len).to_bytes(),
+    ];
+    let mut part = [0; EAPOL_KEY_PACKET_LEN];
+    for (target, source) in part.iter_mut().zip(layout.into_iter().flatten()) {
+        *target = *source;
+    }
+    part
+}
+
 impl<const N: usize> EapolKeyBuffer<N> {
     /// Encode `fields` with a zero Key MIC; a refusal leaves nothing.
     pub fn encode(fields: &EapolKeyFields<'_>) -> Result<Self, EapolEncodeError> {
@@ -404,28 +441,41 @@ impl<const N: usize> EapolKeyBuffer<N> {
             .ok_or(EapolEncodeError::KeyDataTooLong)?;
         let length = oer_portable_wire::PrefixLength::new(required)
             .ok_or(EapolEncodeError::BufferTooSmall { required })?;
-        let mut bytes = [0; N];
-        let mut writer = oer_portable_wire::Writer::new(&mut bytes);
-        for field in [
-            &[fields.protocol_version, EAPOL_PACKET_TYPE_KEY][..],
-            &EapolLength::of(body_len).to_bytes(),
-            &[RSN_KEY_DESCRIPTOR_TYPE],
-            &fields.key_information.to_bytes(),
-            &EapolLength::of(fields.key_length).to_bytes(),
-            &KeyReplayCounter::of(fields.replay_counter).to_bytes(),
-            &fields.nonce,
-            &[0; 16],
-            &fields.key_rsc,
-            &[0; 8],
-            &ZERO_MIC,
-            &EapolLength::of(key_data_len).to_bytes(),
+        Ok(Self::place(
+            &fixed_part(&fields.fixed, body_len, key_data_len),
             fields.key_data,
-        ] {
-            writer
-                .write(field)
-                .map_err(|_| EapolEncodeError::BufferTooSmall { required })?;
+            length,
+        ))
+    }
+
+    /// Encode a packet without Key Data, with a zero Key MIC. It cannot
+    /// refuse: the buffer's room for it is checked when `N` is chosen.
+    pub fn encode_without_key_data(fields: &EapolKeyFixedFields) -> Self {
+        const BODY_LEN: u16 = 95;
+        const {
+            if BODY_LEN as usize != EAPOL_KEY_FIXED_LEN {
+                panic!("the EAPOL-Key body without Key Data");
+            }
         }
-        Ok(Self { bytes, length })
+        Self::place(
+            &fixed_part(fields, BODY_LEN, 0),
+            &[],
+            oer_portable_wire::PrefixLength::<N>::constant::<EAPOL_KEY_PACKET_LEN>(),
+        )
+    }
+
+    /// The packet of `fixed` and `key_data`, whose length `length` proves
+    /// fits the buffer: nothing of it is cut.
+    fn place(
+        fixed: &[u8; EAPOL_KEY_PACKET_LEN],
+        key_data: &[u8],
+        length: oer_portable_wire::PrefixLength<N>,
+    ) -> Self {
+        let mut bytes = [0; N];
+        for (target, source) in bytes.iter_mut().zip(fixed.iter().chain(key_data)) {
+            *target = *source;
+        }
+        Self { bytes, length }
     }
 
     /// The packet.
@@ -635,6 +685,71 @@ impl<'a> Iterator for KeyDataElements<'a> {
 mod tests {
     use super::*;
 
+    /// The encoder lays out every field where the parser reads it: each
+    /// field holds a value no other field holds, and the Key Data closes
+    /// the packet.
+    #[test]
+    fn every_encoded_field_is_read_back_from_its_place() {
+        let mut nonce = [0; 32];
+        for (index, octet) in (0x40_u8..).zip(nonce.iter_mut()) {
+            *octet = index;
+        }
+        let key_rsc = [0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98];
+        let key_data = [0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda];
+        let fixed = EapolKeyFixedFields {
+            protocol_version: 2,
+            key_information: KeyInformation::from_raw(0x13ca),
+            key_length: 0x0110,
+            replay_counter: 0x0102_0304_0506_0708,
+            nonce,
+            key_rsc,
+        };
+        let packet = EapolKeyBuffer::<160>::encode(&EapolKeyFields {
+            fixed,
+            key_data: &key_data,
+        })
+        .unwrap();
+        let bytes = packet.as_bytes();
+        assert_eq!(bytes.len(), EAPOL_KEY_PACKET_LEN + key_data.len());
+        assert_eq!(bytes.get(EAPOL_KEY_PACKET_LEN..), Some(&key_data[..]));
+        let key = EapolKey::parse(bytes).unwrap();
+        assert_eq!(key.protocol_version(), 2);
+        assert_eq!(key.key_information().raw(), 0x13ca);
+        assert_eq!(key.key_length(), 0x0110);
+        assert_eq!(key.replay_counter(), 0x0102_0304_0506_0708);
+        assert_eq!(key.nonce(), &nonce);
+        assert_eq!(key.key_iv(), &[0; 16]);
+        assert_eq!(key.key_rsc(), &key_rsc);
+        assert_eq!(key.key_identifier(), &[0; 8]);
+        assert_eq!(key.mic(), &[0; EAPOL_KEY_MIC_LEN]);
+        assert_eq!(key.key_data(), &key_data);
+    }
+
+    /// A packet without Key Data is the packet `encode` writes for empty
+    /// Key Data, in a buffer of exactly its length.
+    #[test]
+    fn a_packet_without_key_data_is_the_encoded_one() {
+        let fixed = EapolKeyFixedFields {
+            protocol_version: 2,
+            key_information: KeyInformation::from_raw(0x008a),
+            key_length: 16,
+            replay_counter: 0x0102_0304_0506_0708,
+            nonce: [0x5a; 32],
+            key_rsc: [0x3c; 8],
+        };
+        let encoded = EapolKeyBuffer::<EAPOL_KEY_PACKET_LEN>::encode(&EapolKeyFields {
+            fixed,
+            key_data: &[],
+        })
+        .unwrap();
+        let fixed_packet = EapolKeyBuffer::<EAPOL_KEY_PACKET_LEN>::encode_without_key_data(&fixed);
+        assert_eq!(fixed_packet.as_bytes(), encoded.as_bytes());
+        assert_eq!(fixed_packet.as_bytes().len(), EAPOL_KEY_PACKET_LEN);
+        // In a larger buffer the packet is the same prefix.
+        let larger = EapolKeyBuffer::<512>::encode_without_key_data(&fixed);
+        assert_eq!(larger.as_bytes(), encoded.as_bytes());
+    }
+
     #[test]
     fn key_information_round_trips_big_endian() {
         let info = KeyInformation::EMPTY
@@ -683,12 +798,14 @@ mod tests {
     /// replay counter 9, a MIC of 0xa5 and no Key Data.
     fn message4() -> EapolKeyBuffer<128> {
         EapolKeyBuffer::encode(&EapolKeyFields {
-            protocol_version: 1,
-            key_information: KeyInformation::from_raw(0x030a),
-            key_length: 0,
-            replay_counter: 9,
-            nonce: [0; 32],
-            key_rsc: [0; 8],
+            fixed: EapolKeyFixedFields {
+                protocol_version: 1,
+                key_information: KeyInformation::from_raw(0x030a),
+                key_length: 0,
+                replay_counter: 9,
+                nonce: [0; 32],
+                key_rsc: [0; 8],
+            },
             key_data: &[],
         })
         .unwrap()
@@ -698,12 +815,14 @@ mod tests {
     #[test]
     fn the_key_length_reads_back_whole() {
         let packet = EapolKeyBuffer::<128>::encode(&EapolKeyFields {
-            protocol_version: 2,
-            key_information: KeyInformation::from_raw(0x008a),
-            key_length: 0x0110,
-            replay_counter: 1,
-            nonce: [0; 32],
-            key_rsc: [0; 8],
+            fixed: EapolKeyFixedFields {
+                protocol_version: 2,
+                key_information: KeyInformation::from_raw(0x008a),
+                key_length: 0x0110,
+                replay_counter: 1,
+                nonce: [0; 32],
+                key_rsc: [0; 8],
+            },
             key_data: &[],
         })
         .unwrap();
@@ -769,12 +888,14 @@ mod tests {
         );
         assert_eq!(
             EapolKeyBuffer::<98>::encode(&EapolKeyFields {
-                protocol_version: 1,
-                key_information: KeyInformation::EMPTY,
-                key_length: 0,
-                replay_counter: 0,
-                nonce: [0; 32],
-                key_rsc: [0; 8],
+                fixed: EapolKeyFixedFields {
+                    protocol_version: 1,
+                    key_information: KeyInformation::EMPTY,
+                    key_length: 0,
+                    replay_counter: 0,
+                    nonce: [0; 32],
+                    key_rsc: [0; 8],
+                },
                 key_data: &[],
             }),
             Err(EapolEncodeError::BufferTooSmall { required: 99 })

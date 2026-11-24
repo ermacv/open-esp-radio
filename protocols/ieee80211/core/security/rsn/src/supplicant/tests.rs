@@ -7,9 +7,7 @@ use crate::{
     frames::{RsnGtk, RsnPlainKeyData},
     keys::RsnKeyKind,
 };
-use oer_protocols_ieee80211_core_security_cipher::aes::{
-    RSN_KEY_DATA_CAPACITY, SoftwareAes128, software_aes128_key_wrap,
-};
+use oer_protocols_ieee80211_core_security_cipher::aes::{RSN_KEY_DATA_CAPACITY, SoftwareAes128};
 
 const LOCAL: [u8; 6] = [1; 6];
 const AP: [u8; 6] = [2; 6];
@@ -50,7 +48,7 @@ fn encrypted_message3(
     key_rsc: [u8; 8],
     plain_key_data: &[u8],
 ) -> crate::OwnedEapolFrame<512> {
-    let wrapped = software_aes128_key_wrap(ptk.kek(), plain_key_data).unwrap();
+    let wrapped = software_wrap(ptk.kek(), plain_key_data).unwrap();
     let frame = RsnTxFrame::<512>::message3(
         crate::Akm::Psk,
         LOCAL,
@@ -68,7 +66,7 @@ fn encrypted_message3(
 /// The key data of the tests' Group Message 1: one GTK KDE (key 1, bytes
 /// 0x6a) wrapped under `ptk`'s KEK.
 fn group_key_data(ptk: &Ptk) -> oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData {
-    software_aes128_key_wrap(ptk.kek(), &group_kde(1, 0x6a)).unwrap()
+    software_wrap(ptk.kek(), &group_kde(1, 0x6a)).unwrap()
 }
 
 enum GroupStep {
@@ -1019,9 +1017,7 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
         LOCAL,
         3,
         [9; 8],
-        software_aes128_key_wrap(ptk.kek(), &[0; 24])
-            .unwrap()
-            .as_bytes(),
+        software_wrap(ptk.kek(), &[0; 24]).unwrap().as_bytes(),
     )
     .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
@@ -1107,4 +1103,24 @@ fn management_frames_are_protected_only_when_both_elements_are_capable() {
             RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, own, authenticator, &[]).unwrap();
         assert_eq!(supplicant.group_management(), expected);
     }
+}
+
+/// RFC 3394 wrap over the software engine, as a composition runs it.
+fn software_wrap(
+    kek: &[u8; 16],
+    plaintext: &[u8],
+) -> Result<
+    oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
+    oer_portable_crypto::rfc3394::KeyWrapError,
+> {
+    let plaintext = oer_portable_crypto::KeyData::try_copy(plaintext)
+        .map_err(|_| oer_portable_crypto::rfc3394::KeyWrapError::CapacityExceeded)?;
+    oer_portable_crypto::block::wrap_now(
+        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+        oer_portable_crypto::KeyWrapRequest::new(
+            oer_portable_crypto::Aes128Key::copy_from(kek),
+            plaintext,
+        ),
+    )
+    .into_wrapped()
 }

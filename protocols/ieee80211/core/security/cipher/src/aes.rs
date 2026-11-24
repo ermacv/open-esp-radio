@@ -12,7 +12,6 @@ use ::aes::{
 use oer_portable_crypto::{
     Aes128Key, KeyData,
     block::{Aes128Blocks, Block, BlockCipher},
-    rfc3394::KeyWrapError,
 };
 use zeroize::Zeroize;
 
@@ -50,21 +49,6 @@ impl BlockCipher for SoftwareAes128Keyed {
         *block = array.into();
         array.zeroize();
     }
-}
-
-/// Wrap a bounded WPA2 key-data plaintext with RFC 3394 under an AES-128 KEK.
-///
-/// WPA2 Message 3 key data is already padded to a multiple of eight bytes by
-/// the frame builder. Inputs outside the RFC 3394 domain fail before output
-/// is exposed.
-pub fn software_aes128_key_wrap(
-    kek: &[u8; 16],
-    plaintext: &[u8],
-) -> Result<RsnKeyData, KeyWrapError> {
-    let key = Aes128Key::copy_from(kek);
-    let mut cipher = SoftwareAes128.load_key(&key);
-    drop(key);
-    oer_portable_crypto::rfc3394::wrap(&mut cipher, plaintext)
 }
 
 #[cfg(test)]

@@ -3,7 +3,9 @@
 use super::*;
 use crate::AkmKeys;
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
-use oer_protocols_ieee80211_wire::eapol::{EapolEncodeError, EapolKeyBuffer, EapolKeyFields};
+use oer_protocols_ieee80211_wire::eapol::{
+    EapolEncodeError, EapolKeyBuffer, EapolKeyFields, EapolKeyFixedFields,
+};
 
 /// The Key Length field these EAPOL-Key frames carry: `RSN_GTK_LEN`
 /// octets (IEEE Std 802.11-2020, 12.7.2).
@@ -18,7 +20,7 @@ const _: () = {
 pub struct RsnTxFrame<const N: usize = RSN_TX_EAPOL_CAPACITY> {
     interface: RsnInterface,
     peer: [u8; 6],
-    retransmission: bool,
+    pub(crate) retransmission: bool,
     packet: EapolKeyBuffer<N>,
 }
 
@@ -43,6 +45,33 @@ impl<const N: usize> RsnTxFrame<N> {
             [0; 8],
             &[],
         )
+    }
+
+    /// Message 1 of a nonce the caller proved nonzero. It cannot refuse:
+    /// a Message 1 carries no Key Data, and its room in `N` is checked when
+    /// `N` is chosen.
+    pub(crate) fn authenticator_message1(
+        akm: Akm,
+        peer: [u8; 6],
+        replay_counter: u64,
+        authenticator_nonce: [u8; 32],
+    ) -> Self {
+        Self {
+            interface: RsnInterface::AccessPoint,
+            peer,
+            retransmission: false,
+            packet: EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
+                protocol_version: 2,
+                key_information: KeyInformation::EMPTY
+                    .with_descriptor_version(akm.key_descriptor_version())
+                    .with_pairwise(true)
+                    .with_ack(true),
+                key_length: GTK_KEY_LENGTH,
+                replay_counter,
+                nonce: authenticator_nonce,
+                key_rsc: [0; 8],
+            }),
+        }
     }
 
     pub fn message2<const R: usize>(
@@ -196,12 +225,14 @@ impl<const N: usize> RsnTxFrame<N> {
             return Err(RsnFrameError::ZeroNonce);
         }
         let packet = EapolKeyBuffer::encode(&EapolKeyFields {
-            protocol_version,
-            key_information: key_info,
-            key_length,
-            replay_counter,
-            nonce,
-            key_rsc,
+            fixed: EapolKeyFixedFields {
+                protocol_version,
+                key_information: key_info,
+                key_length,
+                replay_counter,
+                nonce,
+                key_rsc,
+            },
             key_data,
         })
         .map_err(|error| match error {
@@ -304,35 +335,6 @@ pub fn build_sta_action_frame<const N: usize, const R: usize>(
             RsnTxFrame::message4(state.akm(), *state.peer(), transmit.replay_counter)
         }
         RsnTxMessage::PairwiseMessage1 | RsnTxMessage::PairwiseMessage3 => {
-            Err(RsnFrameError::UnexpectedTransmitAction)
-        }
-    }?;
-    frame.retransmission = transmit.retransmission;
-    Ok(frame)
-}
-
-pub fn build_ap_action_frame<const N: usize>(
-    state: &RsnApState,
-    transmit: RsnTransmit,
-    key_rsc: [u8; 8],
-    encrypted_key_data: &[u8],
-) -> Result<RsnTxFrame<N>, RsnFrameError> {
-    let mut frame = match transmit.message {
-        RsnTxMessage::PairwiseMessage1 => RsnTxFrame::message1(
-            state.akm(),
-            *state.peer(),
-            transmit.replay_counter,
-            *state.authenticator_nonce(),
-        ),
-        RsnTxMessage::PairwiseMessage3 => RsnTxFrame::message3(
-            state.akm(),
-            *state.peer(),
-            transmit.replay_counter,
-            *state.authenticator_nonce(),
-            key_rsc,
-            encrypted_key_data,
-        ),
-        RsnTxMessage::PairwiseMessage2 | RsnTxMessage::PairwiseMessage4 => {
             Err(RsnFrameError::UnexpectedTransmitAction)
         }
     }?;

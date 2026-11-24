@@ -35,14 +35,17 @@ use crate::security_policy::ApSecurityPolicy;
 use oer_protocols_ieee80211_core_security_rsn::pmksa::{Pmksa, PmksaCache};
 use oer_protocols_ieee80211_core_security_rsn::{
     OwnedEapolFrame, Pmk, Ptk, PtkContext,
-    authenticator::{RsnAuthenticator, RsnAuthenticatorError, RsnAuthenticatorStep},
+    authenticator::{
+        Message3Material, RsnApAuthorized, RsnApEapol, RsnApError, RsnApHandshake, RsnApRetransmit,
+        RsnApStart,
+    },
     element::{ValidatedRsnElement, validate_rsn_element},
     frames::{
         OwnedAssociationSecurityIes, RSN_PLAIN_KEY_DATA_CAPACITY, RsnFrameError, RsnGtk, RsnIgtk,
         RsnPlainKeyData, RsnTxFrame,
     },
     retry::{RsnRetry, RsnRetryAction, RsnRetryAlarm, RsnRetryConfig, RsnRetryError},
-    state::{RsnApPhase, RsnApState, RsnStateError},
+    state::RsnStateError,
 };
 use oer_protocols_ieee80211_wire::beacon::{TimAssociationId, TimBitmapError, TimVirtualBitmap};
 use oer_protocols_ieee80211_wire::ht::HtPeerCapabilities;
@@ -391,7 +394,6 @@ pub enum ApWpa2Error {
     Service(ApServiceError),
     Frame(RsnFrameError),
     KeyWrap(KeyWrapError),
-    MissingPairwiseKey,
     UnexpectedAction,
     Retry(RsnRetryError),
     /// The AES engine refused an EAPOL-Key MIC's key or block.
@@ -448,17 +450,14 @@ impl From<KeyWrapError> for ApWpa2Error {
     }
 }
 
-impl From<RsnAuthenticatorError> for ApWpa2Error {
-    fn from(error: RsnAuthenticatorError) -> Self {
+impl From<RsnApError> for ApWpa2Error {
+    fn from(error: RsnApError) -> Self {
         match error {
-            RsnAuthenticatorError::Rejected(error) | RsnAuthenticatorError::State(error) => {
-                error.into()
-            }
-            RsnAuthenticatorError::Frame(error) => Self::Frame(error),
-            RsnAuthenticatorError::KeyWrap(error) => Self::KeyWrap(error),
-            RsnAuthenticatorError::MissingPairwiseKey => Self::MissingPairwiseKey,
-            RsnAuthenticatorError::UnexpectedAction => Self::UnexpectedAction,
-            RsnAuthenticatorError::Engine(error) => Self::Engine(error),
+            RsnApError::Rejected(error) => error.into(),
+            RsnApError::ReplayCounterExhausted => RsnStateError::ReplayCounterExhausted.into(),
+            RsnApError::Frame(error) => Self::Frame(error),
+            RsnApError::KeyWrap(error) => Self::KeyWrap(error),
+            RsnApError::Engine(error) => Self::Engine(error),
         }
     }
 }
@@ -482,13 +481,25 @@ impl From<RsnStateError> for ApServiceError {
     }
 }
 
+/// A peer's four-way handshake, by what exists of it.
+enum ApHandshake {
+    /// No RSN association.
+    Absent,
+    /// The RSN association is accepted and its response is not yet on the
+    /// air: what Message 1 starts from.
+    Associated(RsnApStart),
+    Handshaking(RsnApHandshake),
+    /// The controlled port is open; the handshake and its keys are gone.
+    Authorized(RsnApAuthorized),
+}
+
 struct ApPeer {
     address: [u8; 6],
     association_id: u16,
     association_epoch: u32,
     phase: ApPeerPhase,
     /// The four-way handshake of an RSN association.
-    authenticator: Option<RsnAuthenticator>,
+    handshake: ApHandshake,
     /// The PMK of a WPA3 station: from its accepted SAE exchange, or the
     /// cached one its association resumed.
     pmk: Option<Pmk>,
@@ -647,7 +658,7 @@ impl ApPeer {
             association_id,
             association_epoch,
             phase: ApPeerPhase::Authenticated,
-            authenticator: None,
+            handshake: ApHandshake::Absent,
             pmk: None,
             pmkid: None,
             wpa2_retry: new_ap_wpa2_retry(),
@@ -722,7 +733,7 @@ const fn new_ap_wpa2_retry() -> RsnRetry {
         // Every transmission of a step, the original and each retry, stays
         // in the authenticator's window of awaited replay counters.
         if AP_WPA2_RETRY_ATTEMPTS as usize + 1
-            > oer_protocols_ieee80211_core_security_rsn::state::RSN_AP_REPLAY_WINDOW
+            > oer_protocols_ieee80211_core_security_rsn::authenticator::RSN_AP_REPLAY_WINDOW
         {
             panic!("the AP WPA2 retries exceed the awaited replay window");
         }

@@ -7,8 +7,8 @@
 //! on it.
 
 use crate::{
-    KeyData, KeyUnwrapError, KeyUnwrapResponse,
-    block::{BlockCipher, BlockEngine, BlockError},
+    KeyData, KeyUnwrapError, KeyUnwrapResponse, KeyWrapResponse,
+    block::{BlockEngine, BlockError},
 };
 use zeroize::Zeroize;
 
@@ -164,43 +164,93 @@ pub enum KeyWrapError {
     InvalidLength,
     /// The ciphertext, one semiblock longer, does not fit `N`.
     CapacityExceeded,
+    /// A block engine failed; the buffer and intermediate state are erased.
+    Engine(BlockError),
 }
 
-/// Wrap `plaintext` (RFC 3394 §2.2.1, index-based form) into a buffer of
-/// capacity `N`. Inputs outside the domain fail before a block operation.
-pub fn wrap<const N: usize>(
-    cipher: &mut impl BlockCipher,
-    plaintext: &[u8],
-) -> Result<KeyData<N>, KeyWrapError> {
-    if plaintext.len() < 2 * SEMIBLOCK || !plaintext.len().is_multiple_of(SEMIBLOCK) {
-        return Err(KeyWrapError::InvalidLength);
+/// Wrap `plaintext` (`n >= 2` semiblocks, RFC 3394 §2.2.1, index-based
+/// form) in place in its buffer of capacity `N`, encrypting each block over
+/// the engine `load` returns. A length refusal returns before `load` runs; a
+/// refused key or block ends the operation with [`KeyWrapError::Engine`].
+/// The engine is dropped after the last block, the integrity register and the
+/// block are erased on every exit, and a refusal clears the buffer.
+pub fn wrap<K: BlockEngine, const N: usize>(
+    plaintext: KeyData<N>,
+    load: impl FnOnce() -> Result<K, BlockError>,
+) -> KeyWrapResponse<N> {
+    let mut data = plaintext;
+    let plain = data.len;
+    if plain < 2 * SEMIBLOCK || !plain.is_multiple_of(SEMIBLOCK) {
+        return refuse_wrap(data, KeyWrapError::InvalidLength);
     }
-    let len = plaintext
-        .len()
-        .checked_add(SEMIBLOCK)
-        .ok_or(KeyWrapError::CapacityExceeded)?;
-    if len > N {
-        return Err(KeyWrapError::CapacityExceeded);
+    let Some(len) = plain.checked_add(SEMIBLOCK).filter(|len| *len <= N) else {
+        return refuse_wrap(data, KeyWrapError::CapacityExceeded);
+    };
+    let Ok(semiblocks) = u64::try_from(plain / SEMIBLOCK) else {
+        return refuse_wrap(data, KeyWrapError::CapacityExceeded);
+    };
+    // Make room for the integrity register: `R[1..=n]` one semiblock on.
+    let mut source = plain;
+    while source > 0 {
+        source = source.saturating_sub(1);
+        let target = source.saturating_add(SEMIBLOCK);
+        match (data.bytes.get(source).copied(), data.bytes.get_mut(target)) {
+            (Some(byte), Some(out)) => *out = byte,
+            _ => return refuse_wrap(data, KeyWrapError::CapacityExceeded),
+        }
     }
-    let mut output = KeyData::<N>::cleared();
-    output.len = len;
-    for (out, byte) in output.bytes.iter_mut().skip(SEMIBLOCK).zip(plaintext) {
-        *out = *byte;
-    }
-    let semiblocks = (plaintext.len() / SEMIBLOCK) as u64;
+    data.len = len;
+    let mut cipher = match load() {
+        Ok(cipher) => cipher,
+        Err(error) => return refuse_wrap(data, KeyWrapError::Engine(error)),
+    };
     let mut accumulator = IV;
     let mut block = [0; 16];
+    let blocks = wrap_blocks(
+        &mut cipher,
+        &mut data,
+        semiblocks,
+        &mut accumulator,
+        &mut block,
+    );
+    drop(cipher);
+    block.zeroize();
+    if blocks.is_ok()
+        && let Some(first) = data.bytes.first_chunk_mut::<SEMIBLOCK>()
+    {
+        *first = accumulator;
+    }
+    accumulator.zeroize();
+    match blocks {
+        Ok(()) => KeyWrapResponse {
+            data,
+            outcome: Ok(()),
+        },
+        Err(error) => refuse_wrap(data, error),
+    }
+}
+
+/// The six passes: for `j` from 0 to 5 and `i` from 1 to `n`,
+/// `B = AES(K, A | R[i])`, then `A = MSB(64, B) ^ t` with `t = n * j + i`
+/// and `R[i] = LSB(64, B)`.
+fn wrap_blocks<K: BlockEngine, const N: usize>(
+    cipher: &mut K,
+    data: &mut KeyData<N>,
+    semiblocks: u64,
+    accumulator: &mut [u8; SEMIBLOCK],
+    block: &mut [u8; 16],
+) -> Result<(), KeyWrapError> {
     for round in 0..=u64::from(LAST_ROUND) {
         for index in 1..=semiblocks {
-            let register = register(&mut output, index).ok_or(KeyWrapError::CapacityExceeded)?;
-            block = join(&accumulator, register);
-            cipher.encrypt_block(&mut block);
+            let register = register(data, index).ok_or(KeyWrapError::CapacityExceeded)?;
+            *block = join(accumulator, register);
+            cipher.encrypt(block).map_err(KeyWrapError::Engine)?;
             let counter = round
                 .checked_mul(semiblocks)
                 .and_then(|base| base.checked_add(index))
                 .ok_or(KeyWrapError::CapacityExceeded)?;
             let mut high;
-            (high, *register) = split(&block);
+            (high, *register) = split(block);
             for ((out, value), count) in accumulator.iter_mut().zip(high).zip(counter.to_be_bytes())
             {
                 *out = value ^ count;
@@ -208,12 +258,16 @@ pub fn wrap<const N: usize>(
             high.zeroize();
         }
     }
-    block.zeroize();
-    if let Some(first) = output.bytes.first_chunk_mut::<SEMIBLOCK>() {
-        *first = accumulator;
+    Ok(())
+}
+
+/// The wrap's refusal: the buffer cleared, with `error`.
+fn refuse_wrap<const N: usize>(mut data: KeyData<N>, error: KeyWrapError) -> KeyWrapResponse<N> {
+    data.zeroize();
+    KeyWrapResponse {
+        data,
+        outcome: Err(error),
     }
-    accumulator.zeroize();
-    Ok(output)
 }
 
 /// The register `R[index]`, `index >= 1`, after the first semiblock.
