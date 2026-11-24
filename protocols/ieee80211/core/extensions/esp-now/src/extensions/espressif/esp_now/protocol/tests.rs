@@ -1,3 +1,5 @@
+extern crate std;
+
 use super::*;
 use oer_protocols_ieee80211_core_arbiter::interface::{VifId, VirtualInterface};
 use oer_protocols_ieee80211_wire::channel::ChannelWidth;
@@ -34,6 +36,7 @@ fn the_count_follows_the_occupied_slots() {
     assert_eq!(table.len(), 1);
     let second = table.add(peer(3)).unwrap();
     assert_eq!(table.len(), 2);
+    assert!(!table.is_empty());
     assert_eq!(table.add(peer(4)), Err(EspNowPeerTableError::Full));
     assert_eq!(table.remove(first), Ok(peer(2)));
     assert_eq!(table.len(), 1);
@@ -174,4 +177,38 @@ fn duplicate_history_evicts_only_oldest_and_reset_counts_all_fingerprints() {
         epoch.receive_v1(&bytes[..len]),
         Ok(EspNowRxOutcome::Received(_))
     ));
+}
+
+/// A slot reused by a later peer gives it the next generation; the
+/// earlier handle is stale there.
+#[test]
+fn a_reused_slot_makes_the_earlier_handle_stale() {
+    let mut table = EspNowPeerTable::<1>::new(channel(1));
+    let first = table.add(peer(2)).unwrap();
+    assert_eq!(first.generation(), 1);
+    table.remove(first).unwrap();
+    let second = table.add(peer(3)).unwrap();
+    assert_eq!((second.index(), second.generation()), (first.index(), 2));
+    assert_eq!(table.iter().next(), Some((second, peer(3))));
+    assert_eq!(table.get(first), Err(EspNowPeerTableError::Stale(first)));
+    assert_eq!(table.remove(first), Err(EspNowPeerTableError::Stale(first)));
+    assert_eq!(table.get(second), Ok(peer(3)));
+}
+
+/// Every table error names itself: its text is never empty.
+#[test]
+fn a_table_error_s_text_names_it() {
+    let errors = [
+        EspNowPeerTableError::Full,
+        EspNowPeerTableError::Duplicate(EspNowDestination::Broadcast),
+        EspNowPeerTableError::ChannelMismatch {
+            peer: channel(2),
+            home: channel(1),
+        },
+        EspNowPeerTableError::OffChannelMatchesHome(channel(1)),
+        EspNowPeerTableError::GenerationExhausted,
+    ];
+    for error in errors {
+        assert!(!std::format!("{error}").is_empty(), "{error:?}");
+    }
 }

@@ -1201,6 +1201,90 @@ mod tests {
         );
     }
 
+    /// The common prefix classifies a body by its version, and each of its
+    /// fields refuses it alone.
+    #[test]
+    fn each_prefix_field_classifies_or_refuses_alone() {
+        let frame = EspNowV1Frame::new(
+            EspNowDestination::Broadcast,
+            source(),
+            SequenceNumber::ZERO,
+            EspNowRandomValue::new([1, 2, 3, 4]),
+            &[7; 9],
+        )
+        .unwrap();
+        let mut bytes = [0_u8; 64];
+        let len = frame.encode(&mut bytes).unwrap();
+        let mut body = [0_u8; 64];
+        let body_len = len - ESP_NOW_MANAGEMENT_HEADER_LEN;
+        body[..body_len].copy_from_slice(&bytes[ESP_NOW_MANAGEMENT_HEADER_LEN..len]);
+        let body = &mut body[..body_len];
+        assert_eq!(esp_now_wire_version(body), Ok(EspNowWireVersion::V1));
+        let refused = |at: usize, value: u8| {
+            let mut changed = [0_u8; 64];
+            changed[..body.len()].copy_from_slice(body);
+            changed[at] = value;
+            esp_now_wire_version(&changed[..body.len()])
+        };
+        assert_eq!(
+            refused(0, 4),
+            Err(EspNowVersionError::UnsupportedActionCategory(4))
+        );
+        for at in 1..4 {
+            assert_eq!(
+                refused(at, 0xee),
+                Err(EspNowVersionError::InvalidActionOrganizationIdentifier),
+                "{at}"
+            );
+        }
+        assert_eq!(
+            refused(8, 0xde),
+            Err(EspNowVersionError::UnsupportedElementId(0xde))
+        );
+        assert_eq!(
+            refused(9, 4),
+            Err(EspNowVersionError::ElementBodyTooShort { declared: 4 })
+        );
+        assert_eq!(refused(9, 5), Ok(EspNowWireVersion::V1));
+        for at in 10..13 {
+            assert_eq!(
+                refused(at, 0xee),
+                Err(EspNowVersionError::InvalidElementOrganizationIdentifier),
+                "{at}"
+            );
+        }
+        assert_eq!(
+            refused(13, 9),
+            Err(EspNowVersionError::UnsupportedElementType(9))
+        );
+        assert_eq!(
+            esp_now_wire_version(&body[..ESP_NOW_V1_ACTION_OVERHEAD - 1]),
+            Err(EspNowVersionError::ActionTooShort {
+                minimum: ESP_NOW_V1_ACTION_OVERHEAD
+            })
+        );
+    }
+
+    /// A payload's length is its own, the empty one's zero.
+    #[test]
+    fn a_payload_reports_its_length() {
+        let empty = EspNowV1Payload::new(&[]).unwrap();
+        assert_eq!((empty.len(), empty.is_empty()), (0, true));
+        let three = EspNowV1Payload::new(&[1, 2, 3]).unwrap();
+        assert_eq!((three.len(), three.is_empty()), (3, false));
+        assert_eq!(three.length().get(), 3);
+        let empty = v2::EspNowV2Payload::new(&[]).unwrap();
+        assert_eq!((empty.len(), empty.is_empty()), (0, true));
+        let three = v2::EspNowV2Payload::new(&[1, 2, 3]).unwrap();
+        assert_eq!((three.len(), three.is_empty()), (3, false));
+        let random = EspNowRandomValue::new([1, 2, 3, 4]);
+        let empty = v2::EspNowV2Action::new(random, &[]).unwrap();
+        assert_eq!((empty.payload_len(), empty.is_empty()), (0, true));
+        let three = v2::EspNowV2Action::new(random, &[1, 2, 3]).unwrap();
+        assert_eq!((three.payload_len(), three.is_empty()), (3, false));
+        assert_eq!(three.payload_length().get(), 3);
+    }
+
     /// Every wire error names itself: its text is never empty.
     #[test]
     fn a_wire_error_s_text_names_it() {

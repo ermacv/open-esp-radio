@@ -120,6 +120,7 @@ fn the_encrypted_count_follows_the_occupied_slots() {
     assert_eq!(table.len(), 1);
     let second = table.install(peer(3, 2)).unwrap();
     assert_eq!(table.len(), 2);
+    assert!(!table.is_empty());
     let (error, proposed) = table.install(peer(4, 3)).unwrap_err().into_parts();
     assert_eq!(error, EspNowEncryptedPeerError::Full);
     assert_eq!(proposed.lmk().expose_secret(), &[3; 16]);
@@ -370,4 +371,69 @@ fn shutdown_reports_its_cleared_peers_once_and_the_table_returns_its_count() {
     let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
     table.install(peer(2, 1)).unwrap();
     assert_eq!(table.clear_on_shutdown(), 1);
+}
+
+/// A replaced key's earlier handle is stale for its key as well.
+#[test]
+fn a_replaced_pmk_s_earlier_handle_reads_no_key() {
+    let mut owner = EspNowPmkOwner::from_key(EspNowPmk::new([1; 16]));
+    let first = owner.current_id().unwrap();
+    let (second, _) = owner.replace(first, EspNowPmk::new([2; 16])).unwrap();
+    assert_eq!(owner.key(first).unwrap_err(), EspNowPmkError::Stale(first));
+    assert_eq!(owner.key(second).unwrap().expose_secret(), &[2; 16]);
+}
+
+/// A slot reused by a later peer gives it the next generation; the
+/// earlier handle is stale for every call, and a removed peer is not
+/// restored into a slot reused and vacated since.
+#[test]
+fn a_reused_encrypted_slot_makes_the_earlier_handle_stale() {
+    let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
+    let first = table.install(peer(2, 1)).unwrap();
+    assert_eq!(first.generation(), 1);
+    let removed = table.remove(first).unwrap();
+    let second = table.install(peer(3, 2)).unwrap();
+    assert_eq!((second.index(), second.generation()), (first.index(), 2));
+    assert_eq!(table.find(peer(3, 0).destination()), Some(second));
+    assert_eq!(
+        table.lmk(first).unwrap_err(),
+        EspNowEncryptedPeerError::Stale(first)
+    );
+    assert!(matches!(
+        table.prepare_rx_replay(first, pn(1)),
+        Err(EspNowEncryptedPeerError::Stale(stale)) if stale == first
+    ));
+    let (error, proposed) = table.install(peer(3, 4)).unwrap_err().into_parts();
+    assert_eq!(
+        error,
+        EspNowEncryptedPeerError::Duplicate(peer(3, 0).destination())
+    );
+    assert_eq!(proposed.lmk().expose_secret(), &[4; 16]);
+    table.remove(second).unwrap();
+    let previous = removed.previous_id();
+    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
+    assert_eq!(error, EspNowEncryptedPeerError::Stale(previous));
+    assert_eq!(removed.config().lmk().expose_secret(), &[1; 16]);
+}
+
+/// Every PMK and table error names itself: its text is never empty.
+#[test]
+fn a_security_error_s_text_names_it() {
+    let id = EspNowPmkOwner::from_key(EspNowPmk::new([1; 16]))
+        .current_id()
+        .unwrap();
+    for error in [
+        EspNowPmkError::GenerationExhausted,
+        EspNowPmkError::Stale(id),
+    ] {
+        assert!(!std::format!("{error}").is_empty(), "{error:?}");
+    }
+    let destination = peer(2, 0).destination();
+    for error in [
+        EspNowEncryptedPeerError::Full,
+        EspNowEncryptedPeerError::Duplicate(destination),
+        EspNowEncryptedPeerError::GenerationExhausted,
+    ] {
+        assert!(!std::format!("{error}").is_empty(), "{error:?}");
+    }
 }
