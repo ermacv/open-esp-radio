@@ -17,11 +17,17 @@ use crate::{
 /// The Supported Rates and Extended Supported Rates records of this AP.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LegacyRates {
-    supported: [u8; 8],
-    extended: [u8; 4],
+    supported: [u8; Self::SUPPORTED],
+    extended: [u8; Self::EXTENDED],
 }
 
 impl LegacyRates {
+    const SUPPORTED: usize = 8;
+    const EXTENDED: usize = 4;
+    /// The records' lengths, as their elements carry them.
+    pub(crate) const SUPPORTED_LEN: u8 = crate::encoding::octet::<{ Self::SUPPORTED }>();
+    pub(crate) const EXTENDED_LEN: u8 = crate::encoding::octet::<{ Self::EXTENDED }>();
+
     /// Rates use 500-kbit/s units, with bit seven marking a basic rate.
     pub const fn new(supported: [u8; 8], extended: [u8; 4]) -> Self {
         Self {

@@ -102,9 +102,7 @@ impl<'frame> MonitorInjectionMpdu<'frame> {
                         return Err(MonitorInjectionFrameError::QosData);
                     }
                     subtype => {
-                        return Err(MonitorInjectionFrameError::UnsupportedDataSubtype(
-                            subtype as u8,
-                        ));
+                        return Err(MonitorInjectionFrameError::UnsupportedDataSubtype(subtype));
                     }
                 }
             }
@@ -148,7 +146,7 @@ pub enum MonitorInjectionFrameError {
     UnsupportedManagementFlags,
     FourAddressData,
     QosData,
-    UnsupportedDataSubtype(u8),
+    UnsupportedDataSubtype(u16),
     InvalidNullDataLength { expected: usize, actual: usize },
     UnsupportedFrameType(u8),
 }

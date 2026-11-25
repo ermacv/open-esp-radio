@@ -98,6 +98,11 @@ impl Fragment<'_> {
     }
 }
 
+/// `N` as the octet an element's Length carries, proven to fit at build.
+pub(crate) const fn octet<const N: usize>() -> u8 {
+    oer_portable_wire::PrefixLength::<N>::constant::<N>().to_u8()
+}
+
 struct FragmentPlan<I>(I);
 
 impl<'a, I: Clone + Iterator<Item = Fragment<'a>>> FragmentPlan<I> {
@@ -189,7 +194,13 @@ impl<'a> AmsduBody<'a> {
                 [
                     Fragment::Borrowed(&frame.destination),
                     Fragment::Borrowed(&frame.source),
-                    Fragment::Word(crate::data::AmsduLength::of(msdu_length as u16).to_bytes()),
+                    Fragment::Word(
+                        crate::data::AmsduLength::of(
+                            // Nor does this: admission proves the sum.
+                            u16::try_from(msdu_length).unwrap_or(u16::MAX),
+                        )
+                        .to_bytes(),
+                    ),
                     Fragment::Borrowed(&RFC1042_LLC_SNAP_PREFIX),
                     Fragment::Word(crate::data::EtherTypeField::of(frame.ether_type).to_bytes()),
                     Fragment::Borrowed(frame.payload),

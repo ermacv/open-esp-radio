@@ -44,14 +44,16 @@ impl XorShift {
             0
         } else {
             match self.next().checked_rem(bound as u64) {
-                Some(value) => value as usize,
+                // Below `bound`, so it fits.
+                Some(value) => usize::try_from(value).unwrap_or(0),
                 None => 0,
             }
         }
     }
 
     fn byte(&mut self) -> u8 {
-        self.next() as u8
+        // One octet of the value.
+        u8::try_from(self.next() & 0xFF).unwrap_or(0)
     }
 }
 
@@ -138,5 +140,22 @@ fn mutate(rng: &mut XorShift, buffer: &mut Vec<u8>) {
             };
         }
         _ => buffer.push(rng.byte()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::XorShift;
+
+    #[test]
+    fn a_drawn_value_and_octet_are_those_of_the_sequence() {
+        let (mut drawn, mut sequence) = (XorShift::new(7), XorShift::new(7));
+        for bound in 1..200_usize {
+            let value = usize::try_from(sequence.next() % u64::try_from(bound).unwrap()).unwrap();
+            assert_eq!(drawn.below(bound), value);
+            let [octet, ..] = sequence.next().to_le_bytes();
+            assert_eq!(drawn.byte(), octet);
+        }
+        assert_eq!(drawn.below(0), 0);
     }
 }

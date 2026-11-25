@@ -1,8 +1,8 @@
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
-#![expect(clippy::cast_sign_loss, reason = "the final crates cleaned")]
 #![cfg_attr(
     test,
     expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
         clippy::let_underscore_must_use,
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )

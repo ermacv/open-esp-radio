@@ -37,7 +37,7 @@ pub const LEGACY_RATES: [(u8, LegacyRate); 12] = [
 
 /// The bits of a [`LegacyRateSet`] that name an entry of [`LEGACY_RATES`].
 const RATE_BITS: u16 = const {
-    match 1_u16.checked_shl(LEGACY_RATES.len() as u32) {
+    match 1_u16.checked_shl(crate::encoding::octet::<{ LEGACY_RATES.len() }>() as u32) {
         Some(beyond) => beyond.wrapping_sub(1),
         None => panic!("every legacy rate has a bit"),
     }

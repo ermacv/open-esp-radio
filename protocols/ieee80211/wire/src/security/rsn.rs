@@ -185,10 +185,10 @@ impl<'a> RsnElement<'a> {
     }
 
     /// Number of PMKIDs, or `None` when the PMKID Count field is absent.
-    pub const fn pmkid_count(&self) -> Option<u16> {
+    pub const fn pmkid_count(&self) -> Option<usize> {
         match self.pmkids {
-            // Parsing took exactly the u16 count carried by the element.
-            Some(pmkids) => Some((pmkids.bytes.len() / RSN_PMKID_LEN) as u16),
+            // Parsing took exactly the count carried by the element.
+            Some(pmkids) => Some(pmkids.bytes.len() / RSN_PMKID_LEN),
             None => None,
         }
     }
@@ -295,7 +295,7 @@ pub const fn rsn_single_suite_element(
     akm: u8,
     capabilities: u16,
 ) -> [u8; RSN_SINGLE_SUITE_ELEMENT_LEN] {
-    const BODY_LEN: u8 = (RSN_SINGLE_SUITE_ELEMENT_LEN - 2) as u8;
+    const BODY_LEN: u8 = crate::encoding::octet::<{ RSN_SINGLE_SUITE_ELEMENT_LEN - 2 }>();
     let [v0, v1] = RsnField::of(RSN_VERSION).to_bytes();
     let [o0, o1, o2] = RSN_OUI;
     // One suite in each list.
@@ -339,7 +339,7 @@ pub const fn rsn_group_management_element(
     capabilities: u16,
     group_management_cipher: u8,
 ) -> [u8; RSN_GROUP_MANAGEMENT_ELEMENT_LEN] {
-    const BODY_LEN: u8 = (RSN_GROUP_MANAGEMENT_ELEMENT_LEN - 2) as u8;
+    const BODY_LEN: u8 = crate::encoding::octet::<{ RSN_GROUP_MANAGEMENT_ELEMENT_LEN - 2 }>();
     let [
         id,
         _,
@@ -405,7 +405,7 @@ pub const fn rsn_group_management_element(
 /// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 (RSN Extension element: the
 /// low four bits of the first octet are the field length minus one).
 pub const fn rsnx_element(capabilities: RsnExtendedCapabilities) -> [u8; RSNXE_ONE_OCTET_LEN] {
-    const BODY_LEN: u8 = (RSNXE_ONE_OCTET_LEN - 2) as u8;
+    const BODY_LEN: u8 = crate::encoding::octet::<{ RSNXE_ONE_OCTET_LEN - 2 }>();
     let [octet] = capabilities.to_bytes();
     [RSNXE_ELEMENT_ID, BODY_LEN, octet]
 }

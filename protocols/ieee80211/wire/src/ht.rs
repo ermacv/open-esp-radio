@@ -217,7 +217,13 @@ impl HtPeerCapabilities {
 
     /// Highest common one-spatial-stream MCS advertised by the peer.
     pub const fn highest_rx_mcs(self) -> u8 {
-        self.rx_mcs_0_to_7.ilog2() as u8
+        let mut highest = 0_u8;
+        let mut above = self.rx_mcs_0_to_7.get() >> 1;
+        while above != 0 {
+            highest = highest.saturating_add(1);
+            above >>= 1;
+        }
+        highest
     }
 }
 

@@ -245,15 +245,15 @@ pub fn write_ht_beacon(
     ];
     crate::encoding::FrameParts([
         fixed.as_slice(),
-        &[0, ssid.as_bytes().len() as u8],
+        &[0, ssid.length().to_u8()],
         ssid.as_bytes(),
-        &[1, profile.legacy_rates.supported().len() as u8],
+        &[1, crate::ap::profile::LegacyRates::SUPPORTED_LEN],
         profile.legacy_rates.supported(),
         if ghz2_4 { &dsss } else { &[] },
         &tim,
         if ghz2_4 { &erp } else { &[] },
         rsn,
-        &[50, profile.legacy_rates.extended().len() as u8],
+        &[50, crate::ap::profile::LegacyRates::EXTENDED_LEN],
         profile.legacy_rates.extended(),
         &wmm_parameter_ie,
         &ht_capability,
@@ -601,9 +601,12 @@ pub fn stamp(
         return None;
     }
     let interval_us = u64::from(interval_tu).checked_mul(1_024)?;
-    let phase = timestamp
-        .checked_div(interval_us)?
-        .checked_rem(u64::from(period))? as u8;
+    let phase = u8::try_from(
+        timestamp
+            .checked_div(interval_us)?
+            .checked_rem(u64::from(period))?,
+    )
+    .ok()?;
     let count = period.checked_sub(1)?.checked_sub(phase)?;
     *bytes.get_mut(tim_offset.checked_add(2)?)? = count;
 

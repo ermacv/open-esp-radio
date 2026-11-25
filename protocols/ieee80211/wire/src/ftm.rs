@@ -477,7 +477,8 @@ fn parameter_fields(element: &[u8]) -> Result<[u8; FTM_PARAMETERS_FIELD_LEN], Ft
     if element.first().copied() != Some(FTM_PARAMETERS_ELEMENT_ID) {
         return Err(FtmParameterError::WrongElementId);
     }
-    if element.get(1).copied() != Some(FTM_PARAMETERS_FIELD_LEN as u8)
+    if element.get(1).copied()
+        != Some(const { crate::encoding::octet::<FTM_PARAMETERS_FIELD_LEN>() })
         || element.len() != FTM_PARAMETERS_ELEMENT_LEN
     {
         return Err(FtmParameterError::WrongElementLength);
@@ -840,7 +841,7 @@ const fn parameters_element(fields: FtmParameterFields) -> [u8; FTM_PARAMETERS_E
     let [f0, f1, f2, f3, f4, f5, f6, f7, f8] = fields.to_bytes();
     [
         FTM_PARAMETERS_ELEMENT_ID,
-        FTM_PARAMETERS_FIELD_LEN as u8,
+        const { crate::encoding::octet::<FTM_PARAMETERS_FIELD_LEN>() },
         f0,
         f1,
         f2,

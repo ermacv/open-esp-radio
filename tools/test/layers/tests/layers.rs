@@ -8731,10 +8731,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/security/rsn/src/retry.rs::RsnRetry.pending",
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Header.association",
         BY_CONTROLLER,
     ),
@@ -10728,18 +10724,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::should_implement_trait",
         1,
         "an endless generator, not an iterator",
-    ),
-    (
-        "protocols/ieee80211/wire/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/wire/src/lib.rs",
-        "clippy::cast_sign_loss",
-        1,
-        BY_FINAL_CRATES,
     ),
     (
         "protocols/network/runtime/src/lib.rs",

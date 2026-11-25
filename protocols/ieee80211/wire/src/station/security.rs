@@ -60,7 +60,11 @@ impl SelectedRsn {
         let element = resumed.bytes.first_chunk_mut::<2>()?;
         let header = crate::management::ElementHeader::from_bytes(*element);
         *element = header
-            .with_length(header.length().checked_add(PMKID_LIST_LEN as u8)?)
+            .with_length(
+                header
+                    .length()
+                    .checked_add(const { crate::encoding::octet::<PMKID_LIST_LEN>() })?,
+            )
             .to_bytes();
         crate::encoding::write_array::<SELECTED_RSN_IE_LEN, _, _>(
             &mut resumed.bytes,

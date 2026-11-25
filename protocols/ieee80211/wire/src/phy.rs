@@ -336,11 +336,10 @@ pub struct HeRate {
 // 27.5.1. Each leaf is evaluated at compilation, not on received parameters.
 /// The largest HE nominal rate in kb/s fits a `u32`: the largest data
 /// subcarriers (1 960), bits per subcarrier (10), code-rate numerator (5)
-/// and streams (8), over the smallest divisor of [`HeRate::nominal_kbps`]'s
-/// arms (`2 · 13 600`), bound every arm.
+/// and streams (8), times the largest factor of [`HeRate::nominal_kbps`]
+/// (`1 250`), bound every product it divides.
 const HE_KBPS_FITS: () = {
-    let largest = 1_960_u64 * 10 * 5 * 8 * 1_000_000 / (2 * 13_600);
-    if largest > u32::MAX as u64 {
+    if 1_960_u64 * 10 * 5 * 8 * 1_250 > u32::MAX as u64 {
         panic!("HE's nominal rate exceeds a u32");
     }
 };
@@ -355,7 +354,7 @@ enum CodeRate {
 }
 
 impl CodeRate {
-    const fn numerator(self) -> u64 {
+    const fn numerator(self) -> u32 {
         match self {
             Self::Half => 1,
             Self::TwoThirds => 2,
@@ -364,7 +363,7 @@ impl CodeRate {
         }
     }
 
-    const fn denominator(self) -> u64 {
+    const fn denominator(self) -> u32 {
         match self {
             Self::Half => 2,
             Self::TwoThirds => 3,
@@ -434,58 +433,61 @@ impl HeRate {
         // N_DBPS over the symbol's duration (12.8 us and the guard
         // interval), in kb/s, rounded down once: every divisor is a constant
         // of the standard's tables.
-        let bits = numerator.saturating_mul(1_000_000);
+        // The kilobits and the symbol's nanoseconds are in lowest terms:
+        // 10^6 over 13 600, 14 400 and 16 000.
+        let gi_800 = numerator.saturating_mul(1_250);
+        let gi_1600 = numerator.saturating_mul(625);
+        let gi_3200 = numerator.saturating_mul(125);
         let kbps = match (rate, self.dcm, self.gi_ltf) {
             (CodeRate::Half, false, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
-                bits / (2 * 13_600)
+                gi_800 / (2 * 17)
             }
-            (CodeRate::Half, false, HeGiLtf::Ltf2xGi1600Ns) => bits / (2 * 14_400),
-            (CodeRate::Half, false, HeGiLtf::Ltf4xGi3200Ns) => bits / (2 * 16_000),
+            (CodeRate::Half, false, HeGiLtf::Ltf2xGi1600Ns) => gi_1600 / (2 * 9),
+            (CodeRate::Half, false, HeGiLtf::Ltf4xGi3200Ns) => gi_3200 / (2 * 2),
             (CodeRate::Half, true, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
-                bits / (4 * 13_600)
+                gi_800 / (4 * 17)
             }
-            (CodeRate::Half, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (4 * 14_400),
-            (CodeRate::Half, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (4 * 16_000),
+            (CodeRate::Half, true, HeGiLtf::Ltf2xGi1600Ns) => gi_1600 / (4 * 9),
+            (CodeRate::Half, true, HeGiLtf::Ltf4xGi3200Ns) => gi_3200 / (4 * 2),
             (CodeRate::TwoThirds, false, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
-                bits / (3 * 13_600)
+                gi_800 / (3 * 17)
             }
-            (CodeRate::TwoThirds, false, HeGiLtf::Ltf2xGi1600Ns) => bits / (3 * 14_400),
-            (CodeRate::TwoThirds, false, HeGiLtf::Ltf4xGi3200Ns) => bits / (3 * 16_000),
+            (CodeRate::TwoThirds, false, HeGiLtf::Ltf2xGi1600Ns) => gi_1600 / (3 * 9),
+            (CodeRate::TwoThirds, false, HeGiLtf::Ltf4xGi3200Ns) => gi_3200 / (3 * 2),
             (CodeRate::TwoThirds, true, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
-                bits / (6 * 13_600)
+                gi_800 / (6 * 17)
             }
-            (CodeRate::TwoThirds, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (6 * 14_400),
-            (CodeRate::TwoThirds, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (6 * 16_000),
+            (CodeRate::TwoThirds, true, HeGiLtf::Ltf2xGi1600Ns) => gi_1600 / (6 * 9),
+            (CodeRate::TwoThirds, true, HeGiLtf::Ltf4xGi3200Ns) => gi_3200 / (6 * 2),
             (CodeRate::ThreeQuarters, false, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
-                bits / (4 * 13_600)
+                gi_800 / (4 * 17)
             }
-            (CodeRate::ThreeQuarters, false, HeGiLtf::Ltf2xGi1600Ns) => bits / (4 * 14_400),
-            (CodeRate::ThreeQuarters, false, HeGiLtf::Ltf4xGi3200Ns) => bits / (4 * 16_000),
+            (CodeRate::ThreeQuarters, false, HeGiLtf::Ltf2xGi1600Ns) => gi_1600 / (4 * 9),
+            (CodeRate::ThreeQuarters, false, HeGiLtf::Ltf4xGi3200Ns) => gi_3200 / (4 * 2),
             (CodeRate::ThreeQuarters, true, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
-                bits / (8 * 13_600)
+                gi_800 / (8 * 17)
             }
-            (CodeRate::ThreeQuarters, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (8 * 14_400),
-            (CodeRate::ThreeQuarters, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (8 * 16_000),
+            (CodeRate::ThreeQuarters, true, HeGiLtf::Ltf2xGi1600Ns) => gi_1600 / (8 * 9),
+            (CodeRate::ThreeQuarters, true, HeGiLtf::Ltf4xGi3200Ns) => gi_3200 / (8 * 2),
             (CodeRate::FiveSixths, false, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
-                bits / (6 * 13_600)
+                gi_800 / (6 * 17)
             }
-            (CodeRate::FiveSixths, false, HeGiLtf::Ltf2xGi1600Ns) => bits / (6 * 14_400),
-            (CodeRate::FiveSixths, false, HeGiLtf::Ltf4xGi3200Ns) => bits / (6 * 16_000),
+            (CodeRate::FiveSixths, false, HeGiLtf::Ltf2xGi1600Ns) => gi_1600 / (6 * 9),
+            (CodeRate::FiveSixths, false, HeGiLtf::Ltf4xGi3200Ns) => gi_3200 / (6 * 2),
             (CodeRate::FiveSixths, true, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
-                bits / (12 * 13_600)
+                gi_800 / (12 * 17)
             }
-            (CodeRate::FiveSixths, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (12 * 14_400),
-            (CodeRate::FiveSixths, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (12 * 16_000),
+            (CodeRate::FiveSixths, true, HeGiLtf::Ltf2xGi1600Ns) => gi_1600 / (12 * 9),
+            (CodeRate::FiveSixths, true, HeGiLtf::Ltf4xGi3200Ns) => gi_3200 / (12 * 2),
         };
-        // In u32 by `HE_KBPS_FITS`: no arm exceeds the largest numerator
-        // over the smallest divisor.
+        // No product above saturates, by `HE_KBPS_FITS`.
         let () = HE_KBPS_FITS;
-        kbps as u32
+        kbps
     }
 
     /// The bits per subcarrier and the code rate of the HE-MCS (IEEE Std
     /// 802.11ax-2021, 27.5.1), and the data subcarriers of the bandwidth.
-    const fn modulation(self) -> (u64, CodeRate) {
+    const fn modulation(self) -> (u32, CodeRate) {
         match self.mcs.0 {
             0 => (1, CodeRate::Half),
             1 => (2, CodeRate::Half),
@@ -506,19 +508,19 @@ impl HeRate {
     /// fraction: the data subcarriers of the bandwidth, the bits per
     /// subcarrier, the code rate's numerator and the streams, over the code
     /// rate's denominator and DCM's two.
-    const fn data_bits_per_symbol(self) -> (u64, u64) {
-        let subcarriers: u64 = match self.bandwidth {
+    const fn data_bits_per_symbol(self) -> (u32, u32) {
+        let subcarriers: u32 = match self.bandwidth {
             PpduBandwidth::Mhz20 => 234,
             PpduBandwidth::Mhz40 => 468,
             PpduBandwidth::Mhz80 => 980,
             PpduBandwidth::Mhz160 => 1_960,
         };
         let (bits, rate) = self.modulation();
-        let streams: u64 = match self.spatial_streams.0 {
-            count @ 1..=7 => count as u64,
+        let streams: u32 = match self.spatial_streams.0 {
+            count @ 1..=7 => count as u32,
             _ => 8,
         };
-        let dcm: u64 = if self.dcm { 2 } else { 1 };
+        let dcm: u32 = if self.dcm { 2 } else { 1 };
         (
             subcarriers
                 .saturating_mul(bits)
@@ -526,6 +528,12 @@ impl HeRate {
                 .saturating_mul(streams),
             rate.denominator().saturating_mul(dcm),
         )
+    }
+
+    /// [`Self::data_bits_per_symbol`] in the width times are counted in.
+    const fn data_bits_wide(self) -> (u64, u64) {
+        let (numerator, denominator) = self.data_bits_per_symbol();
+        (numerator as u64, denominator as u64)
     }
 }
 
@@ -598,7 +606,7 @@ impl PhyRate {
                 if rate.short_gi { 3_600 } else { 4_000 },
             ),
             Self::He(rate) => {
-                let (numerator, denominator) = rate.data_bits_per_symbol();
+                let (numerator, denominator) = rate.data_bits_wide();
                 (
                     numerator,
                     denominator,
@@ -610,10 +618,9 @@ impl PhyRate {
             checked!(bits.checked_mul(spacing_ns)),
             checked!(checked!(divisor.checked_mul(symbol_ns)).checked_mul(8))
         ));
-        if bytes > u32::MAX as u64 {
-            None
-        } else {
-            Some(bytes as u32)
+        match oer_portable_wire::U64::<32>::new(bytes) {
+            Some(bytes) => Some(bytes.to_u32()),
+            None => None,
         }
     }
 
@@ -713,7 +720,7 @@ impl PhyRate {
                 )
             }
             Self::He(rate) => {
-                let (numerator, denominator) = rate.data_bits_per_symbol();
+                let (numerator, denominator) = rate.data_bits_wide();
                 let streams = rate.spatial_streams.0 as u64;
                 // BCC tail bound: one encoder per 600 Mb/s (802.11ax-2021 27.4.3).
                 let encoders = checked!(ceil_div(rate.nominal_kbps() as u64, 600_000));
@@ -748,10 +755,9 @@ impl PhyRate {
                 )
             }
         };
-        if micros > u32::MAX as u64 {
-            None
-        } else {
-            Some(micros as u32)
+        match oer_portable_wire::U64::<32>::new(micros) {
+            Some(micros) => Some(micros.to_u32()),
+            None => None,
         }
     }
 
@@ -822,7 +828,7 @@ impl PhyRate {
             Self::He(rate) => {
                 // L-STF to HE-STF, the HE-LTFs, then symbols of 12.8 us
                 // plus the guard interval over exact N_DBPS (27.4.3).
-                let (numerator, denominator) = rate.data_bits_per_symbol();
+                let (numerator, denominator) = rate.data_bits_wide();
                 let streams = rate.spatial_streams.0 as u64;
                 let guard_ns = rate.gi_ltf.guard_interval_ns() as u64;
                 let ltf: u64 = match rate.gi_ltf {

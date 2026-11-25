@@ -88,7 +88,7 @@ fn counted_views_preserve_every_entry_and_refuse_partial_pmkids() {
         let mut bytes = std::vec![RSN_ELEMENT_ID, body.len() as u8];
         bytes.extend_from_slice(&body);
         let parsed = RsnElement::parse(&bytes).unwrap();
-        assert_eq!(parsed.pmkid_count(), Some(count));
+        assert_eq!(parsed.pmkid_count(), Some(usize::from(count)));
         assert!(parsed.pmkids().eq(expected.iter().copied()));
         assert_eq!(parsed.akm_suites().len(), 2);
         assert!(parsed.akm_suites().iter().eq([SAE, PSK]));

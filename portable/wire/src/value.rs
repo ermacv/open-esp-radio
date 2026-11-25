@@ -118,6 +118,25 @@ unsigned!(U16, u16);
 unsigned!(U32, u32);
 unsigned!(U64, u64);
 
+impl<const WIDTH: usize> U64<WIDTH> {
+    /// The value in 32 bits. It is lossless: a width of at most 32 bits is
+    /// checked when `WIDTH` is chosen.
+    ///
+    /// ```compile_fail,E0080
+    /// let _ = oer_portable_wire::U64::<33>::ZERO.to_u32();
+    /// ```
+    pub const fn to_u32(self) -> u32 {
+        const {
+            if WIDTH > u32::BITS as usize {
+                panic!("invalid wire field geometry or value");
+            }
+        }
+        // `self.0` has `WIDTH <= 32` bits: the low four octets are all of it.
+        let [.., a, b, c, d] = self.0.to_be_bytes();
+        u32::from_be_bytes([a, b, c, d])
+    }
+}
+
 /// The admitted length of a prefix in an array of `N` octets.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -162,6 +181,23 @@ impl<const N: usize> PrefixLength<N> {
         // `self.0 <= N <= u16::MAX`: the two low octets are the whole value.
         let [.., high, low] = self.0.to_be_bytes();
         u16::from_be_bytes([high, low])
+    }
+
+    /// The length as an 8-bit count. It is lossless: an array of at most
+    /// `u8::MAX` octets is checked when `N` is chosen.
+    ///
+    /// ```compile_fail,E0080
+    /// let _ = oer_portable_wire::PrefixLength::<256>::ZERO.to_u8();
+    /// ```
+    pub const fn to_u8(self) -> u8 {
+        const {
+            if N > u8::MAX as usize {
+                panic!("invalid wire field geometry or value");
+            }
+        }
+        // `self.0 <= N <= u8::MAX`: the low octet is the whole value.
+        let [.., low] = self.0.to_be_bytes();
+        low
     }
 
     /// This prefix placed after `PREFIX` octets, in an array of `M`

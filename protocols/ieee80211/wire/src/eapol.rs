@@ -149,11 +149,11 @@ pub const fn kde_header(data_type: u8, data_len: usize) -> Option<[u8; KDE_HEADE
     let Some(length) = data_len.checked_add(4) else {
         return None;
     };
-    if length > u8::MAX as usize {
+    let Some(length) = oer_portable_wire::PrefixLength::<{ u8::MAX as usize }>::new(length) else {
         return None;
-    }
+    };
     let [o0, o1, o2] = RSN_OUI;
-    Some([KDE_ELEMENT_ID, length as u8, o0, o1, o2, data_type])
+    Some([KDE_ELEMENT_ID, length.to_u8(), o0, o1, o2, data_type])
 }
 
 /// One KDE of the IEEE 802.11 OUI: its Data Type and data.

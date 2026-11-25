@@ -33,7 +33,7 @@ pub struct ValidatedRsnElement {
     owned: OwnedRsnIe,
     akm: Akm,
     capabilities: u16,
-    pmkid_count: u16,
+    pmkid_count: usize,
 }
 
 impl ValidatedRsnElement {
@@ -52,7 +52,7 @@ impl ValidatedRsnElement {
 
     /// The number of PMKIDs the element lists: a station resuming a cached
     /// PMKSA names its PMKID.
-    pub const fn pmkid_count(&self) -> u16 {
+    pub const fn pmkid_count(&self) -> usize {
         self.pmkid_count
     }
 

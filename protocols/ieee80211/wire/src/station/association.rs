@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::address::OwnAddress;
+use oer_portable_wire::PrefixLength;
 
 /// Relative HE UL-MU transmit-power capability for MAC rates 16 through 25.
 ///
@@ -36,10 +37,8 @@ impl HeUlMuPowerCapability {
             let difference = base
                 .checked_sub(i16::from(power))
                 .ok_or(HeUlMuPowerCapabilityError::HigherPowerThanRate16 { rate })?;
-            if !(0..=i16::from(u8::MAX)).contains(&difference) {
-                return Err(HeUlMuPowerCapabilityError::HigherPowerThanRate16 { rate });
-            }
-            *relative = difference as u8;
+            *relative = u8::try_from(difference)
+                .map_err(|_| HeUlMuPowerCapabilityError::HigherPowerThanRate16 { rate })?;
         }
         Ok(Self {
             relative_to_rate_16,
@@ -98,7 +97,12 @@ impl StaPowerCapability {
     }
 
     fn encode(self) -> [u8; POWER_CAPABILITY_IE_LEN] {
-        [33, 2, self.minimum_dbm as u8, self.maximum_dbm as u8]
+        [
+            33,
+            2,
+            self.minimum_dbm.cast_unsigned(),
+            self.maximum_dbm.cast_unsigned(),
+        ]
     }
 }
 
@@ -172,11 +176,9 @@ impl AssociationRequest<'_> {
     ) -> Result<usize, AssociationRequestError> {
         validate_peer(self.access_point.bssid.get()).map_err(AssociationRequestError::Frame)?;
         let ssid = self.access_point.ssid_bytes();
-        if ssid.len() > MAX_SSID_LEN {
-            return Err(AssociationRequestError::Frame(
-                StationFrameError::SsidTooLong,
-            ));
-        }
+        let ssid_len = PrefixLength::<MAX_SSID_LEN>::new(ssid.len()).ok_or(
+            AssociationRequestError::Frame(StationFrameError::SsidTooLong),
+        )?;
 
         let rates_len = self
             .access_point
@@ -199,14 +201,6 @@ impl AssociationRequest<'_> {
             ));
         }
         let first_rates_len = rates_len.min(SUPPORTED_RATES_ELEMENT_CAPACITY);
-        let extended_rates_len =
-            rates_len
-                .checked_sub(first_rates_len)
-                .ok_or(AssociationRequestError::Frame(
-                    StationFrameError::OutputTooSmall {
-                        required: usize::MAX,
-                    },
-                ))?;
         let selected_rsn = self.security;
         let (ht_capability, he_capability, power_capability, he_ul_mu_power) = match self.phy {
             AssociationPhyElements::NonHt => (None, None, None, None),
@@ -262,7 +256,13 @@ impl AssociationRequest<'_> {
             AssociationRequestError::Frame(StationFrameError::TooManySupportedRates)
         })?;
         let extended_rates = reader.remaining();
-        let extended_header = [50, extended_rates_len as u8];
+        let too_many = AssociationRequestError::Frame(StationFrameError::TooManySupportedRates);
+        let first_rates_len =
+            PrefixLength::<SUPPORTED_RATES_ELEMENT_CAPACITY>::new(first_rates.len())
+                .ok_or(too_many)?;
+        let extended_rates_len =
+            PrefixLength::<MAX_SUPPORTED_RATES_LEN>::new(extended_rates.len()).ok_or(too_many)?;
+        let extended_header = [50, extended_rates_len.to_u8()];
         let power_capability = power_capability.map(|value| value.encode());
         let he_ul_mu_power = he_ul_mu_power.map(|value| value.encode());
         // SOURCE(esp32s31): complete `libnet80211.a[ieee80211_output.o]::
@@ -270,15 +270,15 @@ impl AssociationRequest<'_> {
         // only after the selected RSN and the HE Power Capability.
         crate::encoding::FrameParts([
             fixed.as_slice(),
-            &[0, ssid.len() as u8],
+            &[0, ssid_len.to_u8()],
             ssid,
-            &[1, first_rates_len as u8],
+            &[1, first_rates_len.to_u8()],
             first_rates,
             selected_rsn.as_bytes(),
             power_capability
                 .as_ref()
                 .map_or(&[], |value| value.as_slice()),
-            if extended_rates_len == 0 {
+            if extended_rates.is_empty() {
                 &[]
             } else {
                 &extended_header
@@ -511,5 +511,18 @@ fn copy_rates(access_point: &ScanRecord, output: &mut [u8]) {
         .chain(access_point.extended_supported_rates_bytes());
     for (destination, &rate) in output.iter_mut().zip(rates) {
         *destination = rate;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StaPowerCapability;
+
+    /// IEEE Std 802.11-2020, 9.4.2.14 (Power Capability element): both
+    /// powers are signed, in dBm.
+    #[test]
+    fn a_power_capability_carries_both_powers_in_two_s_complement() {
+        let capability = StaPowerCapability::new(-2, 20).unwrap();
+        assert_eq!(capability.encode(), [33, 2, 0xfe, 20]);
     }
 }
