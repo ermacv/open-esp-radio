@@ -135,17 +135,11 @@ mod tests {
         assert!(!boot.begin_reset());
         assert!(Election::new().begin_reset());
     }
-    crate::retained_static! {
-        static NUMBERS: u32;
-    }
-    crate::retained_static! {
-        static WRAPPING: u32;
-    }
-    crate::retained_static! {
-        static HELD: u32;
-    }
     #[test]
     fn reentry_is_visible_and_dropping_claim_does_not_release_it() {
+        crate::retained_static! {
+            static NUMBERS: u32;
+        }
         let boot = Election::new();
         {
             let _first = boot.claim(&NUMBERS).unwrap();
@@ -156,6 +150,15 @@ mod tests {
     }
     #[test]
     fn every_boot_s_terminal_has_the_next_nonzero_number() {
+        crate::retained_static! {
+            static NUMBERS: u32;
+        }
+        crate::retained_static! {
+            static WRAPPING: u32;
+        }
+        crate::retained_static! {
+            static HELD: u32;
+        }
         let numbers = |cell: &RetainedCell<u32>| {
             [(); 3].map(|()| Terminal::word(Election::new().claim(cell).unwrap().terminal()))
         };
