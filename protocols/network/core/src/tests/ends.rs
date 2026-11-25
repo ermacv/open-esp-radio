@@ -238,3 +238,16 @@ fn acceptance_order_is_no_send_order_a_ready_datagram_goes_before_one_waiting_fo
         ));
     });
 }
+
+/// A close's result read before its end was told frees its place: no end of
+/// it is told after.
+#[test]
+fn a_close_read_before_its_end_is_told_is_told_no_more() {
+    wide(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let ends = socket.ends();
+        let close = stack.close(socket).unwrap();
+        assert_eq!(finished(stack.take_result(close)), Outcome::SocketClosed);
+        assert!(told(stack, &ends).is_empty());
+    });
+}

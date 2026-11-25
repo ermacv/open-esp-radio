@@ -389,7 +389,8 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         if self.vacant() != Some(number) {
             return false;
         }
-        if usize::from(number) == self.fresh && self.free.head().is_none() {
+        // With no freed place, the vacant one is the first never used.
+        if self.free.head().is_none() {
             self.fresh = self.fresh.saturating_add(1);
         }
         let Some(place) = self.get_mut(number) else {
