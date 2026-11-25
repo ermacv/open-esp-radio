@@ -115,7 +115,7 @@ role. Espressif policy parameters live in
 [`oer-chips-family-radio-ieee80211-policy`](../../chips/family/radio/ieee80211/policy/README.md).
 
 ESP-NOW (`core/extensions/esp-now`, the wire's `extensions/espressif`), NDP
-Announcement (the wire's `ndpa.rs`) and the monitor's channel sequence
+Announcement (the wire's `ndpa.rs`), Trigger frames (`trigger.rs`) and the monitor's channel sequence
 (`core/upper-mac/src/monitor/channels.rs`) are kept as sources outside the
 build.
 

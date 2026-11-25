@@ -21,11 +21,6 @@ or framing version is rejected before the body is decoded; the key selects the
 body's type. Host and target treat decode errors, sequence gaps and
 bounded-queue loss as protocol failure.
 
-The optional `async-io` feature exposes `write_frame` for an already encoded
-frame. It writes all bytes and flushes before returning success. Callers must
-bound the complete operation, including flush: accepting bytes alone does not
-complete a USB transfer whose final packet is full.
-
 ## Image keys
 
 A boot's first frame is its `base::Hello`: how many keys the image serves, a

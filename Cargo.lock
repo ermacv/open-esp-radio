@@ -2192,10 +2192,6 @@ name = "oer-portable-riscv"
 version = "0.1.0"
 
 [[package]]
-name = "oer-portable-sort"
-version = "0.1.0"
-
-[[package]]
 name = "oer-portable-sync"
 version = "0.1.0"
 dependencies = [
@@ -2266,13 +2262,9 @@ dependencies = [
 name = "oer-protocols-hil-agent"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
- "crc",
  "embassy-futures",
  "embedded-io-async",
- "heapless 0.9.3",
  "oer-portable-diagnostics",
- "oer-portable-memory",
  "oer-protocols-hil-protocol",
  "postcard",
  "postcard-schema",
@@ -2285,7 +2277,6 @@ version = "0.1.0"
 dependencies = [
  "cobs",
  "crc",
- "embedded-io-async",
  "heapless 0.9.3",
  "postcard",
  "postcard-schema",

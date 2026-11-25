@@ -1946,18 +1946,11 @@ fn must_not_wait(path: &str) -> bool {
 /// with their exact marker counts and the change that removes each. The
 /// list only shrinks: a lower count lowers its entry, and a file without
 /// markers leaves it. No new file belongs here.
-const WAITING_DEVIATIONS: &[(&str, usize, &str)] = &[
-    (
-        "protocols/network/core/src/owner.rs",
-        2,
-        "the pump, the entry and the images, the network owner in the network runtime: `register_port` takes a `Context`",
-    ),
-    (
-        "protocols/hil/protocol/src/io.rs",
-        1,
-        "the final crates cleaned: the async `write_frame` has no caller in the workspace",
-    ),
-];
+const WAITING_DEVIATIONS: &[(&str, usize, &str)] = &[(
+    "protocols/network/core/src/owner.rs",
+    2,
+    "the pump, the entry and the images, the network owner in the network runtime: `register_port` takes a `Context`",
+)];
 
 /// The identifiers of waiting: an `async` item and the task vocabulary.
 const WAITING: [&str; 5] = ["async", "Future", "Poll", "Waker", "Context"];
@@ -6704,7 +6697,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_BLUETOOTH,
     ),
     ("protocols/bluetooth/hci/src/wire.rs", 1, BY_BLUETOOTH),
-    ("protocols/hil/agent/src/postmortem.rs", 3, BY_FINAL_CRATES),
     ("protocols/hil/protocol/src/framing.rs", 12, BY_FINAL_CRATES),
     ("protocols/hil/protocol/src/key.rs", 1, BY_FINAL_CRATES),
     (
@@ -10165,12 +10157,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_possible_truncation",
         1,
         BY_BLUETOOTH,
-    ),
-    (
-        "protocols/hil/agent/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
     ),
     (
         "protocols/hil/protocol/src/key.rs",
