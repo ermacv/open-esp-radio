@@ -50,7 +50,7 @@ use crate::events::{AggregateSettled, DataEvent, DataLoss};
 use crate::numbers::{TxKey, TxNumbers};
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
-use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Arena, ArenaOutcome, ArenaSide, DataPort, FrameSet, GateOpen,
     HEADROOM, HeaderLen, IdleArena, Ieee80211Capabilities, MpduLength, MpduStartSpacing, OnAir,
@@ -1605,7 +1605,7 @@ fn write_front(
         destination: Eui48::new([d0, d1, d2, d3, d4, d5]),
         sequence_number,
         priority,
-        ether_type: u16::from_be_bytes([e0, e1]),
+        ether_type: EtherType::from_octets([e0, e1]),
     };
     header.write_before(fields, headroom);
     if let Some(ccmp) = ccmp {

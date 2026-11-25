@@ -384,7 +384,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
                 self.arrived.push(index);
                 let id = self.arrived.len() as u8;
                 let (kind, sequence) = self.kinds()[index];
-                let eapol = oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
+                let eapol = oer_protocols_ieee802_wire::EtherType::EAPOL.value();
                 let frame = match (kind, self.agreement) {
                     (Kind::Data, Agreement::Tid0) => receive::qos_data(sequence, id),
                     (Kind::Data, Agreement::None) => {

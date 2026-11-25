@@ -9,14 +9,6 @@ use oer_protocols_ieee802_wire::{EtherType, Eui48};
 /// Length of the header, without an FCS.
 pub const HEADER_LEN: usize = 14;
 
-oer_portable_wire::bitfield! {
-    /// The Length/Type field.
-    /// SOURCE: IEEE Std 802.3-2022, 3.2.6 (Length/Type field).
-    struct LengthType[2] (big) {
-        value, with_value: {u16} = 0..16;
-    }
-}
-
 /// One Ethernet II header.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EthernetHeader {
@@ -53,7 +45,7 @@ impl EthernetHeader {
         Self {
             destination: Eui48::new([d0, d1, d2, d3, d4, d5]),
             source: Eui48::new([s0, s1, s2, s3, s4, s5]),
-            ether_type: EtherType::new(LengthType::from_bytes(length_type).value()),
+            ether_type: EtherType::from_octets(length_type),
         }
     }
 
@@ -61,9 +53,7 @@ impl EthernetHeader {
     pub const fn to_bytes(&self) -> [u8; HEADER_LEN] {
         let [d0, d1, d2, d3, d4, d5] = self.destination.octets();
         let [s0, s1, s2, s3, s4, s5] = self.source.octets();
-        let [type_high, type_low] = LengthType::from_bytes([0; 2])
-            .with_value(self.ether_type.value())
-            .to_bytes();
+        let [type_high, type_low] = self.ether_type.octets();
         [
             d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, type_high, type_low,
         ]

@@ -1,7 +1,7 @@
 extern crate std;
 
 use super::*;
-use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 
 const DATA: u16 = 0x0008;
 const QOS_DATA: u16 = 0x0088;
@@ -123,7 +123,7 @@ fn station_fragments_reassemble_one_exact_ethernet_view() {
             value: (
                 Eui48::new(STA),
                 Eui48::new(SOURCE),
-                0x0800,
+                EtherType::IPV4,
                 std::vec![1, 2, 3, 4, 5]
             ),
         }

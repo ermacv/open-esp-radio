@@ -7121,11 +7121,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ),
     ("protocols/bluetooth/hci/src/wire.rs", 1, BY_BLUETOOTH),
     (
-        "protocols/ieee80211/core/datapath/src/plane.rs",
-        1,
-        BY_CONTROLLER,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/machine.rs",
         1,
         BY_CONTROLLER,

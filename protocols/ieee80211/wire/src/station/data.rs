@@ -4,7 +4,7 @@ use super::*;
 use crate::address::{Bssid, OwnAddress};
 use crate::data::{MsduHeader, PeerQos};
 use crate::frame::QosAckPolicy;
-use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 
 mod amsdu;
 pub use amsdu::{StaProtectedAmsduFrame, sta_protected_amsdu_frame_length};
@@ -21,7 +21,7 @@ pub struct StaDataFrame<'a> {
     pub bssid: Bssid,
     pub destination: Eui48,
     pub sequence_number: SequenceNumber,
-    pub ether_type: u16,
+    pub ether_type: EtherType,
     pub payload: &'a [u8],
 }
 
@@ -56,7 +56,7 @@ pub struct StaOpenDataFrame<'a> {
     /// The TID of a QoS data MPDU; unused without QoS.
     pub priority: WmmUserPriority,
     pub peer_qos: PeerQos,
-    pub ether_type: u16,
+    pub ether_type: EtherType,
     pub payload: &'a [u8],
 }
 
@@ -110,7 +110,7 @@ pub struct StaProtectedDataFrame<'a> {
     pub user_priority: u8,
     pub peer_qos: PeerQos,
     pub ccmp_header: [u8; CCMP_HEADER_LEN],
-    pub ether_type: u16,
+    pub ether_type: EtherType,
     pub payload: &'a [u8],
 }
 

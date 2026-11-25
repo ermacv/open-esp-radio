@@ -169,12 +169,23 @@ impl GroupAddress {
     }
 }
 
+oer_portable_wire::bitfield! {
+    /// The Length/Type field.
+    /// SOURCE: IEEE Std 802.3-2022, 3.2.6 (Length/Type field); RFC 1042,
+    /// "SNAP header", which carries it after the prefix.
+    struct LengthType[2] (big) {
+        value, with_value: {u16} = 0..16;
+    }
+}
+
 /// An EtherType: the Type interpretation of the Length/Type field, as the
 /// big-endian number of its registry entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct EtherType(u16);
 
 impl EtherType {
+    /// The octets of a type.
+    pub const LEN: usize = 2;
     /// Internet Protocol version 4.
     ///
     /// SOURCE: IEEE Registration Authority EtherType registry; RFC 894.
@@ -195,9 +206,39 @@ impl EtherType {
     ///
     /// SOURCE: IEEE Std 802.1Q-2022, 9.5 (Tag Protocol Identification), Table 9-1.
     pub const PROVIDER_VLAN: Self = Self(0x88a8);
+    /// EAP over LAN: IEEE 802.1X port access entity frames, which carry the
+    /// RSN 4-way and group key handshakes.
+    ///
+    /// SOURCE: IEEE Std 802.1X-2020, 11.1.4 (PAE EtherType); IEEE Std
+    /// 802.11-2020, 12.7.2 (EAPOL-Key frames).
+    pub const EAPOL: Self = Self(0x888e);
+    /// WLAN Authentication and Privacy Infrastructure.
+    ///
+    /// SOURCE: IEEE Registration Authority EtherType registry (88-B4).
+    pub const WAPI: Self = Self(0x88b4);
 
     pub const fn new(value: u16) -> Self {
         Self(value)
+    }
+
+    /// The type these octets hold, in transmission order.
+    pub const fn from_octets(octets: [u8; Self::LEN]) -> Self {
+        Self(LengthType::from_bytes(octets).value())
+    }
+
+    /// Its octets, in transmission order.
+    pub const fn octets(self) -> [u8; Self::LEN] {
+        LengthType::from_bytes([0; Self::LEN])
+            .with_value(self.0)
+            .to_bytes()
+    }
+
+    /// Read the next type of `reader`.
+    ///
+    /// # Errors
+    /// [`Error`]: fewer octets are left, and none is taken.
+    pub fn read(reader: &mut Reader<'_>) -> Result<Self, Error> {
+        reader.read().map(Self::from_octets)
     }
 
     pub const fn value(self) -> u16 {
@@ -275,6 +316,18 @@ mod tests {
                 Ok(address)
             );
         }
+    }
+
+    #[test]
+    fn an_ether_type_is_its_two_octets_the_high_one_first() {
+        assert_eq!(EtherType::EAPOL.octets(), [0x88, 0x8e]);
+        assert_eq!(EtherType::WAPI.octets(), [0x88, 0xb4]);
+        assert_eq!(EtherType::from_octets([0x86, 0xdd]), EtherType::IPV6);
+        assert_eq!(
+            EtherType::read(&mut Reader::new(&[0x08, 0x06, 0xff])),
+            Ok(EtherType::ARP)
+        );
+        assert!(EtherType::read(&mut Reader::new(&[0x08])).is_err());
     }
 
     #[test]

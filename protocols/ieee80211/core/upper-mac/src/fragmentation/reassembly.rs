@@ -4,7 +4,7 @@
 
 use super::FragmentAdmissionEpoch;
 use crate::duplicate::RetrySubfield;
-use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_ieee80211_wire::data::{LLC_SNAP_HEADER_LEN, MsduParts, rfc1042_ether_type};
 
 use super::{
@@ -17,7 +17,7 @@ use oer_portable_time::{Duration, Instant};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OpenReassembledData<'payload> {
     identity: OpenDataFragmentIdentity,
-    ether_type: u16,
+    ether_type: EtherType,
     /// The MSDU after its validated LLC/SNAP header.
     payload: &'payload [u8],
 }

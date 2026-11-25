@@ -11,7 +11,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::frame::QosControl;
-use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
+use oer_protocols_ieee802_wire::{EtherType, Eui48, Eui48Kind};
 
 use crate::qos::{WmmAccessCategory, WmmUserPriority};
 
@@ -33,25 +33,11 @@ const IEEE80211_FROM_DS: u8 = 0x02;
 #[cfg(test)]
 const IEEE80211_QOS_AMSDU_PRESENT: u8 = 0x80;
 oer_portable_wire::bitfield! {
-    /// The EtherType after an LLC/SNAP header, big-endian.
-    /// SOURCE: IETF RFC 1042, "SNAP header"; IEEE Std 802-2014, 10.5.
-    pub struct EtherTypeField[2] (big) {
-        pub value, with_value: {u16} = 0..16;
-    }
-}
-oer_portable_wire::bitfield! {
     /// An A-MSDU subframe header's Length, big-endian.
     /// SOURCE: IEEE Std 802.11-2020, 9.3.2.2.2 (A-MSDU subframe header,
     /// Figure 9-71).
     pub struct AmsduLength[2] (big) {
         pub value, with_value: {u16} = 0..16;
-    }
-}
-
-impl EtherTypeField {
-    /// The field holding `ether_type`.
-    pub const fn of(ether_type: u16) -> Self {
-        Self::from_bytes([0; 2]).with_value(ether_type)
     }
 }
 
@@ -171,7 +157,7 @@ impl DataEncapPlan {
 pub struct DataDecapPlan {
     pub destination: Eui48,
     pub source: Eui48,
-    pub ether_type: u16,
+    pub ether_type: EtherType,
     pub payload_offset: usize,
     pub payload_length: usize,
 }
@@ -185,7 +171,7 @@ pub struct DataDecapPlan {
 pub struct MsduHeader {
     pub destination: Eui48,
     pub source: Eui48,
-    pub ether_type: u16,
+    pub ether_type: EtherType,
 }
 
 /// An MSDU shorter than its Ethernet II header.
@@ -208,7 +194,7 @@ impl MsduHeader {
         let mut reader = oer_portable_wire::Reader::new(frame);
         let destination = Eui48::read(&mut reader).map_err(|_| MsduTooShort)?;
         let source = Eui48::read(&mut reader).map_err(|_| MsduTooShort)?;
-        let ether_type = reader.u16_be().map_err(|_| MsduTooShort)?;
+        let ether_type = EtherType::read(&mut reader).map_err(|_| MsduTooShort)?;
         Ok((
             Self {
                 destination,
@@ -229,7 +215,7 @@ impl MsduHeader {
 pub struct MsduParts<'payload> {
     pub destination: Eui48,
     pub source: Eui48,
-    pub ether_type: u16,
+    pub ether_type: EtherType,
     pub payload: &'payload [u8],
 }
 
@@ -246,11 +232,11 @@ impl MsduParts<'_> {
 
 /// The EtherType after an RFC 1042 LLC/SNAP header, or `None` for another
 /// header.
-pub const fn rfc1042_ether_type(llc: [u8; LLC_SNAP_HEADER_LEN]) -> Option<u16> {
+pub const fn rfc1042_ether_type(llc: [u8; LLC_SNAP_HEADER_LEN]) -> Option<EtherType> {
     let [p0, p1, p2, p3, p4, p5, e0, e1] = llc;
     let [r0, r1, r2, r3, r4, r5] = RFC1042_LLC_SNAP_PREFIX;
     if p0 == r0 && p1 == r1 && p2 == r2 && p3 == r3 && p4 == r4 && p5 == r5 {
-        Some(EtherTypeField::from_bytes([e0, e1]).value())
+        Some(EtherType::from_octets([e0, e1]))
     } else {
         None
     }
@@ -410,13 +396,13 @@ impl<'a> AmsduSubframes<'a> {
 /// A raw priority cannot enter the encoder:
 ///
 /// ```compile_fail,E0308
-/// use oer_protocols_ieee802_wire::Eui48;
+/// use oer_protocols_ieee802_wire::{EtherType, Eui48};
 /// use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
 /// use oer_protocols_ieee80211_wire::{data::PeerQos, frame::QosAckPolicy};
 /// let msdu = MsduHeader {
 ///     destination: Eui48::new([6; 6]),
 ///     source: Eui48::new([4; 6]),
-///     ether_type: 0x0800,
+///     ether_type: EtherType::IPV4,
 /// };
 /// let _plan = plan_data_encapsulation(
 ///     DataInterfaceRole::Station, Eui48::new([2; 6]), Eui48::new([4; 6]), msdu, 8, PeerQos::Qos, QosAckPolicy::Normal,
@@ -426,14 +412,14 @@ impl<'a> AmsduSubframes<'a> {
 /// Fixed protocol priorities need no runtime validation:
 ///
 /// ```
-/// use oer_protocols_ieee802_wire::Eui48;
+/// use oer_protocols_ieee802_wire::{EtherType, Eui48};
 /// use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
 /// use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 /// use oer_protocols_ieee80211_wire::{data::PeerQos, frame::QosAckPolicy};
 /// let msdu = MsduHeader {
 ///     destination: Eui48::new([6; 6]),
 ///     source: Eui48::new([4; 6]),
-///     ether_type: 0x0800,
+///     ether_type: EtherType::IPV4,
 /// };
 /// let plan = plan_data_encapsulation(
 ///     DataInterfaceRole::Station, Eui48::new([2; 6]), Eui48::new([4; 6]), msdu,
@@ -455,7 +441,7 @@ pub const fn plan_data_encapsulation(
         source,
         ether_type,
     } = msdu;
-    let [e0, e1] = EtherTypeField::of(ether_type).to_bytes();
+    let [e0, e1] = ether_type.octets();
     // An access point's group-addressed data stays non-QoS.
     let group_from_access_point = matches!(role, DataInterfaceRole::AccessPoint)
         && matches!(destination.kind(), Eui48Kind::Group(_));

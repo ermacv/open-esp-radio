@@ -28,7 +28,6 @@ and the runtime's `drive` carries its steps out on the port.
 | `wire/src/element.rs` | One complete information element: identifier, length and body |
 | `wire/src/sae.rs` | SAE Commit and Confirm body codecs (byte values of scalar, element and confirm) and SAE extension element IDs |
 | `wire/src/status.rs` | Status and reason codes |
-| `wire/src/ethertype.rs` | The EtherType values the 802.11 side names (EAPOL, WAPI) |
 | `wire/src/tsf.rs` | The Timestamp field and the time unit |
 | `core/roles/sta/src/security.rs` | Station security policy: candidate admission and RSN selection |
 | `core/roles/ap/src/security_policy.rs` | Access point security policy and its advertised elements |

@@ -8,7 +8,7 @@
 
 use crate::data::{MsduHeader, MsduParts, PeerQos};
 use crate::frame::{FrameControlFields, FrameType, QosAckPolicy};
-use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
+use oer_protocols_ieee802_wire::{EtherType, Eui48, IndividualAddress};
 
 use crate::{
     block_ack::{BlockAckAction, parse_block_ack_action},
@@ -84,7 +84,7 @@ pub struct ApDataFrame<'payload> {
     pub access_point: Eui48,
     pub destination: Eui48,
     pub sequence_number: SequenceNumber,
-    pub ether_type: u16,
+    pub ether_type: EtherType,
     pub payload: &'payload [u8],
 }
 

@@ -19,5 +19,5 @@ A parse returns a checked value over the caller's bytes or a typed refusal;
 a valid header of another kind (another EtherType, another IP protocol) is
 not an error. Options and extension headers are not interpreted; a parse does
 not check a checksum.
-The EtherType values the IEEE 802.11 side itself needs (EAPOL, WAPI) belong
-to `oer-protocols-ieee80211-wire`; the LLC/SNAP field it carries is a plain number.
+The EtherType values are the IEEE 802 wire's, which the LLC/SNAP header of the
+IEEE 802.11 wire carries too.

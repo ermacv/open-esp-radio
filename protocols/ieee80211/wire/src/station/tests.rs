@@ -2,7 +2,7 @@ use super::*;
 use crate::data::MsduParts;
 use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, RsnAssociation, SaePwe, Spp};
 use crate::sequence::seq;
-use oer_protocols_ieee802_wire::IndividualAddress;
+use oer_protocols_ieee802_wire::{EtherType, IndividualAddress};
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
 const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
@@ -25,7 +25,7 @@ fn msdu(frame: &[u8]) -> MsduParts<'_> {
     MsduParts {
         destination: Eui48::new(frame[..6].try_into().unwrap()),
         source: Eui48::new(frame[6..12].try_into().unwrap()),
-        ether_type: u16::from_be_bytes([frame[12], frame[13]]),
+        ether_type: EtherType::new(u16::from_be_bytes([frame[12], frame[13]])),
         payload: &frame[14..],
     }
 }
@@ -312,7 +312,7 @@ fn sta_data_frame_encodes_to_ds_llc_snap() {
         .unwrap(),
         destination: Eui48::new([0x20, 0x21, 0x22, 0x23, 0x24, 0x25]),
         sequence_number: seq(0x123),
-        ether_type: 0x888e,
+        ether_type: EtherType::new(0x888e),
         payload: &[1, 2, 3],
     }
     .encode(&mut output)
@@ -346,7 +346,7 @@ fn protected_data_frame_selects_the_recovered_legacy_or_qos_layout() {
         user_priority: 7,
         peer_qos: crate::data::PeerQos::Qos,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-        ether_type: 0x888e,
+        ether_type: EtherType::new(0x888e),
         payload: &[1, 2, 3],
     };
     let len = frame.encode(&mut output).unwrap();
@@ -389,7 +389,7 @@ fn protected_data_frame_fully_overwrites_a_reused_dma_slot() {
         user_priority: 7,
         peer_qos: crate::data::PeerQos::Qos,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-        ether_type: 0x888e,
+        ether_type: EtherType::new(0x888e),
         payload: &[1, 2, 3],
     };
     let mut zeroed = [0_u8; 64];
@@ -422,7 +422,7 @@ fn protected_he_control_keeps_ccmp_immediately_after_qos() {
         user_priority: 0,
         peer_qos: crate::data::PeerQos::Qos,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
-        ether_type: 0x0806,
+        ether_type: EtherType::new(0x0806),
         payload: &[1, 2, 3],
     }
     .encode_with_he_control(
@@ -481,12 +481,12 @@ fn protected_amsdu_encodes_two_msdus_and_round_trips() {
     let first_decoded = subframes.next().unwrap().unwrap();
     assert_eq!(first_decoded.destination.octets(), first[..6]);
     assert_eq!(first_decoded.source.octets(), first[6..12]);
-    assert_eq!(first_decoded.ether_type, 0x0800);
+    assert_eq!(first_decoded.ether_type, EtherType::new(0x0800));
     assert_eq!(first_decoded.payload, &[1, 2, 3]);
     let second_decoded = subframes.next().unwrap().unwrap();
     assert_eq!(second_decoded.destination.octets(), second[..6]);
     assert_eq!(second_decoded.source.octets(), second[6..12]);
-    assert_eq!(second_decoded.ether_type, 0x88b5);
+    assert_eq!(second_decoded.ether_type, EtherType::new(0x88b5));
     assert_eq!(second_decoded.payload, &[4, 5, 6]);
     assert_eq!(subframes.next(), None);
 }
@@ -549,7 +549,7 @@ fn protected_amsdu_rejects_the_unadvertised_large_class() {
     let large = MsduParts {
         destination: Eui48::new([0; 6]),
         source: Eui48::new([0; 6]),
-        ether_type: 0,
+        ether_type: EtherType::new(0),
         payload: &payload,
     };
     let frames = [large, large];
@@ -642,7 +642,7 @@ fn station_encoders_admit_complete_capacity_before_writing() {
         bssid,
         destination: Eui48::new(BSSID),
         sequence_number,
-        ether_type: 0x888e,
+        ether_type: EtherType::new(0x888e),
         payload: &[1, 2, 3],
     };
     let protected_data = StaProtectedDataFrame {
@@ -653,7 +653,7 @@ fn station_encoders_admit_complete_capacity_before_writing() {
         user_priority: 7,
         peer_qos: crate::data::PeerQos::Qos,
         ccmp_header: [0; CCMP_HEADER_LEN],
-        ether_type: 0x0800,
+        ether_type: EtherType::new(0x0800),
         payload: &[1, 2, 3],
     };
     let open = OpenAuthenticationRequest {
@@ -834,7 +834,7 @@ fn an_open_qos_data_frame_carries_its_tid_and_decodes_back() {
         sequence_number: seq(0x12),
         priority: crate::qos::WmmUserPriority::UP5,
         peer_qos: crate::data::PeerQos::Qos,
-        ether_type: 0x0800,
+        ether_type: EtherType::new(0x0800),
         payload: &[1, 2, 3],
     };
     let mut output = [0_u8; 64];

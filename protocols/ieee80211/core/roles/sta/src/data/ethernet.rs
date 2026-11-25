@@ -28,7 +28,7 @@ pub struct FrameTooLong {
 /// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 /// let parts = MsduParts {
 ///     destination: Eui48::BROADCAST, source: Eui48::new([2, 0, 0, 0, 0, 1]),
-///     ether_type: 0x0800, payload: &[1, 2, 3],
+///     ether_type: EtherType::IPV4, payload: &[1, 2, 3],
 /// };
 /// let frame = EthernetFrame::from_parts(parts).unwrap();
 /// assert_eq!(frame.parts(), parts);
@@ -77,7 +77,7 @@ impl EthernetFrame {
             header: MsduHeader {
                 destination: Eui48::ZERO,
                 source: Eui48::ZERO,
-                ether_type: 0,
+                ether_type: EtherType::new(0),
             },
             payload: heapless::Vec::new(),
         }
@@ -125,7 +125,7 @@ impl oer_protocols_network_port::EthernetFrame for EthernetFrame {
         Ok(oer_protocols_network_port::EthernetFrameView {
             destination: parts.destination,
             source: parts.source,
-            ether_type: EtherType::new(parts.ether_type),
+            ether_type: parts.ether_type,
             payload: parts.payload,
         })
     }
@@ -150,7 +150,7 @@ pub struct MsduDelivery<'frame> {
 pub struct MsduPlan {
     pub destination: [u8; 6],
     pub source: [u8; 6],
-    pub ether_type: u16,
+    pub ether_type: EtherType,
     /// The payload's range in the MPDU.
     pub payload: core::ops::Range<usize>,
 }
@@ -219,7 +219,7 @@ mod tests {
         let parts = |payload| MsduParts {
             destination: Eui48::new([1; 6]),
             source: Eui48::new([2; 6]),
-            ether_type: 0x0800,
+            ether_type: EtherType::new(0x0800),
             payload,
         };
         let delivery = MsduDelivery::locate(&frame, parts(&frame[3..6])).unwrap();
@@ -242,7 +242,7 @@ mod tests {
         let parts = MsduParts {
             destination: Eui48::new([0xab; 6]),
             source: Eui48::new([0xcd; 6]),
-            ether_type: 0xabcd,
+            ether_type: EtherType::new(0xabcd),
             payload: &[0xab; MAX_ETHERNET_PAYLOAD_LEN],
         };
         let frame = EthernetFrame::from_parts(parts).unwrap();

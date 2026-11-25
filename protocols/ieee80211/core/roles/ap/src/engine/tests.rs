@@ -286,10 +286,10 @@ fn an_rsn_association_starts_the_handshake_and_its_eapol_reaches_the_authenticat
     // A From-DS data frame to the peer with the EAPOL EtherType.
     assert_eq!(output[1] & 0x03, 0x02);
     assert_eq!(output[4..10], PEER);
-    assert_eq!(output[30..32], EAPOL_ETHER_TYPE.to_be_bytes());
+    assert_eq!(output[30..32], EtherType::EAPOL.octets());
     // The peer's EAPOL comes to the authenticator; its other data does not
     // reach the network before it is authorized.
-    let eapol = uplink(EAPOL_ETHER_TYPE, &[1, 3, 0, 0]);
+    let eapol = uplink(EtherType::EAPOL.value(), &[1, 3, 0, 0]);
     assert_eq!(
         engine
             .receive(
@@ -334,13 +334,13 @@ fn the_network_reaches_only_an_authorized_peer_and_the_group() {
     associate(&mut engine);
     assert_eq!(
         engine
-            .plan_msdu(PEER, AP, 0x0800, WmmUserPriority::UP0)
+            .plan_msdu(PEER, AP, EtherType::new(0x0800), WmmUserPriority::UP0)
             .unwrap(),
         None,
         "the peer is not authorized"
     );
     let group = engine
-        .plan_msdu([0xff; 6], AP, 0x0806, WmmUserPriority::UP6)
+        .plan_msdu([0xff; 6], AP, EtherType::new(0x0806), WmmUserPriority::UP6)
         .unwrap()
         .unwrap();
     assert_eq!(group.kind(), ApFrameKind::Group);
@@ -376,7 +376,7 @@ fn an_in_place_write_that_does_not_fit_draws_no_sequence_number() {
     let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
     let mut engine = engine(&mut storage, &mut beacon);
     let group = engine
-        .plan_msdu([0xff; 6], AP, 0x0800, WmmUserPriority::UP0)
+        .plan_msdu([0xff; 6], AP, EtherType::new(0x0800), WmmUserPriority::UP0)
         .unwrap()
         .unwrap();
     let mut region = [0; 64];
@@ -610,7 +610,7 @@ mod handshake {
             ApReceived::Nothing
         );
         let eapol = message4(replay_retry);
-        let frame = protected_uplink(EAPOL_ETHER_TYPE, &eapol, 2);
+        let frame = protected_uplink(EtherType::EAPOL.value(), &eapol, 2);
         let ApReceived::Eapol { body, .. } = engine
             .receive(
                 &frame,
@@ -694,7 +694,7 @@ fn the_network_takes_what_is_for_the_access_point_or_a_group() {
         let msdu = ApMsdu {
             destination,
             source: PEER,
-            ether_type: 0x0800,
+            ether_type: EtherType::new(0x0800),
             payload: &[],
         };
         assert_eq!(engine.delivers(&msdu), delivered, "{destination:?}");

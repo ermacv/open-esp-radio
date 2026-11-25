@@ -4,20 +4,19 @@
 //! module contains only finite decisions which can be verified on the host.
 
 use oer_protocols_ieee802_wire::EtherType;
-use oer_protocols_ieee80211_wire::ethertype;
 use oer_protocols_network_wire::ip::{DsField, Ipv6HeaderPrefix};
 
 /// The classifier's protocol word: the EtherType octets as they lie in the
 /// frame, read as a little-endian `u16`.
-const fn protocol_word(ether_type: u16) -> u16 {
-    u16::from_le_bytes(ether_type.to_be_bytes())
+const fn protocol_word(ether_type: EtherType) -> u16 {
+    u16::from_le_bytes(ether_type.octets())
 }
 
-pub const ETHER_TYPE_IPV4: u16 = protocol_word(EtherType::IPV4.value());
-pub const ETHER_TYPE_ARP: u16 = protocol_word(EtherType::ARP.value());
-pub const ETHER_TYPE_EAPOL: u16 = protocol_word(ethertype::ETHER_TYPE_EAPOL);
-pub const ETHER_TYPE_WAPI: u16 = protocol_word(ethertype::ETHER_TYPE_WAPI);
-pub const ETHER_TYPE_IPV6: u16 = protocol_word(EtherType::IPV6.value());
+pub const ETHER_TYPE_IPV4: u16 = protocol_word(EtherType::IPV4);
+pub const ETHER_TYPE_ARP: u16 = protocol_word(EtherType::ARP);
+pub const ETHER_TYPE_EAPOL: u16 = protocol_word(EtherType::EAPOL);
+pub const ETHER_TYPE_WAPI: u16 = protocol_word(EtherType::WAPI);
+pub const ETHER_TYPE_IPV6: u16 = protocol_word(EtherType::IPV6);
 /// The vendor classifier's private priority marker.
 pub const ETHER_TYPE_VENDOR_PRIORITY: u16 = 0xeeee;
 

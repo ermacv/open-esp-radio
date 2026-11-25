@@ -39,6 +39,7 @@
 //! [`Station::link_returned`]: crate::machine::Station::link_returned
 //! [`Station::tx_sequence`]: crate::machine::Station::tx_sequence
 
+use oer_protocols_ieee802_wire::EtherType;
 use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, RxMetadata, StorageTooShort};
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch;
 use oer_protocols_ieee80211_core_upper_mac::receive::{AdmittedData, Integrity, RxDropReason};
@@ -46,7 +47,6 @@ use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::data::MsduParts;
 use oer_protocols_ieee80211_wire::eapol::PAE_GROUP_ADDRESS;
-use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::frame::{DecodedHeader, MacHeader};
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::security::LinkProtection;
@@ -275,7 +275,7 @@ pub(crate) fn msdus<'f>(
     let protected = protection == LinkProtection::Ccmp;
     Ok(admitted.msdus()?.map(move |parts| {
         let parts = parts?;
-        if parts.ether_type == ETHER_TYPE_EAPOL {
+        if parts.ether_type == EtherType::EAPOL {
             if protected
                 && !frame_protected
                 && parts.destination != address.get()
