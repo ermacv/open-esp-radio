@@ -7,8 +7,7 @@ use super::*;
 
 /// The kinds of work the list holds now.
 fn listed<B>(stack: &Stack<B>, now: Instant) -> Vec<Class> {
-    stack
-        .demands(now, &())
+    finite(stack.demands(now, &()))
         .map(|demand| demand.ready().class)
         .collect()
 }

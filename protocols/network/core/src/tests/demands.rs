@@ -6,8 +6,8 @@ use super::*;
 
 /// The walk and the reference over the same state.
 fn same_demands<B: core::fmt::Debug>(stack: &Stack<B>, now: Instant) -> usize {
-    let walked: Vec<_> = stack.demands(now, &()).collect();
-    let chained: Vec<_> = stack.demands_chain(now, &()).collect();
+    let walked: Vec<_> = finite(stack.demands(now, &())).collect();
+    let chained: Vec<_> = finite(stack.demands_chain(now, &())).collect();
     assert_eq!(std::format!("{walked:?}"), std::format!("{chained:?}"));
     walked.len()
 }
@@ -43,7 +43,9 @@ fn the_walk_of_ready_work_lists_what_the_chain_listed() {
         let mut listed = same_demands(stack, at(1));
         assert!(listed >= 5, "every source has work: {listed}");
         // Each publication moves the sockets' turn and takes one piece away.
+        let mut passes = Passes::default();
         while let Some(demand) = stack.poll_demand(at(1)) {
+            passes.one();
             let _ = stack.transmit(at(1), demand.grant(), unproduced, &());
             listed = same_demands(stack, at(1));
         }

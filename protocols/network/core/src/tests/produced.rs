@@ -687,7 +687,9 @@ fn the_neighbor_counter_moves_on_every_release_of_protection() {
         };
         let work = stack.declare(at(2), &socket, far, 8, 35).unwrap();
         let mut now = at(2);
+        let mut passes = Passes::default();
         while let Some(demand) = stack.poll_demand(now) {
+            passes.one();
             stack
                 .transmit(now, demand.grant(), unproduced, &())
                 .unwrap();

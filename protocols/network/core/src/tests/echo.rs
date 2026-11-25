@@ -54,7 +54,9 @@ fn ask<B>(stack: &mut Stack<B>, now: Instant, message: &[u8]) -> Vec<NetEvent> {
 /// Every ready work sent; what went.
 fn flush<B>(stack: &mut Stack<B>, now: Instant) -> Vec<Vec<u8>> {
     let before = stack.port().sent.len();
+    let mut passes = Passes::default();
     while let Some(demand) = stack.poll_demand(now) {
+        passes.one();
         stack
             .transmit(now, demand.grant(), unproduced, &())
             .unwrap();

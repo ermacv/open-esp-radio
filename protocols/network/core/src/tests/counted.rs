@@ -112,8 +112,7 @@ fn a_readiness_walk_counts_every_running_place_it_visits() {
     wide(|stack| {
         let _socket = four_running(stack);
         let counter = Counter::on();
-        let ready: Vec<_> = stack
-            .demands(at(1), &counter)
+        let ready: Vec<_> = finite(stack.demands(at(1), &counter))
             .map(|demand| demand.ready().class)
             .collect();
         assert_eq!(
@@ -155,7 +154,8 @@ fn ends_and_frames_count_where_they_are_told_and_built() {
         // A stale grant builds nothing.
         let stale = stack.poll_demand(at(1)).map(|demand| demand.grant());
         assert!(stale.is_none(), "the waiting one is not ready");
-        let told: Vec<_> = core::iter::from_fn(|| stack.next_end(&ends, &counter)).collect();
+        let told: Vec<_> =
+            finite(core::iter::from_fn(|| stack.next_end(&ends, &counter))).collect();
         assert_eq!(told.len(), 3);
         assert_eq!(
             counter.told.get(),
@@ -181,8 +181,7 @@ fn script<B: core::fmt::Debug>(counter: &Counter, stack: &mut Wide<B>) -> Vec<st
     let ends = socket.ends();
     let mut seen = Vec::new();
     for _ in 0..4 {
-        let demands: Vec<_> = stack
-            .demands(at(1), counter)
+        let demands: Vec<_> = finite(stack.demands(at(1), counter))
             .map(|demand| *demand.ready())
             .collect();
         seen.push(std::format!("{demands:?}"));
@@ -190,7 +189,7 @@ fn script<B: core::fmt::Debug>(counter: &Counter, stack: &mut Wide<B>) -> Vec<st
         let sent = stack.transmit(at(1), demand.grant(), unproduced, counter);
         seen.push(std::format!("{sent:?}"));
     }
-    let told: Vec<_> = core::iter::from_fn(|| stack.next_end(&ends, counter)).collect();
+    let told: Vec<_> = finite(core::iter::from_fn(|| stack.next_end(&ends, counter))).collect();
     seen.push(std::format!("{told:?}"));
     seen.push(std::format!("{:?}", stack.port_mut().sent));
     seen
