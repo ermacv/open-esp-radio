@@ -83,7 +83,6 @@ pub enum ApGroupManagementError {
     OutputTooSmall,
     /// The IGTK's 48-bit IPN space is exhausted; replace the key.
     PacketNumbersExhausted,
-    InvalidKey(RsnFrameError),
     /// The AES engine refused the IGTK or a block.
     Engine(oer_portable_crypto::block::BlockError),
 }
@@ -221,8 +220,7 @@ impl<S: SppScope> AccessPointService<'_, S> {
         // New associations receive the current frontier in Message 3,
         // so old group frames cannot replay under the unchanged IGTK.
         let packet_number = sender.packet_number();
-        *igtk = RsnIgtk::new(igtk.key_id(), packet_number, igtk.key())
-            .map_err(ApGroupManagementError::InvalidKey)?;
+        *igtk = RsnIgtk::new(igtk.key_id(), packet_number, igtk.key());
         Ok(protected)
     }
 }

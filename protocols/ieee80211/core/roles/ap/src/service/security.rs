@@ -548,10 +548,9 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         // A retried Message 3 repeats the IPN captured at its first
         // publication. Only WPA2 without management protection is claimed;
         // the WPA3/PMF correctness of that snapshot is not.
-        let igtk = match self.igtk() {
-            Some(igtk) => Some(RsnIgtk::new(igtk.key_id(), management_ipn, igtk.key())?),
-            None => None,
-        };
+        let igtk = self
+            .igtk()
+            .map(|igtk| RsnIgtk::new(igtk.key_id(), management_ipn, igtk.key()));
         Ok(RsnPlainKeyData::build(
             elements,
             self.gtk()?,

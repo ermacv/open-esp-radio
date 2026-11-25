@@ -3,6 +3,7 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::bip::KeyIdField;
 use crate::ccmp::GroupKeyId;
 use crate::security::rsn::RSN_OUI;
 use oer_protocols_ieee802_wire::Eui48;
@@ -605,8 +606,8 @@ impl<'a> GtkKde<'a> {
 /// An IGTK KDE's data: its Key ID, the IGTK packet number and the IGTK.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IgtkKde<'a> {
-    /// The little-endian Key ID field.
-    pub key_id: u16,
+    /// The Key ID field.
+    pub key_id: KeyIdField,
     /// The IPN field.
     pub packet_number: [u8; 6],
     pub key: &'a [u8; 16],
@@ -620,7 +621,7 @@ impl<'a> IgtkKde<'a> {
         let (&packet_number, key) = rest.split_first_chunk::<6>()?;
         let key = <&[u8; 16]>::try_from(key).ok()?;
         Some(Self {
-            key_id: crate::bip::KeyIdField::from_bytes([id0, id1]).key_id(),
+            key_id: KeyIdField::from_bytes([id0, id1]),
             packet_number,
             key,
         })
@@ -634,9 +635,7 @@ impl<'a> IgtkKde<'a> {
                 None => panic!("IGTK KDE geometry"),
             };
         let mut kde = [0; IGTK_KDE_LEN];
-        let id = crate::bip::KeyIdField::from_bytes([0; 2])
-            .with_key_id(self.key_id)
-            .to_bytes();
+        let id = self.key_id.to_bytes();
         for (target, source) in kde.iter_mut().zip(
             HEADER
                 .iter()
@@ -987,7 +986,7 @@ mod tests {
         assert_eq!(GtkKde::parse(&reserved[KDE_HEADER_LEN..]), None);
 
         let igtk = IgtkKde {
-            key_id: 4,
+            key_id: crate::bip::IgtkKeyId::Four.field(),
             packet_number: [1, 2, 3, 4, 5, 6],
             key: &[0x22; 16],
         }
@@ -996,7 +995,7 @@ mod tests {
         assert_eq!(&igtk[8..14], &[1, 2, 3, 4, 5, 6]);
         let parsed = IgtkKde::parse(&igtk[KDE_HEADER_LEN..]).unwrap();
         assert_eq!(
-            (parsed.key_id, parsed.packet_number),
+            (parsed.key_id.key_id(), parsed.packet_number),
             (4, [1, 2, 3, 4, 5, 6])
         );
         assert_eq!(IgtkKde::parse(&igtk[KDE_HEADER_LEN..29]), None);

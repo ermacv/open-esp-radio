@@ -22,7 +22,8 @@ fn deauthentication() -> [u8; 26 + MANAGEMENT_MIC_ELEMENT_LEN] {
 #[test]
 fn an_appended_element_has_the_reference_layout_and_parses_back() {
     let mut frame = deauthentication();
-    let protection = BipProtection::append(&mut frame, 26, 4, ipn(0x0102_0304_0506)).unwrap();
+    let protection =
+        BipProtection::append(&mut frame, 26, IgtkKeyId::Four, ipn(0x0102_0304_0506)).unwrap();
     let [aad, body, element, zero] = protection.mic_input();
     let mut expected_aad = std::vec![0xc0, 0x00];
     expected_aad.extend_from_slice(&[0xff; 6]);
@@ -39,7 +40,7 @@ fn an_appended_element_has_the_reference_layout_and_parses_back() {
 
     let parsed = BipFrame::parse(&frame).unwrap();
     assert_eq!(
-        (parsed.key_id(), parsed.packet_number().get()),
+        (parsed.key_id().key_id(), parsed.packet_number().get()),
         (4, 0x0102_0304_0506)
     );
     assert_eq!(parsed.mic(), &[0xa5; 8]);
@@ -64,11 +65,11 @@ fn a_frame_without_its_element_or_room_is_refused_and_untouched() {
     );
     let before = frame;
     assert_eq!(
-        BipProtection::append(&mut frame, 27, 4, ipn(1)).err(),
+        BipProtection::append(&mut frame, 27, IgtkKeyId::Four, ipn(1)).err(),
         Some(BipFormatError::Truncated)
     );
     assert_eq!(
-        BipProtection::append(&mut frame, 23, 4, ipn(1)).err(),
+        BipProtection::append(&mut frame, 23, IgtkKeyId::Four, ipn(1)).err(),
         Some(BipFormatError::Truncated)
     );
     assert_eq!(frame, before);
@@ -77,7 +78,7 @@ fn a_frame_without_its_element_or_room_is_refused_and_untouched() {
 #[test]
 fn a_data_frame_or_another_version_with_a_valid_element_is_refused() {
     let mut protected = deauthentication();
-    let length = BipProtection::append(&mut protected, 26, 4, ipn(1))
+    let length = BipProtection::append(&mut protected, 26, IgtkKeyId::Four, ipn(1))
         .unwrap()
         .finish(&[0xa5; 8]);
     assert!(BipFrame::parse(&protected[..length]).is_ok());
@@ -91,7 +92,7 @@ fn a_data_frame_or_another_version_with_a_valid_element_is_refused() {
         );
         let before = frame;
         assert_eq!(
-            BipProtection::append(&mut frame, 26, 4, ipn(1)).err(),
+            BipProtection::append(&mut frame, 26, IgtkKeyId::Four, ipn(1)).err(),
             Some(BipFormatError::NotManagement)
         );
         assert_eq!(frame, before);
@@ -103,7 +104,7 @@ fn a_data_frame_or_another_version_with_a_valid_element_is_refused() {
 fn the_highest_ipn_round_trips() {
     let mut frame = [0_u8; 26 + MANAGEMENT_MIC_ELEMENT_LEN];
     frame[..26].copy_from_slice(&deauthentication()[..26]);
-    let protection = BipProtection::append(&mut frame, 26, 4, ipn(HIGHEST)).unwrap();
+    let protection = BipProtection::append(&mut frame, 26, IgtkKeyId::Four, ipn(HIGHEST)).unwrap();
     let length = protection.finish(&[0; BIP_MIC_LEN]);
     assert_eq!(
         BipFrame::parse(&frame[..length])
@@ -117,4 +118,16 @@ fn the_highest_ipn_round_trips() {
         ipn_to_bytes(ipn_from_bytes([1, 2, 3, 4, 5, 6])),
         [1, 2, 3, 4, 5, 6]
     );
+}
+
+#[test]
+fn an_igtk_is_named_four_or_five_and_by_no_other_field() {
+    for value in 0..=u16::MAX {
+        let field = KeyIdField::from_bytes(value.to_le_bytes());
+        let key_id = IgtkKeyId::from_field(field);
+        assert_eq!(key_id.is_some(), matches!(value, 4 | 5));
+        if let Some(key_id) = key_id {
+            assert_eq!(key_id.field(), field);
+        }
+    }
 }

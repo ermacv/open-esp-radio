@@ -17,6 +17,7 @@ use oer_protocols_ieee80211_core_security_cipher::bip::{
     self, BipError, BipFrame, BipProtectError,
 };
 use oer_protocols_ieee80211_core_upper_mac::packet_number::{PacketNumber48, PacketNumberFrontier};
+use oer_protocols_ieee80211_wire::bip::IgtkKeyId;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A six-octet BIP IPN. This value cannot be used as a CCMP PN.
@@ -43,7 +44,9 @@ impl PacketNumber48 for BipPacketNumber {
 /// The receive state of one IGTK: its key and the last accepted IPN.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct BipReceiver {
-    key_id: u8,
+    /// Public: only the key material needs erasure.
+    #[zeroize(skip)]
+    key_id: IgtkKeyId,
     key: [u8; RSN_IGTK_LEN],
     /// IPNs are public; only the key material needs erasure.
     #[zeroize(skip)]
@@ -60,7 +63,7 @@ impl BipReceiver {
         }
     }
 
-    pub const fn key_id(&self) -> u8 {
+    pub const fn key_id(&self) -> IgtkKeyId {
         self.key_id
     }
 
@@ -116,7 +119,9 @@ impl From<BipError> for BipReceiveError {
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct BipTransmitter {
-    key_id: u8,
+    /// Public: only the key material needs erasure.
+    #[zeroize(skip)]
+    key_id: IgtkKeyId,
     key: [u8; RSN_IGTK_LEN],
     /// The last successfully protected IPN, kept in its bounded domain.
     #[zeroize(skip)]

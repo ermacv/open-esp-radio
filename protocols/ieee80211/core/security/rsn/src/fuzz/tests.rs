@@ -176,7 +176,11 @@ fn key_unwrap_never_panics_full() {
 }
 
 fn bip(count: usize) {
-    let igtk = RsnIgtk::new(4, [1, 0, 0, 0, 0, 0], &[0x5a; 16]).unwrap();
+    let igtk = RsnIgtk::new(
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four,
+        [1, 0, 0, 0, 0, 0],
+        &[0x5a; 16],
+    );
     let mut transmitter = BipTransmitter::new(&igtk);
     let mut frame = [0_u8; 26 + 18];
     frame[0] = 0xc0;
