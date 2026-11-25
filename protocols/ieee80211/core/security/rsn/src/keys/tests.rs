@@ -4,7 +4,7 @@ use oer_protocols_ieee80211_wire::eapol::GtkTx;
 fn key(peer: [u8; 6], value: u8) -> RsnKeyInstall {
     RsnKeyInstall {
         interface: RsnInterface::Station,
-        peer,
+        peer: Eui48::new(peer),
         kind: RsnKeyKind::Pairwise,
         receive_sequence: [0; 8],
         key: Ccmp128Key::new(&[value; 16]),

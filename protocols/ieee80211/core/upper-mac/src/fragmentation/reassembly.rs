@@ -259,12 +259,12 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
     }
 
     /// Revoke contexts owned by one transmitter at an AP peer-close edge.
-    pub fn forget_transmitter(&mut self, transmitter: [u8; 6]) -> usize {
+    pub fn forget_transmitter(&mut self, transmitter: Eui48) -> usize {
         let mut discarded = 0_usize;
         for slot in &mut self.slots {
             if slot
                 .identity()
-                .is_some_and(|identity| identity.transmitter_address() == Eui48::new(transmitter))
+                .is_some_and(|identity| identity.transmitter_address() == transmitter)
             {
                 // At most one per slot, so at most CONTEXTS.
                 discarded = discarded.saturating_add(usize::from(slot.is_active()));

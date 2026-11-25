@@ -82,14 +82,17 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
     };
     let message4 = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         10,
     )
     .authenticate(service.pending_ptk(PEER).unwrap(), &mut SoftwareAes128)
     .unwrap();
-    let message4 =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
-            .unwrap();
+    let message4 = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        message4.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         service.on_eapol(PEER, message4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::AuthorizePeer

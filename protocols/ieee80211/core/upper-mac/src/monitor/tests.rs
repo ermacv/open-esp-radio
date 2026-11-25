@@ -20,7 +20,7 @@ fn bounded_filter_combines_type_rssi_and_address_without_payload_matching() {
     let filter = MonitorFilter::all()
         .frame_types(MonitorFrameTypeMask::DATA)
         .minimum_rssi_dbm(-60)
-        .any_address(selected);
+        .any_address(Eui48::new(selected));
 
     assert!(filter.accepts(&frame));
     assert!(!filter.minimum_rssi_dbm(-40).accepts(&frame));
@@ -58,7 +58,7 @@ fn qos_control_and_payload_of_a_three_address_frame_are_no_address4() {
         metadata: MacRxMetadata::unavailable(),
         logical_length: bytes.len(),
     };
-    let filter = MonitorFilter::all().any_address(selected);
+    let filter = MonitorFilter::all().any_address(Eui48::new(selected));
     assert!(!filter.accepts(&frame));
     // An Ack holds only its RA: octets after it are not a TA.
     let mut ack = [0_u8; 16];

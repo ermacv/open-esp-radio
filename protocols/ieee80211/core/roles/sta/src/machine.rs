@@ -675,7 +675,7 @@ pub enum StaFrame<K> {
         /// The agreement's recipient.
         receiver: IndividualAddress,
         /// The station's address.
-        transmitter: [u8; 6],
+        transmitter: Eui48,
         /// The agreement's TID.
         tid: oer_protocols_ieee80211_contracts_port::Tid,
         /// Where the recipient's window moves.
@@ -3040,12 +3040,11 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                         .into(),
                 );
             };
-            let eapol = OwnedEapolFrame::try_copy(
-                RsnInterface::Station,
-                connected.bssid.get().octets(),
-                payload,
-            )
-            .map_err(|_| oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Payload)?;
+            let eapol =
+                OwnedEapolFrame::try_copy(RsnInterface::Station, connected.bssid.get(), payload)
+                    .map_err(|_| {
+                        oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Payload
+                    })?;
             let Some(rsn) = connected.rsn.as_mut() else {
                 return Err(
                     oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Protection
@@ -4724,8 +4723,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                             oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking => {
                                 SaePasswordElement::hunting_and_pecking(
                                     password.as_bytes(),
-                                    self.config.address.get().octets(),
-                                    bssid.get().octets(),
+                                    self.config.address.get(),
+                                    bssid.get(),
                                 )
                                 .map_err(|error| {
                                     sae_derivation_failure(error, bssid.get().octets(), pwe)
@@ -4736,10 +4735,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                                     .map_err(|error| {
                                         sae_derivation_failure(error, bssid.get().octets(), pwe)
                                     })?
-                                    .password_element(
-                                        self.config.address.get().octets(),
-                                        bssid.get().octets(),
-                                    )
+                                    .password_element(self.config.address.get(), bssid.get())
                             }
                         };
                         let commit = SaeCommit::new(
@@ -4943,12 +4939,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     payload,
                     protection,
                 }) => {
-                    let eapol = OwnedEapolFrame::try_copy(
-                        RsnInterface::Station,
-                        bssid.get().octets(),
-                        payload,
-                    )
-                    .map_err(|_| RxDropReason::Payload)?;
+                    let eapol =
+                        OwnedEapolFrame::try_copy(RsnInterface::Station, bssid.get(), payload)
+                            .map_err(|_| RxDropReason::Payload)?;
                     let change = match &mut *state {
                         State::Handshake(handshake) => {
                             self.handshake_eapol(handshake, now, eapol, protection)
@@ -6002,7 +5995,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             tag: StaTxTag { epoch, purpose },
             frame: StaFrame::BlockAckRequest {
                 receiver,
-                transmitter: self.config.address.get().octets(),
+                transmitter: self.config.address.get(),
                 tid: port_tid,
                 starting_sequence: start,
             },
@@ -6829,8 +6822,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         // The checked handshake is built straight into the role's slot; the
         // language moves it there by value.
         let supplicant = RsnStaHandshake::new(
-            self.config.address.get().octets(),
-            bssid.get().octets(),
+            self.config.address.get(),
+            bssid.get(),
             self.config.callbacks.nonce(),
             join.rsn.as_bytes(),
             join.access_point.rsn_ie_bytes(),

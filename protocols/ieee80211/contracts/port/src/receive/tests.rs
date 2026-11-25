@@ -11,9 +11,9 @@ fn a_header_is_the_frame_s_fields_and_the_offset_of_its_body() {
     frame[24] = 5;
     let decoded = DecodedHeader::decode(&frame).unwrap();
     let header = RxHeader::of(&decoded, &frame).unwrap();
-    assert_eq!(header.receiver, [2; 6]);
-    assert_eq!(header.transmitter, [4; 6]);
-    assert_eq!(header.address3, [6; 6]);
+    assert_eq!(header.receiver, Eui48::new([2; 6]));
+    assert_eq!(header.transmitter, Eui48::new([4; 6]));
+    assert_eq!(header.address3, Eui48::new([6; 6]));
     assert_eq!(header.sequence_control.to_bytes(), [0x34, 0x12]);
     assert_eq!(header.qos.map(|qos| qos.to_bytes()), Some([5, 0]));
     assert_eq!(header.body, 26);

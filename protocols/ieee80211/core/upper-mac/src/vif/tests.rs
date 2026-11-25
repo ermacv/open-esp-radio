@@ -12,9 +12,9 @@ const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 3];
 const PEER: [u8; 6] = [0x02, 0, 0, 0, 0, 4];
 const GROUP: [u8; 6] = [0xff; 6];
 const ADDRESSES: StaApRxAddresses = StaApRxAddresses {
-    station: STA,
-    station_bssid: UPLINK,
-    access_point: AP,
+    station: Eui48::new(STA),
+    station_bssid: Eui48::new(UPLINK),
+    access_point: Eui48::new(AP),
 };
 
 fn frame(frame_control: u16, receiver: [u8; 6], transmitter: [u8; 6], third: [u8; 6]) -> [u8; 24] {
@@ -64,7 +64,7 @@ fn routes_upstream_beacon_by_transmitter_and_bssid() {
 #[test]
 fn ambiguous_and_unknown_headers_fail_closed() {
     let same_address = StaApRxAddresses {
-        access_point: STA,
+        access_point: Eui48::new(STA),
         ..ADDRESSES
     };
     assert_eq!(

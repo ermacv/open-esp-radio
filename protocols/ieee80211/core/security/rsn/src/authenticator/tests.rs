@@ -29,8 +29,8 @@ fn ptk() -> Ptk {
     pmk().derive_ptk(
         Akm::Psk,
         PtkContext {
-            authenticator_address: AP,
-            supplicant_address: PEER,
+            authenticator_address: Eui48::new(AP),
+            supplicant_address: Eui48::new(PEER),
             authenticator_nonce: ANONCE,
             supplicant_nonce: SNONCE,
         },
@@ -42,8 +42,8 @@ fn ptk() -> Ptk {
 fn handshake(association_rsn: &[u8]) -> RsnApHandshake {
     let start = RsnApStart::new(
         Akm::Psk,
-        AP,
-        PEER,
+        Eui48::new(AP),
+        Eui48::new(PEER),
         ANONCE,
         REPLAY,
         pmk().bind_association_security_ies(association_rsn),
@@ -61,11 +61,16 @@ fn handshake(association_rsn: &[u8]) -> RsnApHandshake {
 
 fn message2_at(rsn: &[u8], ptk: &Ptk, replay: u64) -> OwnedEapolFrame<512> {
     let rsn = OwnedRsnIe::<64>::try_copy(rsn).unwrap();
-    let frame = RsnTxFrame::<512>::message2(Akm::Psk, AP, replay, SNONCE, &rsn)
+    let frame = RsnTxFrame::<512>::message2(Akm::Psk, Eui48::new(AP), replay, SNONCE, &rsn)
         .unwrap()
         .authenticate(ptk, &mut SoftwareAes128)
         .unwrap();
-    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
+    OwnedEapolFrame::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        frame.as_bytes(),
+    )
+    .unwrap()
 }
 
 fn message2(rsn: &[u8], ptk: &Ptk) -> OwnedEapolFrame<512> {
@@ -73,10 +78,15 @@ fn message2(rsn: &[u8], ptk: &Ptk) -> OwnedEapolFrame<512> {
 }
 
 fn signed_message4(replay: u64) -> OwnedEapolFrame<512> {
-    let answer = RsnTxFrame::<512>::message4(Akm::Psk, AP, replay)
+    let answer = RsnTxFrame::<512>::message4(Akm::Psk, Eui48::new(AP), replay)
         .authenticate(&ptk(), &mut SoftwareAes128)
         .unwrap();
-    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, answer.as_bytes()).unwrap()
+    OwnedEapolFrame::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        answer.as_bytes(),
+    )
+    .unwrap()
 }
 
 fn group_packet_number(value: u64) -> CcmpPacketNumber {
@@ -123,7 +133,7 @@ fn forged(frame: &OwnedEapolFrame<512>) -> OwnedEapolFrame<512> {
     let len = frame.as_bytes().len();
     bytes[..len].copy_from_slice(frame.as_bytes());
     bytes[81] ^= 1;
-    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, &bytes[..len]).unwrap()
+    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, Eui48::new(PEER), &bytes[..len]).unwrap()
 }
 
 #[test]
@@ -277,8 +287,8 @@ fn a_message2_under_another_pmk_builds_no_message3() {
     let other = Pmk::from_bytes([0x44; 32]).derive_ptk(
         Akm::Psk,
         PtkContext {
-            authenticator_address: AP,
-            supplicant_address: PEER,
+            authenticator_address: Eui48::new(AP),
+            supplicant_address: Eui48::new(PEER),
             authenticator_nonce: ANONCE,
             supplicant_nonce: SNONCE,
         },
@@ -433,9 +443,12 @@ fn a_first_message3_that_failed_to_build_awaits_message2_again() {
     let small_frame = message2(&STATION_RSN, &ptk);
     // Message 3 is built in Message 2's frame capacity: 128 octets do not
     // hold it.
-    let narrow =
-        OwnedEapolFrame::<128>::try_copy(RsnInterface::AccessPoint, PEER, small_frame.as_bytes())
-            .unwrap();
+    let narrow = OwnedEapolFrame::<128>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        small_frame.as_bytes(),
+    )
+    .unwrap();
     assert_eq!(
         small
             .on_eapol(&pmk(), narrow, material(&key_data, 0), &mut SoftwareAes128)
@@ -575,8 +588,12 @@ fn foreign_input_and_exhausted_counters_are_refused() {
     let key_data = key_data();
     let mut handshake = handshake(&STATION_RSN);
     let frame = message2(&STATION_RSN, &ptk());
-    let other_peer =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, AP, frame.as_bytes()).unwrap();
+    let other_peer = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(AP),
+        frame.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         handshake.on_eapol(
             &pmk(),
@@ -587,22 +604,45 @@ fn foreign_input_and_exhausted_counters_are_refused() {
         Err(RsnApError::Rejected(RsnStateError::WrongPeer))
     ));
     let station =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::Station, PEER, frame.as_bytes()).unwrap();
+        OwnedEapolFrame::<512>::try_copy(RsnInterface::Station, Eui48::new(PEER), frame.as_bytes())
+            .unwrap();
     assert!(matches!(
         handshake.on_eapol(&pmk(), station, material(&key_data, 0), &mut SoftwareAes128),
         Err(RsnApError::Rejected(RsnStateError::WrongInterface))
     ));
     let binding = || pmk().bind_association_security_ies(&STATION_RSN);
     assert!(matches!(
-        RsnApStart::new(Akm::Psk, AP, PEER, [0; 32], REPLAY, binding()),
+        RsnApStart::new(
+            Akm::Psk,
+            Eui48::new(AP),
+            Eui48::new(PEER),
+            [0; 32],
+            REPLAY,
+            binding()
+        ),
         Err(RsnStateError::ZeroNonce)
     ));
     assert!(matches!(
-        RsnApStart::new(Akm::Psk, AP, PEER, ANONCE, u64::MAX, binding()),
+        RsnApStart::new(
+            Akm::Psk,
+            Eui48::new(AP),
+            Eui48::new(PEER),
+            ANONCE,
+            u64::MAX,
+            binding()
+        ),
         Err(RsnStateError::ReplayCounterExhausted)
     ));
     // The counter before the last leaves none for a retransmitted Message 1.
-    let start = RsnApStart::new(Akm::Psk, AP, PEER, ANONCE, u64::MAX - 1, binding()).unwrap();
+    let start = RsnApStart::new(
+        Akm::Psk,
+        Eui48::new(AP),
+        Eui48::new(PEER),
+        ANONCE,
+        u64::MAX - 1,
+        binding(),
+    )
+    .unwrap();
     let (mut last, ..) = RsnApHandshake::start::<512>(start);
     assert!(matches!(
         last.retransmit::<512, _, _>(material(&key_data, 0), &mut SoftwareAes128),
@@ -691,12 +731,16 @@ fn a_second_message2_is_ignored_with_its_snonce_and_refused_with_another() {
         Ok(RsnApEapol::None)
     ));
     let rsn = OwnedRsnIe::<64>::try_copy(&STATION_RSN).unwrap();
-    let other = RsnTxFrame::<512>::message2(Akm::Psk, AP, REPLAY, [0x23; 32], &rsn)
+    let other = RsnTxFrame::<512>::message2(Akm::Psk, Eui48::new(AP), REPLAY, [0x23; 32], &rsn)
         .unwrap()
         .authenticate(&ptk(), &mut SoftwareAes128)
         .unwrap();
-    let other = OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, other.as_bytes())
-        .unwrap();
+    let other = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        other.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         handshake.on_eapol(&pmk(), other, material(&key_data, 0), &mut SoftwareAes128),
         Err(RsnApError::Rejected(RsnStateError::UnexpectedMessage))

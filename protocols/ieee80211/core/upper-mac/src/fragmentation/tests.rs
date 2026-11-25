@@ -396,7 +396,7 @@ fn protected_amsdu_overflow_and_lifecycle_edges_fail_closed() {
             |_| (),
         )
         .unwrap();
-    assert_eq!(state.forget_transmitter(STA), 1);
+    assert_eq!(state.forget_transmitter(Eui48::new(STA)), 1);
     assert_eq!(state.clear(), 0);
 }
 

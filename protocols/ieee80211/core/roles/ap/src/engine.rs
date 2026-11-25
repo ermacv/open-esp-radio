@@ -456,13 +456,12 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
             .flatten()
             .find(|replay| Eui48::new(replay.peer) == peer)
             .map(|replay| &mut replay.replay);
-        let admitted =
-            match AdmittedData::admit_uplink(header, bssid, peer.octets(), integrity, replay) {
-                Ok(admitted) => admitted,
-                Err(RxDropReason::Replay | RxDropReason::Integrity | _) => {
-                    return ApReceived::Nothing;
-                }
-            };
+        let admitted = match AdmittedData::admit_uplink(header, bssid, peer, integrity, replay) {
+            Ok(admitted) => admitted,
+            Err(RxDropReason::Replay | RxDropReason::Integrity | _) => {
+                return ApReceived::Nothing;
+            }
+        };
         let Ok(mut msdus) = admitted.msdus() else {
             return ApReceived::Nothing;
         };
@@ -735,9 +734,11 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         body: &[u8],
         group_key: &InstalledCcmpTxKey<K>,
     ) -> Result<ApEapol, ApEngineError> {
-        let Ok(frame) =
-            OwnedEapolFrame::<AP_EAPOL_CAPACITY>::try_copy(RsnInterface::AccessPoint, peer, body)
-        else {
+        let Ok(frame) = OwnedEapolFrame::<AP_EAPOL_CAPACITY>::try_copy(
+            RsnInterface::AccessPoint,
+            Eui48::new(peer),
+            body,
+        ) else {
             return Ok(ApEapol::Nothing);
         };
         let before = self.temporal_key(peer);
@@ -867,7 +868,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         frame: &RsnTxFrame<AP_EAPOL_CAPACITY>,
         output: &mut [u8],
     ) -> Result<ApFrame, ApEngineError> {
-        let peer = *frame.peer();
+        let peer = frame.peer().octets();
         let sequence = self.service.next_data_sequence();
         let len = ApDataFrame {
             access_point: Eui48::new(self.address()),

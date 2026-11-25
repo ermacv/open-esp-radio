@@ -86,7 +86,7 @@ pub enum AddressMatch {
     /// Any frame.
     Any,
     /// A frame one of whose address fields is this address.
-    Exactly([u8; 6]),
+    Exactly(Eui48),
 }
 
 impl MonitorFilter {
@@ -108,7 +108,7 @@ impl MonitorFilter {
         self
     }
 
-    pub const fn any_address(mut self, address: [u8; 6]) -> Self {
+    pub const fn any_address(mut self, address: Eui48) -> Self {
         self.address = AddressMatch::Exactly(address);
         self
     }
@@ -173,9 +173,8 @@ fn frame_type(control: FrameControlFields) -> MonitorFrameType {
 
 /// Whether `address` is one of the addresses the frame holds; a frame whose
 /// address fields cannot be read holds none.
-fn frame_contains_address(bytes: &[u8], address: [u8; 6]) -> bool {
-    AddressFields::parse(bytes)
-        .is_ok_and(|fields| fields.addresses().any(|held| held == Eui48::new(address)))
+fn frame_contains_address(bytes: &[u8], address: Eui48) -> bool {
+    AddressFields::parse(bytes).is_ok_and(|fields| fields.addresses().any(|held| held == address))
 }
 
 #[cfg(test)]

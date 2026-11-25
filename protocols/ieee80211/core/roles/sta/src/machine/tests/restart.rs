@@ -66,7 +66,7 @@ fn a_finished_station_restarts_in_place_reclaims_old_keys_then_connects() {
         world.receive(at(84), &association_response(0));
         let m1 = RsnTxFrame::<512>::message1(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-            LOCAL,
+            Eui48::new(LOCAL),
             1,
             ANONCE,
         )
@@ -76,8 +76,8 @@ fn a_finished_station_restarts_in_place_reclaims_old_keys_then_connects() {
         let ptk = Pmk::from_bytes(PMK).derive_ptk(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
             oer_protocols_ieee80211_core_security_rsn::PtkContext {
-                authenticator_address: BSSID,
-                supplicant_address: LOCAL,
+                authenticator_address: Eui48::new(BSSID),
+                supplicant_address: Eui48::new(LOCAL),
                 authenticator_nonce: ANONCE,
                 supplicant_nonce: SNONCE,
             },

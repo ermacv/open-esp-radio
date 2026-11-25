@@ -224,8 +224,8 @@ fn drive(bytes: &[u8]) {
                 clock,
             );
         } else if length == 0xfe {
-            owner.forget_transmitter(STA);
-            owner.forget_transmitter(AP);
+            owner.forget_transmitter(Eui48::new(STA));
+            owner.forget_transmitter(Eui48::new(AP));
         }
         let _ = owner.active_contexts();
     }

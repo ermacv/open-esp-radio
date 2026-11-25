@@ -11,6 +11,7 @@
 //! round's own (its opening and its close), the ring serviced once.
 
 use core::marker::PhantomData;
+use oer_protocols_ieee802_wire::Eui48;
 
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_wire::frame::{
@@ -33,11 +34,11 @@ pub struct RxHeader {
     /// The Frame Control field.
     pub control: FrameControl,
     /// Address 1.
-    pub receiver: [u8; 6],
+    pub receiver: Eui48,
     /// Address 2.
-    pub transmitter: [u8; 6],
+    pub transmitter: Eui48,
     /// Address 3.
-    pub address3: [u8; 6],
+    pub address3: Eui48,
     /// The Sequence Control field.
     pub sequence_control: oer_protocols_ieee80211_wire::sequence::SequenceControl,
     /// The QoS Control field, when the frame has one.
@@ -52,9 +53,9 @@ impl RxHeader {
         let body = frame.len().checked_sub(decoded.body().len())?;
         Some(Self {
             control: decoded.control(),
-            receiver: decoded.receiver().octets(),
-            transmitter: decoded.transmitter().octets(),
-            address3: decoded.address3().octets(),
+            receiver: decoded.receiver(),
+            transmitter: decoded.transmitter(),
+            address3: decoded.address3(),
             sequence_control: decoded.sequence_control(),
             qos: decoded.qos(),
             body: u16::try_from(body).ok()?,
@@ -145,12 +146,12 @@ impl<M> Received<'_, M> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EthernetAddresses {
     /// The Destination Address.
-    pub destination: [u8; 6],
+    pub destination: Eui48,
     /// The Source Address.
-    pub source: [u8; 6],
+    pub source: Eui48,
     /// The offset of the EtherType in the unit: the addresses take the
     /// twelve octets before it.
-    pub ether_type: u16,
+    pub ether_type_at: u16,
 }
 
 /// The addresses fall outside the unit's bytes: nothing was written.

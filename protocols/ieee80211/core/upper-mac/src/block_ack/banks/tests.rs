@@ -116,7 +116,15 @@ impl<'v, E: Copy + Eq, const WINDOW: usize> Given<'v, E> for RxBlockAckView<'v, 
             head: &header,
             bytes: &bytes,
         };
-        self.receive(now, local, frame, view, &meta, RetainRoom::Free, events)
+        self.receive(
+            now,
+            local.map(Eui48::new),
+            frame,
+            view,
+            &meta,
+            RetainRoom::Free,
+            events,
+        )
     }
 
     fn offered(
@@ -1091,7 +1099,7 @@ fn a_full_room_gives_back_what_would_be_retained_and_takes_the_holes_frame() {
         };
         view.receive(
             now(2),
-            Some(LOCAL),
+            Some(Eui48::new(LOCAL)),
             frame,
             seen,
             &meta(),

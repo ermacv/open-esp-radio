@@ -4,6 +4,7 @@
 
 use crate::Akm;
 use crate::AkmKeys;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::KeyInformation;
 
 pub const RSN_NONCE_LEN: usize = 32;
@@ -24,8 +25,8 @@ pub(crate) fn pairwise_message3_key_info(akm: Akm) -> u16 {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PtkContext {
-    pub authenticator_address: [u8; 6],
-    pub supplicant_address: [u8; 6],
+    pub authenticator_address: Eui48,
+    pub supplicant_address: Eui48,
     pub authenticator_nonce: [u8; RSN_NONCE_LEN],
     pub supplicant_nonce: [u8; RSN_NONCE_LEN],
 }

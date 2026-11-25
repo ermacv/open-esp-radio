@@ -74,7 +74,7 @@ impl<S: SppScope> AccessPointService<'_, S> {
         frame: RsnTxFrame<N>,
         transmit: oer_protocols_ieee80211_core_security_rsn::state::RsnTransmit,
     ) -> Result<ApEapolTransmit<N>, ApWpa2Error> {
-        let peer = self.checked_peer(*frame.peer())?;
+        let peer = self.checked_peer(frame.peer().octets())?;
         Ok(ApEapolTransmit {
             frame,
             context: ApEapolTxContext {

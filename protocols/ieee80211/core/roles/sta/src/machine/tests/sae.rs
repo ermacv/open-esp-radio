@@ -98,10 +98,13 @@ fn commit(world: &mut World<'_>, pwe: SaePwe, now: u32) -> SaeKeys {
     let element = match pwe {
         SaePwe::HashToElement => SaePasswordToken::derive(SSID, b"password", None)
             .unwrap()
-            .password_element(BSSID, LOCAL),
-        SaePwe::HuntingAndPecking => {
-            SaePasswordElement::hunting_and_pecking(b"password", BSSID, LOCAL).unwrap()
-        }
+            .password_element(Eui48::new(BSSID), Eui48::new(LOCAL)),
+        SaePwe::HuntingAndPecking => SaePasswordElement::hunting_and_pecking(
+            b"password",
+            Eui48::new(BSSID),
+            Eui48::new(LOCAL),
+        )
+        .unwrap(),
     };
     let peer = SaeCommit::new(&element, [0x40; 32], [0x41; 32]).unwrap();
     let keys = peer.process(station).unwrap();
@@ -165,20 +168,20 @@ fn handshake_message3(
     now: u32,
 ) -> (Ptk, RsnTxFrame<512>) {
     world.receive(at(now), &association_response(0));
-    let message1 = RsnTxFrame::<512>::message1(akm, LOCAL, 1, ANONCE).unwrap();
+    let message1 = RsnTxFrame::<512>::message1(akm, Eui48::new(LOCAL), 1, ANONCE).unwrap();
     world.receive(at(now + 1), &eapol_frame(message1.as_bytes()));
     let ptk = pmk.derive_ptk(
         akm,
         PtkContext {
-            authenticator_address: BSSID,
-            supplicant_address: LOCAL,
+            authenticator_address: Eui48::new(BSSID),
+            supplicant_address: Eui48::new(LOCAL),
             authenticator_nonce: ANONCE,
             supplicant_nonce: SNONCE,
         },
     );
     let message2 = OwnedEapolFrame::<512>::try_copy(
         RsnInterface::AccessPoint,
-        LOCAL,
+        Eui48::new(LOCAL),
         &world.frames.last().unwrap()[32..],
     )
     .unwrap();
@@ -204,10 +207,17 @@ fn handshake_message3(
         }
     }
     let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
-    let message3 = RsnTxFrame::<512>::message3(akm, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
-        .unwrap()
-        .authenticate(&ptk, &mut SoftwareAes128)
-        .unwrap();
+    let message3 = RsnTxFrame::<512>::message3(
+        akm,
+        Eui48::new(LOCAL),
+        2,
+        ANONCE,
+        [0; 8],
+        wrapped.as_bytes(),
+    )
+    .unwrap()
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     (ptk, message3)
 }
 

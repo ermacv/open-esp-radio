@@ -25,7 +25,9 @@ const PMKID: &str = "8747a600eea3f9f22475df58ca1e5498";
 
 #[test]
 fn hunting_and_pecking_matches_annex_j10() {
-    let pwe = SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap();
+    let pwe =
+        SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(ADDR1), Eui48::new(ADDR2))
+            .unwrap();
     let commit = SaeCommit::new(&pwe, hex(LOCAL_RAND), hex(LOCAL_MASK)).unwrap();
     let mut body = [0; SAE_COMMIT_LEN];
     assert_eq!(
@@ -52,8 +54,8 @@ fn hunting_and_pecking_matches_annex_j10() {
 fn hash_to_element_matches_annex_j10() {
     let token = SaePasswordToken::derive(b"byteme", PASSWORD, Some(b"psk4internet")).unwrap();
     let pwe = token.password_element(
-        [0x00, 0x09, 0x5b, 0x66, 0xec, 0x1e],
-        [0x00, 0x0b, 0x6b, 0xd9, 0x02, 0x46],
+        Eui48::new([0x00, 0x09, 0x5b, 0x66, 0xec, 0x1e]),
+        Eui48::new([0x00, 0x0b, 0x6b, 0xd9, 0x02, 0x46]),
     );
     let expected: [u8; 64] = hex(
         "c93049b9e64000f848201649e999f2b5c22dea69b5632c9df4d633b8aa1f6c1e
@@ -75,12 +77,13 @@ fn peers(derive: impl Fn([u8; 6], [u8; 6]) -> SaePasswordElement) -> (SaeKeys, S
 fn both_peers_derive_one_pmk_and_verify_each_confirm() {
     for (station, access_point) in [
         peers(|local, peer| {
-            SaePasswordElement::hunting_and_pecking(PASSWORD, local, peer).unwrap()
+            SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(local), Eui48::new(peer))
+                .unwrap()
         }),
         peers(|local, peer| {
             SaePasswordToken::derive(b"byteme", PASSWORD, None)
                 .unwrap()
-                .password_element(local, peer)
+                .password_element(Eui48::new(local), Eui48::new(peer))
         }),
     ] {
         assert_eq!(station.pmk, access_point.pmk);
@@ -105,13 +108,19 @@ fn both_peers_derive_one_pmk_and_verify_each_confirm() {
 #[test]
 fn a_wrong_password_fails_the_confirm() {
     let station = SaeCommit::new(
-        &SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(ADDR1), Eui48::new(ADDR2))
+            .unwrap(),
         [0x11; 32],
         [0x22; 32],
     )
     .unwrap();
     let access_point = SaeCommit::new(
-        &SaePasswordElement::hunting_and_pecking(b"another password", ADDR2, ADDR1).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(
+            b"another password",
+            Eui48::new(ADDR2),
+            Eui48::new(ADDR1),
+        )
+        .unwrap(),
         [0x33; 32],
         [0x44; 32],
     )
@@ -126,7 +135,9 @@ fn a_wrong_password_fails_the_confirm() {
 
 #[test]
 fn invalid_commits_are_refused() {
-    let pwe = SaePasswordElement::hunting_and_pecking(PASSWORD, ADDR1, ADDR2).unwrap();
+    let pwe =
+        SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(ADDR1), Eui48::new(ADDR2))
+            .unwrap();
     assert!(SaeCommit::new(&pwe, [0; 32], [0x22; 32]).is_err());
     assert!(SaeCommit::new(&pwe, [0xff; 32], [0x22; 32]).is_err());
     let commit = SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]).unwrap();
@@ -165,7 +176,7 @@ fn secret_owners_wipe_and_redact_debug() {
 
     let mut token = SaePasswordToken::derive(b"byteme", PASSWORD, None).unwrap();
     assert_eq!(std::format!("{token:?}"), "SaePasswordToken(<redacted>)");
-    let mut element = token.password_element(ADDR1, ADDR2);
+    let mut element = token.password_element(Eui48::new(ADDR1), Eui48::new(ADDR2));
     assert_eq!(
         std::format!("{element:?}"),
         "SaePasswordElement(<redacted>)"
@@ -175,8 +186,9 @@ fn secret_owners_wipe_and_redact_debug() {
     assert!(bool::from(token.0.is_identity()));
     assert!(bool::from(element.0.is_identity()));
 
-    let (mut keys, _) =
-        peers(|a, b| SaePasswordElement::hunting_and_pecking(PASSWORD, a, b).unwrap());
+    let (mut keys, _) = peers(|a, b| {
+        SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(a), Eui48::new(b)).unwrap()
+    });
     assert_eq!(std::format!("{keys:?}"), "SaeKeys(<redacted>)");
     keys.zeroize();
     assert_eq!(keys.kck(), &[0; SAE_KEY_LEN]);
@@ -188,7 +200,7 @@ fn secret_owners_wipe_and_redact_debug() {
 fn a_wiped_password_element_cannot_panic_when_reused_for_a_commit() {
     let mut pwe = SaePasswordToken::derive(b"byteme", PASSWORD, None)
         .unwrap()
-        .password_element(ADDR1, ADDR2);
+        .password_element(Eui48::new(ADDR1), Eui48::new(ADDR2));
     pwe.zeroize();
     assert!(matches!(
         SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]),
@@ -232,7 +244,7 @@ fn invalid_curve_coordinates_keep_their_validity_bit() {
     assert!(peer_element(&[0; SAE_ELEMENT_LEN]).is_none());
     let pwe = SaePasswordToken::derive(b"ssid", PASSWORD, None)
         .unwrap()
-        .password_element(ADDR1, ADDR2);
+        .password_element(Eui48::new(ADDR1), Eui48::new(ADDR2));
     let encoded = element_bytes(&pwe.0.to_affine()).unwrap();
     assert!(peer_element(&encoded).is_some());
     let mut changed = encoded;

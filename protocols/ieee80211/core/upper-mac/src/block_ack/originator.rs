@@ -456,8 +456,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         tid: u8,
         starting_sequence: SequenceNumber,
         bitmap: u64,
-        receiver: [u8; 6],
-        transmitter: [u8; 6],
+        receiver: Eui48,
+        transmitter: Eui48,
     ) -> Option<[u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
         let next = self
             .agreement_mut(tid)?
@@ -465,8 +465,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             .on_delivered(starting_sequence, bitmap)?;
         Some(
             oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
-                Eui48::new(receiver),
-                Eui48::new(transmitter),
+                receiver,
+                transmitter,
                 tid,
                 next,
             ),
@@ -484,8 +484,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         tid: u8,
         starting_sequence: SequenceNumber,
         bitmap: u64,
-        receiver: [u8; 6],
-        transmitter: [u8; 6],
+        receiver: Eui48,
+        transmitter: Eui48,
     ) -> Option<[u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN]> {
         let next = self
             .agreement_mut(tid)?
@@ -493,8 +493,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             .on_expired(starting_sequence, bitmap)?;
         Some(
             oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
-                Eui48::new(receiver),
-                Eui48::new(transmitter),
+                receiver,
+                transmitter,
                 tid,
                 next,
             ),

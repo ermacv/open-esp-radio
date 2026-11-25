@@ -1,4 +1,5 @@
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::GtkTx;
 
 /// The negotiated group management cipher of an association that protects
@@ -80,11 +81,19 @@ fn protected_key_data_carries_the_rsnxe_and_an_igtk_the_station_reads() {
 #[test]
 fn builders_produce_classified_m1_to_m4() {
     let rsn = rsn_ie();
-    let m1 = RsnTxFrame::<128>::message1(crate::Akm::Psk, [2; 6], 7, [3; 32]).unwrap();
-    let m2 = RsnTxFrame::<128>::message2(crate::Akm::Psk, [1; 6], 7, [4; 32], &rsn).unwrap();
-    let m3 =
-        RsnTxFrame::<128>::message3(crate::Akm::Psk, [2; 6], 8, [3; 32], [5; 8], &[6; 24]).unwrap();
-    let m4 = RsnTxFrame::<128>::message4(crate::Akm::Psk, [1; 6], 8);
+    let m1 = RsnTxFrame::<128>::message1(crate::Akm::Psk, Eui48::new([2; 6]), 7, [3; 32]).unwrap();
+    let m2 =
+        RsnTxFrame::<128>::message2(crate::Akm::Psk, Eui48::new([1; 6]), 7, [4; 32], &rsn).unwrap();
+    let m3 = RsnTxFrame::<128>::message3(
+        crate::Akm::Psk,
+        Eui48::new([2; 6]),
+        8,
+        [3; 32],
+        [5; 8],
+        &[6; 24],
+    )
+    .unwrap();
+    let m4 = RsnTxFrame::<128>::message4(crate::Akm::Psk, Eui48::new([1; 6]), 8);
     assert_eq!(
         m1.key_frame().unwrap().message(),
         EapolKeyMessage::PairwiseMessage1
@@ -117,12 +126,12 @@ fn message2_is_bound_to_its_peer_nonce_and_association_ies() {
     let security_ies = association_ies();
     let m2 = RsnTxFrame::<128>::message2_with_security_ies(
         crate::Akm::Psk,
-        [2; 6],
+        Eui48::new([2; 6]),
         7,
         [3; 32],
         &security_ies,
     );
-    assert_eq!(m2.peer(), &[2; 6]);
+    assert_eq!(m2.peer(), Eui48::new(*&[2; 6]));
     let key = m2.key_frame().unwrap();
     assert_eq!(key.nonce(), &[3; 32]);
     assert_eq!(key.replay_counter(), 7);

@@ -10,11 +10,11 @@ description = "A host model of hardware behind the IEEE 802.11 port's contract: 
 [dependencies]
 oer-protocols-ieee80211-contracts-port = { path = "../../contracts/port" }
 oer-protocols-ieee80211-wire = { path = "../../wire" }
-oer-protocols-ieee802-wire = { path = "../../../ieee802/wire" }
 oer-protocols-radio-port = { path = "../../../radio/port" }
 oer-portable-time = { path = "../../../../portable/time" }
 
 [dev-dependencies]
+oer-protocols-ieee802-wire = { path = "../../../ieee802/wire" }
 oer-protocols-ieee80211-testing-conformance = { path = "../conformance" }
 oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-protocols-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }

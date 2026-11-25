@@ -3015,9 +3015,9 @@ where
                 flow,
                 peer_of: |header: &RxHeader| {
                     let (bssid, own, protection, _) = link?;
-                    let to_us = Eui48::new(header.receiver) == own
-                        || IndividualAddress::new(Eui48::new(header.receiver)).is_none();
-                    (Eui48::new(header.transmitter) == bssid && to_us).then_some(RxPeer {
+                    let to_us =
+                        header.receiver == own || IndividualAddress::new(header.receiver).is_none();
+                    (header.transmitter == bssid && to_us).then_some(RxPeer {
                         peer: 0,
                         protection,
                         carrying: carrying?,
@@ -3528,8 +3528,8 @@ where
                         .zip(0_u8..)
                         .find_map(|(entry, peer)| match entry {
                             Entry::Linked(linked)
-                                if header.transmitter == linked.link.client
-                                    && header.receiver == linked.link.access_point =>
+                                if header.transmitter == Eui48::new(linked.link.client)
+                                    && header.receiver == Eui48::new(linked.link.access_point) =>
                             {
                                 Some(RxPeer {
                                     peer,

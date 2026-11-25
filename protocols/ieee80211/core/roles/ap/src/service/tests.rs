@@ -129,8 +129,8 @@ fn signed_message2(
     .derive_ptk(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         PtkContext {
-            authenticator_address: AP,
-            supplicant_address: PEER,
+            authenticator_address: Eui48::new(AP),
+            supplicant_address: Eui48::new(PEER),
             authenticator_nonce,
             supplicant_nonce,
         },
@@ -139,14 +139,19 @@ fn signed_message2(
     let security_ies = OwnedAssociationSecurityIes::<128>::try_copy(&rsn_ie, rsnxe).unwrap();
     let message2 = RsnTxFrame::<512>::message2_with_security_ies(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         9,
         supplicant_nonce,
         &security_ies,
     )
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
-    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes()).unwrap()
+    OwnedEapolFrame::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        message2.as_bytes(),
+    )
+    .unwrap()
 }
 
 fn corrupt_mic(frame: OwnedEapolFrame<512>) -> OwnedEapolFrame<512> {
@@ -154,7 +159,12 @@ fn corrupt_mic(frame: OwnedEapolFrame<512>) -> OwnedEapolFrame<512> {
     let length = frame.as_bytes().len();
     bytes[..length].copy_from_slice(frame.as_bytes());
     bytes[81] ^= 1;
-    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, &bytes[..length]).unwrap()
+    OwnedEapolFrame::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        &bytes[..length],
+    )
+    .unwrap()
 }
 
 fn ht_capabilities() -> ApAssociationCapabilities {
@@ -822,7 +832,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     else {
         panic!("Message 1 response timeout must retransmit")
     };
-    assert_eq!(*retried_message1.frame().peer(), PEER);
+    assert_eq!(retried_message1.frame().peer().octets(), PEER);
     assert!(retried_message1.frame().retransmission());
     // The retransmission takes the next replay counter; only the counter
     // differs from the original.
@@ -844,8 +854,8 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     .derive_ptk(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         PtkContext {
-            authenticator_address: AP,
-            supplicant_address: PEER,
+            authenticator_address: Eui48::new(AP),
+            supplicant_address: Eui48::new(PEER),
             authenticator_nonce: ANONCE,
             supplicant_nonce: SNONCE,
         },
@@ -854,7 +864,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     // Message 2 echoes the retransmitted Message 1's counter.
     let message2 = RsnTxFrame::<512>::message2(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         10,
         SNONCE,
         &rsn,
@@ -862,9 +872,12 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
-    let message2 =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes())
-            .unwrap();
+    let message2 = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        message2.as_bytes(),
+    )
+    .unwrap();
     let ApWpa2Progress::Transmit(message3) =
         service.on_eapol(PEER, message2, &gtk_numbers()).unwrap()
     else {
@@ -914,7 +927,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     else {
         panic!("Message 3 response timeout must retransmit")
     };
-    assert_eq!(*retried_message3.frame().peer(), PEER);
+    assert_eq!(retried_message3.frame().peer().octets(), PEER);
     assert!(retried_message3.frame().retransmission());
     assert_eq!(message3.key_frame().unwrap().replay_counter(), 11);
     assert_eq!(
@@ -932,14 +945,17 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
 
     let message4 = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         12,
     )
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
-    let message4 =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
-            .unwrap();
+    let message4 = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        message4.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         service.on_eapol(PEER, message4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::AuthorizePeer
@@ -1031,12 +1047,12 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
 
     let replay_mismatch = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         77,
     );
     let replay_mismatch = OwnedEapolFrame::<512>::try_copy(
         RsnInterface::AccessPoint,
-        PEER,
+        Eui48::new(PEER),
         replay_mismatch.as_bytes(),
     )
     .unwrap();
@@ -1049,14 +1065,17 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
 
     let unsupported = RsnTxFrame::<512>::message1(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         9,
         ANONCE,
     )
     .unwrap();
-    let unsupported =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, unsupported.as_bytes())
-            .unwrap();
+    let unsupported = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        unsupported.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         service.on_eapol(PEER, unsupported, &gtk_numbers()).unwrap(),
         ApWpa2Progress::None
@@ -1109,21 +1128,25 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
     .derive_ptk(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         PtkContext {
-            authenticator_address: AP,
-            supplicant_address: PEER,
+            authenticator_address: Eui48::new(AP),
+            supplicant_address: Eui48::new(PEER),
             authenticator_nonce: ANONCE,
             supplicant_nonce: SNONCE,
         },
     );
     let valid_m4 = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         10,
     )
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
-    let valid_m4 =
-        OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, valid_m4.as_bytes()).unwrap();
+    let valid_m4 = OwnedEapolFrame::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        valid_m4.as_bytes(),
+    )
+    .unwrap();
     let forged_m4 = corrupt_mic(valid_m4.clone());
     assert!(matches!(
         service.on_eapol(PEER, forged_m4, &gtk_numbers()).unwrap(),
@@ -1232,7 +1255,7 @@ fn exhausted_pairwise_update_count_closes_the_peer() {
             service
                 .take_due_wpa2_retry::<512, _>(oer_portable_time::Instant::from_micros(deadline), &gtk_numbers())
                 .unwrap(),
-            ApWpa2RetryProgress::Transmit(frame) if *frame.frame().peer() == PEER
+            ApWpa2RetryProgress::Transmit(frame) if frame.frame().peer().octets() == PEER
         ));
     }
     assert!(matches!(
@@ -1943,8 +1966,8 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     let ptk = Pmk::from_bytes(SAE_PMK).derive_ptk(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
         PtkContext {
-            authenticator_address: AP,
-            supplicant_address: PEER,
+            authenticator_address: Eui48::new(AP),
+            supplicant_address: Eui48::new(PEER),
             authenticator_nonce: ANONCE,
             supplicant_nonce: SNONCE,
         },
@@ -1952,7 +1975,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     let rsn = OwnedRsnIe::<64>::try_copy(&SAE_STATION_RSN).unwrap();
     let message2 = RsnTxFrame::<512>::message2(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
-        AP,
+        Eui48::new(AP),
         9,
         SNONCE,
         &rsn,
@@ -1960,9 +1983,12 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
-    let message2 =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes())
-            .unwrap();
+    let message2 = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        message2.as_bytes(),
+    )
+    .unwrap();
     let ApWpa2Progress::Transmit(message3) =
         service.on_eapol(PEER, message2, &gtk_numbers()).unwrap()
     else {
@@ -2120,8 +2146,8 @@ fn begin_management_handshake(
     let ptk = Pmk::from_bytes(SAE_PMK).derive_ptk(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
         PtkContext {
-            authenticator_address: AP,
-            supplicant_address: peer,
+            authenticator_address: Eui48::new(AP),
+            supplicant_address: Eui48::new(peer),
             authenticator_nonce: [7; 32],
             supplicant_nonce: [8; 32],
         },
@@ -2129,7 +2155,7 @@ fn begin_management_handshake(
     let rsn = OwnedRsnIe::<64>::try_copy(&SAE_STATION_RSN).unwrap();
     let message2 = RsnTxFrame::<512>::message2(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
-        AP,
+        Eui48::new(AP),
         9,
         [8; 32],
         &rsn,
@@ -2137,9 +2163,12 @@ fn begin_management_handshake(
     .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
-    let message2 =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, peer, message2.as_bytes())
-            .unwrap();
+    let message2 = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(peer),
+        message2.as_bytes(),
+    )
+    .unwrap();
     let ApWpa2Progress::Transmit(message3) =
         service.on_eapol(peer, message2, &gtk_numbers()).unwrap()
     else {
@@ -2164,14 +2193,17 @@ fn authorize_management_peer(
     let now = oer_portable_time::Instant::from_micros(1);
     let message4 = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
-        AP,
+        Eui48::new(AP),
         10,
     )
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
-    let message4 =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, peer, message4.as_bytes())
-            .unwrap();
+    let message4 = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(peer),
+        message4.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         service.on_eapol(peer, message4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::AuthorizePeer
@@ -2372,7 +2404,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     else {
         panic!("Message 3 response timeout must retransmit");
     };
-    assert_eq!(*repeated.frame().peer(), PEER);
+    assert_eq!(repeated.frame().peer().octets(), PEER);
     assert!(repeated.frame().retransmission());
     let repeated_key = repeated.frame().key_frame().unwrap();
     assert_eq!(

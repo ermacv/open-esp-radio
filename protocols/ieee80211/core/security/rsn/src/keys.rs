@@ -4,6 +4,7 @@
 //! Hardware slot selection remains in the chip MAC crate; this module owns
 //! key material, slot identity, replacement, and zeroization.
 
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 
@@ -23,7 +24,7 @@ pub enum RsnKeyKind {
 /// One key installation request with all key material owned by the request.
 pub struct RsnKeyInstall {
     interface: RsnInterface,
-    peer: [u8; 6],
+    peer: Eui48,
     kind: RsnKeyKind,
     receive_sequence: [u8; 8],
     key: Ccmp128Key,
@@ -32,7 +33,7 @@ pub struct RsnKeyInstall {
 impl RsnKeyInstall {
     pub fn pairwise(
         interface: RsnInterface,
-        peer: [u8; 6],
+        peer: Eui48,
         receive_sequence: [u8; 8],
         ptk: &Ptk,
     ) -> Self {
@@ -48,7 +49,7 @@ impl RsnKeyInstall {
     pub fn group(interface: RsnInterface, gtk: &RsnGtk, receive_sequence: [u8; 8]) -> Self {
         Self {
             interface,
-            peer: [0xff; 6],
+            peer: Eui48::BROADCAST,
             kind: RsnKeyKind::Group {
                 key_id: gtk.key_id(),
                 tx: gtk.tx(),
@@ -62,8 +63,8 @@ impl RsnKeyInstall {
         self.interface
     }
 
-    pub const fn peer(&self) -> &[u8; 6] {
-        &self.peer
+    pub const fn peer(&self) -> Eui48 {
+        self.peer
     }
 
     pub const fn kind(&self) -> RsnKeyKind {

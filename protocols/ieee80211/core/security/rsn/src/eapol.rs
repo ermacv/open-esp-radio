@@ -5,6 +5,7 @@
 use crate::AkmKeys;
 use crate::{Akm, Ptk, RSN_KCK_LEN, RsnInterface, RsnKeyConfirmationKey};
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::{EapolKey, EapolParseError, KeyInformation};
 
 /// Why an EAPOL-Key frame's MIC did not verify.
@@ -213,7 +214,7 @@ impl<'a> EapolKeyFrame<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedEapolFrame<const N: usize = DEFAULT_EAPOL_FRAME_CAPACITY> {
     interface: RsnInterface,
-    peer: [u8; 6],
+    peer: Eui48,
     bytes: heapless::Vec<u8, N>,
 }
 
@@ -225,7 +226,7 @@ impl<const N: usize> OwnedEapolFrame<N> {
 
     pub fn try_copy(
         interface: RsnInterface,
-        peer: [u8; 6],
+        peer: Eui48,
         bytes: &[u8],
     ) -> Result<Self, EapolCopyError> {
         EapolKeyFrame::parse(bytes).map_err(EapolCopyError::Invalid)?;
@@ -242,8 +243,8 @@ impl<const N: usize> OwnedEapolFrame<N> {
         self.interface
     }
 
-    pub const fn peer(&self) -> &[u8; 6] {
-        &self.peer
+    pub const fn peer(&self) -> Eui48 {
+        self.peer
     }
 
     pub fn as_bytes(&self) -> &[u8] {

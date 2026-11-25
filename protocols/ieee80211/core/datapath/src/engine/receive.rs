@@ -30,6 +30,7 @@
 //!   reaches the head ([`RxRefusal::LinkHeld`]).
 
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{
     EthernetAddresses, Lendable, ReceivePort, Received, Rest as PortRest, Round, RxCryptoStatus,
     RxEvidence, RxHead, RxHeader, RxMetadata, UnitHandle,
@@ -481,7 +482,7 @@ impl<'id> Receive<'id> {
         let disposition = match round.unit(&handle) {
             Some(view) => agreements.receive(
                 now,
-                Some(reorder.local),
+                Some(Eui48::new(reorder.local)),
                 handle,
                 RxView {
                     head: view.head,
@@ -853,9 +854,9 @@ fn msdus<M>(
             .ok_or(RxRefusal::Undecapsulable)?;
         let msdu = Msdu {
             addresses: EthernetAddresses {
-                destination: frame.destination.octets(),
-                source: frame.source.octets(),
-                ether_type: u16::try_from(ether_type).map_err(|_| RxRefusal::Undecapsulable)?,
+                destination: frame.destination,
+                source: frame.source,
+                ether_type_at: u16::try_from(ether_type).map_err(|_| RxRefusal::Undecapsulable)?,
             },
             span: EthernetSpan {
                 offset: u16::try_from(begin).map_err(|_| RxRefusal::Undecapsulable)?,

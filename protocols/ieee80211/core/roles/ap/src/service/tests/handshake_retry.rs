@@ -27,8 +27,8 @@ fn station_ptk() -> Ptk {
     pmk.derive_ptk(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         PtkContext {
-            authenticator_address: AP,
-            supplicant_address: PEER,
+            authenticator_address: Eui48::new(AP),
+            supplicant_address: Eui48::new(PEER),
             authenticator_nonce: ANONCE,
             supplicant_nonce: SNONCE,
         },
@@ -77,14 +77,18 @@ impl ReplayCheckingStation {
             CcmpPacketNumber::from_receive_sequence(*key.key_receive_sequence()).unwrap();
         let message4 = RsnTxFrame::<512>::message4(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-            AP,
+            Eui48::new(AP),
             key.replay_counter(),
         )
         .authenticate(&self.ptk, &mut SoftwareAes128)
         .unwrap();
         Some(Message4 {
-            frame: OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
-                .unwrap(),
+            frame: OwnedEapolFrame::try_copy(
+                RsnInterface::AccessPoint,
+                Eui48::new(PEER),
+                message4.as_bytes(),
+            )
+            .unwrap(),
             group_receive_sequence,
         })
     }
@@ -210,23 +214,29 @@ fn a_lost_message4_is_recovered_by_a_message3_under_a_larger_counter() {
     // A Message 4 under a counter never sent is refused.
     let unsent = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         message4.key_frame().unwrap().replay_counter() + 1,
     )
     .authenticate(&station.ptk, &mut SoftwareAes128)
     .unwrap();
-    let unsent =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, unsent.as_bytes())
-            .unwrap();
+    let unsent = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        unsent.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         service.on_eapol(PEER, unsent, &gtk).unwrap(),
         ApWpa2Progress::None
     ));
     assert!(!service.wpa2_authorized(PEER).unwrap());
 
-    let duplicate =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, message4.as_bytes())
-            .unwrap();
+    let duplicate = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        message4.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         service.on_eapol(PEER, message4, &gtk).unwrap(),
         ApWpa2Progress::AuthorizePeer
@@ -235,9 +245,12 @@ fn a_lost_message4_is_recovered_by_a_message3_under_a_larger_counter() {
     // Message 4 verified: the peer may be authorized before its port opens.
     assert!(service.wpa2_authorized(PEER).unwrap());
     // A duplicate after completion neither authorizes nor installs again.
-    let again =
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, duplicate.as_bytes())
-            .unwrap();
+    let again = OwnedEapolFrame::<512>::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        duplicate.as_bytes(),
+    )
+    .unwrap();
     assert!(matches!(
         service.on_eapol(PEER, duplicate, &gtk).unwrap(),
         ApWpa2Progress::None
@@ -330,7 +343,9 @@ fn a_retried_message4_under_the_new_ptk_is_readable_while_the_port_is_closed() {
         .unwrap();
     let (llc, eapol) = body.split_at(8);
     assert_eq!(llc, [0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0x8e]);
-    let eapol = OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, eapol).unwrap();
+    let eapol =
+        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, Eui48::new(PEER), eapol)
+            .unwrap();
     assert!(matches!(
         service.on_eapol(PEER, eapol, &gtk).unwrap(),
         ApWpa2Progress::AuthorizePeer
@@ -393,12 +408,17 @@ fn a_recreated_service_announces_the_continuing_numbering_of_the_same_gtk() {
 fn station_message4(replay: u64) -> OwnedEapolFrame<512> {
     let frame = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-        AP,
+        Eui48::new(AP),
         replay,
     )
     .authenticate(&station_ptk(), &mut SoftwareAes128)
     .unwrap();
-    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
+    OwnedEapolFrame::try_copy(
+        RsnInterface::AccessPoint,
+        Eui48::new(PEER),
+        frame.as_bytes(),
+    )
+    .unwrap()
 }
 
 #[test]

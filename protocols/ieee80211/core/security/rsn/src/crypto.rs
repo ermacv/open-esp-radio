@@ -2,6 +2,7 @@
 
 use crate::AkmKeys;
 use hmac::{Hmac, Mac};
+use oer_protocols_ieee802_wire::Eui48;
 use sha1::Sha1;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -68,8 +69,8 @@ pub enum PskDerivationError {
 /// Canonical addresses and nonces used by the WPA2 PRF-384.
 #[derive(Clone, Copy)]
 pub struct PtkContext {
-    pub authenticator_address: [u8; 6],
-    pub supplicant_address: [u8; 6],
+    pub authenticator_address: Eui48,
+    pub supplicant_address: Eui48,
     pub authenticator_nonce: [u8; 32],
     pub supplicant_nonce: [u8; 32],
 }
@@ -116,14 +117,16 @@ impl Pmk {
             if !(RSN_PTK_LEN == 3 * 16
                 && RSN_PTK_LEN == RSN_KCK_LEN + RSN_KEK_LEN + 16
                 && core::mem::size_of::<[u8; 76]>()
-                    == 2 * (core::mem::size_of::<[u8; 6]>() + core::mem::size_of::<[u8; 32]>()))
+                    == 2 * (Eui48::LEN + core::mem::size_of::<[u8; 32]>()))
             {
                 panic!("PTK expansion geometry");
             }
         }
         let mut canonical = [0; 76];
-        let (first_address, second_address) =
-            ordered(&context.authenticator_address, &context.supplicant_address);
+        let (first_address, second_address) = ordered(
+            context.authenticator_address.as_octets(),
+            context.supplicant_address.as_octets(),
+        );
 
         let (first_nonce, second_nonce) =
             ordered(&context.authenticator_nonce, &context.supplicant_nonce);

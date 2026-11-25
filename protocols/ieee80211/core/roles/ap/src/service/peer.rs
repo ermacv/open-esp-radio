@@ -2,6 +2,7 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_ieee80211_wire::status::status_code;
@@ -199,8 +200,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         // language moves it there by value.
         existing.handshake = ApHandshake::Associated(RsnApStart::new(
             akm,
-            access_point,
-            peer,
+            Eui48::new(access_point),
+            Eui48::new(peer),
             authenticator_nonce,
             initial_replay_counter,
             association_security_binding,

@@ -1846,7 +1846,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         let Some(Some(unit)) = self.places.get_mut(usize::from(place)) else {
             return Err(OutsideTheUnit);
         };
-        let end = usize::from(addresses.ether_type);
+        let end = usize::from(addresses.ether_type_at);
         let Some(target) = end
             .checked_sub(12)
             .and_then(|start| unit.bytes.get_mut(start..end))
@@ -1854,8 +1854,8 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         else {
             return Err(OutsideTheUnit);
         };
-        let [d0, d1, d2, d3, d4, d5] = addresses.destination;
-        let [s0, s1, s2, s3, s4, s5] = addresses.source;
+        let [d0, d1, d2, d3, d4, d5] = addresses.destination.octets();
+        let [s0, s1, s2, s3, s4, s5] = addresses.source.octets();
         *target = [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5];
         Ok(())
     }
