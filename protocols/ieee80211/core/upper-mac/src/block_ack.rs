@@ -54,7 +54,5 @@ pub use session::{
     TxBlockAckSession,
 };
 
-pub mod batch;
-
 #[cfg(test)]
 mod tests;

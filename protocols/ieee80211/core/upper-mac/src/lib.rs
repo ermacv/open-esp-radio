@@ -1,4 +1,3 @@
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(clippy::let_underscore_must_use, clippy::let_underscore_untyped)]
@@ -22,21 +21,15 @@
 //! (`oer-protocols-ieee80211-contracts-port`). Everything a backend does not do on its own
 //! lies above that port and is decided here, once for every backend:
 //!
-//! - [`retry`]: the retry counters, limits and Retry bit of one MPDU, and the
-//!   [`RateLadder`] its attempts walk;
-//! - [`aggregate`]: how many queued frames one A-MPDU carries;
-//! - [`ampdu`]: which subframes of an A-MPDU the next attempt resends after
-//!   a BlockAck, with their Retry bit, and when the aggregate ends;
+//! - [`retry`]: the limits of one MPDU's retries and the [`RateLadder`] its
+//!   attempts walk;
+//! - [`ampdu`]: the limits of an A-MPDU's retries;
 //! - [`protection`]: RTS/CTS or CTS-to-self before each PPDU;
 //! - [`management`]: the transmission budget of a management frame;
 //! - [`phy_mode`]: the PHY mode of one association and the elements its
 //!   request carries;
 //! - [`rate_control`]: the seam of a peer's data rates, which learns from
-//!   its exchanges;
-//! - [`tx`]: the [`TxPlanner`], which combines them into one attempt at a
-//!   time and turns each completion into the next attempt or the exchange's
-//!   statistics. It draws no backoff: the lower-MAC port carries none, and
-//!   a backend draws its queues' contention below the port.
+//!   its exchanges.
 //!
 //! Receive owners retain duplicate history, fragment reassembly, CCMP replay
 //! and Block Ack reordering. [`monitor`] selects the frames a monitor keeps and
@@ -45,8 +38,8 @@
 //! the [`sequence`] number spaces and Block Ack negotiation/originator windows. Wire formats remain in
 //! `oer-protocols-ieee80211-wire`.
 //!
-//! The package is sans-IO: completions and the radio time enter as values,
-//! attempt plans and reports leave as values, and nothing waits. The station
+//! The package is sans-IO: completions and the radio time enter as values
+//! and decisions leave as values, and nothing waits. The station
 //! service in `oer-protocols-ieee80211-runtime` submits to the port and feeds its
 //! terminals into rate selection ([`rate_selection::RateSelection::learn`]). Vendor retry schedules, limits and
 //! duration estimates are parameters a profile supplies, such as
@@ -55,7 +48,6 @@
 #[cfg(test)]
 extern crate std;
 
-pub mod aggregate;
 pub mod ampdu;
 pub mod management;
 pub mod phy_mode;
@@ -65,20 +57,10 @@ pub mod rate_control;
 pub mod rate_selection;
 pub mod retry;
 pub mod sequence;
-pub mod tx;
 
-pub use ampdu::{
-    AmpduAttemptResult, AmpduRetryDecision, AmpduRetryError, AmpduRetryPolicy, AmpduRetryState,
-    BlockAckAgreement,
-};
+pub use ampdu::AmpduRetryPolicy;
 pub use protection::{HeTxopRtsBudget, ProtectEveryHeTxop, ProtectionPolicy, RtsThreshold};
-pub use retry::{
-    AckFailureAccounting, MpduRetryState, RateLadder, RetryDecision, RetryLimits, RetryOutcome,
-};
-pub use tx::{
-    AmpduRequest, AttemptContent, MpduRequest, TxAttemptPlan, TxBody, TxExchange, TxPlanError,
-    TxPlanner, TxReport, TxRequest, TxStep,
-};
+pub use retry::{AckFailureAccounting, RateLadder, RetryLimits};
 
 pub mod block_ack;
 

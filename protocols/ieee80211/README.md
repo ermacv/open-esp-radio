@@ -98,10 +98,9 @@ backend's service description and normalized statuses. One submission is one
 hardware attempt; data goes through the data port's two data arenas
 (`arena`), which the port's owner alone fills. The backend draws EDCA contention below the port (the S31
 MAC's `edca::contention`); an attempt carries no backoff. The port depends on
-no core. [`core/upper-mac`](core/upper-mac/README.md) owns retry ladders, Retry bits,
-aggregate retry selection, the reading of a BlockAck, protection and the BSS
-basic rates, management budgets, the association PHY mode and the attempt
-planner. [`core/datapath`](core/datapath/README.md) holds the data plane over
+no core. [`core/upper-mac`](core/upper-mac/README.md) owns the retry limits and the
+seam of retry rates, the reading of a BlockAck, protection and the BSS basic
+rates, management budgets and the association PHY mode. [`core/datapath`](core/datapath/README.md) holds the data plane over
 the port's two data arenas, the link's transmit numbers (`TxNumbers`) and the
 MAC's transmit queues. The upper MAC's
 `block_ack/banks.rs` owns an association's receive agreements and reordering.

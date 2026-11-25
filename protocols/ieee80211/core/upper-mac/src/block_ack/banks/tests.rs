@@ -976,7 +976,7 @@ fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outc
     for dialog in 0..PENDING - 2 {
         offer(
             &mut view,
-            request_for(dialog as u8, 3, 8),
+            request_for(u8::try_from(dialog).unwrap(), 3, 8),
             RxAgreements::Declined,
         )
         .unwrap();

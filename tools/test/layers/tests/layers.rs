@@ -8326,18 +8326,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/upper-mac/src/tx.rs::PublicationReport.ack_snr_db",
-        "correct: the hardware's ACK SNR, absent when it reports none (tasks/422)",
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/tx.rs::TxExchange.ack_snr_db",
-        "correct: the hardware's ACK SNR, absent when it reports none (tasks/422)",
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacAmpduTxStatus.ack_snr_db",
-        "correct: the hardware's ACK SNR, absent when it reports none (tasks/422)",
-    ),
-    (
         "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ds_channel",
         "correct: a beacon's DS Parameter Set, absent when it carries none (tasks/402)",
     ),
@@ -10315,12 +10303,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::too_many_arguments",
         3,
         "the frame's owner, view and metadata, the caller's room and event sink / the validated action's fields, the caller's event sink and where released frames go",
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/testing/conformance/src/lib.rs",
