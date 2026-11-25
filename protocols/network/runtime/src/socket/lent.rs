@@ -422,10 +422,12 @@ mod tests {
     use std::boxed::Box;
     use std::vec::Vec;
 
+    use oer_protocols_ieee802_wire::{EtherType, Eui48};
     use oer_protocols_network_core::{
         BlockPlace, Brand, Datagram, NetworkClaim, Pool, Remote, claim, with_local_network,
     };
     use oer_protocols_network_port::{EthernetFrame, EthernetFrameView, FrameLengthError};
+    use oer_protocols_network_wire::address::Ipv4Address;
 
     use super::{LendingLanes, LendingSocket, LentDatagram, LentEnd, Received, lending_lanes};
     use crate::socket::ServiceEnd;
@@ -433,7 +435,7 @@ mod tests {
     const SIZE: usize = 64;
     const LANE: usize = 16;
     const PEER: Remote = Remote {
-        address: [192, 0, 2, 2],
+        address: Ipv4Address::new([192, 0, 2, 2]),
         port: 7,
     };
 
@@ -443,9 +445,9 @@ mod tests {
     impl EthernetFrame for Frame {
         fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
             Ok(EthernetFrameView {
-                destination: [2; 6],
-                source: [4; 6],
-                ether_type: 0x0800,
+                destination: Eui48::new([2; 6]),
+                source: Eui48::new([4; 6]),
+                ether_type: EtherType::IPV4,
                 payload: &self.0,
             })
         }

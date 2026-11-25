@@ -200,7 +200,7 @@ product package depends on either; and
 join. Each `protocols/network/*` package has an explicit layer in
 `oer-tools-test-layers`: the network codec stands on `oer-portable-wire` and the
 IEEE 802 wire (`protocols/ieee802/wire`) alone and the network contract on the
-codec. The IEEE 802 wire holds the addresses both the IEEE 802.11 and the
+two. The IEEE 802 wire holds the addresses and the EtherTypes both the IEEE 802.11 and the
 network codecs carry and stands on `oer-portable-wire` alone.
 
 ## Known deviations

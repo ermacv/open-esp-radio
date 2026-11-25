@@ -9,6 +9,8 @@
 
 extern crate std;
 
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 use std::boxed::Box;
 
 use oer_portable_events::EventSink;
@@ -61,7 +63,8 @@ fn a_receive_load_lends_every_frame_and_counts_its_turns() {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
         let (mut pool, brand) = claim(right, memory);
         pool.loans().pool(CREDIT + 2, 2).unwrap();
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let wire = WirePort::default();
         {
             let mut state = wire.0.borrow_mut();

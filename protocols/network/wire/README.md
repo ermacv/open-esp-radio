@@ -1,11 +1,12 @@
 # oer-protocols-network-wire
 
 Allocation-free Ethernet II, VLAN tag, ARP, IPv4, IPv6, ICMPv4 echo, TCP and
-UDP header fields, DHCP messages and the Internet checksum. It may depend on `oer-portable-wire` and the IEEE 802 wire alone.
+UDP header fields, DHCP messages and the Internet checksum. It depends on `oer-portable-wire` and the IEEE 802 wire alone.
 
 | Module | Fields |
 | --- | --- |
-| `ethernet` | Ethernet II header, `EtherType` values the network side names |
+| `address` | `Ipv4Address`, `Ipv6Address` |
+| `ethernet` | Ethernet II header |
 | `arp` | ARP for IPv4 over Ethernet |
 | `checksum` | The Internet checksum and the IPv4 pseudo header |
 | `vlan` | VLAN Tag Control Information and the enclosed EtherType |

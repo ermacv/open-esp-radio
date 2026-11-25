@@ -6,16 +6,23 @@
 //! the next datagram through the whole path again.
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 /// What a datagram's frame carries, read back from its octets: its station
 /// address, its ports, its marking and its data, every checksum verified.
 fn read(frame: &[u8]) -> ([u8; 6], (u16, u16), Dscp, Vec<u8>) {
     let (ethernet, payload) = EthernetHeader::parse(frame).unwrap();
-    assert_eq!(ethernet.source, LOCAL);
+    assert_eq!(ethernet.source, Eui48::new(LOCAL));
     let packet = Ipv4Header::parse(payload).unwrap();
     assert!(Checksum::new().with(&payload[..20]).verifies(), "IPv4 sum");
     let (udp, data) = UdpHeader::parse(packet.payload()).unwrap();
-    let pseudo = ipv4_pseudo_header(OUR_IP, PEER_IP, PROTOCOL_UDP, udp.length);
+    let pseudo = ipv4_pseudo_header(
+        Ipv4Address::new(OUR_IP),
+        Ipv4Address::new(PEER_IP),
+        PROTOCOL_UDP,
+        udp.length,
+    );
     assert!(
         Checksum::new()
             .with(&pseudo)
@@ -24,7 +31,7 @@ fn read(frame: &[u8]) -> ([u8; 6], (u16, u16), Dscp, Vec<u8>) {
         "UDP sum"
     );
     (
-        ethernet.destination,
+        ethernet.destination.octets(),
         (udp.ports.source, udp.ports.destination),
         packet.dscp(),
         data.to_vec(),

@@ -9,6 +9,7 @@ description = "Allocation-free Ethernet, VLAN, IP and transport header fields"
 readme = "README.md"
 
 [dependencies]
+oer-protocols-ieee802-wire = { path = "../../ieee802/wire" }
 oer-portable-wire = { path = "../../../portable/wire" }
 
 [lints]

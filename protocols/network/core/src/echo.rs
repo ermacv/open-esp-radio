@@ -8,6 +8,7 @@
 //! one, and at most [`ECHO_RATE`] replies a second.
 
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use crate::block::Block;
 
@@ -53,9 +54,9 @@ pub(crate) struct Owed<'m, B, const SIZE: usize> {
     pub(crate) serial: u64,
     pub(crate) block: Block<'m, B, SIZE>,
     /// The asker.
-    pub(crate) to: [u8; 4],
+    pub(crate) to: Ipv4Address,
     /// The neighbor the reply goes through.
-    pub(crate) hop: [u8; 4],
+    pub(crate) hop: Ipv4Address,
 }
 
 /// The replies owed and the rate's window.
@@ -137,7 +138,7 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
     }
 
     /// Whether a reply goes through `address`.
-    pub(crate) fn needs(&self, address: [u8; 4]) -> bool {
+    pub(crate) fn needs(&self, address: Ipv4Address) -> bool {
         self.owed.iter().flatten().any(|owed| owed.hop == address)
     }
 
@@ -152,7 +153,7 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
     /// Take every reply that goes through `address`, each to `end`.
     pub(crate) fn take_through(
         &mut self,
-        address: [u8; 4],
+        address: Ipv4Address,
         mut end: impl FnMut(Owed<'m, B, SIZE>),
     ) {
         for place in &mut self.owed {

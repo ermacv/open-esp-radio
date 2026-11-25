@@ -6,6 +6,8 @@
 
 use oer_portable_wire::Reader;
 
+use crate::address::{Ipv4Address, Ipv6Address};
+
 const IPV4_MIN_LEN: usize = 20;
 /// Length of an IPv4 header with no options.
 pub const IPV4_HEADER_LEN: usize = IPV4_MIN_LEN;
@@ -33,8 +35,8 @@ pub struct Ipv4Fields {
     pub identification: u16,
     pub time_to_live: u8,
     pub protocol: u8,
-    pub source: [u8; 4],
-    pub destination: [u8; 4],
+    pub source: Ipv4Address,
+    pub destination: Ipv4Address,
 }
 
 impl Ipv4Fields {
@@ -69,8 +71,8 @@ impl Ipv4Fields {
                 .with_protocol(self.protocol)
                 .with_checksum(checksum)
                 .to_bytes();
-        let [source0, source1, source2, source3] = self.source;
-        let [destination0, destination1, destination2, destination3] = self.destination;
+        let [source0, source1, source2, source3] = self.source.octets();
+        let [destination0, destination1, destination2, destination3] = self.destination.octets();
         [
             version_ihl,
             services,
@@ -208,7 +210,8 @@ pub struct Ipv4Header<'a> {
     services: DsField,
     fragment: Ipv4Fragment,
     protocol: u8,
-    addresses: [u8; 8],
+    source: Ipv4Address,
+    destination: Ipv4Address,
     payload: &'a [u8],
 }
 
@@ -221,8 +224,10 @@ impl<'a> Ipv4Header<'a> {
     pub fn parse(packet: &'a [u8]) -> Result<Self, IpError> {
         let mut reader = Reader::new(packet);
         let fixed = reader
-            .read::<IPV4_MIN_LEN>()
+            .read::<{ IPV4_MIN_LEN - 2 * Ipv4Address::LEN }>()
             .map_err(|_| IpError::Truncated)?;
+        let source = Ipv4Address::read(&mut reader).map_err(|_| IpError::Truncated)?;
+        let destination = Ipv4Address::read(&mut reader).map_err(|_| IpError::Truncated)?;
         let [
             version_ihl,
             services,
@@ -236,7 +241,6 @@ impl<'a> Ipv4Header<'a> {
             protocol,
             checksum_high,
             checksum_low,
-            addresses @ ..,
         ] = fixed;
         let version_ihl = Ipv4VersionIhl::from_bytes([version_ihl]);
         if version_ihl.version() != 4 {
@@ -266,7 +270,8 @@ impl<'a> Ipv4Header<'a> {
             services: DsField::from_bytes([services]),
             fragment: Ipv4Fragment::from_bytes([fragment_high, fragment_low]),
             protocol: carriage.protocol(),
-            addresses,
+            source,
+            destination,
             payload,
         })
     }
@@ -283,9 +288,14 @@ impl<'a> Ipv4Header<'a> {
         self.protocol
     }
 
-    /// Source then destination address.
-    pub const fn addresses(&self) -> [u8; 8] {
-        self.addresses
+    /// The Source Address.
+    pub const fn source(&self) -> Ipv4Address {
+        self.source
+    }
+
+    /// The Destination Address.
+    pub const fn destination(&self) -> Ipv4Address {
+        self.destination
     }
 
     /// Whether this packet is a fragment: a later one, or the first of
@@ -305,7 +315,8 @@ impl<'a> Ipv4Header<'a> {
 pub struct Ipv6Header<'a> {
     prefix: Ipv6HeaderPrefix,
     next_header: u8,
-    addresses: [u8; 32],
+    source: Ipv6Address,
+    destination: Ipv6Address,
     payload: &'a [u8],
 }
 
@@ -317,7 +328,11 @@ impl<'a> Ipv6Header<'a> {
     /// payload length within `packet`.
     pub fn parse(packet: &'a [u8]) -> Result<Self, IpError> {
         let mut reader = Reader::new(packet);
-        let fixed = reader.read::<IPV6_LEN>().map_err(|_| IpError::Truncated)?;
+        let fixed = reader
+            .read::<{ IPV6_LEN - 2 * Ipv6Address::LEN }>()
+            .map_err(|_| IpError::Truncated)?;
+        let source = Ipv6Address::read(&mut reader).map_err(|_| IpError::Truncated)?;
+        let destination = Ipv6Address::read(&mut reader).map_err(|_| IpError::Truncated)?;
         let [
             first,
             second,
@@ -327,7 +342,6 @@ impl<'a> Ipv6Header<'a> {
             length_low,
             next_header,
             hop_limit,
-            addresses @ ..,
         ] = fixed;
         let prefix = Ipv6HeaderPrefix::from_bytes([first, second]);
         if prefix.version() != 6 {
@@ -339,7 +353,8 @@ impl<'a> Ipv6Header<'a> {
         Ok(Self {
             prefix,
             next_header: carriage.next_header(),
-            addresses,
+            source,
+            destination,
             payload,
         })
     }
@@ -357,9 +372,14 @@ impl<'a> Ipv6Header<'a> {
         self.next_header
     }
 
-    /// Source then destination address.
-    pub const fn addresses(&self) -> [u8; 32] {
-        self.addresses
+    /// The Source Address.
+    pub const fn source(&self) -> Ipv6Address {
+        self.source
+    }
+
+    /// The Destination Address.
+    pub const fn destination(&self) -> Ipv6Address {
+        self.destination
     }
 
     /// The octets after the fixed header, within the payload length.

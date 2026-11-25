@@ -20,11 +20,13 @@
 
 use oer_portable_time::{Duration, Instant};
 use oer_portable_wire::{Error, PrefixLength, Writer};
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::dhcp::{
-    self, DhcpMessage, Fixed, Flags, HEADER_LEN, MessageType, Op, option,
+    self, DhcpMessage, Fixed, Flags, HEADER_LEN, MessageSize, MessageType, Op, Seconds, option,
 };
 
-use crate::interface::{BROADCAST, Ipv4, UNSPECIFIED, is_unicast};
+use crate::interface::{Ipv4, is_unicast};
 
 /// The first wait for an OFFER: a first DISCOVER can reach an access point
 /// before its port opens, which a station cannot see (up to 119 ms after the
@@ -97,25 +99,25 @@ impl DhcpState {
 /// The domain name servers of a lease, in the server's order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Servers {
-    addresses: [[u8; 4]; DNS_SERVERS],
+    addresses: [Ipv4Address; DNS_SERVERS],
     count: PrefixLength<DNS_SERVERS>,
 }
 
 impl Default for Servers {
     fn default() -> Self {
         Self {
-            addresses: [[0; 4]; DNS_SERVERS],
+            addresses: [Ipv4Address::UNSPECIFIED; DNS_SERVERS],
             count: PrefixLength::ZERO,
         }
     }
 }
 
 impl Servers {
-    pub fn as_slice(&self) -> &[[u8; 4]] {
+    pub fn as_slice(&self) -> &[Ipv4Address] {
         self.count.borrow(&self.addresses)
     }
 
-    fn push(&mut self, address: [u8; 4]) {
+    fn push(&mut self, address: Ipv4Address) {
         let at = self.count.get();
         if let Some(count) = PrefixLength::new(at.saturating_add(1))
             && let Some(slot) = self.addresses.get_mut(at)
@@ -134,7 +136,7 @@ pub struct Lease {
     /// RFC 2132, 3.8: the unicast ones, at most [`DNS_SERVERS`].
     pub dns: Servers,
     /// RFC 2132, 9.7: where renewals go.
-    pub server: [u8; 4],
+    pub server: Ipv4Address,
     /// When the REQUEST that won it was first accepted: the times count from
     /// here.
     pub obtained: Instant,
@@ -193,7 +195,7 @@ pub enum LeaseFault {
 pub(crate) enum Destination {
     Broadcast,
     /// The leasing server, through the neighbor table.
-    Server([u8; 4]),
+    Server(Ipv4Address),
 }
 
 /// A message the client owes the port, as values.
@@ -202,13 +204,13 @@ pub(crate) struct Outgoing {
     kind: MessageType,
     xid: u32,
     secs: u16,
-    ciaddr: [u8; 4],
-    requested: Option<[u8; 4]>,
-    server: Option<[u8; 4]>,
-    hardware: [u8; 6],
+    ciaddr: Ipv4Address,
+    requested: Option<Ipv4Address>,
+    server: Option<Ipv4Address>,
+    hardware: Eui48,
     largest: u16,
-    pub(crate) source: [u8; 4],
-    pub(crate) destination: [u8; 4],
+    pub(crate) source: Ipv4Address,
+    pub(crate) destination: Ipv4Address,
 }
 
 impl Outgoing {
@@ -227,7 +229,7 @@ impl Outgoing {
 
     /// Write it at the front of `writer`, RFC 2131, Table 5.
     pub(crate) fn write(&self, writer: &mut Writer<'_>) -> Result<(), Error> {
-        let [h0, h1, h2, h3, h4, h5] = self.hardware;
+        let [h0, h1, h2, h3, h4, h5] = self.hardware.octets();
         Fixed {
             op: Op::Request,
             htype: HARDWARE_ETHERNET,
@@ -236,12 +238,12 @@ impl Outgoing {
             xid: self.xid,
             secs: self.secs,
             // RFC 2131, 4.1: this client takes unicast before it has an
-            // address, so it clears the BROADCAST bit.
+            // address, so it clears the Ipv4Address::BROADCAST bit.
             flags: Flags::from_bytes([0; 2]),
             ciaddr: self.ciaddr,
-            yiaddr: UNSPECIFIED,
-            siaddr: UNSPECIFIED,
-            giaddr: UNSPECIFIED,
+            yiaddr: Ipv4Address::UNSPECIFIED,
+            siaddr: Ipv4Address::UNSPECIFIED,
+            giaddr: Ipv4Address::UNSPECIFIED,
             chaddr: [h0, h1, h2, h3, h4, h5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         }
         .write(writer)?;
@@ -252,15 +254,17 @@ impl Outgoing {
             &[HARDWARE_ETHERNET, h0, h1, h2, h3, h4, h5],
         )?;
         if let Some(requested) = self.requested {
-            dhcp::write_option(writer, option::REQUESTED_ADDRESS, &requested)?;
+            dhcp::write_option(writer, option::REQUESTED_ADDRESS, requested.as_octets())?;
         }
         if let Some(server) = self.server {
-            dhcp::write_option(writer, option::SERVER_IDENTIFIER, &server)?;
+            dhcp::write_option(writer, option::SERVER_IDENTIFIER, server.as_octets())?;
         }
         dhcp::write_option(
             writer,
             option::MAXIMUM_MESSAGE_SIZE,
-            &self.largest.to_be_bytes(),
+            &MessageSize::from_bytes([0; 2])
+                .with_octets(self.largest)
+                .to_bytes(),
         )?;
         dhcp::write_option(writer, option::PARAMETER_REQUEST_LIST, &PARAMETERS)?;
         dhcp::write_end(writer)
@@ -330,8 +334,8 @@ enum Phase {
         turn: Turn,
         taken: Taken,
         tries: u8,
-        server: [u8; 4],
-        offered: [u8; 4],
+        server: Ipv4Address,
+        offered: Ipv4Address,
     },
     Bound(Lease),
     Renewing {
@@ -386,7 +390,7 @@ enum Link {
 /// The client.
 #[derive(Debug)]
 pub(crate) struct Client {
-    hardware: [u8; 6],
+    hardware: Eui48,
     largest: u16,
     random: Random,
     phase: Phase,
@@ -412,7 +416,7 @@ const fn owe(serial: &mut u64) -> Turn {
 }
 
 impl Client {
-    pub(crate) fn new(hardware: [u8; 6], mtu: u16, seed: u64) -> Self {
+    pub(crate) fn new(hardware: Eui48, mtu: u16, seed: u64) -> Self {
         let mut random = Random(seed);
         let xid = xid(&mut random);
         Self {
@@ -608,21 +612,21 @@ impl Client {
         let secs = u16::try_from(now.saturating_duration_since(self.began).as_micros() / 1_000_000)
             .unwrap_or(u16::MAX);
         let destination = match self.destination() {
-            Destination::Broadcast => BROADCAST,
+            Destination::Broadcast => Ipv4Address::BROADCAST,
             Destination::Server(server) => server,
         };
         Some(Outgoing {
             kind,
             xid: self.xid,
             secs,
-            ciaddr: ciaddr.unwrap_or(UNSPECIFIED),
+            ciaddr: ciaddr.unwrap_or(Ipv4Address::UNSPECIFIED),
             requested,
             server,
             hardware: self.hardware,
             largest: self.largest,
             // RFC 2131, 4.1: before it has its address, a client sends
             // from 0.
-            source: ciaddr.unwrap_or(UNSPECIFIED),
+            source: ciaddr.unwrap_or(Ipv4Address::UNSPECIFIED),
             destination,
         })
     }
@@ -703,7 +707,7 @@ impl Client {
     pub(crate) fn input(
         &mut self,
         now: Instant,
-        source: [u8; 4],
+        source: Ipv4Address,
         bytes: &[u8],
         serial: &mut u64,
     ) -> Result<(), DhcpDrop> {
@@ -715,7 +719,7 @@ impl Client {
         if fixed.htype != HARDWARE_ETHERNET || fixed.hlen != 6 {
             return Err(DhcpDrop::Hardware);
         }
-        if fixed.chaddr.get(..6) != Some(&self.hardware[..]) {
+        if fixed.chaddr.get(..6) != Some(self.hardware.as_octets().as_slice()) {
             return Err(DhcpDrop::Foreign);
         }
         let kind = message.message_type().ok_or(DhcpDrop::NoType)?;
@@ -778,7 +782,7 @@ impl Client {
 /// The lease an ACK grants, counted from `obtained`.
 fn lease(
     message: &DhcpMessage<'_>,
-    server: [u8; 4],
+    server: Ipv4Address,
     obtained: Instant,
 ) -> Result<Lease, LeaseFault> {
     let address = message.fixed.yiaddr;
@@ -786,7 +790,7 @@ fn lease(
         return Err(LeaseFault::Address);
     }
     let mask = address_of(message.option(option::SUBNET_MASK)).ok_or(LeaseFault::Mask)?;
-    let mask = u32::from_be_bytes(mask);
+    let mask = mask.bits();
     let prefix = u8::try_from(mask.leading_ones()).map_err(|_| LeaseFault::Mask)?;
     if mask.checked_shl(u32::from(prefix)).unwrap_or(0) != 0 {
         return Err(LeaseFault::Mask);
@@ -799,8 +803,11 @@ fn lease(
             let mut first = None;
             let mut rest = routers;
             while !rest.is_empty() {
-                let (router, after) = rest.split_first_chunk::<4>().ok_or(LeaseFault::Router)?;
-                first = first.or(Some(*router).filter(|router| is_unicast(*router)));
+                let (router, after) = rest
+                    .split_first_chunk::<{ Ipv4Address::LEN }>()
+                    .ok_or(LeaseFault::Router)?;
+                first =
+                    first.or(Some(Ipv4Address::new(*router)).filter(|router| is_unicast(*router)));
                 rest = after;
             }
             if routers.is_empty() {
@@ -820,11 +827,14 @@ fn lease(
         }
         let mut rest = servers;
         while !rest.is_empty() {
-            let (server, after) = rest.split_first_chunk::<4>().ok_or(LeaseFault::Servers)?;
+            let (server, after) = rest
+                .split_first_chunk::<{ Ipv4Address::LEN }>()
+                .ok_or(LeaseFault::Servers)?;
+            let server = Ipv4Address::new(*server);
             // Some servers name 0.0.0.0 for an empty slot: only hosts are
             // kept.
-            if is_unicast(*server) {
-                dns.push(*server);
+            if is_unicast(server) {
+                dns.push(server);
             }
             rest = after;
         }
@@ -833,7 +843,7 @@ fn lease(
         message
             .option(code)
             .and_then(|data| data.first_chunk::<4>().filter(|_| data.len() == 4))
-            .map(|data| u32::from_be_bytes(*data))
+            .map(|data| Seconds::from_bytes(*data).value())
     };
     let length = seconds(option::LEASE_TIME)
         .filter(|seconds| *seconds != 0)
@@ -901,9 +911,9 @@ fn half(duration: Duration) -> Duration {
 }
 
 /// One IPv4 address, an option of exactly four octets.
-fn address_of(data: Option<&[u8]>) -> Option<[u8; 4]> {
+fn address_of(data: Option<&[u8]>) -> Option<Ipv4Address> {
     match data? {
-        [a, b, c, d] => Some([*a, *b, *c, *d]),
+        [a, b, c, d] => Some(Ipv4Address::new([*a, *b, *c, *d])),
         _ => None,
     }
 }

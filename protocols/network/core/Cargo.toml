@@ -9,6 +9,7 @@ description = "A sans-IO network core: interfaces, neighbors, IPv4 and UDP"
 readme = "README.md"
 
 [dependencies]
+oer-protocols-ieee802-wire = { path = "../../ieee802/wire" }
 heapless = "0.9.3"
 oer-portable-events = { path = "../../../portable/events" }
 oer-portable-time = { path = "../../../portable/time" }

@@ -1,5 +1,6 @@
 extern crate std;
 
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -68,9 +69,15 @@ fn lent(payload: &[u8]) -> Incoming {
 fn lent_from(storage: Lent) -> Incoming {
     let range = 0..storage.0.len();
     Incoming::Lent(
-        LentFrame::new(storage, FIELDS, FIELDS, 0x0800, range)
-            .ok()
-            .unwrap(),
+        LentFrame::new(
+            storage,
+            Eui48::new(FIELDS),
+            Eui48::new(FIELDS),
+            EtherType::IPV4,
+            range,
+        )
+        .ok()
+        .unwrap(),
     )
 }
 
@@ -149,9 +156,9 @@ impl NetDevice for Device {
             return Err(FrameLengthError::MissingCopy);
         }
         Ok(read(EthernetFrameView {
-            destination: FIELDS,
-            source: FIELDS,
-            ether_type: 0x0800,
+            destination: Eui48::new(FIELDS),
+            source: Eui48::new(FIELDS),
+            ether_type: EtherType::IPV4,
             payload: b"copied",
         }))
     }

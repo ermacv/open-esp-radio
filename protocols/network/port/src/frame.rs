@@ -2,6 +2,7 @@
 //! of the egress policy that chooses what goes to it.
 
 use core::task::{Context, Poll};
+use oer_protocols_ieee802_wire::Eui48;
 
 use oer_protocols_network_wire::ip::Dscp;
 
@@ -248,7 +249,7 @@ pub struct Ready {
     /// The frame's length: what a slot must hold.
     pub length: usize,
     /// The next hop's station address, whose budget this work spends.
-    pub peer: [u8; 6],
+    pub peer: Eui48,
     /// The socket that wants it; control work has none.
     pub flow: Option<u8>,
     /// Its priority.

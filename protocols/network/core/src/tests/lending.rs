@@ -1,6 +1,7 @@
 //! A lending socket: what its datagrams keep, and what each refusal says.
 
 use oer_protocols_network_port::{CopyReason, EthernetFrame, Holding};
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use super::{
     Dropped, OUR_IP, PEER_IP, PortFault, Stack, at, best_effort, interface, run, udp_frame,
@@ -38,7 +39,7 @@ fn a_lendable_datagram_stays_in_the_port_s_buffer_under_a_loan() {
         assert_eq!(
             lent.remote,
             Remote {
-                address: PEER_IP,
+                address: Ipv4Address::new(PEER_IP),
                 port: 7
             }
         );

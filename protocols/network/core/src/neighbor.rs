@@ -4,6 +4,8 @@
 //! per second per destination.
 
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 /// Requests before a neighbor counts as unreachable.
 pub(crate) const REQUESTS: u8 = 3;
@@ -15,7 +17,7 @@ const LIFETIME: Duration = Duration::from_secs(60);
 pub(crate) enum Entry {
     Free,
     Asking {
-        address: [u8; 4],
+        address: Ipv4Address,
         /// This resolution's: a grant names it and no later one.
         serial: u64,
         requests: u8,
@@ -24,8 +26,8 @@ pub(crate) enum Entry {
         owed: bool,
     },
     Known {
-        address: [u8; 4],
-        hardware: [u8; 6],
+        address: Ipv4Address,
+        hardware: Eui48,
         expires: Instant,
     },
 }
@@ -46,7 +48,7 @@ const EXHAUSTED: u32 = u32::MAX;
 /// its entry expires, as long as no known entry changed meanwhile.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Found {
-    pub(crate) hardware: [u8; 6],
+    pub(crate) hardware: Eui48,
     known: u32,
     expires: Instant,
 }
@@ -109,12 +111,12 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// Where `address` is, while that is known.
-    pub(crate) fn hardware(&self, now: Instant, address: [u8; 4]) -> Option<[u8; 6]> {
+    pub(crate) fn hardware(&self, now: Instant, address: Ipv4Address) -> Option<Eui48> {
         self.find(now, address).map(|found| found.hardware)
     }
 
     /// Where `address` is, while that is known, and while that holds.
-    pub(crate) fn find(&self, now: Instant, address: [u8; 4]) -> Option<Found> {
+    pub(crate) fn find(&self, now: Instant, address: Ipv4Address) -> Option<Found> {
         self.entries.iter().find_map(|entry| match *entry {
             Entry::Known {
                 address: known,
@@ -144,9 +146,9 @@ impl<const N: usize> Neighbors<N> {
     pub(crate) fn resolve(
         &mut self,
         now: Instant,
-        address: [u8; 4],
+        address: Ipv4Address,
         serial: u64,
-        needed: impl Fn([u8; 4]) -> bool,
+        needed: impl Fn(Ipv4Address) -> bool,
     ) -> Lookup {
         for entry in &self.entries {
             match *entry {
@@ -176,9 +178,9 @@ impl<const N: usize> Neighbors<N> {
     pub(crate) fn ask(
         &mut self,
         now: Instant,
-        address: [u8; 4],
+        address: Ipv4Address,
         serial: u64,
-        needed: impl Fn([u8; 4]) -> bool,
+        needed: impl Fn(Ipv4Address) -> bool,
     ) {
         if let Some(index) = self.room_for(address, needed) {
             self.ask_in(index, now, address, serial);
@@ -186,7 +188,11 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// The entry to ask for `address` in, if there is one.
-    fn room_for(&self, address: [u8; 4], needed: impl Fn([u8; 4]) -> bool) -> Option<usize> {
+    fn room_for(
+        &self,
+        address: Ipv4Address,
+        needed: impl Fn(Ipv4Address) -> bool,
+    ) -> Option<usize> {
         let mut oldest: Option<(usize, Instant)> = None;
         let mut free = None;
         let mut own = None;
@@ -212,7 +218,7 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// Ask for `address` in the entry `index`, whatever it held.
-    fn ask_in(&mut self, index: usize, now: Instant, address: [u8; 4], serial: u64) {
+    fn ask_in(&mut self, index: usize, now: Instant, address: Ipv4Address, serial: u64) {
         let Some(entry) = self.entries.get_mut(index) else {
             return;
         };
@@ -223,7 +229,7 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
-    const fn asking(now: Instant, address: [u8; 4], serial: u64) -> Entry {
+    const fn asking(now: Instant, address: Ipv4Address, serial: u64) -> Entry {
         Entry::Asking {
             address,
             serial,
@@ -235,7 +241,7 @@ impl<const N: usize> Neighbors<N> {
 
     /// Whether `address` has an entry of its own: known, alive or expired
     /// (which [`Self::resolve`] asks for again in place), or asked for.
-    pub(crate) fn holds(&self, address: [u8; 4]) -> bool {
+    pub(crate) fn holds(&self, address: Ipv4Address) -> bool {
         self.entries.iter().any(|entry| match *entry {
             Entry::Known { address: known, .. } => known == address,
             Entry::Asking { address: asked, .. } => asked == address,
@@ -244,7 +250,7 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// The entries whose address `needed` names.
-    pub(crate) fn count(&self, needed: impl Fn([u8; 4]) -> bool) -> usize {
+    pub(crate) fn count(&self, needed: impl Fn(Ipv4Address) -> bool) -> usize {
         self.entries
             .iter()
             .filter(|entry| match **entry {
@@ -256,7 +262,7 @@ impl<const N: usize> Neighbors<N> {
 
     /// Forget requests no datagram needs any more. An entry is asked for only
     /// while one does, so a refused port holds no entry for a closed socket.
-    pub(crate) fn forget_unneeded(&mut self, needed: impl Fn([u8; 4]) -> bool) {
+    pub(crate) fn forget_unneeded(&mut self, needed: impl Fn(Ipv4Address) -> bool) {
         for entry in &mut self.entries {
             if let Entry::Asking { address, .. } = *entry
                 && !needed(address)
@@ -270,7 +276,7 @@ impl<const N: usize> Neighbors<N> {
     /// [`Self::reask`] would ask again for. Usually none, and never more
     /// than the table holds, so a caller looks at its own work only for
     /// these.
-    pub(crate) fn expired(&self, now: Instant) -> [Option<[u8; 4]>; N] {
+    pub(crate) fn expired(&self, now: Instant) -> [Option<Ipv4Address>; N] {
         let mut expired = [None; N];
         for (slot, entry) in expired.iter_mut().zip(&self.entries) {
             if let Entry::Known {
@@ -285,7 +291,7 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// Ask again for `address` if its entry expired; whether it did.
-    pub(crate) fn reask(&mut self, now: Instant, address: [u8; 4], serial: u64) -> bool {
+    pub(crate) fn reask(&mut self, now: Instant, address: Ipv4Address, serial: u64) -> bool {
         for entry in &mut self.entries {
             if let Entry::Known {
                 address: known,
@@ -309,8 +315,8 @@ impl<const N: usize> Neighbors<N> {
     pub(crate) fn learn(
         &mut self,
         now: Instant,
-        address: [u8; 4],
-        hardware: [u8; 6],
+        address: Ipv4Address,
+        hardware: Eui48,
         target: ArpTarget,
     ) -> bool {
         let known = Entry::Known {
@@ -342,7 +348,7 @@ impl<const N: usize> Neighbors<N> {
     /// The requests owed: each entry with its address and resolution.
     /// The first entry from `from` on that owes a request, as
     /// [`Self::owed_requests`] gives it, with the index after it.
-    pub(crate) fn owed_request_from(&self, from: usize) -> Option<((u8, [u8; 4], u64), usize)> {
+    pub(crate) fn owed_request_from(&self, from: usize) -> Option<((u8, Ipv4Address, u64), usize)> {
         let rest = self.entries.get(from..)?;
         rest.iter()
             .zip(from..)
@@ -359,7 +365,9 @@ impl<const N: usize> Neighbors<N> {
             })
     }
 
-    pub(crate) fn owed_requests(&self) -> impl Iterator<Item = (u8, [u8; 4], u64)> + Clone + '_ {
+    pub(crate) fn owed_requests(
+        &self,
+    ) -> impl Iterator<Item = (u8, Ipv4Address, u64)> + Clone + '_ {
         self.entries
             .iter()
             .enumerate()
@@ -402,7 +410,7 @@ impl<const N: usize> Neighbors<N> {
     /// The port refused the request of entry `index` for good: this resolution
     /// ends here, and its address comes back. Nothing asks in its name, so a
     /// later resolution of that address is a new one.
-    pub(crate) fn request_refused(&mut self, index: u8, resolution: u64) -> Option<[u8; 4]> {
+    pub(crate) fn request_refused(&mut self, index: u8, resolution: u64) -> Option<Ipv4Address> {
         let entry = self.entries.get_mut(usize::from(index))?;
         match *entry {
             Entry::Asking {
@@ -416,7 +424,7 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// Ask again where the time came. Each address given up goes to `gave_up`.
-    pub(crate) fn tick(&mut self, now: Instant, mut gave_up: impl FnMut([u8; 4])) {
+    pub(crate) fn tick(&mut self, now: Instant, mut gave_up: impl FnMut(Ipv4Address)) {
         for entry in &mut self.entries {
             if let Entry::Asking {
                 address,
@@ -440,7 +448,7 @@ impl<const N: usize> Neighbors<N> {
 
     /// When the next request, end, or expiry of a neighbor `needed` falls
     /// due.
-    pub(crate) fn deadline(&self, needed: impl Fn([u8; 4]) -> bool) -> Option<Instant> {
+    pub(crate) fn deadline(&self, needed: impl Fn(Ipv4Address) -> bool) -> Option<Instant> {
         self.entries
             .iter()
             .filter_map(|entry| match *entry {
@@ -475,21 +483,39 @@ mod tests {
     #[test]
     fn a_finding_never_holds_again_once_the_count_is_exhausted() {
         let mut table = Neighbors::<2>::new();
-        assert!(table.learn(at(0), PEER, FIRST, ArpTarget::Us));
+        assert!(table.learn(
+            at(0),
+            Ipv4Address::new(PEER),
+            Eui48::new(FIRST),
+            ArpTarget::Us
+        ));
         table.known = 0;
-        let found = table.find(at(1), PEER).unwrap();
+        let found = table.find(at(1), Ipv4Address::new(PEER)).unwrap();
         assert!(table.holds_still(&found.holds(), at(1)));
         table.known = EXHAUSTED - 1;
-        assert!(table.learn(at(1), PEER, MOVED, ArpTarget::Us));
+        assert!(table.learn(
+            at(1),
+            Ipv4Address::new(PEER),
+            Eui48::new(MOVED),
+            ArpTarget::Us
+        ));
         assert!(
-            table.learn(at(1), PEER, MOVED, ArpTarget::Us),
+            table.learn(
+                at(1),
+                Ipv4Address::new(PEER),
+                Eui48::new(MOVED),
+                ArpTarget::Us
+            ),
             "a write past the end"
         );
         assert!(
             !table.holds_still(&found.holds(), at(1)),
             "the old station's finding holds no more"
         );
-        assert_eq!(table.hardware(at(1), PEER), Some(MOVED));
+        assert_eq!(
+            table.hardware(at(1), Ipv4Address::new(PEER)),
+            Some(Eui48::new(MOVED))
+        );
         assert_eq!(table.known, EXHAUSTED, "the count stays at its end");
     }
 
@@ -499,9 +525,14 @@ mod tests {
     fn at_the_end_of_the_count_nothing_found_holds() {
         let mut table = Neighbors::<2>::new();
         table.known = EXHAUSTED;
-        assert!(table.learn(at(0), PEER, FIRST, ArpTarget::Us));
-        let found = table.find(at(1), PEER).unwrap();
-        assert_eq!(found.hardware, FIRST);
+        assert!(table.learn(
+            at(0),
+            Ipv4Address::new(PEER),
+            Eui48::new(FIRST),
+            ArpTarget::Us
+        ));
+        let found = table.find(at(1), Ipv4Address::new(PEER)).unwrap();
+        assert_eq!(found.hardware, Eui48::new(FIRST));
         assert!(!table.holds_still(&found.holds(), at(1)));
     }
 }

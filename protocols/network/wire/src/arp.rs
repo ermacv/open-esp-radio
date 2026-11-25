@@ -5,7 +5,9 @@
 
 use oer_portable_wire::{Error, Reader, Writer};
 
-use crate::ethernet::EtherType;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
+
+use crate::address::Ipv4Address;
 
 /// Length of an ARP packet for IPv4 over Ethernet.
 pub const PACKET_LEN: usize = 28;
@@ -56,13 +58,13 @@ oer_portable_wire::bitfield! {
 pub struct Arp {
     pub operation: Operation,
     /// ar$sha.
-    pub sender_hardware: [u8; 6],
+    pub sender_hardware: Eui48,
     /// ar$spa.
-    pub sender_protocol: [u8; 4],
+    pub sender_protocol: Ipv4Address,
     /// ar$tha.
-    pub target_hardware: [u8; 6],
+    pub target_hardware: Eui48,
     /// ar$tpa.
-    pub target_protocol: [u8; 4],
+    pub target_protocol: Ipv4Address,
 }
 
 impl Arp {
@@ -82,9 +84,9 @@ impl Arp {
         {
             return Ok(None);
         }
-        let read = |reader: &mut Reader<'_>| -> Result<([u8; 6], [u8; 4]), ArpError> {
-            let hardware = *reader.array().map_err(|_| ArpError::Truncated)?;
-            let protocol = *reader.array().map_err(|_| ArpError::Truncated)?;
+        let read = |reader: &mut Reader<'_>| -> Result<(Eui48, Ipv4Address), ArpError> {
+            let hardware = Eui48::read(reader).map_err(|_| ArpError::Truncated)?;
+            let protocol = Ipv4Address::read(reader).map_err(|_| ArpError::Truncated)?;
             Ok((hardware, protocol))
         };
         let (sender_hardware, sender_protocol) = read(&mut reader)?;
@@ -111,10 +113,10 @@ impl Arp {
             .with_protocol_length(PROTOCOL_LEN)
             .with_operation(self.operation.encoding());
         writer.write(&fixed.to_bytes())?;
-        writer.write(&self.sender_hardware)?;
-        writer.write(&self.sender_protocol)?;
-        writer.write(&self.target_hardware)?;
-        writer.write(&self.target_protocol)
+        writer.write(self.sender_hardware.as_octets())?;
+        writer.write(self.sender_protocol.as_octets())?;
+        writer.write(self.target_hardware.as_octets())?;
+        writer.write(self.target_protocol.as_octets())
     }
 }
 
@@ -131,10 +133,10 @@ mod tests {
     fn a_request_reads_and_writes_as_it_lies_on_the_wire() {
         let packet = Arp::parse(&REQUEST).unwrap().unwrap();
         assert_eq!(packet.operation, Operation::Request);
-        assert_eq!(packet.sender_hardware, [2, 0, 0, 0, 0, 1]);
-        assert_eq!(packet.sender_protocol, [192, 0, 2, 1]);
-        assert_eq!(packet.target_hardware, [0; 6]);
-        assert_eq!(packet.target_protocol, [192, 0, 2, 2]);
+        assert_eq!(packet.sender_hardware, Eui48::new([2, 0, 0, 0, 0, 1]));
+        assert_eq!(packet.sender_protocol, Ipv4Address::new([192, 0, 2, 1]));
+        assert_eq!(packet.target_hardware, Eui48::new([0; 6]));
+        assert_eq!(packet.target_protocol, Ipv4Address::new([192, 0, 2, 2]));
         let mut written = [0; PACKET_LEN];
         packet.write(&mut written).unwrap();
         assert_eq!(written, REQUEST);

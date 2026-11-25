@@ -1,6 +1,8 @@
 //! Work a local producer declares: a place and no block, a frame its producer
 //! fills in the port's slot, and the ends of that work.
 
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 use std::cell::Cell;
 use std::vec::Vec;
 
@@ -35,7 +37,7 @@ fn declines(
 
 fn broadcast() -> Remote {
     Remote {
-        address: [192, 0, 2, 255],
+        address: Ipv4Address::new([192, 0, 2, 255]),
         port: 7,
     }
 }
@@ -71,7 +73,7 @@ fn a_declared_work_holds_a_place_and_no_block() {
         assert_eq!(demand.ready().length, 14 + 20 + 8 + 100);
         assert_eq!(demand.ready().flow, Some(socket.flow()));
         assert_eq!(demand.ready().dscp, dscp);
-        assert_eq!(demand.ready().peer, [0xFF; 6]);
+        assert_eq!(demand.ready().peer, Eui48::new([0xFF; 6]));
         assert!(
             stack.queued().next().is_none(),
             "nothing to evict: no block"
@@ -86,7 +88,7 @@ fn a_declaration_is_refused_as_a_send_is() {
     world_on!(interface(OUR_IP, 24, None), |stack| {
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let far = Remote {
-            address: [198, 51, 100, 1],
+            address: Ipv4Address::new([198, 51, 100, 1]),
             port: 7,
         };
         assert_eq!(
@@ -109,13 +111,13 @@ fn a_declaration_is_refused_as_a_send_is() {
         let other = stack.open_local(6001, best_effort()).unwrap();
         for (on, last) in [(&socket, 3), (&other, 4)] {
             let remote = Remote {
-                address: [192, 0, 2, last],
+                address: Ipv4Address::new([192, 0, 2, last]),
                 port: 7,
             };
             assert!(stack.declare(at(0), on, remote, 10, 7).is_ok());
         }
         let third = Remote {
-            address: [192, 0, 2, 5],
+            address: Ipv4Address::new([192, 0, 2, 5]),
             port: 7,
         };
         assert_eq!(
@@ -142,13 +144,13 @@ fn a_produced_frame_is_written_in_the_slot_and_its_checksum_verifies() {
         assert_eq!(end_of(stack, &socket.ends()), None, "told once");
         let frame = stack.port_mut().sent.pop().unwrap();
         let (ethernet, packet) = EthernetHeader::parse(&frame).unwrap();
-        assert_eq!(ethernet.destination, PEER);
-        assert_eq!(ethernet.source, LOCAL);
+        assert_eq!(ethernet.destination, Eui48::new(PEER));
+        assert_eq!(ethernet.source, Eui48::new(LOCAL));
         assert_eq!(ethernet.ether_type, EtherType::IPV4);
         assert!(Checksum::new().with(&packet[..20]).verifies());
         let ip = Ipv4Header::parse(packet).unwrap();
-        assert_eq!(ip.addresses()[..4], OUR_IP);
-        assert_eq!(ip.addresses()[4..], PEER_IP);
+        assert_eq!(ip.source().octets(), OUR_IP);
+        assert_eq!(ip.destination().octets(), PEER_IP);
         assert_eq!(packet[1] >> 2, 10, "the socket's DSCP");
         let datagram = ip.payload();
         let (udp, data) = UdpHeader::parse(datagram).unwrap();
@@ -160,8 +162,8 @@ fn a_produced_frame_is_written_in_the_slot_and_its_checksum_verifies() {
         assert!(
             Checksum::new()
                 .with(&ipv4_pseudo_header(
-                    OUR_IP,
-                    PEER_IP,
+                    Ipv4Address::new(OUR_IP),
+                    Ipv4Address::new(PEER_IP),
                     PROTOCOL_UDP,
                     udp.length
                 ))
@@ -198,8 +200,8 @@ fn a_header_and_filler_go_out_whole_under_a_checksum_that_verifies() {
             assert!(
                 Checksum::new()
                     .with(&ipv4_pseudo_header(
-                        OUR_IP,
-                        PEER_IP,
+                        Ipv4Address::new(OUR_IP),
+                        Ipv4Address::new(PEER_IP),
                         PROTOCOL_UDP,
                         udp.length
                     ))
@@ -225,8 +227,8 @@ fn datagram_of(frame: &[u8]) -> (Vec<u8>, bool) {
     let (udp, _) = UdpHeader::parse(datagram).unwrap();
     let verifies = Checksum::new()
         .with(&ipv4_pseudo_header(
-            OUR_IP,
-            PEER_IP,
+            Ipv4Address::new(OUR_IP),
+            Ipv4Address::new(PEER_IP),
             PROTOCOL_UDP,
             udp.length,
         ))
@@ -682,7 +684,7 @@ fn the_neighbor_counter_moves_on_every_release_of_protection() {
         // A resolution given up.
         let socket = stack.open_local(6001, best_effort()).unwrap();
         let far = Remote {
-            address: [192, 0, 2, 9],
+            address: Ipv4Address::new([192, 0, 2, 9]),
             port: 7,
         };
         let work = stack.declare(at(2), &socket, far, 8, 35).unwrap();

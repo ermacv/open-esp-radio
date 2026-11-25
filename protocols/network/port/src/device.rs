@@ -2,6 +2,7 @@
 
 use crate::{FrameLengthError, LinkState};
 use core::task::{Context, Poll};
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 
 /// The publication epoch changes on a new association, not on channel absences.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,9 +21,9 @@ impl LinkSnapshot {
 /// A borrowed view of an owned Ethernet-II frame, excluding the FCS.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EthernetFrameView<'a> {
-    pub destination: [u8; 6],
-    pub source: [u8; 6],
-    pub ether_type: u16,
+    pub destination: Eui48,
+    pub source: Eui48,
+    pub ether_type: EtherType,
     pub payload: &'a [u8],
 }
 
@@ -82,9 +83,9 @@ impl FrameStorage for core::convert::Infallible {
 /// where its payload lies in the storage.
 pub struct LentFrame<S> {
     storage: S,
-    destination: [u8; 6],
-    source: [u8; 6],
-    ether_type: u16,
+    destination: Eui48,
+    source: Eui48,
+    ether_type: EtherType,
     payload: core::ops::Range<usize>,
 }
 
@@ -92,9 +93,9 @@ pub struct LentFrame<S> {
 pub struct LentParts<S> {
     /// The owner; its `payload` bytes are the frame's payload.
     pub storage: S,
-    pub destination: [u8; 6],
-    pub source: [u8; 6],
-    pub ether_type: u16,
+    pub destination: Eui48,
+    pub source: Eui48,
+    pub ether_type: EtherType,
     /// The payload's range in the storage's bytes.
     pub payload: core::ops::Range<usize>,
 }
@@ -104,9 +105,9 @@ impl<S: FrameStorage> LentFrame<S> {
     /// back unchanged if that range is not inside its bytes.
     pub fn new(
         storage: S,
-        destination: [u8; 6],
-        source: [u8; 6],
-        ether_type: u16,
+        destination: Eui48,
+        source: Eui48,
+        ether_type: EtherType,
         payload: core::ops::Range<usize>,
     ) -> Result<Self, S> {
         if storage.bytes().get(payload.clone()).is_none() {
@@ -243,25 +244,43 @@ mod tests {
     fn a_lent_frame_views_its_payload_in_its_owner_storage() {
         let mut bytes = [0; 32];
         bytes[20..24].copy_from_slice(&[1, 2, 3, 4]);
-        let Ok(frame) = LentFrame::new(Owned(bytes), [1; 6], [2; 6], 0x0800, 20..24) else {
+        let Ok(frame) = LentFrame::new(
+            Owned(bytes),
+            Eui48::new([1; 6]),
+            Eui48::new([2; 6]),
+            EtherType::IPV4,
+            20..24,
+        ) else {
             panic!("the payload lies inside the storage");
         };
         let view = LentFrame::view(&frame).unwrap();
         assert_eq!(view.payload, &[1, 2, 3, 4]);
-        assert_eq!(view.ether_type, 0x0800);
+        assert_eq!(view.ether_type, EtherType::IPV4);
         let parts = frame.into_parts();
         assert_eq!(parts.payload, 20..24);
-        assert_eq!(parts.destination, [1; 6]);
+        assert_eq!(parts.destination, Eui48::new([1; 6]));
     }
 
     #[test]
     fn a_payload_outside_the_storage_returns_the_owner_unchanged() {
-        let Err(owner) = LentFrame::new(Owned([7; 32]), [1; 6], [2; 6], 0x0800, 30..33) else {
+        let Err(owner) = LentFrame::new(
+            Owned([7; 32]),
+            Eui48::new([1; 6]),
+            Eui48::new([2; 6]),
+            EtherType::IPV4,
+            30..33,
+        ) else {
             panic!("the range ends past the storage");
         };
         assert_eq!(owner.0, [7; 32]);
         #[allow(clippy::reversed_empty_ranges, reason = "the refused shape")]
-        let reversed = LentFrame::new(Owned([7; 32]), [1; 6], [2; 6], 0x0800, 5..4);
+        let reversed = LentFrame::new(
+            Owned([7; 32]),
+            Eui48::new([1; 6]),
+            Eui48::new([2; 6]),
+            EtherType::IPV4,
+            5..4,
+        );
         assert!(reversed.is_err());
     }
 }

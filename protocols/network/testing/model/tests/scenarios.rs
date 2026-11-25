@@ -18,6 +18,8 @@
     reason = "test code: a test may panic"
 )]
 
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::future::Future;
@@ -78,8 +80,8 @@ type Run<'n, B, const N: usize> = Ended<'n, 'n, B, SIZE, SOCKETS, CREDITS, N, DE
 
 fn peer(number: u8, micros_per_octet: u32) -> PeerSpec {
     PeerSpec {
-        hardware: [2, 0, 0, 0, 1, number],
-        address: [192, 0, 2, 10 + number],
+        hardware: Eui48::new([2, 0, 0, 0, 1, number]),
+        address: Ipv4Address::new([192, 0, 2, 10 + number]),
         overhead_micros: OVERHEAD,
         micros_per_octet,
         estimated_per_octet: micros_per_octet,
@@ -89,7 +91,7 @@ fn peer(number: u8, micros_per_octet: u32) -> PeerSpec {
 }
 
 fn medium(peers: &[PeerSpec]) -> Medium {
-    Medium::new(LOCAL, OUR_IP, AT_PORT, peers)
+    Medium::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), AT_PORT, peers)
 }
 
 fn owner<'n, B: Brand, const N: usize>(right: NetworkClaim<B>, medium: &Medium) -> Owner<'n, B, N> {
@@ -99,7 +101,7 @@ fn owner<'n, B: Brand, const N: usize>(right: NetworkClaim<B>, medium: &Medium) 
 }
 
 fn interface() -> Interface {
-    Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap()
+    Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap()
 }
 
 /// One flow: a socket on `port` that always has a datagram for `address`.
@@ -201,7 +203,7 @@ async fn flood<'n, B: 'n>(
     let start = clock.now().as_micros() + flow.after;
     clock.wait_until(Instant::from_micros(start)).await;
     let remote = Remote {
-        address: flow.to,
+        address: Ipv4Address::new(flow.to),
         port: 7,
     };
     let tally = |sent: Sent| {
@@ -429,7 +431,7 @@ fn flows(to: &[(u16, PeerSpec)]) -> Vec<Flow> {
         .zip(to)
         .map(|(group, (port, peer))| Flow {
             port: *port,
-            to: peer.address,
+            to: peer.address.octets(),
             group: (group, usize::MAX),
             after: 0,
         })
@@ -479,7 +481,7 @@ fn an_exhausted_pool_starves_no_flow() {
 fn to_a_sleeper(peers: &[PeerSpec; 2], limit: usize) -> [Flow; 3] {
     let flow = |port, peer: PeerSpec, group, limit, after| Flow {
         port,
-        to: peer.address,
+        to: peer.address.octets(),
         group: (group, limit),
         after,
     };
@@ -656,12 +658,17 @@ fn each_block_ack_of_32_settles_in_one_turn_which_publishes_again() {
     with_local_network(|right| {
         const AGGREGATE: usize = 32;
         let peers = [peer(1, FAST)];
-        let medium = Medium::new(LOCAL, OUR_IP, AGGREGATE, &peers);
+        let medium = Medium::new(
+            Eui48::new(LOCAL),
+            Ipv4Address::new(OUR_IP),
+            AGGREGATE,
+            &peers,
+        );
         medium.batch(AGGREGATE);
         let flows: Vec<Flow> = (0..4)
             .map(|flow| Flow {
                 port: 5000 + flow,
-                to: peers[0].address,
+                to: peers[0].address.octets(),
                 group: (0, usize::MAX),
                 after: 0,
             })

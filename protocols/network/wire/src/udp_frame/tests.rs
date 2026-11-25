@@ -1,18 +1,20 @@
 extern crate std;
 
+use crate::address::Ipv4Address;
+use oer_protocols_ieee802_wire::Eui48;
 use std::vec;
 
 use super::*;
-use crate::ethernet::EtherType;
 use crate::ip::Dscp;
+use oer_protocols_ieee802_wire::EtherType;
 
 /// A template's headers are the ones the fields make, field by field, for
 /// every length and identification, and its checksums verify.
 #[test]
 fn a_template_s_headers_are_the_ones_its_fields_make() {
     let ethernet = EthernetHeader {
-        destination: [2, 0, 0, 0, 0, 2],
-        source: [2, 0, 0, 0, 0, 1],
+        destination: Eui48::new([2, 0, 0, 0, 0, 2]),
+        source: Eui48::new([2, 0, 0, 0, 0, 1]),
         ether_type: EtherType::IPV4,
     };
     let fields = Ipv4Fields {
@@ -21,8 +23,8 @@ fn a_template_s_headers_are_the_ones_its_fields_make() {
         identification: 0,
         time_to_live: 64,
         protocol: PROTOCOL_UDP,
-        source: [192, 0, 2, 1],
-        destination: [198, 51, 100, 7],
+        source: Ipv4Address::new([192, 0, 2, 1]),
+        destination: Ipv4Address::new([198, 51, 100, 7]),
     };
     let ports = Ports {
         source: 5000,

@@ -4,6 +4,8 @@
 //! RFC 2131 for DHCP (`dhcp`); RFC 792 for ICMP echo (`echo`).
 
 use core::marker::PhantomData;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
@@ -14,7 +16,7 @@ use oer_protocols_network_port::{
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header};
 use oer_protocols_network_wire::dhcp;
-use oer_protocols_network_wire::ethernet::{self, EtherType, EthernetHeader};
+use oer_protocols_network_wire::ethernet::{self, EthernetHeader};
 use oer_protocols_network_wire::icmp::{self, Echo, PROTOCOL_ICMP};
 use oer_protocols_network_wire::ip::{
     Dscp, IPV4_HEADER_LEN, Ipv4Fields, Ipv4Header, Ipv4VersionIhl,
@@ -26,9 +28,7 @@ use crate::block::{Block, CoreBrand, Group, Pool, Tag};
 use crate::dhcp::{Client, Destination, DhcpDrop, DhcpState, Lease, Outgoing};
 use crate::diagnostics::{Count, counted};
 use crate::echo::{Echoes, IcmpDrop, Owed};
-use crate::interface::{
-    Addressing, BROADCAST, BROADCAST_HARDWARE, Interface, Ipv4, UNSPECIFIED, is_unicast,
-};
+use crate::interface::{Addressing, Interface, Ipv4, is_unicast};
 use crate::loans::{LoansRefused, NotLent};
 use crate::neighbor::{Holds, Lookup, Neighbors};
 use crate::payload::Payload;
@@ -49,7 +49,7 @@ const BEST_EFFORT: Dscp = Dscp::from_field(oer_portable_wire::U8::constant::<0>(
 /// A peer's address and port.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Remote {
-    pub address: [u8; 4],
+    pub address: Ipv4Address,
     pub port: u16,
 }
 
@@ -124,7 +124,7 @@ impl<B> Demand<B> {
 pub struct Grant<B> {
     work: Work,
     /// The station address it was chosen for: another is other work.
-    peer: [u8; 6],
+    peer: Eui48,
     brand: Tag<B>,
 }
 
@@ -448,9 +448,9 @@ fn fits(length: usize) -> Option<u16> {
 struct Prepared {
     remote: Remote,
     version: u32,
-    hop: Option<[u8; 4]>,
+    hop: Option<Ipv4Address>,
     /// The look and the station address it found; none for a broadcast.
-    found: Option<(Holds, [u8; 6])>,
+    found: Option<(Holds, Eui48)>,
     template: UdpFrameTemplate,
     dscp: Dscp,
 }
@@ -459,8 +459,8 @@ impl Prepared {
     fn new(
         remote: Remote,
         version: u32,
-        hop: Option<[u8; 4]>,
-        found: Option<(Holds, [u8; 6])>,
+        hop: Option<Ipv4Address>,
+        found: Option<(Holds, Eui48)>,
         ethernet: &EthernetHeader,
         ip: &Ipv4Fields,
         ports: Ports,
@@ -479,7 +479,7 @@ impl Prepared {
     fn serves<const N: usize>(
         &self,
         remote: Remote,
-        hop: Option<[u8; 4]>,
+        hop: Option<Ipv4Address>,
         version: u32,
         neighbors: &Neighbors<N>,
         now: Instant,
@@ -799,7 +799,7 @@ fn end_waiting<
     T: Copy,
 >(
     sockets: &mut [Socket<'m, B, SIZE, CREDITS, RECEIVED, T>],
-    address: [u8; 4],
+    address: Ipv4Address,
     outcome: Outcome,
     pool: &mut Pool<'m, B, SIZE, BLOCKS>,
 ) {
@@ -813,7 +813,7 @@ fn end_waiting<
 fn data_needs<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: Copy>(
     sockets: &[Socket<'m, B, SIZE, CREDITS, RECEIVED, T>],
     echoes: &Echoes<'m, B, SIZE>,
-    address: [u8; 4],
+    address: Ipv4Address,
 ) -> bool {
     sockets.iter().any(|socket| socket.needs(address)) || echoes.needs(address)
 }
@@ -851,7 +851,7 @@ impl Address {
     }
 
     /// The neighbor the DHCP client's owed unicast goes through.
-    fn dhcp_hop(&self) -> Option<[u8; 4]> {
+    fn dhcp_hop(&self) -> Option<Ipv4Address> {
         let client = self.client()?;
         client.owed()?;
         match client.destination() {
@@ -932,7 +932,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
     }
 
     /// Whether running work here goes through `address`.
-    fn needs(&self, address: [u8; 4]) -> bool {
+    fn needs(&self, address: Ipv4Address) -> bool {
         self.places
             .running()
             .any(|(_, place)| place.run().hop() == Some(address))
@@ -942,15 +942,15 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
 /// A free place a datagram may run in, and the neighbor it goes through.
 struct Admitted {
     vacant: Vacant,
-    hop: Option<[u8; 4]>,
+    hop: Option<Ipv4Address>,
 }
 
 /// A reply owed to an asker.
 #[derive(Clone, Copy, Debug)]
 struct Reply {
     serial: u64,
-    hardware: [u8; 6],
-    address: [u8; 4],
+    hardware: Eui48,
+    address: Ipv4Address,
 }
 
 /// The owner of the network state.
@@ -1131,15 +1131,15 @@ impl<
     }
 
     /// The address a frame goes out from: 0 before the interface has one.
-    fn source(&self) -> [u8; 4] {
+    fn source(&self) -> Ipv4Address {
         self.address
             .ipv4()
-            .map_or(UNSPECIFIED, |ipv4| ipv4.address())
+            .map_or(Ipv4Address::UNSPECIFIED, |ipv4| ipv4.address())
     }
 
     /// The limited broadcast address, or the network's own.
-    fn is_broadcast(&self, address: [u8; 4]) -> bool {
-        address == BROADCAST
+    fn is_broadcast(&self, address: Ipv4Address) -> bool {
+        address == Ipv4Address::BROADCAST
             || self
                 .address
                 .ipv4()
@@ -1152,7 +1152,7 @@ impl<
     /// the protection a send acquires, not the entry's presence: an entry
     /// data protects already stays its own, cached or expired, and one that
     /// is merely cached costs a place like any other.
-    fn data_may_resolve(&self, hop: [u8; 4]) -> bool {
+    fn data_may_resolve(&self, hop: Ipv4Address) -> bool {
         let sockets = &self.sockets;
         let echoes = &self.echoes;
         if self.address.client().is_none() || data_needs(sockets, echoes, hop) {
@@ -1164,7 +1164,7 @@ impl<
     }
 
     /// Resolve `hop` for data, within the control reserve.
-    fn resolve_for_data(&mut self, now: Instant, hop: [u8; 4]) -> Lookup {
+    fn resolve_for_data(&mut self, now: Instant, hop: Ipv4Address) -> Lookup {
         if !self.data_may_resolve(hop) {
             return Lookup::Full;
         }
@@ -1410,8 +1410,8 @@ impl<
         now: Instant,
         socket: &SocketId<B>,
         remote: Remote,
-        hop: Option<[u8; 4]>,
-        source: [u8; 4],
+        hop: Option<Ipv4Address>,
+        source: Ipv4Address,
     ) {
         let found = match hop {
             Some(hop) => match self.neighbors.find(now, hop) {
@@ -1429,7 +1429,7 @@ impl<
             return;
         };
         let ethernet = EthernetHeader {
-            destination: found.map_or(BROADCAST_HARDWARE, |(_, peer)| peer),
+            destination: found.map_or(Eui48::BROADCAST, |(_, peer)| peer),
             source: hardware,
             ether_type: EtherType::IPV4,
         };
@@ -1466,7 +1466,7 @@ impl<
         &mut self,
         socket: &SocketId<B>,
         admitted: Admitted,
-        run: impl FnOnce(Option<[u8; 4]>) -> Run<'m, B, SIZE, T>,
+        run: impl FnOnce(Option<Ipv4Address>) -> Run<'m, B, SIZE, T>,
     ) -> CommandId<B> {
         let serial = self.next_serial();
         let Admitted { vacant, hop } = admitted;
@@ -1702,7 +1702,7 @@ impl<
         let view = EthernetFrameView {
             destination: header.destination,
             source: header.source,
-            ether_type: header.ether_type.value(),
+            ether_type: header.ether_type,
             payload,
         };
         // A frame given as octets is no port's buffer: it is copied.
@@ -1763,11 +1763,10 @@ impl<
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) -> Option<Arrived<'f>> {
-        if frame.destination != self.interface.hardware() && frame.destination != BROADCAST_HARDWARE
-        {
+        if frame.destination != self.interface.hardware() && frame.destination != Eui48::BROADCAST {
             return None;
         }
-        let ether_type = EtherType::new(frame.ether_type);
+        let ether_type = frame.ether_type;
         if ether_type == EtherType::ARP {
             self.input_arp(now, frame.payload, events);
             None
@@ -1825,8 +1824,7 @@ impl<
             report(events, || NetEvent::Malformed);
             return None;
         };
-        let [s0, s1, s2, s3, d0, d1, d2, d3] = packet.addresses();
-        let (source, destination) = ([s0, s1, s2, s3], [d0, d1, d2, d3]);
+        let (source, destination) = (packet.source(), packet.destination());
         let ours = self
             .address
             .ipv4()
@@ -1973,7 +1971,7 @@ impl<
     fn input_dhcp<const BLOCKS: usize>(
         &mut self,
         now: Instant,
-        source: [u8; 4],
+        source: Ipv4Address,
         message: &[u8],
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
@@ -2000,8 +1998,8 @@ impl<
     fn input_icmp<const BLOCKS: usize>(
         &mut self,
         now: Instant,
-        source: [u8; 4],
-        destination: [u8; 4],
+        source: Ipv4Address,
+        destination: Ipv4Address,
         message: &[u8],
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
@@ -2014,8 +2012,8 @@ impl<
     fn owe_echo<const BLOCKS: usize>(
         &mut self,
         now: Instant,
-        source: [u8; 4],
-        destination: [u8; 4],
+        source: Ipv4Address,
+        destination: Ipv4Address,
         message: &[u8],
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> Result<(), IcmpDrop> {
@@ -2239,7 +2237,7 @@ impl<
                 ready: Ready {
                     class: Class::Control,
                     length: ARP_FRAME,
-                    peer: BROADCAST_HARDWARE,
+                    peer: Eui48::BROADCAST,
                     flow: None,
                     dscp: BEST_EFFORT,
                 },
@@ -2302,9 +2300,9 @@ impl<
     }
 
     /// The station address the client's owed message goes to.
-    fn dhcp_peer(&self, now: Instant, client: &Client) -> Option<[u8; 6]> {
+    fn dhcp_peer(&self, now: Instant, client: &Client) -> Option<Eui48> {
         match client.destination() {
-            Destination::Broadcast => Some(BROADCAST_HARDWARE),
+            Destination::Broadcast => Some(Eui48::BROADCAST),
             Destination::Server(server) => {
                 let hop = self.address.ipv4()?.next_hop(server)?;
                 self.neighbors.hardware(now, hop)
@@ -2338,7 +2336,7 @@ impl<
                 Some((found.holds(), found.hardware))
             }
         };
-        let peer = found.map_or(BROADCAST_HARDWARE, |(_, peer)| peer);
+        let peer = found.map_or(Eui48::BROADCAST, |(_, peer)| peer);
         Some(Demand {
             ready: Ready {
                 class: Class::Data,
@@ -2383,7 +2381,7 @@ impl<
                     .neighbors
                     .owed_requests()
                     .find(|owed| (owed.0, owed.2) == (neighbor, serial))?;
-                self.arp_frame(Operation::Request, BROADCAST_HARDWARE, [0; 6], address)
+                self.arp_frame(Operation::Request, Eui48::BROADCAST, Eui48::ZERO, address)
             }
             Work::Datagram {
                 socket,
@@ -2400,9 +2398,9 @@ impl<
     /// carrying `length` octets.
     fn ip_headers(
         &self,
-        peer: [u8; 6],
-        source: [u8; 4],
-        destination: [u8; 4],
+        peer: Eui48,
+        source: Ipv4Address,
+        destination: Ipv4Address,
         protocol: u8,
         length: usize,
         writer: &mut Writer<'_>,
@@ -2432,7 +2430,7 @@ impl<
 
     #[cold]
     #[inline(never)]
-    fn dhcp_frame(&self, now: Instant, serial: u64, peer: [u8; 6]) -> Option<Frame<'_, T>> {
+    fn dhcp_frame(&self, now: Instant, serial: u64, peer: Eui48) -> Option<Frame<'_, T>> {
         let client = self.address.client()?;
         if self.dhcp_peer(now, client)? != peer {
             return None;
@@ -2468,7 +2466,7 @@ impl<
         &self,
         now: Instant,
         serial: u64,
-        peer: [u8; 6],
+        peer: Eui48,
         found: &Holds,
     ) -> Option<Frame<'_, T>> {
         let owed = self.echoes.get(serial)?;
@@ -2497,9 +2495,9 @@ impl<
     fn arp_frame(
         &self,
         operation: Operation,
-        destination: [u8; 6],
-        target_hardware: [u8; 6],
-        target_protocol: [u8; 4],
+        destination: Eui48,
+        target_hardware: Eui48,
+        target_protocol: Ipv4Address,
     ) -> Option<Frame<'_, T>> {
         let mut frame = [0; ARP_FRAME];
         let (head, rest) = frame.split_at_mut_checked(ethernet::HEADER_LEN)?;
@@ -2527,12 +2525,12 @@ impl<
     fn next_hop(
         &self,
         now: Instant,
-        hop: Option<[u8; 4]>,
+        hop: Option<Ipv4Address>,
         found: Option<&Holds>,
-        peer: [u8; 6],
-    ) -> Option<[u8; 6]> {
+        peer: Eui48,
+    ) -> Option<Eui48> {
         let Some(hop) = hop else {
-            return Some(BROADCAST_HARDWARE);
+            return Some(Eui48::BROADCAST);
         };
         match found {
             // What was found holds: it found `peer`.
@@ -2547,7 +2545,7 @@ impl<
         socket: u8,
         place: u8,
         serial: u64,
-        (peer, found): ([u8; 6], Option<Holds>),
+        (peer, found): (Eui48, Option<Holds>),
     ) -> Option<Frame<'_, T>> {
         // No frame leaves from an address past its lease's end.
         let source = self.usable(now)?.address();
@@ -2571,7 +2569,7 @@ impl<
             Some(prepared) if prepared.serves(remote, hop, self.version, &self.neighbors, now) => {
                 let next_hop = prepared
                     .found
-                    .map_or(BROADCAST_HARDWARE, |(_, hardware)| hardware);
+                    .map_or(Eui48::BROADCAST, |(_, hardware)| hardware);
                 if next_hop != peer {
                     return None;
                 }
@@ -2600,10 +2598,10 @@ impl<
         &self,
         now: Instant,
         open: &Socket<'m, B, SIZE, CREDITS, RECEIVED, T>,
-        (remote, hop): (Remote, Option<[u8; 4]>),
-        source: [u8; 4],
+        (remote, hop): (Remote, Option<Ipv4Address>),
+        source: Ipv4Address,
         length: usize,
-        (peer, found): ([u8; 6], Option<Holds>),
+        (peer, found): (Eui48, Option<Holds>),
     ) -> Option<UdpHeaders<'static>> {
         let source_port = open.opened.port()?;
         let next_hop = self.next_hop(now, hop, found.as_ref(), peer)?;
@@ -2960,7 +2958,7 @@ impl<
     fn next(&mut self) -> Option<Demand<B>> {
         let core = self.core;
         let brand = core.brand;
-        let control = |length: usize, peer: [u8; 6], work: Work| Demand {
+        let control = |length: usize, peer: Eui48, work: Work| Demand {
             ready: Ready {
                 class: Class::Control,
                 length,
@@ -2993,7 +2991,7 @@ impl<
                         self.at = DemandAt::Requests(after);
                         return Some(control(
                             ARP_FRAME,
-                            BROADCAST_HARDWARE,
+                            Eui48::BROADCAST,
                             Work::Request { neighbor, serial },
                         ));
                     }

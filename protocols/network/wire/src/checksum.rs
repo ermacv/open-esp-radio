@@ -3,6 +3,8 @@
 //! SOURCE: RFC 1071, 1 (Introduction) and 4.1 (C); RFC 768 for UDP's pseudo
 //! header and its zero; RFC 791, 3.1 for IPv4's header.
 
+use crate::address::Ipv4Address;
+
 /// The one's complement sum of a sequence of octets, in any number of parts.
 ///
 /// A part may end on an odd octet: the next part continues the sequence.
@@ -287,13 +289,13 @@ pub const fn udp_field(computed: u16) -> u16 {
 
 /// The IPv4 pseudo header of a transport `length` octets long.
 pub const fn ipv4_pseudo_header(
-    source: [u8; 4],
-    destination: [u8; 4],
+    source: Ipv4Address,
+    destination: Ipv4Address,
     protocol: u8,
     length: u16,
 ) -> [u8; 12] {
-    let [s0, s1, s2, s3] = source;
-    let [d0, d1, d2, d3] = destination;
+    let [s0, s1, s2, s3] = source.octets();
+    let [d0, d1, d2, d3] = destination.octets();
     let [zero, next, length_high, length_low] = PseudoHeaderTail::from_bytes([0; 4])
         .with_protocol(protocol)
         .with_length(length)
@@ -548,7 +550,12 @@ mod tests {
     #[test]
     fn a_udp_datagram_covers_its_pseudo_header() {
         let mut datagram = [0x12, 0x34, 0x56, 0x78, 0, 10, 0, 0, 0xAB, 0xCD];
-        let pseudo = ipv4_pseudo_header([192, 0, 2, 1], [192, 0, 2, 2], PROTOCOL_UDP, 10);
+        let pseudo = ipv4_pseudo_header(
+            Ipv4Address::new([192, 0, 2, 1]),
+            Ipv4Address::new([192, 0, 2, 2]),
+            PROTOCOL_UDP,
+            10,
+        );
         let field = Checksum::new().with(&pseudo).with(&datagram).finish();
         datagram[6..8].copy_from_slice(&udp_field(field).to_be_bytes());
         assert!(Checksum::new().with(&pseudo).with(&datagram).verifies());

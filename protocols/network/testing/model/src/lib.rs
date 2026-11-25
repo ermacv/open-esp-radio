@@ -18,13 +18,13 @@ use std::rc::Rc;
 use std::task::{Context, Waker};
 
 use oer_portable_time::Instant;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Unpublished};
+use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
-use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
+use oer_protocols_network_wire::ethernet::EthernetHeader;
 use oer_protocols_network_wire::ip::Ipv4Header;
 use oer_protocols_network_wire::transport::UdpHeader;
-
-const BROADCAST: [u8; 6] = [0xff; 6];
 
 /// An association: a peer's number and its generation.
 pub type PeerKey = (u8, u16);
@@ -47,8 +47,8 @@ pub type Ticket = usize;
 /// One peer's rate and addresses.
 #[derive(Clone, Copy, Debug)]
 pub struct PeerSpec {
-    pub hardware: [u8; 6],
-    pub address: [u8; 4],
+    pub hardware: Eui48,
+    pub address: Ipv4Address,
     /// The cost of any frame.
     pub overhead_micros: u32,
     /// The cost of each octet.
@@ -114,8 +114,8 @@ struct Flight {
 
 #[derive(Debug)]
 struct State {
-    local: [u8; 6],
-    address: [u8; 4],
+    local: Eui48,
+    address: Ipv4Address,
     peers: Vec<Peer>,
     broadcast: Spent,
     flows: BTreeMap<u16, Spent>,
@@ -150,7 +150,7 @@ impl State {
         }
     }
 
-    fn peer_of(&self, hardware: [u8; 6]) -> Option<usize> {
+    fn peer_of(&self, hardware: Eui48) -> Option<usize> {
         self.peers
             .iter()
             .position(|peer| peer.spec.hardware == hardware)
@@ -164,8 +164,8 @@ impl State {
             .map(|peer| peer.spec)
             .max_by_key(|spec| spec.micros_per_octet);
         slowest.unwrap_or(PeerSpec {
-            hardware: BROADCAST,
-            address: [0; 4],
+            hardware: Eui48::BROADCAST,
+            address: Ipv4Address::UNSPECIFIED,
             overhead_micros: 1,
             micros_per_octet: 1,
             estimated_per_octet: 1,
@@ -247,7 +247,7 @@ impl State {
         let header = EthernetHeader::parse(frame).ok();
         let destination = header.as_ref().map(|(header, _)| header.destination);
         let peer = destination
-            .filter(|hardware| *hardware != BROADCAST)
+            .filter(|hardware| *hardware != Eui48::BROADCAST)
             .and_then(|hardware| self.peer_of(hardware));
         if let Some((header, payload)) = header
             && header.ether_type == EtherType::ARP
@@ -313,7 +313,7 @@ impl Medium {
     /// A medium for a station of `local` and `address`, with `depth` frames at
     /// the port at most.
     #[must_use]
-    pub fn new(local: [u8; 6], address: [u8; 4], depth: usize, peers: &[PeerSpec]) -> Self {
+    pub fn new(local: Eui48, address: Ipv4Address, depth: usize, peers: &[PeerSpec]) -> Self {
         Self(Rc::new(RefCell::new(State {
             local,
             address,
@@ -501,7 +501,7 @@ impl FrameSource for Medium {
                 EthernetFrameView {
                     destination: header.destination,
                     source: header.source,
-                    ether_type: header.ether_type.value(),
+                    ether_type: header.ether_type,
                     payload,
                 },
                 Holding::Copied(CopyReason::Format),
@@ -546,7 +546,12 @@ mod reviewer_ticket_width {
     #[test]
     fn distinct_valid_buffer_places_have_distinct_tickets() {
         let last = usize::from(u16::MAX);
-        let medium = Medium::new([2, 0, 0, 0, 0, 1], [192, 0, 2, 1], last + 2, &[]);
+        let medium = Medium::new(
+            Eui48::new([2, 0, 0, 0, 0, 1]),
+            Ipv4Address::new([192, 0, 2, 1]),
+            last + 2,
+            &[],
+        );
         let mut state = medium.0.borrow_mut();
         let frame = [0_u8; 14];
         let a = state.fly(last, &frame);

@@ -2,6 +2,7 @@
 //! told end no right to its result, and running work offered in the order it
 //! was accepted.
 
+use oer_protocols_network_wire::address::Ipv4Address;
 use std::vec::Vec;
 
 use super::*;
@@ -158,7 +159,7 @@ fn the_ends_of_a_closed_socket_tell_nothing_of_the_next_in_its_place() {
         let second = stack.open(5001, best_effort()).unwrap();
         let block = stack.pool().take().unwrap();
         let broadcast = Remote {
-            address: [192, 0, 2, 255],
+            address: Ipv4Address::new([192, 0, 2, 255]),
             port: 7,
         };
         let command = stack.send(at(0), &second, broadcast, block).unwrap();
@@ -217,7 +218,7 @@ fn acceptance_order_is_no_send_order_a_ready_datagram_goes_before_one_waiting_fo
     wide(|stack| {
         let socket = stack.open(5000, best_effort()).unwrap();
         let unknown = Remote {
-            address: [192, 0, 2, 9],
+            address: Ipv4Address::new([192, 0, 2, 9]),
             port: 7,
         };
         let block = filled(stack.pool(), b"waits");

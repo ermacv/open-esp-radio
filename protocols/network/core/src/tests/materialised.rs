@@ -3,6 +3,8 @@
 //! trusted while it holds, looked up again once anything known moved.
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 /// The data of a test datagram of `length` octets, none alike in a row.
 fn octets(length: usize) -> Vec<u8> {
@@ -17,7 +19,12 @@ fn segment(frame: &[u8]) -> (UdpHeader, Vec<u8>, u16) {
     let (_, payload) = EthernetHeader::parse(frame).unwrap();
     let packet = Ipv4Header::parse(payload).unwrap();
     let (udp, data) = UdpHeader::parse(packet.payload()).unwrap();
-    let pseudo = ipv4_pseudo_header(OUR_IP, PEER_IP, PROTOCOL_UDP, udp.length);
+    let pseudo = ipv4_pseudo_header(
+        Ipv4Address::new(OUR_IP),
+        Ipv4Address::new(PEER_IP),
+        PROTOCOL_UDP,
+        udp.length,
+    );
     let unfilled = UdpHeader { checksum: 0, ..udp };
     let expected = udp_field(
         Checksum::new()
@@ -89,7 +96,7 @@ fn a_table_that_moved_elsewhere_is_looked_at_again_and_the_frame_goes() {
         stack.input(at(1), &other, &mut ());
         stack.transmit(at(1), chosen, unproduced, &()).unwrap();
         let (header, _) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
-        assert_eq!(header.destination, PEER);
+        assert_eq!(header.destination, Eui48::new(PEER));
         assert_eq!(finished(stack.take_result(command)), Outcome::Accepted);
     });
 }

@@ -5,6 +5,7 @@
 //! and the same steps give the same answers.
 
 use core::cell::Cell;
+use oer_protocols_network_wire::address::Ipv4Address;
 use std::vec::Vec;
 
 use oer_protocols_network_port::Holding;
@@ -97,7 +98,7 @@ fn send_to<B: core::fmt::Debug>(
 fn four_running<B: core::fmt::Debug>(stack: &mut Wide<B>) -> crate::SocketId<B> {
     let socket = stack.open(5000, best_effort()).unwrap();
     let unknown = Remote {
-        address: [192, 0, 2, 9],
+        address: Ipv4Address::new([192, 0, 2, 9]),
         port: 7,
     };
     let _waits = send_to(stack, &socket, unknown, b"waits");

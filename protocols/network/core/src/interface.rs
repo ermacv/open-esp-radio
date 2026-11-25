@@ -1,17 +1,12 @@
 //! The one interface of this core and its IPv4 addressing.
 
-/// The all-stations address.
-pub(crate) const BROADCAST_HARDWARE: [u8; 6] = [0xFF; 6];
-/// The limited broadcast address, RFC 1122, 3.2.1.3 (c).
-pub(crate) const BROADCAST: [u8; 4] = [0xFF; 4];
-/// RFC 1122, 3.2.1.3 (a): this host on this network, before it has an
-/// address.
-pub(crate) const UNSPECIFIED: [u8; 4] = [0; 4];
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 /// An interface's identity, and how it gets its address.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Interface {
-    hardware: [u8; 6],
+    hardware: Eui48,
     mtu: u16,
     addressing: Addressing,
 }
@@ -29,10 +24,10 @@ pub(crate) enum Addressing {
 /// One IPv4 address on the interface's network, its prefix and its gateway.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ipv4 {
-    address: [u8; 4],
+    address: Ipv4Address,
     prefix: u8,
     mask: u32,
-    gateway: Option<[u8; 4]>,
+    gateway: Option<Ipv4Address>,
 }
 
 /// An interface that cannot be.
@@ -50,9 +45,9 @@ impl Ipv4 {
     /// # Errors
     /// [`InterfaceError::Prefix`] or [`InterfaceError::Gateway`].
     pub fn new(
-        address: [u8; 4],
+        address: Ipv4Address,
         prefix: u8,
-        gateway: Option<[u8; 4]>,
+        gateway: Option<Ipv4Address>,
     ) -> Result<Self, InterfaceError> {
         if prefix > 32 {
             return Err(InterfaceError::Prefix(prefix));
@@ -72,7 +67,7 @@ impl Ipv4 {
         Ok(ipv4)
     }
 
-    pub const fn address(&self) -> [u8; 4] {
+    pub const fn address(&self) -> Ipv4Address {
         self.address
     }
 
@@ -80,31 +75,29 @@ impl Ipv4 {
         self.prefix
     }
 
-    pub const fn gateway(&self) -> Option<[u8; 4]> {
+    pub const fn gateway(&self) -> Option<Ipv4Address> {
         self.gateway
     }
 
-    fn on_link(&self, address: [u8; 4]) -> bool {
-        (u32::from_be_bytes(address) ^ u32::from_be_bytes(self.address)) & self.mask == 0
+    fn on_link(&self, address: Ipv4Address) -> bool {
+        (address.bits() ^ self.address.bits()) & self.mask == 0
     }
 
     /// The network's own broadcast address. Prefixes of 31 and 32 bits have
     /// none, RFC 3021.
-    pub(crate) fn is_directed_broadcast(&self, address: [u8; 4]) -> bool {
-        !self.mask > 1
-            && self.on_link(address)
-            && u32::from_be_bytes(address) | self.mask == u32::MAX
+    pub(crate) fn is_directed_broadcast(&self, address: Ipv4Address) -> bool {
+        !self.mask > 1 && self.on_link(address) && address.bits() | self.mask == u32::MAX
     }
 
     /// The network's own number, all host bits zero, RFC 1122, 3.2.1.3 (b),
     /// for prefixes with host bits to spare, RFC 3021.
-    pub(crate) fn is_network(&self, address: [u8; 4]) -> bool {
-        !self.mask > 1 && self.on_link(address) && u32::from_be_bytes(address) & !self.mask == 0
+    pub(crate) fn is_network(&self, address: Ipv4Address) -> bool {
+        !self.mask > 1 && self.on_link(address) && address.bits() & !self.mask == 0
     }
 
     /// The neighbor a datagram to `address` goes through; `None` when no
     /// route leads there.
-    pub(crate) fn next_hop(&self, address: [u8; 4]) -> Option<[u8; 4]> {
+    pub(crate) fn next_hop(&self, address: Ipv4Address) -> Option<Ipv4Address> {
         if self.on_link(address) {
             Some(address)
         } else {
@@ -119,10 +112,10 @@ impl Interface {
     /// # Errors
     /// [`InterfaceError`]: what is not valid.
     pub fn new(
-        hardware: [u8; 6],
-        address: [u8; 4],
+        hardware: Eui48,
+        address: Ipv4Address,
         prefix: u8,
-        gateway: Option<[u8; 4]>,
+        gateway: Option<Ipv4Address>,
         mtu: u16,
     ) -> Result<Self, InterfaceError> {
         let ipv4 = Ipv4::new(address, prefix, gateway)?;
@@ -135,12 +128,12 @@ impl Interface {
     ///
     /// # Errors
     /// [`InterfaceError::Mtu`].
-    pub fn dhcp(hardware: [u8; 6], mtu: u16, seed: u64) -> Result<Self, InterfaceError> {
+    pub fn dhcp(hardware: Eui48, mtu: u16, seed: u64) -> Result<Self, InterfaceError> {
         Self::with(hardware, mtu, Addressing::Dhcp { seed })
     }
 
     const fn with(
-        hardware: [u8; 6],
+        hardware: Eui48,
         mtu: u16,
         addressing: Addressing,
     ) -> Result<Self, InterfaceError> {
@@ -154,7 +147,7 @@ impl Interface {
         })
     }
 
-    pub(crate) const fn hardware(&self) -> [u8; 6] {
+    pub(crate) const fn hardware(&self) -> Eui48 {
         self.hardware
     }
 
@@ -170,7 +163,43 @@ impl Interface {
 /// Whether `address` may be a host's own: not this network's zero address,
 /// not a broadcast, loopback, multicast or reserved one, RFC 1122, 3.2.1.3,
 /// and RFC 5771 for multicast.
-pub(crate) fn is_unicast(address: [u8; 4]) -> bool {
-    let [first, ..] = address;
+pub(crate) fn is_unicast(address: Ipv4Address) -> bool {
+    let [first, ..] = address.octets();
     first != 0 && first != 127 && first < 224
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ipv4(prefix: u8) -> Ipv4 {
+        Ipv4::new(Ipv4Address::new([192, 0, 2, 5]), prefix, None).unwrap()
+    }
+
+    #[test]
+    fn a_network_has_its_own_number_and_broadcast_only_with_host_bits_to_spare() {
+        for (prefix, host, network, broadcast) in [
+            (24, 0, true, false),
+            (24, 255, false, true),
+            (24, 4, false, false),
+            (30, 4, true, false),
+            (30, 7, false, true),
+            (30, 6, false, false),
+            // Another network's number and broadcast.
+            (30, 0, false, false),
+            (30, 3, false, false),
+            (31, 4, false, false),
+            (31, 5, false, false),
+            (32, 5, false, false),
+        ] {
+            let address = Ipv4Address::new([192, 0, 2, host]);
+            let ipv4 = ipv4(prefix);
+            assert_eq!(ipv4.is_network(address), network, "{host}/{prefix}");
+            assert_eq!(
+                ipv4.is_directed_broadcast(address),
+                broadcast,
+                "{host}/{prefix}"
+            );
+        }
+    }
 }

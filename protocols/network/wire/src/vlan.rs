@@ -3,8 +3,8 @@
 //! SOURCE: IEEE Std 802.1Q-2022, 9.5 (Tag Protocol Identification) and 9.6
 //! (Tag Control Information).
 
-use crate::ethernet::EtherType;
 use oer_portable_wire::{Error, Reader};
+use oer_protocols_ieee802_wire::EtherType;
 
 /// Length of the tag's Tag Control Information and inner EtherType; the Tag
 /// Protocol Identifier is the outer EtherType.

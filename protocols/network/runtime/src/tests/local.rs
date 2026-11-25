@@ -21,6 +21,7 @@ use oer_portable_events::EventSink;
 use oer_portable_memory::WakingSpscSender;
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_network_core::{
     Block, BlockPlace, Brand, Declined, Group, Interface, NetEvent, NetworkClaim, NetworkOwner,
     Outcome, Payload, Remote, SendRefusal, WorkId, claim, with_local_network,
@@ -28,9 +29,10 @@ use oer_protocols_network_core::{
 use oer_protocols_network_port::{
     EthernetFrameView, FramePort, FrameSource, LinkSnapshot, LinkState, Unpublished,
 };
+use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::arp::Operation;
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header};
-use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
+use oer_protocols_network_wire::ethernet::EthernetHeader;
 use oer_protocols_network_wire::ip::{Dscp, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, UdpHeader};
 
@@ -440,7 +442,7 @@ impl FrameSource for LocalPort {
             EthernetFrameView {
                 destination: header.destination,
                 source: header.source,
-                ether_type: header.ether_type.value(),
+                ether_type: header.ether_type,
                 payload,
             },
             Holding::Copied(CopyReason::Format),
@@ -504,7 +506,7 @@ struct Bench<'n, B: 'n, const C: usize = 2> {
 fn bench<'n, B: Brand + 'n, const C: usize>(right: NetworkClaim<B>) -> Bench<'n, B, C> {
     bench_on(
         right,
-        Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap(),
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap(),
     )
 }
 
@@ -546,21 +548,21 @@ fn direct<'n, B: Brand + 'n>(right: NetworkClaim<B>) -> Bench<'n, B> {
 
 fn broadcast() -> Remote {
     Remote {
-        address: [192, 0, 2, 255],
+        address: Ipv4Address::new([192, 0, 2, 255]),
         port: 7,
     }
 }
 
 fn host(last: u8) -> Remote {
     Remote {
-        address: [192, 0, 2, last],
+        address: Ipv4Address::new([192, 0, 2, last]),
         port: 7,
     }
 }
 
 fn peer() -> Remote {
     Remote {
-        address: PEER_IP,
+        address: Ipv4Address::new(PEER_IP),
         port: 7,
     }
 }
@@ -568,8 +570,8 @@ fn peer() -> Remote {
 /// The peer's ARP request for us, so the core knows it.
 fn peer_asks() -> Vec<u8> {
     let mut frame = EthernetHeader {
-        destination: [0xFF; 6],
-        source: PEER,
+        destination: Eui48::new([0xFF; 6]),
+        source: Eui48::new(PEER),
         ether_type: EtherType::ARP,
     }
     .to_bytes()
@@ -577,10 +579,10 @@ fn peer_asks() -> Vec<u8> {
     let mut packet = [0; oer_protocols_network_wire::arp::PACKET_LEN];
     oer_protocols_network_wire::arp::Arp {
         operation: Operation::Request,
-        sender_hardware: PEER,
-        sender_protocol: PEER_IP,
-        target_hardware: [0; 6],
-        target_protocol: OUR_IP,
+        sender_hardware: Eui48::new(PEER),
+        sender_protocol: Ipv4Address::new(PEER_IP),
+        target_hardware: Eui48::new([0; 6]),
+        target_protocol: Ipv4Address::new(OUR_IP),
     }
     .write(&mut packet)
     .unwrap();
@@ -675,8 +677,8 @@ fn a_refused_offer_does_not_hold_back_the_next_in_the_first_poll() {
         assert!(
             Checksum::new()
                 .with(&ipv4_pseudo_header(
-                    OUR_IP,
-                    [192, 0, 2, 255],
+                    Ipv4Address::new(OUR_IP),
+                    Ipv4Address::new([192, 0, 2, 255]),
                     PROTOCOL_UDP,
                     udp.length
                 ))
@@ -1647,7 +1649,7 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
             script,
             clock,
             ..
-        } = bench_on::<_, 2>(right, Interface::dhcp(LOCAL, 1500, 7).unwrap());
+        } = bench_on::<_, 2>(right, Interface::dhcp(Eui48::new(LOCAL), 1500, 7).unwrap());
         let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
         service.watch(watch).unwrap();
         assert_eq!(service.watch(watch), Err(WatchRefused::Taken));
@@ -1695,8 +1697,14 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
             // The watch has the address, published at the turn's end.
             assert_ne!(watch.changes(), first);
             let configuration = watch.read().unwrap().configuration.unwrap();
-            assert_eq!(configuration.ipv4().unwrap().address(), OUR_IP);
-            assert_eq!(configuration.lease().unwrap().server, PEER_IP);
+            assert_eq!(
+                configuration.ipv4().unwrap().address(),
+                Ipv4Address::new(OUR_IP)
+            );
+            assert_eq!(
+                configuration.lease().unwrap().server,
+                Ipv4Address::new(PEER_IP)
+            );
             // The address version released the hold: the offer went.
             script.wake();
             settle(&mut run, &count, &waker);
@@ -1747,8 +1755,8 @@ fn peer_pings() -> Vec<u8> {
     let mut message = request.header(Icmp::Echo).to_vec();
     message.extend_from_slice(b"ping");
     let mut frame = EthernetHeader {
-        destination: LOCAL,
-        source: PEER,
+        destination: Eui48::new(LOCAL),
+        source: Eui48::new(PEER),
         ether_type: EtherType::IPV4,
     }
     .to_bytes()
@@ -1760,8 +1768,8 @@ fn peer_pings() -> Vec<u8> {
             identification: 1,
             time_to_live: 64,
             protocol: PROTOCOL_ICMP,
-            source: PEER_IP,
-            destination: OUR_IP,
+            source: Ipv4Address::new(PEER_IP),
+            destination: Ipv4Address::new(OUR_IP),
         }
         .to_bytes(),
     );

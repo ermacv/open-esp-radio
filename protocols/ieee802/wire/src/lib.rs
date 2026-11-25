@@ -10,14 +10,15 @@
     )
 )]
 
-//! What every IEEE 802 wire carries alike: the 48-bit addresses.
+//! What every IEEE 802 wire carries alike: the 48-bit addresses and the
+//! EtherType.
 //!
 //! An [`Eui48`] is an address field's octets, whatever they are: a header
 //! from the air may hold any. [`Eui48::kind`] tells an [`IndividualAddress`]
 //! from a [`GroupAddress`], and whoever admits a frame keeps the kind its own
 //! rule needs.
 //!
-//! SOURCE: IEEE Std 802-2014, 8.2 (Universal addresses).
+//! SOURCE: IEEE Std 802-2014, 8.2 (Universal addresses) and 9.2 (EtherTypes).
 
 use oer_portable_wire::{Error, Reader};
 
@@ -168,6 +169,55 @@ impl GroupAddress {
     }
 }
 
+/// An EtherType: the Type interpretation of the Length/Type field, as the
+/// big-endian number of its registry entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct EtherType(u16);
+
+impl EtherType {
+    /// Internet Protocol version 4.
+    ///
+    /// SOURCE: IEEE Registration Authority EtherType registry; RFC 894.
+    pub const IPV4: Self = Self(0x0800);
+    /// Address Resolution Protocol.
+    ///
+    /// SOURCE: IEEE Registration Authority EtherType registry; RFC 826.
+    pub const ARP: Self = Self(0x0806);
+    /// Customer VLAN tag (C-TAG).
+    ///
+    /// SOURCE: IEEE Std 802.1Q-2022, 9.5 (Tag Protocol Identification), Table 9-1.
+    pub const VLAN: Self = Self(0x8100);
+    /// Internet Protocol version 6.
+    ///
+    /// SOURCE: IEEE Registration Authority EtherType registry; RFC 8200.
+    pub const IPV6: Self = Self(0x86dd);
+    /// Service VLAN tag (S-TAG).
+    ///
+    /// SOURCE: IEEE Std 802.1Q-2022, 9.5 (Tag Protocol Identification), Table 9-1.
+    pub const PROVIDER_VLAN: Self = Self(0x88a8);
+
+    pub const fn new(value: u16) -> Self {
+        Self(value)
+    }
+
+    pub const fn value(self) -> u16 {
+        self.0
+    }
+
+    /// Whether the field names a type rather than an IEEE 802.3 length.
+    ///
+    /// SOURCE: IEEE Std 802.3-2022, 3.2.6: values of 1536 (0x0600) and above
+    /// are types.
+    pub const fn is_type(self) -> bool {
+        self.0 >= 0x0600
+    }
+
+    /// Whether the type names a VLAN tag (C-TAG or S-TAG).
+    pub const fn is_vlan_tag(self) -> bool {
+        matches!(self, Self::VLAN | Self::PROVIDER_VLAN)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,5 +275,16 @@ mod tests {
                 Ok(address)
             );
         }
+    }
+
+    #[test]
+    fn ether_types_tell_types_from_lengths_and_name_vlan_tags() {
+        assert!(EtherType::new(0x0600).is_type());
+        assert!(!EtherType::new(0x05dc).is_type());
+        assert!(EtherType::VLAN.is_vlan_tag());
+        assert!(EtherType::PROVIDER_VLAN.is_vlan_tag());
+        assert!(!EtherType::IPV6.is_vlan_tag());
+        assert_eq!(EtherType::IPV6.value(), 0x86dd);
+        assert_eq!(EtherType::ARP.value(), 0x0806);
     }
 }

@@ -3,6 +3,8 @@
 
 extern crate std;
 
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 use std::boxed::Box;
 use std::vec::Vec;
 
@@ -93,7 +95,8 @@ fn lending_diagnosed<'n, B: Brand + 'n, D: crate::Diagnostics>(
     let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
     let (mut pool, brand) = claim(right, memory);
     pool.loans().pool(buffers, reserve).unwrap();
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let interface =
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
     let wire = WirePort::default();
     {
         let mut state = wire.0.borrow_mut();
@@ -297,7 +300,8 @@ fn a_late_return_reaches_the_next_service_that_adopted_the_socket() {
         let mut ended = service.retire();
         let late = ended.sockets.each_mut().map(Option::take);
         let retired = ended.retired;
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
         let (next_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let mut next: TestPair<'_, _, BLOCKS> = Service::new(owner, MemoryPolicy::KEEP, stopping);
@@ -333,7 +337,8 @@ fn a_credit_the_account_cannot_hold_refuses_the_bind_and_returns_the_storage() {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
         let (mut pool, brand) = claim(right, memory);
         pool.loans().pool(2, 1).unwrap();
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(brand, interface, pool, WirePort::default());
         let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let mut service: TestPair<'_, _, BLOCKS> =

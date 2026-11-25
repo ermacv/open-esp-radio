@@ -3,13 +3,15 @@
 
 use super::*;
 use crate::{ECHO_RATE, ECHOES, IcmpDrop};
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::icmp::{Echo, MessageType, PROTOCOL_ICMP};
 
 /// An ICMP message from the peer to `to`, in an Ethernet frame.
 pub(super) fn icmp_frame(to: [u8; 4], message: &[u8]) -> Vec<u8> {
     let mut frame = EthernetHeader {
-        destination: LOCAL,
-        source: PEER,
+        destination: Eui48::new(LOCAL),
+        source: Eui48::new(PEER),
         ether_type: EtherType::IPV4,
     }
     .to_bytes()
@@ -21,8 +23,8 @@ pub(super) fn icmp_frame(to: [u8; 4], message: &[u8]) -> Vec<u8> {
             identification: 9,
             time_to_live: 64,
             protocol: PROTOCOL_ICMP,
-            source: PEER_IP,
-            destination: to,
+            source: Ipv4Address::new(PEER_IP),
+            destination: Ipv4Address::new(to),
         }
         .to_bytes(),
     );
@@ -76,11 +78,15 @@ fn an_echo_is_answered_from_the_address_it_was_sent_to_with_all_its_data() {
         assert_eq!(sent.len(), 1);
         let frame = &sent[0];
         let (ethernet, payload) = EthernetHeader::parse(frame).unwrap();
-        assert_eq!((ethernet.destination, ethernet.source), (PEER, LOCAL));
+        assert_eq!(
+            (ethernet.destination, ethernet.source),
+            (Eui48::new(PEER), Eui48::new(LOCAL))
+        );
         let ip = Ipv4Header::parse(payload).unwrap();
         assert!(Checksum::new().with(&payload[..20]).verifies());
         assert_eq!(ip.protocol(), PROTOCOL_ICMP);
-        assert_eq!(ip.addresses(), [192, 0, 2, 1, 192, 0, 2, 2]);
+        assert_eq!(ip.source().octets(), [192, 0, 2, 1]);
+        assert_eq!(ip.destination().octets(), [192, 0, 2, 2]);
         assert!(Checksum::new().with(ip.payload()).verifies());
         let reply = Echo::parse(ip.payload()).unwrap();
         assert_eq!(reply.kind, MessageType::EchoReply);
@@ -285,11 +291,14 @@ fn a_reply_the_port_refuses_waits_and_retirement_brings_its_block_home() {
 
 #[test]
 fn an_interface_without_an_address_answers_no_echo() {
-    run(Interface::dhcp(LOCAL, 1500, 1).unwrap(), |stack| {
-        // No address yet: an echo to any address is no one's.
-        let mut dropped = Dropped::default();
-        stack.input(at(0), &icmp_frame(OUR_IP, &echo(1, b"ping")), &mut dropped);
-        assert!(dropped.0.is_empty());
-        assert_eq!(stack.poll_demand(at(0)), None);
-    });
+    run(
+        Interface::dhcp(Eui48::new(LOCAL), 1500, 1).unwrap(),
+        |stack| {
+            // No address yet: an echo to any address is no one's.
+            let mut dropped = Dropped::default();
+            stack.input(at(0), &icmp_frame(OUR_IP, &echo(1, b"ping")), &mut dropped);
+            assert!(dropped.0.is_empty());
+            assert_eq!(stack.poll_demand(at(0)), None);
+        },
+    );
 }
