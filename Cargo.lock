@@ -1344,6 +1344,7 @@ dependencies = [
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-runtime",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-riscv",
@@ -1388,6 +1389,7 @@ dependencies = [
  "oer-chips-family-radio-power",
  "oer-chips-family-registers-analog-i2c",
  "oer-portable-bounded",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-memory",
  "oer-portable-mmio",
@@ -1439,6 +1441,7 @@ dependencies = [
  "oer-chips-family-drivers-system-timer",
  "oer-chips-family-facts",
  "oer-chips-family-platform-bootstrap",
+ "oer-portable-clock",
  "oer-portable-time",
  "static_cell",
 ]
@@ -1465,6 +1468,7 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
  "oer-chips-family-platform-runtime",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-memory",
@@ -1483,6 +1487,7 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-radio-phy",
  "oer-chips-family-registers-analog-i2c",
+ "oer-portable-clock",
  "oer-portable-cooperate",
  "oer-portable-diagnostics",
  "oer-portable-hot",
@@ -1511,6 +1516,7 @@ dependencies = [
  "oer-chips-family-platform-layout",
  "oer-chips-family-registers-analog-i2c",
  "oer-portable-bounded",
+ "oer-portable-clock",
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1534,6 +1540,7 @@ dependencies = [
 name = "oer-chips-family-drivers-system-timer"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-clock",
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1552,6 +1559,7 @@ dependencies = [
 name = "oer-chips-family-drivers-watchdog"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-clock",
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1576,6 +1584,7 @@ dependencies = [
  "oer-chips-family-drivers-system-timer",
  "oer-chips-family-platform-layout",
  "oer-chips-family-platform-port",
+ "oer-portable-clock",
  "oer-portable-memory",
  "oer-portable-riscv",
  "oer-portable-time",
@@ -1591,6 +1600,7 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
  "oer-chips-family-platform-runtime",
+ "oer-portable-clock",
  "oer-portable-cooperate",
  "oer-portable-memory",
  "oer-portable-mmio",
@@ -1644,6 +1654,7 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-layout",
  "oer-chips-family-platform-port",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-memory",
  "oer-portable-riscv",
@@ -1666,6 +1677,7 @@ dependencies = [
 name = "oer-chips-family-radio-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-clock",
  "oer-portable-time",
  "oer-portable-wire",
  "oer-protocols-ieee802-wire",
@@ -1680,6 +1692,7 @@ dependencies = [
 name = "oer-chips-family-radio-modem-clock"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-clock",
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1690,6 +1703,7 @@ version = "0.1.0"
 dependencies = [
  "oer-chips-family-drivers-regi2c",
  "oer-chips-family-registers-analog-i2c",
+ "oer-portable-clock",
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1699,6 +1713,7 @@ name = "oer-chips-family-radio-power"
 version = "0.1.0"
 dependencies = [
  "oer-chips-family-radio-modem-clock",
+ "oer-portable-clock",
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-protocols-radio-coex",
@@ -1745,6 +1760,7 @@ dependencies = [
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-runtime",
+ "oer-portable-clock",
  "oer-portable-crypto",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
@@ -1770,6 +1786,7 @@ dependencies = [
  "oer-chips-family-platform-runtime",
  "oer-hil-agent",
  "oer-hil-services-radio-pair",
+ "oer-portable-clock",
  "oer-portable-cooperate",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
@@ -1800,6 +1817,7 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
  "oer-chips-family-platform-runtime",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-memory",
@@ -1822,6 +1840,7 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
  "oer-chips-family-platform-runtime",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-riscv",
@@ -1840,6 +1859,7 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
  "oer-chips-family-platform-runtime",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-riscv",
@@ -1857,6 +1877,7 @@ dependencies = [
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-runtime",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-memory",
@@ -1877,6 +1898,7 @@ dependencies = [
  "oer-chips-family-platform-runtime",
  "oer-chips-family-radio-coex",
  "oer-chips-family-radio-phy",
+ "oer-portable-clock",
  "oer-portable-cooperate",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
@@ -1936,6 +1958,7 @@ dependencies = [
  "oer-chips-family-platform-runtime",
  "oer-hil-agent",
  "oer-hil-services-radio-pair",
+ "oer-portable-clock",
  "oer-portable-cooperate",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
@@ -1973,6 +1996,7 @@ dependencies = [
  "oer-hil-agent",
  "oer-hil-services-timer-facts",
  "oer-portable-bounded",
+ "oer-portable-clock",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-mmio",
@@ -2061,9 +2085,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-portable-clock"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+ "toml",
+]
+
+[[package]]
 name = "oer-portable-cooperate"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-clock",
  "oer-portable-time",
 ]
 
@@ -2092,6 +2125,7 @@ version = "0.1.0"
 dependencies = [
  "critical-section",
  "embassy-time",
+ "oer-portable-clock",
  "oer-portable-time",
 ]
 
@@ -2144,7 +2178,6 @@ dependencies = [
 name = "oer-portable-time"
 version = "0.1.0"
 dependencies = [
- "oer-portable-time-virtual",
  "toml",
 ]
 
@@ -2153,6 +2186,7 @@ name = "oer-portable-time-virtual"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
+ "oer-portable-clock",
  "oer-portable-settle",
  "oer-portable-time",
  "tempfile",
@@ -2311,6 +2345,7 @@ name = "oer-protocols-ieee80211-core-roles-sta"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
+ "oer-portable-clock",
  "oer-portable-crypto",
  "oer-portable-events",
  "oer-portable-memory",
@@ -2377,6 +2412,7 @@ version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
  "oer-portable-bounded",
+ "oer-portable-clock",
  "oer-portable-events",
  "oer-portable-time",
  "oer-portable-time-virtual",
@@ -2457,6 +2493,7 @@ name = "oer-protocols-network-runtime"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
+ "oer-portable-clock",
  "oer-portable-events",
  "oer-portable-memory",
  "oer-portable-time",
@@ -2475,6 +2512,7 @@ dependencies = [
  "embassy-futures",
  "heapless 0.9.3",
  "oer-chips-family-radio-ieee80211-policy",
+ "oer-portable-clock",
  "oer-portable-events",
  "oer-portable-memory",
  "oer-portable-time",
@@ -2514,6 +2552,7 @@ version = "0.1.0"
 name = "oer-protocols-radio-port"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-clock",
  "oer-portable-memory",
  "oer-portable-sync",
  "oer-portable-time",
@@ -2963,6 +3002,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "libc",
+ "oer-portable-clock",
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-protocols-ieee802-wire",

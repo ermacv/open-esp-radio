@@ -9,6 +9,7 @@ description = "The network core's task and its sockets over messages"
 readme = "README.md"
 
 [dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }
 embassy-futures = "0.1.2"
 oer-portable-events = { path = "../../../portable/events" }
 oer-portable-memory = { path = "../../../portable/memory" }

@@ -12,7 +12,7 @@
 
 //! The image's monotonic time on the `embassy-time` driver.
 //!
-//! [`EmbassyClock`] implements [`oer_portable_time::Clock`] and [`oer_portable_time::Timer`]
+//! [`EmbassyClock`] implements [`oer_portable_clock::Clock`] and [`oer_portable_clock::Timer`]
 //! over the one time driver the final image links, and [`now_micros`] reads
 //! the same time for owners that take a plain function, such as a trace
 //! record stamp. The resolution is the driver's tick; instants
@@ -28,7 +28,8 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use oer_portable_time::{CLOCK_EPOCH_OFFSET, Clock, Instant, Timer};
+use oer_portable_clock::{CLOCK_EPOCH_OFFSET, Clock, Timer};
+use oer_portable_time::Instant;
 
 /// An owned, movable timer wait for manually polled driver operations.
 pub struct WaitUntil {

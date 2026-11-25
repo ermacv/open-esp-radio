@@ -51,11 +51,12 @@ use oer_chips_esp32s31_radio_phy::{
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_hil_services_radio_pair::{self as service, ReceiverCommand, ReceiverRequest, Refusal};
+use oer_portable_clock::{Clock, Timer};
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::arena::{Arena, Handle};
 use oer_portable_settle::SettleCounter as _;
-use oer_portable_time::{Clock, Duration, Instant, Timer};
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 
 /// The ring: sixteen descriptors; the arena's other sixteen buffers

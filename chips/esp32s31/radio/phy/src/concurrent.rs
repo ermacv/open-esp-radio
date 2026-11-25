@@ -406,7 +406,7 @@ pub enum PhyClientAccess<'l, B: PlatformClockBackend, K: PhyClientKind> {
 /// use oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocked;
 /// use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 /// fn wifi<B: PlatformClockBackend>(ready: PhyClientReady<'_, B, WifiPhyMembership>, clocks: &WifiClocked,
-///         clock: &impl oer_portable_time::Clock) {
+///         clock: &impl oer_portable_clock::Clock) {
 ///     let _ = join_wifi(ready, clocks, clock);
 /// }
 /// ```
@@ -419,7 +419,7 @@ pub enum PhyClientAccess<'l, B: PlatformClockBackend, K: PhyClientKind> {
 /// use oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocked;
 /// use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 /// fn foreign<B: PlatformClockBackend>(ready: PhyClientReady<'_, B, BluetoothPhyMembership>, clocks: &WifiClocked,
-///            clock: &impl oer_portable_time::Clock) {
+///            clock: &impl oer_portable_clock::Clock) {
 ///     let _ = join_wifi(ready, clocks, clock);
 /// }
 /// ```
@@ -539,7 +539,7 @@ pub fn phy_ready<'l, B: PlatformClockBackend>(
 pub(crate) fn acquire_client<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     client: RadioClient,
-    clock: &impl oer_portable_time::Clock,
+    clock: &impl oer_portable_clock::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     let PhyDomain {
@@ -587,7 +587,7 @@ fn publish_acquisition(
 pub(crate) fn resume_client<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
     key: PhyClientKey,
-    clock: &impl oer_portable_time::Clock,
+    clock: &impl oer_portable_clock::Clock,
 ) -> Result<ConcurrentAcquire, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     phy.check_permission(key)?;
@@ -706,7 +706,7 @@ pub(crate) fn suspend_client<B: PlatformClockBackend>(
 /// domain is unchanged.
 pub fn evaluate_periodic_tracking<B: PlatformClockBackend>(
     radio: &mut RadioDomain<B, ConcurrentPhy>,
-    clock: &impl oer_portable_time::Clock,
+    clock: &impl oer_portable_clock::Clock,
 ) -> Result<bool, ConcurrentPhyError> {
     let phy = radio.attachment_mut();
     let PhyDomain {

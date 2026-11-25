@@ -2,7 +2,8 @@
 //! a hook that runs a preempting read at a chosen access.
 
 use core::cell::Cell;
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::{Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 
 use super::{CounterLatch, LATCH_SETTLE_POLLS, LatchStuck, READ_ROUNDS, Unverified, check, read};

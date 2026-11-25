@@ -13,7 +13,8 @@ mod low_rate;
 pub use low_rate::MacLowRateHardware;
 
 use crate::types::MacDelaySlot;
-use oer_portable_time::{Duration, Timer};
+use oer_portable_clock::Timer;
+use oer_portable_time::Duration;
 
 pub use self::{
     cold::{

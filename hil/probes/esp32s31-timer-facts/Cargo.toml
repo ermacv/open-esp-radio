@@ -10,6 +10,7 @@ description = "SYSTIMER facts on the stand: targets loaded into comparators 1 an
 build = "build.rs"
 
 [dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }
 oer-hil-services-timer-facts = { path = "../../services/timer-facts" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]

@@ -6,7 +6,8 @@ use oer_chips_family_drivers_watchdog::{
     Access, MainConfig, MainWatchdogEnable, MainWatchdogRegisters, MicrosecondTick, RtcStageAction,
     RtcWatchdogArm, RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
 };
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::{Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use std::{cell::RefCell, marker::PhantomData, vec::Vec};
 

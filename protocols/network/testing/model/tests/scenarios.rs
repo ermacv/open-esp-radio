@@ -30,9 +30,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Wake, Waker};
 
 use embassy_futures::select::select;
+use oer_portable_clock::{Clock, Timer};
 use oer_portable_events::EventSink;
 use oer_portable_memory::WakingSpscSender;
-use oer_portable_time::{Clock, Duration, Instant, Timer};
+use oer_portable_time::{Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
     Block, BlockPlace, Brand, Interface, NetEvent, NetworkClaim, NetworkOwner, Outcome, Remote,

@@ -1,5 +1,6 @@
 //! One SAR/PWDET conversion, advanced by timer events with short I/O loans.
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::{Duration, Instant};
 
 // MEASUREMENT: s31-a run 1792521908966-002e2465, 21,512 conversions,
 // 100 forced tracking ticks, post-2-us-settle ready observations <= 20 us.

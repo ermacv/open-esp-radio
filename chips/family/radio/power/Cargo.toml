@@ -15,6 +15,7 @@ oer-protocols-radio-coex = { path = "../../../../protocols/radio/coex" }
 oer-chips-family-radio-modem-clock = { path = "../modem-clock" }
 
 [dev-dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-portable-time = { path = "../../../../portable/time" }
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 

@@ -191,7 +191,7 @@ impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> Monotonic<L, TICKS_PER_M
     }
 }
 
-impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> oer_portable_time::Clock
+impl<L: CounterLatch, const TICKS_PER_MICROSECOND: u64> oer_portable_clock::Clock
     for Monotonic<L, TICKS_PER_MICROSECOND>
 {
     fn now(&self) -> oer_portable_time::Instant {

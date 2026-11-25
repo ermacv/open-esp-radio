@@ -12,8 +12,9 @@ use oer_chips_esp32s31_hal::{
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_phy::{PhyCalibrationIdentity, phy_get_rf_cal_version};
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
+use oer_portable_clock::{Clock, Timer};
 use oer_portable_embassy_time::EmbassyClock;
-use oer_portable_time::{Clock, Duration, Timer};
+use oer_portable_time::Duration;
 
 oer_chips_family_platform_runtime::interrupt_table! {
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }

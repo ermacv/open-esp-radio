@@ -1,23 +1,24 @@
 # Clocks, stamps and alarms
 
-How time is represented across the stack. The vocabulary is in `oer-portable-time`
-(`portable/time`) and `oer-protocols-radio-port` (`protocols/radio/port`); measured
+How time is represented across the stack. The values are in `oer-portable-time`
+(`portable/time`), the monotonic clock's ports in `oer-portable-clock`
+(`portable/clock`), and the radio ports' clock vocabulary in `oer-protocols-radio-port` (`protocols/radio/port`); measured
 facts about the Wi-Fi stamp are cataloged as
 `HIL_OPEN_MAC_LOCAL_TIME_RATE_2026_10_03` in
 [hil-open.toml](../chips/esp32s31/registers/evidence/hil-open.toml).
 
 ## Three kinds of time object
 
-- A **clock** reads "now" in its domain and nothing else: `oer_portable_time::Clock`
+- A **clock** reads "now" in its domain and nothing else: `oer_portable_clock::Clock`
   for monotonic time, a port's `now()` for its radio domain.
 - A **stamp** is a value the hardware recorded when an event happened. It
   carries its domain and the generation of its clock relation
   (`oer_protocols_radio_port::RadioStamp<D>`).
 - An **alarm** wakes something at an instant of its domain. An executor wait
-  is an alarm of monotonic time (`oer_portable_time::Timer`). A hardware timer of a MAC
+  is an alarm of monotonic time (`oer_portable_clock::Timer`). A hardware timer of a MAC
   or PHY (station TBTT, the TSF timers) is an alarm of
   its own domain, armed through a port or driver operation, never an
-  `oer_portable_time::Timer`.
+  `oer_portable_clock::Timer`.
 
 ## Domains
 
@@ -65,6 +66,6 @@ sample of another generation does not convert (`StaleSample`).
   above as read-only capabilities (`MacLocalTime`) or port operations.
 - Only adapters, the executor binding (`chips/family/platform/executor`, the time
   driver) and the firmware depend on `embassy-time`, dev dependencies
-  included; every lower layer reads and waits through the `oer-portable-time` ports,
+  included; every lower layer reads and waits through the `oer-portable-clock` ports,
   takes its timer from its owner or caller, and is tested with
   `oer-portable-time-virtual`.

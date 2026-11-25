@@ -127,7 +127,7 @@ fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, 
 #[inline(never)]
 pub(super) fn advance<
     D: crate::executor::wait::PhyShortDelay,
-    C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
 >(
     io: &mut Io<'_>,
     child: &mut PhyParamTrackingTxPowerTransition<'_>,
@@ -181,7 +181,7 @@ fn acknowledge(transition: &mut PhyTxPowerTrackingTransition) -> Result<(), Fail
 }
 
 #[inline(never)]
-fn elapsed<C: oer_portable_time::Clock>(
+fn elapsed<C: oer_portable_clock::Clock>(
     clock: &C,
     started: Option<oer_portable_time::Instant>,
     maximum: &mut u16,

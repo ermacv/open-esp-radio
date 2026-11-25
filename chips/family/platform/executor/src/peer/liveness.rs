@@ -34,8 +34,9 @@ use oer_chips_family_platform_interrupt_table::signal::{
     self, ForeignContext, IrqSignal, SignalExecutor,
 };
 use oer_chips_family_platform_runtime::panic::FaultReason;
+use oer_portable_clock::{TimeOverflow, Timer};
 use oer_portable_memory::RequestSlot;
-use oer_portable_time::{Duration, Instant, TimeOverflow, Timer};
+use oer_portable_time::{Duration, Instant};
 
 use super::obligation::{Obligations, Scan, Watch};
 use super::{PeerClient, PeerError, PeerServer, PostError};

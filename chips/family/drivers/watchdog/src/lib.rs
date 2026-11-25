@@ -584,14 +584,14 @@ impl<R: RtcWatchdogArm> ArmedRtcWatchdog<R> {
     /// A deadline past the clock's range ends the feeding, never the wait.
     pub async fn feed_every(
         mut self,
-        timer: &impl oer_portable_time::Timer,
+        timer: &impl oer_portable_clock::Timer,
         period: oer_portable_time::Duration,
     ) -> ! {
         loop {
             self.feed();
             match timer.deadline_after(period) {
                 Ok(deadline) => timer.wait_until(deadline).await,
-                Err(oer_portable_time::TimeOverflow) => core::future::pending().await,
+                Err(oer_portable_clock::TimeOverflow) => core::future::pending().await,
             }
         }
     }

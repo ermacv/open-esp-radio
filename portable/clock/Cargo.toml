@@ -1,0 +1,17 @@
+[package]
+name = "oer-portable-clock"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The monotonic clock and timer ports"
+
+[dependencies]
+oer-portable-time = { path = "../time" }
+
+[dev-dependencies]
+toml = "1.1"
+
+[lints]
+workspace = true

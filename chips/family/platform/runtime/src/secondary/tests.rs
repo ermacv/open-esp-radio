@@ -5,7 +5,8 @@ use core::cell::{Cell, RefCell};
 use std::{vec, vec::Vec};
 
 use oer_chips_family_boot::wait::{BootBudget, BootDeadline, BootWait, WaitFailure};
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::{Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 
 use super::*;

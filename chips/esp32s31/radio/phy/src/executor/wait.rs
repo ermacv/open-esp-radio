@@ -3,14 +3,15 @@
 //!
 //! A PHY wait is either a short minimum settle, which completes inside the
 //! exclusive hardware transaction through a [`PhyShortDelay`], or a wait on
-//! the caller's [`oer_portable_time::Timer`]: scheduling backoff, long settles and
+//! the caller's [`oer_portable_clock::Timer`]: scheduling backoff, long settles and
 //! readiness retries. [`delay`] chooses between them; [`delay_observed`] also
 //! reports the wait against the same start and deadline.
 
 use core::{future::Future, pin::pin, task::Poll};
 
+use oer_portable_clock::Timer;
 use oer_portable_settle::{SettleCounter, SettleLimit};
-use oer_portable_time::{Duration, Timer};
+use oer_portable_time::Duration;
 
 pub mod tx;
 
@@ -204,7 +205,7 @@ impl<'t, T: ?Sized, K> PhyTimer<'t, T, K> {
     }
 }
 
-impl<T: oer_portable_time::Clock + ?Sized, K> oer_portable_time::Clock for PhyTimer<'_, T, K> {
+impl<T: oer_portable_clock::Clock + ?Sized, K> oer_portable_clock::Clock for PhyTimer<'_, T, K> {
     fn now(&self) -> oer_portable_time::Instant {
         self.timer.now()
     }

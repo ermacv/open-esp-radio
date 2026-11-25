@@ -127,6 +127,6 @@ where
 /// that declares the trace class. This function owns no recorder or counter.
 #[cfg(oer_trace)]
 pub fn trace_now() -> u64 {
-    use oer_portable_time::Clock;
+    use oer_portable_clock::Clock;
     oer_portable_embassy_time::EmbassyClock.now().as_micros()
 }

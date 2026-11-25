@@ -1,5 +1,5 @@
 use super::*;
-use oer_portable_time::Clock;
+use oer_portable_clock::Clock;
 type VirtualClock = oer_portable_time_virtual::VirtualClock<8>;
 
 fn request(tid: u8, timeout_tu: u16) -> RxAddbaRequest {

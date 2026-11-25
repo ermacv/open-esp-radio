@@ -135,7 +135,8 @@ mod delays {
     use std::vec::Vec;
 
     use crate::executor::test_clock::VirtualClock;
-    use oer_portable_time::{Clock, Duration, Instant};
+    use oer_portable_clock::Clock;
+    use oer_portable_time::{Duration, Instant};
 
     use super::super::{Event, Kind, PhyShortDelay, delay, delay_observed};
 

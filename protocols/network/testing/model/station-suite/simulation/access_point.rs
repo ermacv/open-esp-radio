@@ -11,7 +11,8 @@
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use oer_portable_time::{Clock, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::Instant;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, RxCryptoStatus, RxEvidence};
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;

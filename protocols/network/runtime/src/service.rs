@@ -6,9 +6,10 @@ use core::task::{Context, Poll};
 
 use embassy_futures::select::select;
 use embassy_futures::yield_now;
+use oer_portable_clock::Timer;
 use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
-use oer_portable_time::{Duration, Instant, Timer};
+use oer_portable_time::{Duration, Instant};
 use oer_protocols_network_core::{
     Broken, CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, Intake,
     LentDatagram, LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool,

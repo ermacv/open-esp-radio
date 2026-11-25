@@ -269,7 +269,7 @@ fn idle_flow(
 
 #[test]
 fn queue_authority_follows_the_selected_flow_through_transmission() {
-    use oer_portable_time::Clock as _;
+    use oer_portable_clock::Clock as _;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let mut requester = IndividualTwtRequester::new(CONFIG);
     let flow = proposal(IndividualTwtImplicit::Implicit)
@@ -324,7 +324,7 @@ fn queue_authority_follows_the_selected_flow_through_transmission() {
 
 #[test]
 fn a_foreign_proposal_does_not_mutate_either_flow() {
-    use oer_portable_time::Clock as _;
+    use oer_portable_clock::Clock as _;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let mut requester = IndividualTwtRequester::new(CONFIG);
     let proposal = proposal(IndividualTwtImplicit::Implicit);
@@ -345,7 +345,7 @@ fn a_foreign_proposal_does_not_mutate_either_flow() {
 
 #[test]
 fn every_previous_nontransmitting_occupied_phase_still_permits_teardown() {
-    use oer_portable_time::Clock as _;
+    use oer_portable_clock::Clock as _;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let flow = proposal(IndividualTwtImplicit::Implicit)
         .parameters
@@ -390,7 +390,7 @@ fn every_previous_nontransmitting_occupied_phase_still_permits_teardown() {
 /// setup and the teardown in flight wait for their own.
 #[test]
 fn a_stale_generation_ends_neither_the_setup_nor_the_teardown_in_flight() {
-    use oer_portable_time::Clock as _;
+    use oer_portable_clock::Clock as _;
     use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let mut requester = IndividualTwtRequester::new(CONFIG);

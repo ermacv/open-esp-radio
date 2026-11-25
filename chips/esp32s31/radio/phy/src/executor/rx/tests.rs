@@ -9,7 +9,7 @@ use crate::{
     rx::program::tests::{Oracle, at_estimator, at_field, parameters},
 };
 use oer_chips_esp32s31_hal::types::{PhyEstimatorMeasurement, PhyEstimatorStart};
-use oer_portable_time::Timer;
+use oer_portable_clock::Timer;
 use std::{cell::Cell, rc::Rc, vec::Vec};
 
 struct Delay;
@@ -330,7 +330,7 @@ fn an_immediately_ready_timer_is_consumed_once_and_resumes_in_a_later_poll() {
             limit.micros()
         }
         fn sample(&self) -> u32 {
-            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+            crate::executor::test_clock::sample_at(oer_portable_clock::Clock::now(self))
         }
     }
     impl Clock for Immediate<'_> {

@@ -88,7 +88,7 @@ impl ClockPort for Port {
 
 impl crate::radio::ieee80211::client::WifiPowerPort for Port {
     fn pulse_wifi_baseband_and_mac_reset(&mut self) {
-        use oer_portable_time::Clock;
+        use oer_portable_clock::Clock;
         self.log
             .borrow_mut()
             .push(Operation::ResetWifi(self.clock.now()));
@@ -365,7 +365,8 @@ fn a_failed_initial_domain_entry_retries_the_clock_selection() {
 }
 
 fn calibrated(port: &mut Port) -> oer_portable_time::Instant {
-    use oer_portable_time::{Clock, Duration};
+    use oer_portable_clock::Clock;
+    use oer_portable_time::Duration;
     port.clock.advance(Duration::from_micros(10)).unwrap();
     port.calibrated_window = true;
     let at = port.clock.now();

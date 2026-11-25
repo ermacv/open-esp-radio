@@ -20,6 +20,7 @@ sha2 = "0.10"
 tempfile = "3"
 
 [dev-dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }
 oer-protocols-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 oer-protocols-ieee802-wire = { path = "../../../protocols/ieee802/wire" }
 oer-portable-time = { path = "../../../portable/time" }

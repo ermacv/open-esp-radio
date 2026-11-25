@@ -59,7 +59,7 @@ impl fmt::Debug for WifiPhyMembership {
 pub fn join_wifi<'l, B: PlatformClockBackend>(
     ready: PhyClientReady<'l, B, WifiPhyMembership>,
     clocked: &WifiClocked,
-    clock: &impl oer_portable_time::Clock,
+    clock: &impl oer_portable_clock::Clock,
 ) -> Result<Joined<'l, B, WifiPhyMembership>, JoinRefused<'l, B, ConcurrentPhyError>> {
     let _ = clocked;
     let key = ready.key();
@@ -228,7 +228,7 @@ pub fn resume_wifi<'l, B: PlatformClockBackend>(
     ready: PhyReady<'l, B>,
     clocks: &WifiClocksOn,
     suspended: WifiPhySuspended,
-    clock: &impl oer_portable_time::Clock,
+    clock: &impl oer_portable_clock::Clock,
 ) -> Result<Joined<'l, B, WifiPhyMembership>, JoinRefused<'l, B, WifiPhySuspendedFailure>> {
     let _ = clocks;
     let radio = ready.into_radio();

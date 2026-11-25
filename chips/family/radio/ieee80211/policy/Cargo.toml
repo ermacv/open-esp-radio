@@ -18,6 +18,7 @@ oer-portable-time = { path = "../../../../../portable/time" }
 oer-portable-wire = { path = "../../../../../portable/wire" }
 
 [dev-dependencies]
+oer-portable-clock = { path = "../../../../../portable/clock" }
 oer-tools-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
 
 [lints]

@@ -5,8 +5,9 @@
 //! The pool and the lane have room throughout, so a refusal is the look-ahead
 //! running dry and nothing else.
 
+use oer_portable_clock::{Clock, Timer};
 use oer_portable_events::EventSink;
-use oer_portable_time::{Clock, Duration, Timer};
+use oer_portable_time::Duration;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_core::BlockPlace;
 use oer_protocols_network_core::NetEvent;

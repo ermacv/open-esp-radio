@@ -29,10 +29,11 @@ use oer_hil_services_timer_facts::{
     Refusal, Request, STANDING_AHEAD, SWEEP_NEW, Shot, Standing, Swept, TOLERANCE, Tally, Timed,
     WINDOW, WordsRead,
 };
+use oer_portable_clock::Timer as _;
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_settle::{SettleCounter as _, SettleLimit};
-use oer_portable_time::{Duration, Timer as _};
+use oer_portable_time::Duration;
 
 use crate::comparators::{One, Ticks, Two};
 use crate::trial::{Rate, Seen, before, classify, offset};

@@ -42,8 +42,9 @@ use core::{
 use oer_chips_family_platform_interrupt_table::signal::{
     self, ForeignContext, IrqSignal, SignalExecutor,
 };
+use oer_portable_clock::Timer;
 use oer_portable_memory::{InPlaceClient, InPlaceServer, RequestSlot};
-use oer_portable_time::{Instant, Timer};
+use oer_portable_time::Instant;
 
 /// The fact a raise of the server's signal carries: a request was posted.
 pub const POSTED: u32 = 1;

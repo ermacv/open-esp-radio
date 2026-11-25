@@ -8,7 +8,8 @@ use core::{
     future::Future,
     task::{Context, Poll, Waker},
 };
-use oer_portable_time::{Clock, Duration, Timer};
+use oer_portable_clock::{Clock, Timer};
+use oer_portable_time::Duration;
 use oer_portable_time_virtual::VirtualClock;
 use std::{
     boxed::Box,

@@ -9,7 +9,7 @@ use oer_chips_family_boot::{
 use oer_chips_family_drivers_system_timer::LatchStuck;
 use oer_chips_family_platform_layout::Layout;
 use oer_chips_family_platform_port::EarlyText;
-use oer_portable_time::Clock;
+use oer_portable_clock::Clock;
 
 /// CPU settings expressed in the register value types of one chip binding.
 pub type CpuConfiguration<B> = clock::CpuClockProfile<

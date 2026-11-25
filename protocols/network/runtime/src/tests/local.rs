@@ -18,9 +18,10 @@ use core::future::Future;
 use core::pin::{Pin, pin};
 use core::task::{Context, Poll, Waker};
 
+use oer_portable_clock::Clock;
 use oer_portable_events::EventSink;
 use oer_portable_memory::WakingSpscSender;
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_network_core::{

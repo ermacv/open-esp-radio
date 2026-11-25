@@ -19,8 +19,9 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
+use oer_portable_clock::Clock;
 use oer_portable_cooperate::CooperativeTimer as Timer;
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 pub(crate) trait Hardware {
     fn control<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(

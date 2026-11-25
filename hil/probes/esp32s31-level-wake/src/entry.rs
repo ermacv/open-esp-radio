@@ -16,7 +16,8 @@ use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_chips_family_platform_interrupt_table::{Here, InterruptSource, InterruptSources, Pend};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_riscv::OnHart;
-use oer_portable_time::{Duration, Timer as _};
+use oer_portable_clock::{Timer as _};
+use oer_portable_time::Duration;
 use static_cell::StaticCell;
 
 use crate::calc::{Line, Outcome, Tally};

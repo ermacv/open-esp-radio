@@ -22,7 +22,7 @@ use oer_chips_esp32s31_hal::system::owner::{SharedPhyAccess, SharedPhyContext};
 pub fn clear_pbus<
     D: PhyShortDelay,
     O: PhyTargetObserver,
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     mut child: PhyCalibrationPbusClearTransition,
@@ -231,7 +231,7 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
 
 fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
     observer: &super::ObserverSlot<'_, O>,
-    clock: &(impl oer_portable_time::Clock + oer_portable_settle::SettleCounter),
+    clock: &(impl oer_portable_clock::Clock + oer_portable_settle::SettleCounter),
     scope: crate::executor::wait::tx::Scope,
     micros: u32,
 ) -> Result<(), PhyTargetPortError> {
@@ -375,7 +375,7 @@ pub(crate) fn complete_channel_direct<
     D: PhyShortDelay,
     P,
     O: PhyTargetObserver,
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     binding: crate::channel::PhyChipChannelExternalBinding,
@@ -420,7 +420,7 @@ pub(crate) fn complete_channel_direct<
 }
 
 fn complete_temperature_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     binding: crate::analog::temperature::PhyTemperatureExternalBinding,
@@ -466,7 +466,7 @@ fn complete_temperature_direct<
 }
 
 fn complete_channel_i2c_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     mut binding: crate::channel::PhyChipChannelI2cBinding,

@@ -63,7 +63,8 @@ fn a_task_beyond_the_queue_registers_nothing() {
 
 #[test]
 fn self_wakes_keep_future_alarms_armed_and_fired_alarms_reconcile_the_queue() {
-    use oer_portable_time::{Clock, Duration};
+    use oer_portable_clock::Clock;
+    use oer_portable_time::Duration;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let now = || clock.now().as_micros();
     let start = now();

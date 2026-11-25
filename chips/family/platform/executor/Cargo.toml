@@ -24,6 +24,7 @@ chip = [
 ]
 
 [dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-portable-trace = { path = "../../../../portable/trace" }
 oer-chips-family-drivers-system-timer = { path = "../../drivers/system-timer" }
 static_cell = "2.1.1"

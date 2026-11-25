@@ -9,6 +9,7 @@ publish = false
 description = "Espressif watchdog sequences over a chip's typed watchdog registers: the write-protect key held only inside closed operations that latch and lock, the RTC and super watchdogs and the platform-owned system-deadline reset lease"
 
 [dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-portable-time = { path = "../../../../portable/time" }
 
 [dev-dependencies]

@@ -64,7 +64,7 @@ use oer_chips_esp32s31_hal::system::owner::SharedPhyAccess;
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn force_pbus_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -90,7 +90,7 @@ pub(crate) fn force_pbus_direct<
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn read_i2c_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -115,7 +115,7 @@ pub(crate) fn read_i2c_direct<
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn write_i2c_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -147,7 +147,7 @@ pub(crate) fn write_i2c_direct<
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn write_i2c_field_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -161,7 +161,7 @@ pub(crate) fn write_i2c_field_direct<
 /// `phy_reset_ckgen` within named 20 µs completion settles.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset_clock_generator_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,

@@ -63,7 +63,7 @@ const _: () = {
 };
 
 /// Lend the detector and its analog bus together, using the chip profile.
-pub fn apply_brownout<C: oer_portable_time::Clock + ?Sized>(
+pub fn apply_brownout<C: oer_portable_clock::Clock + ?Sized>(
     owner: &mut oer_chips_esp32s31_hal::system::boot::Brownout,
     deadline: &oer_chips_family_boot::wait::BootDeadline<'_, C>,
 ) -> Result<(), brownout::BrownoutFailure> {

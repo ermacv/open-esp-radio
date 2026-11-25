@@ -9,6 +9,7 @@ publish.workspace = true
 build = "build.rs"
 
 [dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-chips-esp32s31-platform-layout.workspace = true
 oer-chips-family-platform-bootstrap = { path = "../../../family/platform/bootstrap" }
 oer-chips-esp32s31-hal = { path = "../../hal" }

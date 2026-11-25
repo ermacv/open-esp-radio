@@ -2,7 +2,8 @@
 //! virtual time: each test checks which operations run in which order and
 //! how a wait ends, never a word's address.
 
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::{Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 
 mod cache;

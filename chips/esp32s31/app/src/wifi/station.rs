@@ -405,7 +405,7 @@ impl Station {
     /// was never confirmed.
     pub async fn stop(&mut self) -> Result<(), StopError> {
         let deadline = {
-            use oer_portable_time::Clock as _;
+            use oer_portable_clock::Clock as _;
             EmbassyClock.now().saturating_add(self.drain)
         };
         self.control.stop(deadline);

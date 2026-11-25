@@ -9,8 +9,9 @@ use core::{
 use std::{boxed::Box, sync::Arc, task::Wake, vec::Vec};
 
 use oer_chips_family_platform_interrupt_table::signal::host;
+use oer_portable_clock::Clock as _;
 use oer_portable_memory::RequestSlot;
-use oer_portable_time::{Clock as _, Duration};
+use oer_portable_time::Duration;
 use oer_portable_time_virtual::VirtualClock;
 
 use oer_chips_family_platform_runtime::panic::FaultReason;
@@ -204,7 +205,7 @@ fn every_end_of_supervision_keeps_its_own_reason_and_words() {
         (FaultReason::LivenessBroken, [2, 5, 4, 0])
     );
     assert_eq!(
-        LivenessError::Time(oer_portable_time::TimeOverflow).diagnostic(),
+        LivenessError::Time(oer_portable_clock::TimeOverflow).diagnostic(),
         (FaultReason::LivenessBroken, [3, 0, 0, 0])
     );
     assert_eq!(

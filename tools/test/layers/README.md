@@ -38,7 +38,7 @@ other `portable/` support, firmware images and tools.
 | `ObservationContract` | `protocols/*/instrumentation` | observation contracts, facts, shared vocabulary, portable, wire, port |
 | `HilProtocol` | `protocols/hil/protocol` | portable |
 | `HilAgent` | `protocols/hil/agent` | HIL protocol, portable |
-| `HilBinding` | Wi-Fi, network, Bluetooth, conformance, PHY probe and radio-health dictionaries | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/time{,-virtual}` |
+| `HilBinding` | Wi-Fi, network, Bluetooth, conformance, PHY probe and radio-health dictionaries | HIL protocol and agent, facades, observation contracts, shared vocabulary, wire, port, runtime, portable without `portable/clock` and `portable/time-virtual` (the values of `portable/time`, not its ports) |
 | `HilImage` | `hil/images/*` | the application entry (each depends on it), the HIL agent on the entry, HIL bindings, agent and protocol, portable, Embassy adapters |
 
 Roles outside this table keep their own rules. The backend rule holds for
@@ -52,6 +52,13 @@ service reaches no chip adapter by any path.
 chip crates, the family's drivers and radio crates, the probes and
 `portable/time-virtual` may depend on it, and no other package does, a
 protocol package among them.
+
+`a_package_that_must_not_wait_takes_neither_the_clock_nor_the_settle`: no
+package for which `must_not_wait` holds (below) has a normal or build
+dependency on `oer-portable-clock`, the monotonic clock and timer ports, or
+on `oer-portable-settle`; it takes time as values from `oer-portable-time`.
+The strict codecs may take those values and nothing else beyond their lists,
+and the IEEE 802.11 wire reaches the ports of time by no path.
 
 ## Deviation lists
 

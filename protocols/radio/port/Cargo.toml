@@ -21,6 +21,7 @@ pin-project-lite = "0.2.17"
 oer-portable-time = { path = "../../../portable/time" }
 
 [dev-dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
 oer-tools-test-ui-cases = { path = "../../../tools/test/ui-cases" }

@@ -289,8 +289,9 @@ mod chip {
     use oer_chips_family_platform_interrupt_table::{
         Bound, Controller, Entry, EventAuthority, InterruptSources, Router, Table,
     };
+    use oer_portable_clock::Timer as _;
     use oer_portable_memory::{AffineSpscQueue, CompactSpscCursor, HandlerCell};
-    use oer_portable_time::{Duration, Instant, Timer as _};
+    use oer_portable_time::{Duration, Instant};
     use oer_portable_trace::Observer;
     use static_cell::StaticCell;
 

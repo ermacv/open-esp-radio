@@ -9,6 +9,7 @@ description = "Host model of one shared medium with several peers, for the netwo
 readme = "README.md"
 
 [dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-protocols-ieee802-wire = { path = "../../../ieee802/wire" }
 oer-portable-time = { path = "../../../../portable/time" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../../ieee80211/core/upper-mac" }

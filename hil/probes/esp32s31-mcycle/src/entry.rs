@@ -16,7 +16,8 @@ use oer_chips_esp32s31_hal::system::platform::Port;
 use oer_chips_esp32s31_hal::system::root::Root;
 use oer_chips_family_platform_executor::Executor;
 use oer_chips_family_platform_runtime::SecondaryHandoff;
-use oer_portable_time::{Clock as _, Duration, Timer as _};
+use oer_portable_clock::{Clock as _, Timer as _};
+use oer_portable_time::Duration;
 
 use crate::calc::{Line, offset, per_10ms};
 

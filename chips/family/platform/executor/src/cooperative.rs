@@ -1,7 +1,8 @@
 //! The executor's cooperative admission attached to an image's timer.
 use core::marker::PhantomData;
 
-use oer_portable_time::{Clock, Instant, Timer};
+use oer_portable_clock::{Clock, Timer};
+use oer_portable_time::Instant;
 
 use crate::binding::Binding;
 

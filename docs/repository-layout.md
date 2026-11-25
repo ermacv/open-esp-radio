@@ -39,8 +39,8 @@ tools/registers/{cli, contracts, generate, model}/
 tools/regulatory/generate/
 tools/test/{layers, ui-cases}/
 tools/vendor/{cli, lineage, provenance, scenario, scenario-cli}/
-portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, settle,
-    sync, time, time-virtual, trace, wire}/
+portable/{clock, cooperate, crypto, diagnostics, events, memory, mmio, riscv,
+    settle, sync, time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
 protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/

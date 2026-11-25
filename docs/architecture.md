@@ -211,8 +211,13 @@ time enter as values; actions and the next deadline leave as values. They
 never await, so they run under any executor and in host tests with virtual
 time; the layer tests scan every package under `protocols/` but a runtime,
 a port, a model, an agent and a testing package for waiting, with a list of
-the files that still wait which only shrinks. Only a protocol's runtime awaits, and it binds no executor: time comes
-from `oer-portable-time`, interrupt signals from `portable/`, no executor,
+the files that still wait which only shrinks. Time's values
+(`oer-portable-time`: the instant and span of a clock's domain, the window,
+the relation of two domains) are every layer's, a codec's and a dictionary's
+included; its ports (`oer-portable-clock`: the monotonic `Clock` and `Timer`)
+and the settle are not a core's, and the layer tests refuse a core that
+depends on either. Only a protocol's runtime awaits, and it binds no executor: time comes
+from `oer-portable-clock`, interrupt signals from `portable/`, no executor,
 `embassy-time`, `embassy-sync` or HAL dependency
 (`embassy-futures` is allowed). The firmware composition declares the tasks
 that poll the futures.
@@ -383,6 +388,12 @@ Before its acknowledgement the launch hands the hart its interrupt grant and
 the image's parts for it through the image's SRAM mailbox
 (`secondary_entry!`); the hart then makes its own interrupt context and may
 run its own executor.
+
+A task reads the image's monotonic time and waits on it through the ports of
+`oer-portable-clock`, which its owner or caller gives it: the executor's
+clock in an image, virtual time in a host test. A package that must not wait
+(a protocol core, a codec) depends on neither those ports nor the settle; it
+takes time as values.
 
 P*n* names level *n* of the 8 the CLIC offers. Each context's level, and each
 entry's line and hart, come from `[interrupt-layout]` in the chip's facts;

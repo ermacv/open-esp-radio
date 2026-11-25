@@ -26,7 +26,8 @@ use core::{
     task::{Context, Poll},
 };
 use io::Io;
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::{Duration, Instant};
 
 const EDGE_MICROS: u64 = super::wait::poll::OBSERVATION_MICROS;
 const RETRY: Duration = Duration::from_micros(1);
@@ -255,7 +256,7 @@ impl<'a> Job<'a> {
     #[inline(never)]
     fn advance_one<
         D: super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         io: Io<'_>,
@@ -277,7 +278,7 @@ impl<'a> Job<'a> {
     }
     fn advance<
         D: super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         mut io: Io<'_>,

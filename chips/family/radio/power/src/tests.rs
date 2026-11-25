@@ -1,5 +1,6 @@
 use super::{domain::*, membership::*};
-use oer_portable_time::{Clock as _, Duration};
+use oer_portable_clock::Clock as _;
+use oer_portable_time::Duration;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_radio_coex::RadioClient::*;
 use std::vec::Vec;

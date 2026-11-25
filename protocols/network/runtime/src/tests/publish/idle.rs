@@ -3,7 +3,8 @@
 //! or the turn its time comes, and a turn with no work still takes its
 //! frames, commands and notices.
 
-use oer_portable_time::{Duration, Timer};
+use oer_portable_clock::Timer;
+use oer_portable_time::Duration;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::dhcp::MessageType;
