@@ -1,4 +1,3 @@
-#![expect(clippy::let_underscore_must_use, reason = "the final crates cleaned")]
 //! The facts of the Espressif chips, in one layered model.
 //!
 //! Each fact has one layer (README): the ISA of the harts

@@ -9521,12 +9521,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         BY_UNOWNED_ROWS,
     ),
     (
-        "chips/family/facts/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
         "chips/family/platform/bootstrap/src/app_descriptor.rs",
         "unsafe_code",
         1,

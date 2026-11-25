@@ -10,14 +10,14 @@ impl Vectors {
             "/* Generated from the chip hart geometry. */\nSECTIONS {\n.irq_stacks ORIGIN(INTERNAL_LOW) (NOLOAD) : {\n",
         );
         for hart in 0..self.harts {
-            let _ = writeln!(
+            add_line!(
                 text,
                 "__runtime_cpu{hart}_irq_stack_bottom = ABSOLUTE(.);\n__runtime_cpu{hart}_irq_stack_guard_end = ABSOLUTE(. + __runtime_cpu{hart}_irq_stack_guard_bytes);\n. += IRQ_STACK_HART{hart}_BYTES;\n__runtime_cpu{hart}_irq_stack_top = ABSOLUTE(.);"
             );
         }
         text.push_str("} > INTERNAL_LOW\n} INSERT BEFORE .isr.text;\nSECTIONS {\n.psram.task_stacks ALIGN(__runtime_psram_noinit_end, 64) (NOLOAD) : {\n");
         for hart in 0..self.harts {
-            let _ = writeln!(
+            add_line!(
                 text,
                 ". = TASK_STACK_HART{hart}_BYTES > 0 ? ALIGN(64) : .;\n__runtime_cpu{hart}_task_stack_bottom = ABSOLUTE(.);\n. += TASK_STACK_HART{hart}_BYTES;\n__runtime_cpu{hart}_task_stack_top = ABSOLUTE(.);"
             );
@@ -30,17 +30,17 @@ impl Vectors {
             ] {
                 let bottom = format!("__runtime_cpu{hart}_{kind}_stack_bottom");
                 let top = format!("__runtime_cpu{hart}_{kind}_stack_top");
-                let _ = writeln!(
+                add_line!(
                     text,
                     "ASSERT({top} - {bottom} == {input}_STACK_HART{hart}_BYTES, \"hart {hart} exact {kind} stack allocation\")\nASSERT({bottom} >= ORIGIN({region}) && {top} <= ORIGIN({region}) + LENGTH({region}), \"hart {hart} {kind} stack outside memory\")\nASSERT(({input}_STACK_HART{hart}_BYTES % 16) == 0, \"hart {hart} {kind} stack alignment\")"
                 );
             }
-            let _ = writeln!(
+            add_line!(
                 text,
                 "ASSERT(IRQ_STACK_HART{hart}_BYTES == 0 || __runtime_cpu{hart}_irq_stack_guard_bytes == 0 ? 1 : (IRQ_STACK_HART{hart}_BYTES > __runtime_cpu{hart}_irq_stack_guard_bytes && (__runtime_cpu{hart}_irq_stack_bottom % __runtime_cpu{hart}_irq_stack_guard_bytes) == 0), \"hart {hart} IRQ stack bottom must be guard aligned with usable storage\")"
             );
             if hart != self.boot_hart {
-                let _ = writeln!(
+                add_line!(
                     text,
                     "ASSERT((TASK_STACK_HART{hart}_BYTES == 0) == (IRQ_STACK_HART{hart}_BYTES == 0), \"hart {hart} task and IRQ use must agree\")"
                 );
@@ -50,7 +50,7 @@ impl Vectors {
         // header carries the mask to the bootstrap, which opens their buses.
         text.push_str("__runtime_used_harts = 0");
         for hart in 0..self.harts {
-            let _ = write!(
+            add!(
                 text,
                 " | (TASK_STACK_HART{hart}_BYTES > 0 ? {} : 0)",
                 1_u64 << hart
@@ -61,18 +61,18 @@ impl Vectors {
         // the hart's boot word, keeps bit 31 clear, so the ROM takes its
         // `main` path. The image gate rejects a linked entry of an unused hart.
         for hart in self.secondaries() {
-            let _ = writeln!(
+            add_line!(
                 text,
                 "ASSERT((__runtime_isr_end & 0x80000000) == 0, \"hart {hart}'s entry in .isr.text takes the ROM main path: boot word bit 31 clear\")"
             );
         }
         let boot = self.boot_hart;
-        let _ = writeln!(
+        add_line!(
             text,
             "ASSERT((__runtime_used_harts & {}) != 0, \"the boot hart is used\")",
             1_u64.checked_shl(boot).unwrap_or(0)
         );
-        let _ = writeln!(
+        add_line!(
             text,
             "ASSERT(HART_COUNT == {}, \"stack geometry disagrees with facts\")\nASSERT(TASK_STACK_HART{boot}_BYTES > 0 && IRQ_STACK_HART{boot}_BYTES > 0, \"boot hart needs both stacks\")\nASSERT(ORIGIN(INTERNAL_LOW) + LENGTH(INTERNAL_LOW) <= ORIGIN(PSRAM_RUNTIME), \"every IRQ stack must lie below every task stack\")",
             self.harts
@@ -96,12 +96,12 @@ impl Vectors {
                 "task_stack_bottom",
                 "task_stack_top",
             ] {
-                let _ = writeln!(text, "safe static __runtime_cpu{hart}_{suffix}: [u8; 0];");
+                add_line!(text, "safe static __runtime_cpu{hart}_{suffix}: [u8; 0];");
             }
         }
         text.push_str("}; }\nmacro_rules! stack_addresses { () => { [\n");
         for hart in 0..self.harts {
-            let _ = writeln!(
+            add_line!(
                 text,
                 "HartStacks {{ irq: range(addr_of!(__runtime_cpu{hart}_irq_stack_bottom), addr_of!(__runtime_cpu{hart}_irq_stack_top)), task: range(addr_of!(__runtime_cpu{hart}_task_stack_bottom), addr_of!(__runtime_cpu{hart}_task_stack_top)), #[cfg(irq_stack_guard)] guard: range(addr_of!(__runtime_cpu{hart}_irq_stack_bottom), addr_of!(__runtime_cpu{hart}_irq_stack_guard_end)).len() }},"
             );
