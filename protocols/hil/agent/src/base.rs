@@ -299,8 +299,8 @@ macro_rules! __requests {
             type Trap = $crate::__trap!($($traps)?);
 
             fn decode(
-                frame: &$crate::__protocol::Frame<'_>,
-            ) -> Option<Result<Self, $crate::__protocol::DecodeError>> {
+                frame: &$crate::oer_protocols_hil_protocol::Frame<'_>,
+            ) -> Option<Result<Self, $crate::oer_protocols_hil_protocol::DecodeError>> {
                 $(
                     $(#[cfg($cfg)])*
                     if let Some(request) = frame.decode::<$ty>() {
@@ -312,22 +312,22 @@ macro_rules! __requests {
         }
 
         impl $crate::base::Service for $name {
-            const KEYS: &'static [$crate::__protocol::Key] = &[
+            const KEYS: &'static [$crate::oer_protocols_hil_protocol::Key] = &[
                 $(
                     $(#[cfg($cfg)])*
-                    <$ty as $crate::__protocol::Message>::KEY,
+                    <$ty as $crate::oer_protocols_hil_protocol::Message>::KEY,
                     $(#[cfg($cfg)])*
-                    <<$ty as $crate::__protocol::Endpoint>::Response as $crate::__protocol::Message>::KEY,
+                    <<$ty as $crate::oer_protocols_hil_protocol::Endpoint>::Response as $crate::oer_protocols_hil_protocol::Message>::KEY,
                 )*
                 $($(
                     $(#[cfg($published_cfg)])*
-                    <$published as $crate::__protocol::Message>::KEY,
+                    <$published as $crate::oer_protocols_hil_protocol::Message>::KEY,
                 )*)?
             ];
-            const REQUESTS: &'static [$crate::__protocol::Key] = &[
+            const REQUESTS: &'static [$crate::oer_protocols_hil_protocol::Key] = &[
                 $(
                     $(#[cfg($cfg)])*
-                    <$ty as $crate::__protocol::Message>::KEY,
+                    <$ty as $crate::oer_protocols_hil_protocol::Message>::KEY,
                 )*
             ];
         }
@@ -464,7 +464,7 @@ macro_rules! __service {
                 fn $om(
                     &mut self,
                     request: $oty,
-                ) -> <$oty as $crate::__protocol::Endpoint>::Response;
+                ) -> <$oty as $crate::oer_protocols_hil_protocol::Endpoint>::Response;
             )*
         }
 
@@ -517,7 +517,7 @@ macro_rules! __commander {
                     request: $cty,
                 ) -> impl ::core::future::Future<
                     Output = $crate::__command_output!(
-                        $traps <$cty as $crate::__protocol::Endpoint>::Response
+                        $traps <$cty as $crate::oer_protocols_hil_protocol::Endpoint>::Response
                     ),
                 >;
             )*
@@ -526,7 +526,7 @@ macro_rules! __commander {
         const _: () = {
             /// One command's answer, written from where it lies.
             pub enum Answer {
-                $($cv(<$cty as $crate::__protocol::Endpoint>::Response),)*
+                $($cv(<$cty as $crate::oer_protocols_hil_protocol::Endpoint>::Response),)*
             }
 
             impl $crate::serve::Answer for Answer {
@@ -621,8 +621,8 @@ macro_rules! __trap {
 macro_rules! image_keys {
     ($(#[$meta:meta])* $vis:vis $name:ident = [$($service:ty),* $(,)?]) => {
         $(#[$meta])*
-        $vis const $name: $crate::__protocol::base::ImageKeySet<'static> = {
-            use $crate::__protocol::{Key, base};
+        $vis const $name: $crate::oer_protocols_hil_protocol::base::ImageKeySet<'static> = {
+            use $crate::oer_protocols_hil_protocol::{Key, base};
             const GROUPS: &[&[Key]] = &[
                 <$crate::base::Base as $crate::base::Service>::KEYS,
                 $(<$service as $crate::base::Service>::KEYS,)*

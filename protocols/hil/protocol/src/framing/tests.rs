@@ -282,7 +282,7 @@ fn cobs_decoding_agrees_with_the_reference_over_short_frames() {
 
 #[test]
 fn cobs_decoding_restores_a_block_past_one_code_and_refuses_an_empty_frame() {
-    let raw: [u8; 600] = core::array::from_fn(|index| (index % 255 + 1) as u8);
+    let raw: [u8; 600] = core::array::from_fn(|index| u8::try_from(index % 255 + 1).unwrap());
     let mut encoded = [0; 620];
     let written = cobs::encode(&raw, &mut encoded);
     assert_eq!(

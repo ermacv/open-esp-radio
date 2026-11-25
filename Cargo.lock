@@ -2276,6 +2276,7 @@ dependencies = [
  "cobs",
  "crc",
  "heapless 0.9.3",
+ "oer-portable-wire",
  "postcard",
  "postcard-schema",
  "serde",

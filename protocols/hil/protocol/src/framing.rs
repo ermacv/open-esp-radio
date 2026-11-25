@@ -1,6 +1,7 @@
 use core::fmt;
 
 use crc::{CRC_32_ISCSI, Crc};
+use oer_portable_wire::PrefixLength;
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
@@ -22,6 +23,35 @@ const _: () = {
         panic!("the header must hold every fixed-width field");
     }
 };
+oer_portable_wire::bitfield! {
+    /// What follows the magic, up to the key: this crate's framing version
+    /// [`FRAMING_VERSION`].
+    struct Numbers[26] (little) {
+        framing, with_framing: {u8} = 0..8;
+        kind, with_kind: {u8} = 8..16;
+        boot_id, with_boot_id: {u64} = 16..80;
+        message_sequence, with_message_sequence: {u32} = 80..112;
+        session_id, with_session_id: {u64} = 112..176;
+        request_id, with_request_id: {u32} = 176..208;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// The payload's length, which ends the header: this crate's framing
+    /// version [`FRAMING_VERSION`].
+    struct PayloadLength[2] (little) {
+        octets, with_octets: {u16} = 0..16;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// The CRC-32C of the header and the payload, which ends a frame: this
+    /// crate's framing version [`FRAMING_VERSION`].
+    struct FrameChecksum[4] (little) {
+        crc, with_crc: {u32} = 0..32;
+    }
+}
+
 #[cfg(test)]
 const KEY_RANGE: core::ops::Range<usize> = 30..38;
 #[cfg(test)]
@@ -30,6 +60,9 @@ const CHECKSUM_BYTES: usize = size_of::<u32>();
 const MAX_RAW_FRAME_BYTES: usize = WIRE_HEADER_BYTES + MAX_POSTCARD_BYTES + CHECKSUM_BYTES;
 const MAX_COBS_FRAME_BYTES: usize = cobs::max_encoding_length(MAX_RAW_FRAME_BYTES);
 pub const MAX_WIRE_FRAME_BYTES: usize = 2 + MAX_COBS_FRAME_BYTES + 1;
+/// [`MAX_WIRE_FRAME_BYTES`] as a frame counts it.
+pub(crate) const MAX_WIRE_FRAME_COUNT: u16 =
+    PrefixLength::<MAX_WIRE_FRAME_BYTES>::constant::<MAX_WIRE_FRAME_BYTES>().to_u16();
 
 const CRC32C: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
@@ -169,21 +202,18 @@ impl FrameEncoder {
     fn frame(&mut self, header: &Header, payload_length: usize) -> Result<&[u8], EncodeError> {
         let payload_length_u16 =
             u16::try_from(payload_length).map_err(|_| EncodeError::Serialize)?;
-        let boot = header.boot_id.to_le_bytes();
-        let sequence = header.message_sequence.to_le_bytes();
-        let session = header.session_id.to_le_bytes();
-        let request = header.request_id.to_le_bytes();
-        let length = payload_length_u16.to_le_bytes();
-        let fields = [
-            WIRE_MAGIC.as_slice(),
-            &[FRAMING_VERSION, header.kind as u8],
-            &boot,
-            &sequence,
-            &session,
-            &request,
-            &header.key.0,
-            &length,
-        ];
+        let numbers = Numbers::from_bytes([0; 26])
+            .with_framing(FRAMING_VERSION)
+            .with_kind(header.kind as u8)
+            .with_boot_id(header.boot_id)
+            .with_message_sequence(header.message_sequence)
+            .with_session_id(header.session_id)
+            .with_request_id(header.request_id)
+            .to_bytes();
+        let length = PayloadLength::from_bytes([0; 2])
+            .with_octets(payload_length_u16)
+            .to_bytes();
+        let fields = [WIRE_MAGIC.as_slice(), &numbers, &header.key.0, &length];
         let destination = self
             .raw
             .first_chunk_mut::<WIRE_HEADER_BYTES>()
@@ -201,7 +231,9 @@ impl FrameEncoder {
             .raw
             .get(..protected_length)
             .ok_or(EncodeError::Serialize)?;
-        let checksum = CRC32C.checksum(protected).to_le_bytes();
+        let checksum = FrameChecksum::from_bytes([0; CHECKSUM_BYTES])
+            .with_crc(CRC32C.checksum(protected))
+            .to_bytes();
         let checksum_bytes = self
             .raw
             .get_mut(protected_length..raw_length)
@@ -387,23 +419,18 @@ impl FrameDecoder {
             self.counters.header_errors = self.counters.header_errors.saturating_add(1);
             return Err(DecodeError::Magic);
         }
-        let [version] = take(&mut remaining)?;
-        if version != FRAMING_VERSION {
+        let numbers = Numbers::from_bytes(take(&mut remaining)?);
+        if numbers.framing() != FRAMING_VERSION {
             self.counters.framing_version_errors =
                 self.counters.framing_version_errors.saturating_add(1);
             return Err(DecodeError::FramingVersion);
         }
-        let [direction] = take(&mut remaining)?;
-        if direction != kind as u8 {
+        if numbers.kind() != kind as u8 {
             self.counters.message_kind_errors = self.counters.message_kind_errors.saturating_add(1);
             return Err(DecodeError::MessageKind);
         }
-        let boot_id = u64::from_le_bytes(take(&mut remaining)?);
-        let message_sequence = u32::from_le_bytes(take(&mut remaining)?);
-        let session_id = u64::from_le_bytes(take(&mut remaining)?);
-        let request_id = u32::from_le_bytes(take(&mut remaining)?);
         let key = Key(take(&mut remaining)?);
-        let payload_length = usize::from(u16::from_le_bytes(take(&mut remaining)?));
+        let payload_length = usize::from(PayloadLength::from_bytes(take(&mut remaining)?).octets());
         let Some((payload, checksum)) = remaining.split_at_checked(payload_length) else {
             self.counters.payload_length_errors =
                 self.counters.payload_length_errors.saturating_add(1);
@@ -420,16 +447,16 @@ impl FrameDecoder {
         let protected = decoded
             .get(..protected_length)
             .ok_or(DecodeError::PayloadLength)?;
-        if CRC32C.checksum(protected) != u32::from_le_bytes(checksum) {
+        if CRC32C.checksum(protected) != FrameChecksum::from_bytes(checksum).crc() {
             self.counters.checksum_errors = self.counters.checksum_errors.saturating_add(1);
             return Err(DecodeError::Checksum);
         }
         self.counters.frames = self.counters.frames.saturating_add(1);
         Ok(Frame {
-            boot_id,
-            message_sequence,
-            session_id,
-            request_id,
+            boot_id: numbers.boot_id(),
+            message_sequence: numbers.message_sequence(),
+            session_id: numbers.session_id(),
+            request_id: numbers.request_id(),
             key,
             payload,
         })

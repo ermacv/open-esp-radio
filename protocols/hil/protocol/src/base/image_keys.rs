@@ -4,6 +4,8 @@
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
 
+use oer_portable_wire::PrefixLength;
+
 use crate::Key;
 
 /// Keys one [`ImageKeyPage`] carries.
@@ -38,7 +40,12 @@ pub struct ImageKeyPage {
 #[derive(Clone, Copy, Debug)]
 pub struct ImageKeySet<'a> {
     keys: &'a [Key],
+    /// How many they are, proven to fit the wire's count.
+    count: PrefixLength<MAX_KEYS>,
 }
+
+/// The most keys the wire's count represents.
+const MAX_KEYS: usize = u16::MAX as usize;
 
 /// Invalid capability-set input. No keys are discarded or reordered by validation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -52,9 +59,9 @@ pub enum ImageKeySetError {
 impl<'a> ImageKeySet<'a> {
     /// Validates the strictly ascending keys and their representable wire count.
     pub const fn new(keys: &'a [Key]) -> Result<Self, ImageKeySetError> {
-        if keys.len() > u16::MAX as usize {
+        let Some(count) = PrefixLength::new(keys.len()) else {
             return Err(ImageKeySetError::Length { length: keys.len() });
-        }
+        };
         let mut remaining = keys;
         while let Some((previous, rest)) = remaining.split_first() {
             if let Some((current, _)) = rest.split_first()
@@ -67,7 +74,7 @@ impl<'a> ImageKeySet<'a> {
             }
             remaining = rest;
         }
-        Ok(Self { keys })
+        Ok(Self { keys, count })
     }
 
     /// The keys, ascending.
@@ -82,10 +89,10 @@ impl<'a> ImageKeySet<'a> {
     /// The Hello of an image of identity `image_crc32` serving this set.
     pub fn hello(&self, maximum_payload_bytes: u16, image_crc32: u32) -> Hello {
         Hello {
-            keys: self.keys.len() as u16,
+            keys: self.count.to_u16(),
             keys_digest: digest(self.keys),
             maximum_payload_bytes,
-            maximum_wire_frame_bytes: crate::MAX_WIRE_FRAME_BYTES as u16,
+            maximum_wire_frame_bytes: crate::framing::MAX_WIRE_FRAME_COUNT,
             image_crc32,
         }
     }
@@ -106,7 +113,7 @@ impl<'a> ImageKeySet<'a> {
         keys.truncate(length);
         ImageKeyPage {
             first,
-            total: self.keys.len() as u16,
+            total: self.count.to_u16(),
             keys,
         }
     }
@@ -137,9 +144,19 @@ fn digest_key(state: u64, key: Key) -> u64 {
 pub struct ImageKeysCheck {
     total: u16,
     expected_digest: u64,
-    next: u16,
-    previous: Option<Key>,
-    state: u64,
+    received: Received,
+}
+
+/// The keys a check has taken.
+#[derive(Clone, Copy, Debug)]
+enum Received {
+    Nothing,
+    Keys {
+        count: u16,
+        last: Key,
+        /// Their digest so far.
+        digest: u64,
+    },
 }
 
 /// Why an image's key pages are not the set its Hello announced.
@@ -166,27 +183,31 @@ impl ImageKeysCheck {
         Self {
             total: hello.keys,
             expected_digest: hello.keys_digest,
-            next: 0,
-            previous: None,
-            state: DIGEST_BASIS,
+            received: Received::Nothing,
         }
     }
 
     /// The first key of the page to ask for next; `None` once every key
     /// arrived.
     pub const fn next_first(&self) -> Option<u16> {
-        if self.next < self.total {
-            Some(self.next)
-        } else {
-            None
+        let next = self.count();
+        if next < self.total { Some(next) } else { None }
+    }
+
+    /// How many keys arrived.
+    const fn count(&self) -> u16 {
+        match self.received {
+            Received::Nothing => 0,
+            Received::Keys { count, .. } => count,
         }
     }
 
     /// Take `page` into the check.
     pub fn accept(&mut self, page: &ImageKeyPage) -> Result<(), ImageKeysError> {
-        if page.first != self.next {
+        let next = self.count();
+        if page.first != next {
             return Err(ImageKeysError::First {
-                expected: self.next,
+                expected: next,
                 first: page.first,
             });
         }
@@ -196,10 +217,10 @@ impl ImageKeysCheck {
                 page: page.total,
             });
         }
-        let remaining = self.total.saturating_sub(self.next);
-        if page.keys.is_empty() {
+        let remaining = self.total.saturating_sub(next);
+        let Some((&first, rest)) = page.keys.split_first() else {
             return Err(ImageKeysError::Empty { first: page.first });
-        }
+        };
         let length = match u16::try_from(page.keys.len()) {
             Ok(length) if length <= remaining => length,
             _ => {
@@ -209,35 +230,46 @@ impl ImageKeysCheck {
                 });
             }
         };
-        let mut previous = self.previous;
-        let mut state = self.state;
-        for current in page.keys.iter().copied() {
-            if let Some(previous) = previous
-                && previous.to_u64() >= current.to_u64()
-            {
-                return Err(ImageKeysError::Order { previous, current });
+        let follows = |previous: Key, current: Key| {
+            if previous.to_u64() < current.to_u64() {
+                Ok(current)
+            } else {
+                Err(ImageKeysError::Order { previous, current })
             }
-            previous = Some(current);
-            state = digest_key(state, current);
+        };
+        let (mut last, mut digest) = match self.received {
+            Received::Nothing => (first, DIGEST_BASIS),
+            Received::Keys { last, digest, .. } => (follows(last, first)?, digest),
+        };
+        digest = digest_key(digest, first);
+        for current in rest {
+            last = follows(last, *current)?;
+            digest = digest_key(digest, last);
         }
-        self.previous = previous;
-        self.state = state;
-        self.next = self.next.saturating_add(length);
+        self.received = Received::Keys {
+            count: next.saturating_add(length),
+            last,
+            digest,
+        };
         Ok(())
     }
 
     /// Whether the accepted pages are exactly the announced set.
     pub const fn finish(&self) -> Result<(), ImageKeysError> {
-        if self.next < self.total {
+        let (received, digest) = match self.received {
+            Received::Nothing => (0, DIGEST_BASIS),
+            Received::Keys { count, digest, .. } => (count, digest),
+        };
+        if received < self.total {
             return Err(ImageKeysError::Incomplete {
-                received: self.next,
+                received,
                 total: self.total,
             });
         }
-        if self.state != self.expected_digest {
+        if digest != self.expected_digest {
             return Err(ImageKeysError::Digest {
                 hello: self.expected_digest,
-                keys: self.state,
+                keys: digest,
             });
         }
         Ok(())

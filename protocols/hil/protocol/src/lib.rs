@@ -1,4 +1,3 @@
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(
@@ -30,6 +29,4 @@ pub use key::{Endpoint, Key, Message};
 // The modules: each is a path prefix and a directory.
 pub mod base;
 #[doc(hidden)]
-pub use postcard_schema as __postcard_schema;
-#[doc(hidden)]
-pub use postcard_schema::Schema as __SchemaDerive;
+pub use postcard_schema;

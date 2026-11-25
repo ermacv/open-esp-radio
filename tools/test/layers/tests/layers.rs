@@ -6940,13 +6940,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
         BY_EXCEPTION_PATH,
     ),
     ("oer/src/print.rs", 1, BY_PUMP),
-    ("protocols/hil/agent/src/lib.rs", 1, BY_FINAL_CRATES),
-    (
-        "protocols/hil/protocol/src/base/boot.rs",
-        3,
-        BY_FINAL_CRATES,
-    ),
-    ("protocols/hil/protocol/src/lib.rs", 2, BY_FINAL_CRATES),
     (
         "protocols/ieee80211/core/roles/ap/src/engine.rs",
         1,
@@ -7079,8 +7072,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_BLUETOOTH,
     ),
     ("protocols/bluetooth/hci/src/wire.rs", 1, BY_BLUETOOTH),
-    ("protocols/hil/protocol/src/framing.rs", 12, BY_FINAL_CRATES),
-    ("protocols/hil/protocol/src/key.rs", 1, BY_FINAL_CRATES),
     (
         "protocols/ieee80211/core/datapath/src/plane.rs",
         1,
@@ -8442,10 +8433,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     (
         "protocols/bluetooth/hci/src/h4.rs::CommandReceiver.expected",
         BY_BLUETOOTH,
-    ),
-    (
-        "protocols/hil/protocol/src/base/image_keys.rs::ImageKeysCheck.previous",
-        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiConfig.access_point",
@@ -10545,12 +10532,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unused_doc_comments",
         1,
         "unknown, to read",
-    ),
-    (
-        "protocols/hil/protocol/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/contracts/port/src/lib.rs",
