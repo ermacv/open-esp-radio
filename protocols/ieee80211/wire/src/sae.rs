@@ -291,12 +291,12 @@ pub const fn anti_clogging_token_container_header(token_len: usize) -> Option<[u
     let Some(length) = token_len.checked_add(1) else {
         return None;
     };
-    if length > u8::MAX as usize {
+    let Some(length) = oer_portable_wire::PrefixLength::<{ u8::MAX as usize }>::new(length) else {
         return None;
-    }
+    };
     Some([
         ELEMENT_ID_EXTENSION,
-        length as u8,
+        length.to_u8(),
         ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID,
     ])
 }

@@ -1,5 +1,7 @@
 //! Allocation-free IEEE 802.11 management-frame construction.
 
+use oer_portable_wire::PrefixLength;
+
 use crate::sequence::SequenceNumber;
 
 pub const MANAGEMENT_HEADER_LEN: usize = 24;
@@ -44,9 +46,8 @@ impl ProbeRequest<'_> {
     /// number is emitted as zero. Rate bytes use the standard 500 kbit/s
     /// representation, including any basic-rate bit supplied by the caller.
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ProbeRequestError> {
-        if self.ssid.len() > MAX_SSID_LEN {
-            return Err(ProbeRequestError::SsidTooLong);
-        }
+        let ssid_len = PrefixLength::<MAX_SSID_LEN>::new(self.ssid.len())
+            .ok_or(ProbeRequestError::SsidTooLong)?;
         if self.supported_rates.is_empty() {
             return Err(ProbeRequestError::NoSupportedRates);
         }
@@ -63,7 +64,11 @@ impl ProbeRequest<'_> {
             .take(first_rates_len)
             .map_err(|_| ProbeRequestError::TooManySupportedRates)?;
         let extended_rates = reader.remaining();
-        let extended_rates_len = extended_rates.len();
+        let first_rates_len =
+            PrefixLength::<SUPPORTED_RATES_ELEMENT_CAPACITY>::new(first_rates.len())
+                .ok_or(ProbeRequestError::TooManySupportedRates)?;
+        let extended_rates_len = PrefixLength::<MAX_SUPPORTED_RATES_LEN>::new(extended_rates.len())
+            .ok_or(ProbeRequestError::TooManySupportedRates)?;
         let mut header = [0; MANAGEMENT_HEADER_LEN];
         crate::encoding::write_array::<0, _, _>(
             &mut header,
@@ -78,15 +83,15 @@ impl ProbeRequest<'_> {
         );
         let extended_header = [
             EXTENDED_SUPPORTED_RATES_ELEMENT_ID,
-            extended_rates_len as u8,
+            extended_rates_len.to_u8(),
         ];
         crate::encoding::FrameParts([
             header.as_slice(),
-            &[SSID_ELEMENT_ID, self.ssid.len() as u8],
+            &[SSID_ELEMENT_ID, ssid_len.to_u8()],
             self.ssid,
-            &[SUPPORTED_RATES_ELEMENT_ID, first_rates_len as u8],
+            &[SUPPORTED_RATES_ELEMENT_ID, first_rates_len.to_u8()],
             first_rates,
-            if extended_rates_len == 0 {
+            if extended_rates.is_empty() {
                 &[]
             } else {
                 &extended_header

@@ -16,6 +16,8 @@ use crate::qos::{WmmAccessCategory, WmmUserPriority};
 
 pub const IEEE80211_LEGACY_DATA_HEADER_LEN: usize = 24;
 pub const IEEE80211_QOS_DATA_HEADER_LEN: usize = 26;
+const LEGACY_HEADER_OCTETS: u8 = crate::encoding::octet::<IEEE80211_LEGACY_DATA_HEADER_LEN>();
+const QOS_HEADER_OCTETS: u8 = crate::encoding::octet::<IEEE80211_QOS_DATA_HEADER_LEN>();
 pub const IEEE80211_HE_CONTROL_LEN: usize = 4;
 pub const LLC_SNAP_HEADER_LEN: usize = 8;
 /// An A-MSDU subframe header: DA, SA and the big-endian MSDU length.
@@ -471,9 +473,9 @@ pub const fn plan_data_encapsulation(
     DataEncapPlan {
         header: data_header_bytes(frame_control, addresses, qos_control),
         header_len: if qos {
-            IEEE80211_QOS_DATA_HEADER_LEN as u8
+            QOS_HEADER_OCTETS
         } else {
-            IEEE80211_LEGACY_DATA_HEADER_LEN as u8
+            LEGACY_HEADER_OCTETS
         },
         llc_snap: {
             let [p0, p1, p2, p3, p4, p5] = RFC1042_LLC_SNAP_PREFIX;
@@ -543,7 +545,7 @@ pub const fn plan_data_encapsulation_with_he_control(
         he_control,
         DataHeControl::HardwareGeneratedBufferStatusReport
     ) {
-        if plan.header_len != IEEE80211_QOS_DATA_HEADER_LEN as u8 {
+        if plan.header_len != QOS_HEADER_OCTETS {
             return Err(HeControlRequiresQos);
         }
         // The chip-specific DMA owner separately marks the four-byte hardware

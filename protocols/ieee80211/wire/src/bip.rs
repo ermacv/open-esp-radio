@@ -196,7 +196,7 @@ impl<'a> BipProtection<'a> {
         let [i0, i1, i2, i3, i4, i5] = ipn_to_bytes(packet_number);
         *element = [
             MANAGEMENT_MIC_ELEMENT_ID,
-            MANAGEMENT_MIC_BODY_LEN as u8,
+            const { crate::encoding::octet::<MANAGEMENT_MIC_BODY_LEN>() },
             k0,
             k1,
             i0,

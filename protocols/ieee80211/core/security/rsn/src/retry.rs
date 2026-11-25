@@ -45,8 +45,16 @@ pub enum RsnRetryAction {
 pub struct RsnRetry {
     config: RsnRetryConfig,
     generation: u32,
-    pending: Option<RsnTxMessage>,
-    attempts_left: u8,
+    window: Window,
+}
+
+/// Whether a message waits for its response.
+enum Window {
+    Closed,
+    Open {
+        message: RsnTxMessage,
+        attempts_left: u8,
+    },
 }
 
 impl RsnRetry {
@@ -63,8 +71,7 @@ impl RsnRetry {
         Ok(Self {
             config,
             generation: 0,
-            pending: None,
-            attempts_left: 0,
+            window: Window::Closed,
         })
     }
 
@@ -78,8 +85,10 @@ impl RsnRetry {
             .checked_add(self.config.first_interval)
             .ok_or(RsnRetryError::DeadlineOverflow)?;
         self.generation = next_generation(self.generation);
-        self.pending = Some(message);
-        self.attempts_left = self.config.attempts;
+        self.window = Window::Open {
+            message,
+            attempts_left: self.config.attempts,
+        };
         Ok(RsnRetryAlarm {
             generation: self.generation,
             deadline,
@@ -88,8 +97,7 @@ impl RsnRetry {
 
     pub fn cancel(&mut self) {
         self.generation = next_generation(self.generation);
-        self.pending = None;
-        self.attempts_left = 0;
+        self.window = Window::Closed;
     }
 
     /// Rebase the first response window to the subsequent interval.
@@ -101,10 +109,12 @@ impl RsnRetry {
         &self,
         now: Instant,
     ) -> Result<Option<RsnRetryAlarm>, RsnRetryError> {
-        if self.pending.is_none() || self.attempts_left != self.config.attempts {
-            return Ok(None);
+        match self.window {
+            Window::Open { attempts_left, .. } if attempts_left == self.config.attempts => {
+                Ok(Some(self.alarm_after(now)?))
+            }
+            Window::Open { .. } | Window::Closed => Ok(None),
         }
-        Ok(Some(self.alarm_after(now)?))
     }
 
     pub fn on_alarm(
@@ -115,18 +125,19 @@ impl RsnRetry {
         if alarm.generation != self.generation {
             return Ok(RsnRetryAction::Stale);
         }
-        let Some(message) = self.pending else {
+        let Window::Open {
+            message,
+            attempts_left,
+        } = &mut self.window
+        else {
             return Ok(RsnRetryAction::Stale);
         };
-
-        if self.attempts_left == 0 {
+        let Some(left) = attempts_left.checked_sub(1) else {
             self.cancel();
             return Ok(RsnRetryAction::Exhausted);
-        }
-        self.attempts_left = self
-            .attempts_left
-            .checked_sub(1)
-            .ok_or(RsnRetryError::ZeroAttempts)?;
+        };
+        *attempts_left = left;
+        let message = *message;
         // Even the last retransmission retains one response window. The next
         // alarm reports explicit exhaustion instead of silently leaving the
         // handshake pending forever after the retry budget is consumed.
@@ -138,11 +149,14 @@ impl RsnRetry {
     }
 
     pub const fn is_armed(&self) -> bool {
-        self.pending.is_some()
+        matches!(self.window, Window::Open { .. })
     }
 
     pub const fn pending_message(&self) -> Option<RsnTxMessage> {
-        self.pending
+        match self.window {
+            Window::Open { message, .. } => Some(message),
+            Window::Closed => None,
+        }
     }
 
     fn alarm_after(&self, now: Instant) -> Result<RsnRetryAlarm, RsnRetryError> {

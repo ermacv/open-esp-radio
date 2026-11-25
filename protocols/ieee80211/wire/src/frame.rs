@@ -900,14 +900,6 @@ oer_portable_wire::bitfield! {
     }
 }
 
-oer_portable_wire::bitfield! {
-    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.4 (To DS and From DS fields).
-    pub struct DsDirection[1] (little) {
-        pub to_ds, with_to_ds: bool = 0..1;
-        pub from_ds, with_from_ds: bool = 1..2;
-    }
-}
-
 #[cfg(test)]
 mod fuzz_tests;
 #[cfg(test)]
@@ -946,10 +938,10 @@ impl FrameControlFields {
             && self.control_subtype().encoding() == subtype.encoding()
     }
     pub const fn to_ds(self) -> bool {
-        DsDirection::from_bytes([self.ds() as u8]).to_ds()
+        self.to_ds_bit()
     }
     pub const fn from_ds(self) -> bool {
-        DsDirection::from_bytes([self.ds() as u8]).from_ds()
+        self.from_ds_bit()
     }
 }
 

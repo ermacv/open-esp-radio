@@ -39,6 +39,11 @@ impl Ssid {
         self.length.borrow(&self.bytes)
     }
 
+    /// Its length, proven at most [`MAX_SSID_LEN`].
+    pub(crate) const fn length(&self) -> oer_portable_wire::PrefixLength<MAX_SSID_LEN> {
+        self.length
+    }
+
     pub const fn len(&self) -> usize {
         self.length.get()
     }

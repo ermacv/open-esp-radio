@@ -513,7 +513,8 @@ pub fn read_sig_b_user_field(complete_bytes: &[u8], bit_offset: u16) -> Option<u
     oer_portable_wire::Reader::new(complete_bytes)
         .bits::<21>(usize::from(bit_offset))
         .ok()
-        .map(|word| word as u32)
+        .and_then(oer_portable_wire::U64::<21>::new)
+        .map(oer_portable_wire::U64::to_u32)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -854,7 +855,7 @@ pub const fn he_capability_ie(
     let [t0, t1] = local.transmit.one_stream_map();
     [
         255,
-        (HE_CAPABILITIES_IE_MIN_LEN - 2) as u8,
+        const { crate::encoding::octet::<{ HE_CAPABILITIES_IE_MIN_LEN - 2 }>() },
         HE_CAPABILITIES_EXTENSION_ID,
         m0,
         m1,

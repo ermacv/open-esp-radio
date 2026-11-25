@@ -344,7 +344,7 @@ fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
                             let numerator =
                                 subcarriers * bits * coding_numerator * u64::from(streams);
                             let denominator = coding_denominator * if dcm { 2 } else { 1 };
-                            assert_eq!(rate.data_bits_per_symbol(), (numerator, denominator));
+                            assert_eq!(rate.data_bits_wide(), (numerator, denominator));
                             assert_eq!(
                                 u64::from(rate.nominal_kbps()),
                                 numerator * 1_000_000
@@ -609,11 +609,7 @@ fn every_he_rate_keeps_its_nominal_rate_and_its_data_bits_per_symbol() {
                             };
                             rates += 1;
                             assert_eq!(rate.nominal_kbps(), reference_kbps(rate), "{rate:?}");
-                            assert_eq!(
-                                rate.data_bits_per_symbol(),
-                                reference_fraction(rate),
-                                "{rate:?}"
-                            );
+                            assert_eq!(rate.data_bits_wide(), reference_fraction(rate), "{rate:?}");
                         }
                     }
                 }
