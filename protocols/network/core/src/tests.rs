@@ -12,9 +12,9 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Block, Brand, CommandState, Core, CoreBrand, Eviction, GROUPS, Group, GroupsFull, Interface,
-    InterfaceError, LoansRefused, LocalNetwork, NetEvent, NetworkClaim, NetworkOwner, NotLent,
-    OpenRefused, Outcome, Pool, Remote, SendRefusal, Unsent, claim, with_local_network,
+    Block, BlockPlace, Brand, CommandState, Core, CoreBrand, Eviction, GROUPS, Group, GroupsFull,
+    Interface, InterfaceError, LoansRefused, LocalNetwork, NetEvent, NetworkClaim, NetworkOwner,
+    NotLent, OpenRefused, Outcome, Pool, Remote, SendRefusal, Unsent, claim, with_local_network,
 };
 use oer_protocols_network_port::{Class, FramePort, Unpublished};
 
@@ -258,7 +258,9 @@ fn best_effort() -> Dscp {
 fn claimed<B: Brand>(right: NetworkClaim<B>) -> (Blocks<B>, CoreBrand<B>) {
     claim(
         right,
-        std::boxed::Box::leak(std::boxed::Box::new([[0; SIZE]; BLOCKS])),
+        std::boxed::Box::leak(std::boxed::Box::new(
+            [const { BlockPlace::<SIZE>::new() }; BLOCKS],
+        )),
     )
 }
 
@@ -2017,6 +2019,7 @@ fn a_new_datagram_after_a_rejected_request_asks_anew() {
     });
 }
 
+mod blocks;
 mod counted;
 mod demands;
 mod dhcp;

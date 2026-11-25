@@ -10,7 +10,7 @@
 
 use super::*;
 
-use oer_protocols_network_core::{Declined, Payload, SendRefusal};
+use oer_protocols_network_core::{BlockPlace, Declined, Payload, SendRefusal};
 use oer_protocols_network_runtime::TurnEnd;
 use oer_protocols_network_runtime::{
     Diagnosis, Diagnostics, Interest, LocalEnd, Next, Offer, Produce, Work,
@@ -231,7 +231,9 @@ fn load_on<B: Brand>(right: NetworkClaim<B>, micros_per_frame: u32) -> Account {
     let medium = Medium::new(LOCAL, OUR_IP, AT_THE_PORT, &[spec]);
     medium.batch(AGGREGATE);
     let clock = clock();
-    let memory = Box::leak(Box::new([[0; LOAD_SIZE]; LOAD_BLOCKS]));
+    let memory = Box::leak(Box::new(
+        [const { BlockPlace::<LOAD_SIZE>::new() }; LOAD_BLOCKS],
+    ));
     let (pool, brand) = claim(right, memory);
     let owner: LoadOwner<'_, B> = NetworkOwner::new(brand, interface(), pool, medium.clone());
     let (stop, stopping): (Stopper, _) = Box::leak(Box::new(StopLane::new())).split();

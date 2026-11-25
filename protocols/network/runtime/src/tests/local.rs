@@ -22,8 +22,8 @@ use oer_portable_memory::WakingSpscSender;
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, Brand, Declined, Group, Interface, NetEvent, NetworkClaim, NetworkOwner, Outcome,
-    Payload, Remote, SendRefusal, WorkId, claim, with_local_network,
+    Block, BlockPlace, Brand, Declined, Group, Interface, NetEvent, NetworkClaim, NetworkOwner,
+    Outcome, Payload, Remote, SendRefusal, WorkId, claim, with_local_network,
 };
 use oer_protocols_network_port::{
     EthernetFrameView, FramePort, FrameSource, LinkSnapshot, LinkState, Unpublished,
@@ -512,7 +512,7 @@ fn bench_on<'n, B: Brand + 'n, const C: usize>(
     right: NetworkClaim<B>,
     interface: Interface,
 ) -> Bench<'n, B, C> {
-    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
     let (pool, brand) = claim(right, memory);
     let line = LocalPort::default();
     let owner = NetworkOwner::new(brand, interface, pool, line.clone());

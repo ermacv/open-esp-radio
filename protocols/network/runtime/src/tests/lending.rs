@@ -9,8 +9,8 @@ use std::vec::Vec;
 use oer_portable_events::EventSink;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Brand, Group, Interface, LoansRefused, NetEvent, NetworkClaim, NetworkOwner, NotLent,
-    OpenRefused, claim, with_local_network,
+    BlockPlace, Brand, Group, Interface, LoansRefused, NetEvent, NetworkClaim, NetworkOwner,
+    NotLent, OpenRefused, claim, with_local_network,
 };
 use oer_protocols_network_port::{CopyReason, Holding};
 use oer_protocols_network_wire::ip::Dscp;
@@ -90,7 +90,7 @@ fn lending_diagnosed<'n, B: Brand + 'n, D: crate::Diagnostics>(
     WirePort,
     oer_portable_memory::WakingSpscSender<'n, (), 1>,
 ) {
-    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
     let (mut pool, brand) = claim(right, memory);
     pool.loans().pool(buffers, reserve).unwrap();
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
@@ -330,7 +330,7 @@ fn a_late_return_reaches_the_next_service_that_adopted_the_socket() {
 #[test]
 fn a_credit_the_account_cannot_hold_refuses_the_bind_and_returns_the_storage() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
         let (mut pool, brand) = claim(right, memory);
         pool.loans().pool(2, 1).unwrap();
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();

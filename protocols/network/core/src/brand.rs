@@ -27,8 +27,8 @@ impl Brand for LocalNetwork<'_> {}
 /// does not compile:
 ///
 /// ```compile_fail,E0382
-/// # use oer_protocols_network_core::{claim, with_local_network};
-/// # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
+/// # use oer_protocols_network_core::{BlockPlace, claim, with_local_network};
+/// # fn f<'m>(a: &'m mut [BlockPlace<'m, 64>; 1], b: &'m mut [BlockPlace<'m, 64>; 1]) {
 /// with_local_network(|right| {
 ///     let first = claim(right, a);
 ///     let second = claim(right, b);

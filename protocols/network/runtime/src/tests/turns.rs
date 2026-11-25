@@ -2,6 +2,7 @@
 //! as fast as it can.
 
 use oer_portable_events::EventSink;
+use oer_protocols_network_core::BlockPlace;
 use oer_protocols_network_core::NetEvent;
 
 use super::*;
@@ -39,7 +40,7 @@ fn flow<'n, B: Brand + 'n>(
     WirePort,
     WakingSpscSender<'n, (), 1>,
 ) {
-    let memory = Box::leak(Box::new([[0; SIZE]; FLOW_BLOCKS]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; FLOW_BLOCKS]));
     let (pool, brand) = claim(right, memory);
     let wire = WirePort::default();
     wire.0.borrow_mut().switches.on(WireSwitch::Answers);
@@ -513,7 +514,7 @@ fn each_turn_tells_the_frames_it_took_in_and_the_notices_it_handed_on() {
 #[test]
 fn ready_work_the_port_has_no_room_for_leaves_the_service_waiting() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; FLOW_BLOCKS]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; FLOW_BLOCKS]));
         let (pool, brand) = claim(right, memory);
         let wire = WirePort::default();
         wire.0.borrow_mut().switches.on(WireSwitch::Answers);

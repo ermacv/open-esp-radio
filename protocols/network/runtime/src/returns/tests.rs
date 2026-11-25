@@ -3,7 +3,9 @@ extern crate std;
 use std::boxed::Box;
 use std::cell::{Cell, RefCell};
 
-use oer_protocols_network_core::{Block, Brand, NetworkClaim, Pool, claim, with_local_network};
+use oer_protocols_network_core::{
+    Block, BlockPlace, Brand, NetworkClaim, Pool, claim, with_local_network,
+};
 
 use super::{ReturnEnd, ReturnLane, ReturnRefusal, Returner};
 
@@ -19,7 +21,7 @@ type Sides<'n, B> = (
 );
 
 fn sides<'n, B: Brand + 'n>(right: NetworkClaim<B>) -> Sides<'n, B> {
-    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
     let (pool, _) = claim(right, memory);
     let lane: &mut Lane<'n, B> = Box::leak(Box::new(ReturnLane::new()));
     let (returner, end) = lane.split();

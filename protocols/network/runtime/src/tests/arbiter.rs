@@ -4,6 +4,7 @@
 //! reservations were batched.
 
 use super::*;
+use oer_protocols_network_core::BlockPlace;
 
 const POOL: usize = 8;
 
@@ -23,7 +24,7 @@ fn granted<'n, B: 'n>(socket: &mut TestSocket<'n, B>) -> Option<Block<'n, B, SIZ
 #[test]
 fn sockets_of_one_group_share_a_turn_s_blocks_whatever_each_asks() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; POOL]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; POOL]));
         let (pool, brand) = claim(right, memory);
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(brand, interface, pool, WirePort::default());

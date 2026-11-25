@@ -13,7 +13,9 @@ use std::boxed::Box;
 
 use oer_portable_events::EventSink;
 use oer_portable_time_virtual::VirtualClock;
-use oer_protocols_network_core::{Interface, NetEvent, NetworkOwner, claim, with_local_network};
+use oer_protocols_network_core::{
+    BlockPlace, Interface, NetEvent, NetworkOwner, claim, with_local_network,
+};
 use oer_protocols_network_port::Holding;
 use oer_protocols_network_wire::ip::Dscp;
 
@@ -56,7 +58,7 @@ impl EventSink<ServiceEvent> for Turns {
 #[test]
 fn a_receive_load_lends_every_frame_and_counts_its_turns() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
         let (mut pool, brand) = claim(right, memory);
         pool.loans().pool(CREDIT + 2, 2).unwrap();
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
