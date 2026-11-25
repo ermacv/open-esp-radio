@@ -7115,7 +7115,7 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     (
         "protocols/network/wire/src/checksum.rs",
         2,
-        "correct: the sum\'s words are numbers made of two octets, not a format (RFC 1071, 1)",
+        "correct: the sum's words are numbers made of two octets, not a format (RFC 1071, 1)",
     ),
 ];
 
