@@ -6369,11 +6369,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         1,
         BY_PUMP,
     ),
-    (
-        "chips/family/radio/ieee80211/policy/src/rate_control.rs",
-        1,
-        BY_FINAL_CRATES,
-    ),
     ("portable/memory/src/rx_external_handoff.rs", 1, BY_RECEIVE),
     (
         "protocols/ieee80211/core/roles/sta/src/ftm.rs",
@@ -6628,7 +6623,7 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
     (
         "chips/family/radio/ieee80211/policy/src/rate_selection.rs::_unavailable",
         1,
-        BY_FINAL_CRATES,
+        BY_CONTROLLER,
     ),
     (
         "portable/memory/src/context_cell.rs::_borrow",
@@ -8396,11 +8391,11 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ("chips/esp32s31/app/src/lib.rs::Boot.timers", BY_PUMP),
     (
         "chips/family/radio/ieee80211/policy/src/rate_control.rs::StaRateControlAssociation.ampdu_runtime",
-        BY_FINAL_CRATES,
+        "correct: the A-MPDU walk of an HT or HE link, which no other link has (tasks/432)",
     ),
     (
         "chips/family/radio/ieee80211/policy/src/rate_selection.rs::EspressifRateSelection.control",
-        BY_FINAL_CRATES,
+        BY_CONTROLLER,
     ),
     (
         "protocols/bluetooth/hci/src/controller/le/acl.rs::LeHostAclPacket.in_flight_end",
@@ -9824,24 +9819,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::struct_excessive_bools",
         1,
         BY_RECEIVE,
-    ),
-    (
-        "chips/family/radio/ieee80211/policy/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "chips/family/radio/ieee80211/policy/src/lib.rs",
-        "clippy::cast_possible_wrap",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "chips/family/radio/ieee80211/policy/src/lib.rs",
-        "clippy::cast_sign_loss",
-        1,
-        BY_FINAL_CRATES,
     ),
     (
         "chips/family/radio/modem-clock/src/execution.rs",

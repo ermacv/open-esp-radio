@@ -309,6 +309,20 @@ pub const fn rate_schedule(kind: RateScheduleKind, index: u8) -> Option<RateSche
     None
 }
 
+/// The record after `current` in the arena of `floor`, no later than `floor`;
+/// `floor` where there is none.
+pub(crate) fn lowered_toward(current: RateScheduleRef, floor: RateScheduleRef) -> RateScheduleRef {
+    let reached = usize::from(floor.index()).saturating_add(1);
+    let next = usize::from(current.index()).saturating_add(1);
+    arena_records(floor.kind())
+        .iter()
+        .take(reached)
+        .nth(next)
+        .map_or(floor, |record| {
+            RateScheduleRef::from_record(floor.kind(), record)
+        })
+}
+
 pub const fn offset_schedule(schedule: RateScheduleRef, records: u8) -> Option<RateScheduleRef> {
     match schedule.index().checked_add(records) {
         Some(index) => rate_schedule(schedule.kind(), index),

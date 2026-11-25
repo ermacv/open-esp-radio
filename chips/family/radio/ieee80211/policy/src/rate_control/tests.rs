@@ -13,13 +13,12 @@ fn state() -> RateControlState {
         reevaluate_after_us: 1,
         retry_state_1d: 2,
         retry_state_1e: 3,
-        maximum_schedule_index: 5,
         current_schedule: RateScheduleState {
             reference: crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 2).unwrap(),
             retry_limit: 7,
             adaptive: 1,
         },
-        legacy_schedule: crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11B, 0).unwrap(),
+        floor_schedule: literal_schedule!(RateScheduleKind::Dot11N, 5),
     }
 }
 
@@ -149,29 +148,49 @@ fn pressure_threshold_clears_state_and_advances_schedule() {
     assert_eq!(value.current_schedule.adaptive, 0);
 }
 
+/// `rcLowerSched`: the walk ends at the floor, whether it reaches it, stands
+/// on it or began past it, and never leaves the floor's arena.
 #[test]
-fn last_schedule_falls_back_to_the_legacy_table() {
-    let mut value = state();
-    value.retry_pressure = 6;
-    value.maximum_schedule_index = 2;
-    value.current_schedule.reference =
-        crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 2).unwrap();
-    assert_eq!(
-        value.update_tx_per(5).schedule,
-        ScheduleSelection::Selected(
-            crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11B, 2).unwrap()
-        )
-    );
+fn the_walk_steps_to_the_floor_and_stays_there() {
+    let at = |index| crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, index).unwrap();
+    for (current, floor, next) in [
+        (0, 5, 1),
+        (4, 5, 5),
+        (5, 5, 5),
+        (9, 5, 5),
+        (12, 13, 13),
+        (13, 13, 13),
+    ] {
+        let mut value = state();
+        value.retry_pressure = 6;
+        value.floor_schedule = at(floor);
+        value.current_schedule.reference = at(current);
+        assert_eq!(
+            value.update_tx_per(5).schedule,
+            ScheduleSelection::Selected(at(next)),
+            "{current} toward {floor}"
+        );
+    }
 }
 
+/// The penalty of a result: its count, or two past the limit past it, each an
+/// octet.
 #[test]
-fn invalid_schedule_transition_is_explicit() {
-    let mut value = state();
-    value.retry_pressure = 6;
-    value.maximum_schedule_index = 6;
-    value.current_schedule.reference =
-        crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 13).unwrap();
-    assert_eq!(value.update_tx_per(5).schedule, ScheduleSelection::Invalid);
+fn a_penalty_is_the_vendor_s_octet() {
+    for (limit, retries, penalty) in [
+        (7, 7, 8),
+        (7, 8, 9),
+        (255, 255, 0),
+        (255, 256, 1),
+        (7, u32::MAX, 9),
+    ] {
+        let mut value = state();
+        value.current_schedule.retry_limit = limit;
+        value.weighted_retries = 0;
+        value.retry_pressure = 0;
+        value.update_tx_per(retries);
+        assert_eq!(value.weighted_retries, penalty, "{retries} of {limit}");
+    }
 }
 
 #[test]
@@ -268,7 +287,7 @@ fn ampdu_thresholds_match_the_he_mcs9_oracle_endpoints() {
 
 #[test]
 fn ampdu_owner_promotes_after_two_clean_vendor_windows() {
-    let mut state = AmpduRateControlState::new(RateScheduleKind::Dot11Ax, 1, 0).unwrap();
+    let mut state = AmpduRateControlState::new(literal_schedule!(RateScheduleKind::Dot11Ax, 1), 0);
     assert_eq!(
         state.current_schedule(),
         literal_schedule!(RateScheduleKind::Dot11Ax, 1)
@@ -298,7 +317,7 @@ fn ampdu_owner_promotes_after_two_clean_vendor_windows() {
 
 #[test]
 fn ampdu_owner_lowers_only_after_two_filtered_bad_windows() {
-    let mut state = AmpduRateControlState::new(RateScheduleKind::Dot11Ax, 0, 0).unwrap();
+    let mut state = AmpduRateControlState::new(literal_schedule!(RateScheduleKind::Dot11Ax, 0), 0);
     assert!(matches!(
         state.observe_block_ack(100_001, tally(500, 0), Some(75)),
         AmpduRateDecision::Retain {
@@ -326,7 +345,7 @@ fn ampdu_owner_lowers_only_after_two_filtered_bad_windows() {
 
 #[test]
 fn ampdu_owner_accepts_checked_counts_without_a_post_mutation_error() {
-    let mut state = AmpduRateControlState::new(RateScheduleKind::Dot11Ax, 0, 0).unwrap();
+    let mut state = AmpduRateControlState::new(literal_schedule!(RateScheduleKind::Dot11Ax, 0), 0);
     assert_eq!(
         state.observe_block_ack(10, tally(16, 16), None),
         AmpduRateDecision::Accumulating
@@ -389,7 +408,7 @@ fn phy_mode_selector_covers_legacy_p2p_ht_he_and_lora() {
         dot11b.current,
         literal_schedule!(RateScheduleKind::Dot11B, 3)
     );
-    assert_eq!(dot11b.maximum_index, 3);
+    assert_eq!(dot11b.floor.index(), 3);
     assert_eq!(dot11b.schedule_count, 6);
 
     let mut dot11g_input = selection_input(1);
@@ -404,13 +423,16 @@ fn phy_mode_selector_covers_legacy_p2p_ht_he_and_lora() {
         dot11g.secondary,
         literal_schedule!(RateScheduleKind::P2pDot11G, 7)
     );
-    assert_eq!(dot11g.maximum_index, 7);
+    assert_eq!(dot11g.floor.index(), 7);
 
     let mut ht_input = selection_input(2);
     ht_input.metric = 8;
     let ht = select_phy_mode(ht_input);
     assert_eq!(ht.current, literal_schedule!(RateScheduleKind::Dot11N, 11));
-    assert_eq!(ht.ampdu_limit_rate, Some(0x10));
+    assert_eq!(
+        ht.ampdu.map(|record| schedule_state(record).rate),
+        Some(0x10)
+    );
 
     let mut he_input = selection_input(4);
     he_input.he_type = 7;
@@ -418,8 +440,11 @@ fn phy_mode_selector_covers_legacy_p2p_ht_he_and_lora() {
     he_input.long_range_rates = LongRangeRates::Present;
     let he = select_phy_mode(he_input);
     assert_eq!(he.current, literal_schedule!(RateScheduleKind::Dot11Ax, 13));
-    assert_eq!(he.maximum_index, 15);
-    assert_eq!(he.ampdu_limit_rate, Some(0x12));
+    assert_eq!(he.floor.index(), 15);
+    assert_eq!(
+        he.ampdu.map(|record| schedule_state(record).rate),
+        Some(0x12)
+    );
     assert_eq!(he.fallback, literal_schedule!(RateScheduleKind::Lora, 1));
 
     let lora = select_phy_mode(selection_input(6));
@@ -451,7 +476,12 @@ fn associated_he_owner_joins_schedule_and_report_rate_without_c_layout() {
     );
     assert_eq!(association.maximum_schedule_index(), 15);
     assert_eq!(association.schedule_count(), 16);
-    assert_eq!(association.ampdu_limit_rate(), Some(0x13));
+    assert_eq!(
+        association
+            .current_ampdu_schedule()
+            .map(|record| schedule_state(record).rate),
+        Some(0x13)
+    );
     assert_eq!(
         association.beamforming_report(),
         beamforming_report_rate_for_metric(20, BOTH)
@@ -911,13 +941,31 @@ fn phy_mode_selection_indices_stay_inside_their_tables() {
                             selection.current,
                             selection.secondary,
                             selection.fallback,
-                            selection.legacy,
+                            selection.floor,
                         ] {
                             assert!(
                                 usize::from(schedule.index())
                                     < crate::rate_schedule::record_count(schedule.kind())
                             );
                         }
+                        // The walk's arena is one, and every record it
+                        // starts from lies no later than its floor.
+                        assert_eq!(selection.current.kind(), selection.floor.kind());
+                        assert!(selection.current.index() <= selection.floor.index());
+                        // The A-MPDU walk begins at the current record, or at
+                        // the vendor's floor of it.
+                        assert_eq!(
+                            selection
+                                .ampdu
+                                .map(|record| (record.kind(), record.index())),
+                            matches!(phy_type, 2..=5).then(|| (
+                                selection.current.kind(),
+                                selection
+                                    .current
+                                    .index()
+                                    .min(AmpduRateControlState::VENDOR_AMPDU_FLOOR_INDEX)
+                            ))
+                        );
                         inputs += 1;
                     }
                 }
