@@ -24,7 +24,7 @@ fn at(millis: u64) -> Instant {
 fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckAction {
     BlockAckAction::AddbaResponse {
         dialog_token: DialogToken::new(dialog_token),
-        status,
+        status: oer_protocols_ieee80211_wire::status::StatusCode::new(status),
         timeout_tu: 0,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
@@ -350,7 +350,7 @@ fn the_recipient_s_delba_ends_the_agreement_and_receive_actions_pass_by() {
     let initiator = |initiator| BlockAckAction::Delba {
         tid: Tid::constant::<0>(),
         initiator,
-        reason: 37,
+        reason: oer_protocols_ieee80211_wire::status::ReasonCode::new(37),
     };
     assert!(
         !tx.on_action(

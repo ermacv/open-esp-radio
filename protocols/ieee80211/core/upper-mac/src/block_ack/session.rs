@@ -9,6 +9,7 @@ use oer_protocols_ieee80211_wire::block_ack::frame::{
 use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::status::StatusCode;
 
 /// Largest originator window represented by the delivery/expiry bitmaps.
 pub const MAX_TX_BLOCK_ACK_WINDOW: u16 = 64;
@@ -75,7 +76,7 @@ pub struct OperationalTxBlockAck {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxBlockAckResponse {
     Operational(OperationalTxBlockAck),
-    Rejected(u16),
+    Rejected(StatusCode),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -222,7 +223,7 @@ impl TxBlockAckSession {
             parameters.window(),
         );
 
-        if status != 0 {
+        if status != StatusCode::SUCCESS {
             self.phase = TxBlockAckPhase::Idle;
             self.generation = next_generation(self.generation);
             return Ok(TxBlockAckResponse::Rejected(status));

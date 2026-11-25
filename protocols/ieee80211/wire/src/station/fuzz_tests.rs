@@ -34,8 +34,8 @@ fn sae_seeds() -> Vec<Vec<u8>> {
             &mut frame,
             Eui48::new(BSSID),
             Eui48::new(LOCAL),
-            transaction,
-            status,
+            crate::management::AuthenticationTransaction::new(transaction),
+            crate::status::StatusCode::new(status),
             body,
             seq(2),
         )
@@ -51,7 +51,7 @@ fn authentication(count: usize) {
         &mut open,
         Eui48::new(BSSID),
         Eui48::new(LOCAL),
-        17,
+        crate::status::StatusCode::DENIED_NO_MORE_STAS,
         seq(3),
     )
     .unwrap();
@@ -103,7 +103,7 @@ fn disconnect(count: usize) {
         Eui48::new(BSSID),
         Eui48::new(LOCAL),
         crate::ap::ApPeerDisconnectKind::Deauthentication,
-        7,
+        crate::status::ReasonCode::INVALID_CLASS3_FRAME,
         seq(4),
     )
     .unwrap();

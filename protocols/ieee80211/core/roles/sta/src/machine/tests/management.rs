@@ -202,7 +202,7 @@ fn only_authenticated_management_disconnects_end_the_negotiated_link() {
                     .filter(|seen| matches!(
                         seen,
                         Seen::Notify(StaNotice::Disconnected(StaDisconnectReason::Peer {
-                            reason_code: 7
+                            reason_code: oer_protocols_ieee80211_wire::status::ReasonCode::INVALID_CLASS3_FRAME
                         }))
                     ))
                     .count(),
@@ -323,7 +323,7 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
             parse_block_ack_action(&response[32..]),
             Some(BlockAckAction::AddbaResponse {
                 dialog_token,
-                status: 37,
+                status: oer_protocols_ieee80211_wire::status::StatusCode::REQUEST_DECLINED,
                 parameters,
                 ..
             }) if dialog_token == DialogToken::new(17)

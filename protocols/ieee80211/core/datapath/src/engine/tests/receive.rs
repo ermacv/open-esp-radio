@@ -1043,7 +1043,7 @@ fn architect_the_end_of_an_agreements_command_is_told() {
             &oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
                 Tid::constant::<0>(),
                 oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
-                1,
+                oer_protocols_ieee80211_wire::status::ReasonCode::UNSPECIFIED,
             ),
         );
         around.port.land(&delba, meta());

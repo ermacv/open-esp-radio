@@ -18,13 +18,12 @@ use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_core_security_rsn::Pmk;
 use oer_protocols_ieee80211_core_security_rsn::sae::{SaeCommit, SaeError, SaeKeys};
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
+use oer_protocols_ieee80211_wire::management::AuthenticationTransaction;
 use oer_protocols_ieee80211_wire::sae::{SAE_COMMIT_LEN, SaeCommitValues, anti_clogging_token};
 use oer_protocols_ieee80211_wire::security::SaePwe;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
-use oer_protocols_ieee80211_wire::station::{
-    SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION, parse_sae_authentication, parse_sta_disconnect,
-};
-use oer_protocols_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::station::{parse_sae_authentication, parse_sta_disconnect};
+use oer_protocols_ieee80211_wire::status::{ReasonCode, StatusCode};
 
 pub const STA_SAE_COMMIT_TIMEOUT: Duration = Duration::from_secs(4);
 pub const STA_SAE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(2);
@@ -35,8 +34,8 @@ pub const STA_SAE_BODY_CAPACITY: usize = SAE_COMMIT_LEN + 3 + STA_SAE_TOKEN_CAPA
 #[derive(Debug, Eq, PartialEq)]
 #[must_use]
 pub struct StaSaeTransmission {
-    pub transaction: u16,
-    pub status_code: u16,
+    pub transaction: AuthenticationTransaction,
+    pub status_code: StatusCode,
     body: heapless::Vec<u8, STA_SAE_BODY_CAPACITY>,
 }
 
@@ -94,10 +93,10 @@ pub enum StaSaeFailure {
     DeadlineOverflow,
     PeerDisconnect {
         kind: StaPeerDisconnectKind,
-        reason_code: u16,
+        reason_code: ReasonCode,
     },
     Rejected {
-        status_code: u16,
+        status_code: StatusCode,
     },
     Protocol(SaeError),
     /// Local password-element derivation failed its mathematical invariant.
@@ -188,22 +187,22 @@ impl StaSaeAuthentication {
             return StaSaeEvent::Irrelevant(self);
         };
         match (frame.transaction, &self.phase) {
-            (SAE_COMMIT_TRANSACTION, StaSaePhase::Committed { .. }) => {
+            (AuthenticationTransaction::SAE_COMMIT, StaSaePhase::Committed { .. }) => {
                 self.receive_commit(frame.status_code, frame.body, now)
             }
-            (SAE_CONFIRM_TRANSACTION, StaSaePhase::Confirmed(_)) => {
+            (AuthenticationTransaction::SAE_CONFIRM, StaSaePhase::Confirmed(_)) => {
                 self.receive_confirm(frame.status_code, frame.body)
             }
             _ => StaSaeEvent::Irrelevant(self),
         }
     }
 
-    fn receive_commit(mut self, status: u16, body: &[u8], now: Instant) -> StaSaeEvent {
+    fn receive_commit(mut self, status: StatusCode, body: &[u8], now: Instant) -> StaSaeEvent {
         let StaSaePhase::Committed { commit, pwe } = &self.phase else {
             return StaSaeEvent::Irrelevant(self);
         };
         let pwe = *pwe;
-        if status == status_code::ANTI_CLOGGING_TOKEN_REQUIRED {
+        if status == StatusCode::ANTI_CLOGGING_TOKEN_REQUIRED {
             let token = match anti_clogging_token(body, pwe) {
                 Ok(token) if token.len() <= STA_SAE_TOKEN_CAPACITY => token,
                 Ok(_) => return StaSaeEvent::Failed(StaSaeFailure::TokenTooLong),
@@ -221,7 +220,7 @@ impl StaSaeAuthentication {
             return StaSaeEvent::Failed(
                 if matches!(
                     status,
-                    status_code::SUCCESS | status_code::SAE_HASH_TO_ELEMENT
+                    StatusCode::SUCCESS | StatusCode::SAE_HASH_TO_ELEMENT
                 ) {
                     StaSaeFailure::Protocol(SaeError::Malformed)
                 } else {
@@ -252,15 +251,15 @@ impl StaSaeAuthentication {
         StaSaeEvent::Transmit {
             authentication: self,
             transmission: StaSaeTransmission {
-                transaction: SAE_CONFIRM_TRANSACTION,
-                status_code: status_code::SUCCESS,
+                transaction: AuthenticationTransaction::SAE_CONFIRM,
+                status_code: StatusCode::SUCCESS,
                 body,
             },
         }
     }
 
-    fn receive_confirm(self, status_code: u16, body: &[u8]) -> StaSaeEvent {
-        if status_code != status_code::SUCCESS {
+    fn receive_confirm(self, status_code: StatusCode, body: &[u8]) -> StaSaeEvent {
+        if status_code != StatusCode::SUCCESS {
             return StaSaeEvent::Failed(StaSaeFailure::Rejected { status_code });
         }
         match self.phase {
@@ -284,10 +283,10 @@ impl StaSaeAuthentication {
     }
 }
 
-const fn commit_status(pwe: SaePwe) -> u16 {
+const fn commit_status(pwe: SaePwe) -> StatusCode {
     match pwe {
-        SaePwe::HashToElement => status_code::SAE_HASH_TO_ELEMENT,
-        SaePwe::HuntingAndPecking => status_code::SUCCESS,
+        SaePwe::HashToElement => StatusCode::SAE_HASH_TO_ELEMENT,
+        SaePwe::HuntingAndPecking => StatusCode::SUCCESS,
     }
 }
 
@@ -309,7 +308,7 @@ fn encode_commit(
     )
     .map_err(|_| StaSaeFailure::Protocol(SaeError::Malformed))?;
     Ok(StaSaeTransmission {
-        transaction: SAE_COMMIT_TRANSACTION,
+        transaction: AuthenticationTransaction::SAE_COMMIT,
         status_code: commit_status(pwe),
         body,
     })

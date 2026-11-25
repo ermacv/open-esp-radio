@@ -78,7 +78,7 @@ fn peer_disconnect_returns_a_retry_owner_but_rejection_consumes_the_epoch() {
         failure,
         StaAuthenticationFailure::PeerDisconnect(StaDisconnect {
             kind: StaDisconnectKind::Deauthentication,
-            reason_code: 1
+            reason_code: oer_protocols_ieee80211_wire::status::ReasonCode::UNSPECIFIED
         })
     );
     let (active, attempt) = runtime.begin_attempt(&mut sequence);
@@ -87,7 +87,9 @@ fn peer_disconnect_returns_a_retry_owner_but_rejection_consumes_the_epoch() {
         active.observe_management_frame(&authentication_response(17)),
         StaAuthenticationEvent::Failed {
             attempts: 2,
-            failure: StaAuthenticationFailure::Rejected { status_code: 17 },
+            failure: StaAuthenticationFailure::Rejected {
+                status_code: oer_protocols_ieee80211_wire::status::StatusCode::DENIED_NO_MORE_STAS
+            },
         }
     ));
 }

@@ -308,7 +308,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
     write_ht_association_response(
         &TEST_ADVERTISEMENT,
         &mut body,
-        17,
+        crate::status::StatusCode::DENIED_NO_MORE_STAS,
         crate::management::AssociationId::new(0x0123),
         ht20,
         None,
@@ -320,7 +320,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
     write_ht_association_response(
         &TEST_ADVERTISEMENT,
         &mut body,
-        0,
+        crate::status::StatusCode::SUCCESS,
         crate::management::AssociationId::new(1),
         ht20,
         None,
@@ -337,7 +337,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
     write_ht_association_response(
         &TEST_ADVERTISEMENT,
         &mut body,
-        0,
+        crate::status::StatusCode::SUCCESS,
         crate::management::AssociationId::new(1),
         ht20,
         Some(peer_ht),
@@ -354,7 +354,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
         write_ht_association_response(
             &TEST_ADVERTISEMENT,
             &mut body,
-            0,
+            crate::status::StatusCode::SUCCESS,
             None,
             ht20,
             None,
@@ -367,7 +367,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
     write_ht_association_response(
         &TEST_ADVERTISEMENT,
         &mut body,
-        0,
+        crate::status::StatusCode::SUCCESS,
         crate::management::AssociationId::new(1),
         ht40,
         None,
@@ -401,7 +401,7 @@ fn peer_disconnect_frames_own_subtype_reason_and_sequence() {
             Eui48::new(access_point),
             Eui48::new(peer),
             ApPeerDisconnectKind::Disassociation,
-            4,
+            crate::status::ReasonCode::new(4),
             seq(7),
         ),
         Ok(AP_PEER_DISCONNECT_LEN),
@@ -417,7 +417,7 @@ fn peer_disconnect_frames_own_subtype_reason_and_sequence() {
         Eui48::new(access_point),
         Eui48::new(peer),
         ApPeerDisconnectKind::Deauthentication,
-        2,
+        crate::status::ReasonCode::new(2),
         seq(8),
     )
     .unwrap();
@@ -509,8 +509,8 @@ fn sae_authentication_frames_cross_between_station_and_access_point() {
         )
         .unwrap(),
         sequence_number: seq(1),
-        transaction: 1,
-        status_code: 126,
+        transaction: crate::management::AuthenticationTransaction::new(1),
+        status_code: crate::status::StatusCode::SAE_HASH_TO_ELEMENT,
         body: &commit,
     }
     .encode(&mut request)
@@ -523,8 +523,8 @@ fn sae_authentication_frames_cross_between_station_and_access_point() {
         ),
         Some(ApManagementRequest::SaeAuthentication {
             peer: Eui48::new(peer),
-            transaction: 1,
-            status: 126,
+            transaction: crate::management::AuthenticationTransaction::new(1),
+            status: crate::status::StatusCode::SAE_HASH_TO_ELEMENT,
             body: &commit,
         })
     );
@@ -535,8 +535,8 @@ fn sae_authentication_frames_cross_between_station_and_access_point() {
         &mut response,
         Eui48::new(access_point),
         Eui48::new(peer),
-        2,
-        0,
+        crate::management::AuthenticationTransaction::new(2),
+        crate::status::StatusCode::SUCCESS,
         &confirm,
         seq(2),
     )
@@ -544,16 +544,19 @@ fn sae_authentication_frames_cross_between_station_and_access_point() {
     let parsed =
         parse_sae_authentication(&response[..len], Eui48::new(peer), Eui48::new(access_point))
             .unwrap();
-    assert_eq!(parsed.transaction, 2);
-    assert_eq!(parsed.status_code, 0);
+    assert_eq!(
+        parsed.transaction,
+        crate::management::AuthenticationTransaction::new(2)
+    );
+    assert_eq!(parsed.status_code, crate::status::StatusCode::SUCCESS);
     assert_eq!(parsed.body, confirm);
     assert_eq!(
         write_sae_authentication(
             &mut response[..32],
             Eui48::new(access_point),
             Eui48::new(peer),
-            2,
-            0,
+            crate::management::AuthenticationTransaction::new(2),
+            crate::status::StatusCode::SUCCESS,
             &confirm,
             seq(2)
         ),
@@ -692,7 +695,7 @@ fn complete_response_encoders_own_addresses_sequence_and_status() {
         &mut authentication,
         Eui48::new(access_point),
         Eui48::new(peer),
-        17,
+        crate::status::StatusCode::DENIED_NO_MORE_STAS,
         seq(7),
     )
     .unwrap();
@@ -707,7 +710,7 @@ fn complete_response_encoders_own_addresses_sequence_and_status() {
         &mut association,
         Eui48::new(access_point),
         Eui48::new(peer),
-        0,
+        crate::status::StatusCode::SUCCESS,
         crate::management::AssociationId::new(1),
         seq(8),
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
@@ -731,7 +734,7 @@ fn a_5_ghz_association_response_carries_no_erp_element() {
         let length = write_ht_association_response(
             &TEST_ADVERTISEMENT,
             &mut body,
-            0,
+            crate::status::StatusCode::SUCCESS,
             crate::management::AssociationId::new(1),
             channel,
             None,
@@ -811,8 +814,13 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
         assert!(matches!(
             parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], Eui48::new(ap)),
             Some(
-                ApManagementRequest::Deauthentication { reason: 3, .. }
-                    | ApManagementRequest::Disassociation { reason: 3, .. }
+                ApManagementRequest::Deauthentication {
+                    reason: crate::status::ReasonCode::DEAUTH_LEAVING,
+                    ..
+                } | ApManagementRequest::Disassociation {
+                    reason: crate::status::ReasonCode::DEAUTH_LEAVING,
+                    ..
+                }
             )
         ));
         assert!(
@@ -851,7 +859,7 @@ fn ap_management_encoders_admit_complete_capacity_before_writing() {
                 out,
                 Eui48::new(access_point),
                 Eui48::new(peer),
-                0,
+                crate::status::StatusCode::SUCCESS,
                 sequence_number,
             )
         },
@@ -860,8 +868,8 @@ fn ap_management_encoders_admit_complete_capacity_before_writing() {
                 out,
                 Eui48::new(access_point),
                 Eui48::new(peer),
-                1,
-                0,
+                crate::management::AuthenticationTransaction::new(1),
+                crate::status::StatusCode::SUCCESS,
                 &[1, 2, 3],
                 sequence_number,
             )
@@ -872,7 +880,7 @@ fn ap_management_encoders_admit_complete_capacity_before_writing() {
                 Eui48::new(access_point),
                 Eui48::new(peer),
                 ApPeerDisconnectKind::Deauthentication,
-                1,
+                crate::status::ReasonCode::UNSPECIFIED,
                 sequence_number,
             )
         },
@@ -952,7 +960,7 @@ fn a_robust_subtype_is_read_only_from_its_frame_control() {
         Eui48::new([2, 0, 0, 0, 0, 1]),
         Eui48::new([2, 0, 0, 0, 0, 2]),
         ApPeerDisconnectKind::Deauthentication,
-        2,
+        crate::status::ReasonCode::new(2),
         seq(1),
     )
     .unwrap();
@@ -1011,7 +1019,7 @@ fn the_largest_association_id_is_written_and_read_whole() {
     write_ht_association_response(
         &TEST_ADVERTISEMENT,
         &mut body,
-        0,
+        crate::status::StatusCode::SUCCESS,
         crate::management::AssociationId::new(2007),
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
         None,
@@ -1148,6 +1156,30 @@ fn null_data_of_no_station_moves_no_power_state() {
                 .is_some(),
             observed,
             "peer {peer:?}"
+        );
+    }
+}
+
+/// An Open System request is its exchange's first frame and carries success:
+/// either refuses it alone.
+#[test]
+fn an_open_authentication_request_is_the_first_frame_with_success() {
+    let mut frame = [0_u8; 30];
+    frame[0] = 0xb0;
+    frame[4..10].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+    frame[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 2]);
+    frame[16..22].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+    for (transaction, status, read) in [(1, 0, true), (2, 0, false), (1, 1, false)] {
+        frame[26] = transaction;
+        frame[28] = status;
+        assert_eq!(
+            parse_ap_management_request(
+                &TEST_ADVERTISEMENT,
+                &frame,
+                Eui48::new([2, 0, 0, 0, 0, 1])
+            )
+            .is_some(),
+            read
         );
     }
 }

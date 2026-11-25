@@ -2,7 +2,7 @@
 
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-use oer_protocols_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::status::StatusCode;
 use oer_protocols_ieee80211_wire::tsf::MICROS_PER_TIME_UNIT;
 use {
     oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter,
@@ -64,7 +64,7 @@ pub enum StaAssociationFailure {
     DeadlineOverflow,
     PeerDisconnect(StaDisconnect),
     Rejected {
-        status_code: u16,
+        status_code: StatusCode,
     },
     /// The access point refused the association temporarily with a comeback
     /// time the station does not wait for: longer than 5000 TUs, or a second
@@ -257,12 +257,12 @@ impl StaAssociationRuntime {
         else {
             return StaAssociationEvent::Irrelevant(self);
         };
-        if response.status_code == status_code::REFUSED_TEMPORARILY
+        if response.status_code == StatusCode::REFUSED_TEMPORARILY
             && let Some(comeback_tu) = response.association_comeback_tu
         {
             return self.come_back(comeback_tu, now);
         }
-        if response.status_code != 0 {
+        if response.status_code != StatusCode::SUCCESS {
             return self.fail(StaAssociationFailure::Rejected {
                 status_code: response.status_code,
             });

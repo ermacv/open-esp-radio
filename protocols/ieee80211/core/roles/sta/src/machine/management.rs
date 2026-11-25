@@ -7,6 +7,8 @@ use oer_protocols_ieee80211_core_security_rsn::{
     bip::BipReceiver, frames::RsnIgtk, management_ccmp::ManagementCcmpReceiver,
 };
 use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
+use oer_protocols_ieee80211_wire::management::ReasonCodeField;
+use oer_protocols_ieee80211_wire::status::ReasonCode;
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, OwnAddress},
     frame::{DecodedHeader, ManagementSubtype},
@@ -18,7 +20,7 @@ use crate::sa_query::{SaQueryStep, StationSaQuery};
 
 /// All management events returned here were authenticated for this BSS.
 pub(super) enum ManagementEvent {
-    Disconnect(u16),
+    Disconnect(ReasonCode),
     Query(SaQuery),
     BlockAck(oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction),
 }
@@ -101,7 +103,9 @@ impl ManagementProtection {
                 let [lo, hi, ..] = *body else {
                     return None;
                 };
-                Some(ManagementEvent::Disconnect(u16::from_le_bytes([lo, hi])))
+                Some(ManagementEvent::Disconnect(
+                    ReasonCodeField::from_bytes([lo, hi]).code(),
+                ))
             }
             (_, true) if !group => SaQuery::parse(body)
                 .map(ManagementEvent::Query)

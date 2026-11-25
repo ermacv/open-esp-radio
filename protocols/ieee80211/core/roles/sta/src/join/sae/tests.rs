@@ -64,7 +64,13 @@ fn start(now: Instant) -> (StaSaeAuthentication, StaSaeTransmission) {
 fn a_full_exchange_yields_the_access_point_pmk() {
     let access_point = commit(BSSID, LOCAL, 0x40);
     let (station, sent) = start(Instant::EPOCH);
-    assert_eq!((sent.transaction, sent.status_code), (1, 0));
+    assert_eq!(
+        (sent.transaction, sent.status_code),
+        (
+            oer_protocols_ieee80211_wire::management::AuthenticationTransaction::SAE_COMMIT,
+            StatusCode::SUCCESS
+        )
+    );
     let station_values = SaeCommitValues::parse(
         sent.body(),
         oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
@@ -77,7 +83,13 @@ fn a_full_exchange_yields_the_access_point_pmk() {
     else {
         panic!("station confirms after peer commit");
     };
-    assert_eq!((confirm.transaction, confirm.status_code), (2, 0));
+    assert_eq!(
+        (confirm.transaction, confirm.status_code),
+        (
+            oer_protocols_ieee80211_wire::management::AuthenticationTransaction::SAE_CONFIRM,
+            StatusCode::SUCCESS
+        )
+    );
     let peer = access_point.process(station_values).unwrap();
     assert_eq!(peer.verify_peer_confirm(confirm.body()), Ok(1));
     let StaSaeEvent::Authenticated(keys) = station.observe_management_frame(
@@ -179,7 +191,10 @@ fn a_wrong_password_or_a_refusal_fails() {
     let (station, _) = start(Instant::EPOCH);
     assert!(matches!(
         station.observe_management_frame(&from_access_point(1, 77, &[20, 0]), Instant::EPOCH),
-        StaSaeEvent::Failed(StaSaeFailure::Rejected { status_code: 77 })
+        StaSaeEvent::Failed(StaSaeFailure::Rejected {
+            status_code:
+                oer_protocols_ieee80211_wire::status::StatusCode::UNSUPPORTED_FINITE_CYCLIC_GROUP
+        })
     ));
     let (station, _) = start(Instant::EPOCH);
     assert!(matches!(

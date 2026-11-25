@@ -13,17 +13,27 @@ use oer_protocols_ieee80211_wire::{
         ADDBA_ACTION_BODY_LEN, BlockAckAction, BlockAckPolicy, encode_addba_response,
     },
     sequence::SequenceNumber,
-    status::status_code,
+    status::StatusCode,
     tsf::time_units_micros,
 };
 
 /// IEEE 802.11 ADDBA response status, separate from a local parsing error.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u16)]
 pub enum AddbaStatus {
-    Success = status_code::SUCCESS,
-    RequestDeclined = status_code::REQUEST_DECLINED,
-    InvalidParameters = status_code::INVALID_PARAMETERS,
+    Success,
+    RequestDeclined,
+    InvalidParameters,
+}
+
+impl AddbaStatus {
+    /// The Status Code that says it.
+    pub const fn code(self) -> StatusCode {
+        match self {
+            Self::Success => StatusCode::SUCCESS,
+            Self::RequestDeclined => StatusCode::REQUEST_DECLINED,
+            Self::InvalidParameters => StatusCode::INVALID_PARAMETERS,
+        }
+    }
 }
 
 /// The A-MSDU Supported subfield of a Block Ack Parameter Set (IEEE Std
@@ -113,7 +123,7 @@ impl AddbaResponse {
     pub fn encode(self) -> Option<[u8; ADDBA_ACTION_BODY_LEN]> {
         encode_addba_response(
             self.dialog_token,
-            self.status as u16,
+            self.status.code(),
             self.tid,
             self.window,
             self.timeout_tu,

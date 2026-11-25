@@ -428,6 +428,59 @@ fn the_beacon_follows_the_tsf_from_its_restart() {
     assert_eq!(engine.next_beacon(), None);
 }
 
+/// A retried Open System request of a peer that went on keeps its state;
+/// a new one, and the retry of a peer that only authenticated, authenticate
+/// again.
+#[test]
+fn only_a_retry_of_a_peer_that_went_on_keeps_its_state() {
+    for (associated, retried, kept) in [
+        (true, true, true),
+        (true, false, false),
+        (false, true, false),
+        (false, false, false),
+    ] {
+        let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
+        let mut engine = engine(&mut storage, &mut beacon);
+        let mut output = [0; 512];
+        let mut send = |engine: &mut ApEngine<'_, Association>, frame: &[u8], now| {
+            engine
+                .receive(
+                    frame,
+                    Integrity::Unverified,
+                    at(now),
+                    Some([7; 32]),
+                    1,
+                    &mut output,
+                )
+                .unwrap();
+        };
+        if associated {
+            associate(&mut engine);
+        } else {
+            send(&mut engine, &authentication(), 1);
+        }
+        let before = engine
+            .service()
+            .peer_status(PEER)
+            .unwrap()
+            .association_identity();
+        let mut request = authentication();
+        if retried {
+            request[1] |= 0x08;
+        }
+        send(&mut engine, &request, 3);
+        let after = engine.service().peer_status(PEER).unwrap();
+        assert_eq!(
+            after.association_identity() == before,
+            kept,
+            "{associated} {retried}"
+        );
+        if !kept {
+            assert_eq!(after.phase, ApPeerPhase::Authenticated);
+        }
+    }
+}
+
 #[test]
 fn a_departing_peer_is_forgotten() {
     let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);

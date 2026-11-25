@@ -6,6 +6,7 @@ use crate::frame::{ControlSubtype, FrameControlFields};
 use crate::management::DialogToken;
 use crate::qos::Tid;
 use crate::sequence::{SequenceControl, SequenceNumber};
+use crate::status::{ReasonCode, StatusCode};
 use oer_protocols_ieee802_wire::Eui48;
 
 pub const BLOCK_ACK_CATEGORY: u8 = 3;
@@ -96,14 +97,14 @@ pub enum BlockAckAction {
     },
     AddbaResponse {
         dialog_token: DialogToken,
-        status: u16,
+        status: StatusCode,
         parameters: AddbaParameters,
         timeout_tu: u16,
     },
     Delba {
         tid: Tid,
         initiator: DelbaInitiator,
-        reason: u16,
+        reason: ReasonCode,
     },
 }
 
@@ -220,8 +221,14 @@ pub fn write_successful_addba_response(
     let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
         return Err(RxAddbaResponseError::InvalidBodyLength(length));
     };
-    let written =
-        encode_addba_response(dialog_token, 0, tid, window, 0, AmsduSupport::NotSupported)?;
+    let written = encode_addba_response(
+        dialog_token,
+        StatusCode::SUCCESS,
+        tid,
+        window,
+        0,
+        AmsduSupport::NotSupported,
+    )?;
     // A successful agreement has a buffer: zero is none.
     if window == 0 {
         return Err(RxAddbaResponseError::InvalidWindow(window));
@@ -229,9 +236,6 @@ pub fn write_successful_addba_response(
     *body = written;
     Ok(())
 }
-
-/// IEEE 802.11 status 37: the recipient cannot accept this agreement.
-pub const ADDBA_STATUS_REQUEST_DECLINED: u16 = crate::status::status_code::REQUEST_DECLINED;
 
 /// Write a finite rejection for a syntactically parsed ADDBA request.
 ///
@@ -250,7 +254,7 @@ pub fn write_declined_addba_response(
     };
     *body = encode_addba_response(
         dialog_token,
-        ADDBA_STATUS_REQUEST_DECLINED,
+        StatusCode::REQUEST_DECLINED,
         tid,
         requested_window,
         0,
@@ -270,7 +274,7 @@ pub fn write_declined_addba_response(
 /// A window wider than ten bits.
 pub fn encode_addba_response(
     dialog_token: DialogToken,
-    status: u16,
+    status: StatusCode,
     tid: Tid,
     window: u16,
     timeout_tu: u16,
@@ -298,7 +302,7 @@ pub fn encode_addba_response(
 pub fn encode_delba(
     tid: Tid,
     initiator: DelbaInitiator,
-    reason: u16,
+    reason: ReasonCode,
 ) -> [u8; DELBA_ACTION_BODY_LEN] {
     let parameters = DelbaParameters::from_bytes([0; 2])
         .with_tid(tid)

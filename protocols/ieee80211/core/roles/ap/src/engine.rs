@@ -29,6 +29,7 @@ use oer_protocols_ieee80211_core_upper_mac::{
 };
 use oer_protocols_ieee80211_wire::data::PeerQos;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
+use oer_protocols_ieee80211_wire::status::{ReasonCode, StatusCode};
 use oer_protocols_ieee80211_wire::{
     address::Bssid,
     ap::{
@@ -65,12 +66,6 @@ pub const AP_EAPOL_CAPACITY: usize =
 /// How long the access point answers no further Probe Request after one:
 /// one response per interval, whatever its sender. The archive's policy.
 pub const PROBE_RESPONSE_INTERVAL: Duration = Duration::from_millis(10);
-
-/// The reason code of the access point's own teardown of a peer: the AP
-/// leaves, or ends an inactive or failed association (IEEE Std
-/// 802.11-2020, Table 9-49, 3: "deauthenticated because sending STA is
-/// leaving (or has left) the BSS").
-pub const AP_LEAVING_REASON: u16 = 3;
 
 /// Why the engine could not take an input or write a frame. Nothing of the
 /// peer table changed unless the variant says so.
@@ -551,7 +546,9 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 let status = match self.service.peer_status(peer.octets()) {
                     // A retried request whose response was lost: the same
                     // success again, the peer's state kept.
-                    Some(status) if retry && status.phase != ApPeerPhase::Authenticated => 0,
+                    Some(status) if retry && status.phase != ApPeerPhase::Authenticated => {
+                        StatusCode::SUCCESS
+                    }
                     Some(_) => {
                         // A new authentication ends the peer's earlier
                         // association: its key comes off first.
@@ -598,7 +595,11 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 {
                     // A repeated request whose response was lost: the same
                     // success again, no second Message 1.
-                    (0, Some(status.association_id), ApAfter::Nothing)
+                    (
+                        StatusCode::SUCCESS,
+                        Some(status.association_id),
+                        ApAfter::Nothing,
+                    )
                 } else if status.phase != ApPeerPhase::Authenticated {
                     return Ok(ApReceived::Nothing);
                 } else {
@@ -689,7 +690,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
     }
 
     /// Authenticate `peer` by Open System: the status its slot allows.
-    fn authenticate(&mut self, peer: [u8; 6], now: Instant) -> Result<u16, ApEngineError> {
+    fn authenticate(&mut self, peer: [u8; 6], now: Instant) -> Result<StatusCode, ApEngineError> {
         match self.service.authenticate_open(peer, now)? {
             ApMlmeAction::AuthenticationResponse { status, .. } => Ok(status),
             _ => Err(ApEngineError::Service(ApServiceError::WrongPeerPhase)),
@@ -956,7 +957,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
             Eui48::new(self.address()),
             Eui48::new(peer),
             kind,
-            AP_LEAVING_REASON,
+            ReasonCode::DEAUTH_LEAVING,
             sequence,
         )?;
         Ok(ApFrame {

@@ -71,7 +71,7 @@ use oer_protocols_ieee80211_core_security_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
     frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnGtk, RsnTxFrame, parse_gtk_key_data},
 };
-use oer_protocols_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::status::StatusCode;
 use oer_protocols_ieee80211_wire::{
     channel::Ghz2_4Channel,
     ht::{ht_capability_ie, ht_peer_capabilities},
@@ -228,7 +228,7 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: PEER,
-            status: status_code::SUCCESS,
+            status: StatusCode::SUCCESS,
         }
     );
     assert_eq!(
@@ -237,7 +237,7 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: OTHER,
-            status: status_code::SUCCESS,
+            status: StatusCode::SUCCESS,
         }
     );
     let third = [0x02, 0, 0, 0, 0, 4];
@@ -247,7 +247,7 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: third,
-            status: status_code::DENIED_NO_MORE_STAS,
+            status: StatusCode::DENIED_NO_MORE_STAS,
         }
     );
     assert_eq!(service.associated_count(), 0);
@@ -738,7 +738,7 @@ fn association_owns_a_bounded_wpa2_state() {
             .unwrap(),
         ApMlmeAction::AssociationResponse {
             peer: PEER,
-            status: status_code::SUCCESS,
+            status: StatusCode::SUCCESS,
             association_id: AssociationId::new(1),
         }
     );
@@ -795,7 +795,7 @@ fn association_rejects_a_peer_without_a_common_legacy_rate() {
             .unwrap(),
         ApMlmeAction::AssociationResponse {
             peer: PEER,
-            status: status_code::DENIED_RATES,
+            status: StatusCode::DENIED_RATES,
             association_id: None,
         }
     );
@@ -1317,7 +1317,7 @@ fn invalid_rsn_does_not_open_the_controlled_port() {
         ),
         Ok(ApMlmeAction::AssociationResponse {
             peer: PEER,
-            status: status_code::INVALID_ELEMENT,
+            status: StatusCode::INVALID_ELEMENT,
             association_id: None,
         })
     );
@@ -1380,7 +1380,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
                 .unwrap(),
             ApMlmeAction::AuthenticationResponse {
                 peer,
-                status: status_code::SUCCESS,
+                status: StatusCode::SUCCESS,
             }
         );
         assert_eq!(
@@ -1399,7 +1399,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
                 )
                 .unwrap(),
             ApMlmeAction::AssociationResponse {
-                status: status_code::SUCCESS,
+                status: StatusCode::SUCCESS,
                 association_id: Some(_),
                 ..
             }
@@ -1413,7 +1413,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: overflow,
-            status: status_code::DENIED_NO_MORE_STAS,
+            status: StatusCode::DENIED_NO_MORE_STAS,
         }
     );
     let released = [0x02, 0, 0, 0, 1, 7];
@@ -1424,7 +1424,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
             .unwrap(),
         ApMlmeAction::AuthenticationResponse {
             peer: overflow,
-            status: status_code::SUCCESS,
+            status: StatusCode::SUCCESS,
         }
     );
     assert_eq!(
@@ -1522,7 +1522,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     assert!(offer(&mut service, OTHER, 101).is_none());
     let response = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
-        status: 0,
+        status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
         timeout_tu: 0,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
@@ -1572,7 +1572,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
                 tid: AP_TX_BLOCK_ACK_TID.tid(),
                 initiator:
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
-                reason: 37,
+                reason: oer_protocols_ieee80211_wire::status::ReasonCode::new(37),
             },
         )
         .unwrap();
@@ -1594,7 +1594,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
                 tid: WmmUserPriority::UP5.tid(),
                 initiator:
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
-                reason: 37,
+                reason: oer_protocols_ieee80211_wire::status::ReasonCode::new(37),
             },
         )
         .unwrap();
@@ -1609,7 +1609,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
                 tid: AP_TX_BLOCK_ACK_TID.tid(),
                 initiator:
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
-                reason: 37,
+                reason: oer_protocols_ieee80211_wire::status::ReasonCode::new(37),
             },
         )
         .unwrap();
@@ -1620,7 +1620,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     let request = offer(&mut service, PEER, 200).unwrap();
     let response = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
-        status: 0,
+        status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
         timeout_tu: 0,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
@@ -1672,7 +1672,7 @@ fn addba_response_after_the_negotiation_timeout_is_dropped_as_stale() {
     assert_eq!(service.next_tx_block_ack_deadline(), None);
     let late = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
-        status: 0,
+        status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
         timeout_tu: 0,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
@@ -1767,7 +1767,7 @@ fn an_unanswered_or_unsent_offer_is_retried_after_the_interval_while_attempts_re
     // The peer declines: no attempt follows, whatever the time.
     let declined = BlockAckAction::AddbaResponse {
         dialog_token: third.dialog_token,
-        status: 37,
+        status: oer_protocols_ieee80211_wire::status::StatusCode::REQUEST_DECLINED,
         timeout_tu: 0,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
@@ -1779,7 +1779,9 @@ fn an_unanswered_or_unsent_offer_is_retried_after_the_interval_while_attempts_re
     };
     assert_eq!(
         service.on_tx_block_ack_action(PEER, declined),
-        Ok(Some(TxBlockAckResponse::Rejected(37)))
+        Ok(Some(TxBlockAckResponse::Rejected(
+            oer_protocols_ieee80211_wire::status::StatusCode::REQUEST_DECLINED
+        )))
     );
     assert_eq!(
         service.take_tx_block_ack_offer(PEER, at(u64::MAX / 2)),
@@ -1967,7 +1969,7 @@ fn sae_station_rsn_with_pmkid(pmkid: [u8; 16]) -> [u8; 40] {
     rsn
 }
 
-fn association_status(action: ApMlmeAction) -> u16 {
+fn association_status(action: ApMlmeAction) -> StatusCode {
     let ApMlmeAction::AssociationResponse { status, .. } = action else {
         panic!("association answers with a response");
     };
@@ -1987,7 +1989,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
             SAE_PMKID,
             oer_portable_time::Instant::from_micros(0)
         ),
-        Ok(status_code::SUCCESS)
+        Ok(StatusCode::SUCCESS)
     );
     let action = service
         .associate_rsn(
@@ -1999,7 +2001,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
             oer_portable_time::Instant::from_micros(1),
         )
         .unwrap();
-    assert_eq!(association_status(action), status_code::SUCCESS);
+    assert_eq!(association_status(action), StatusCode::SUCCESS);
     let message1 = service.begin_wpa2_frame::<512>(PEER).unwrap();
     let (_frame, context) = message1.into_parts();
     service
@@ -2097,11 +2099,11 @@ fn a_wpa3_association_resumes_only_a_known_pmkid() {
         .unwrap();
     assert_eq!(
         associate(&mut service, &SAE_STATION_RSN),
-        status_code::INVALID_PMKID
+        StatusCode::INVALID_PMKID
     );
     assert_eq!(
         associate(&mut service, &sae_station_rsn_with_pmkid(SAE_PMKID)),
-        status_code::INVALID_PMKID
+        StatusCode::INVALID_PMKID
     );
 
     // An SAE exchange caches the association; Open System then resumes it.
@@ -2118,11 +2120,11 @@ fn a_wpa3_association_resumes_only_a_known_pmkid() {
         .unwrap();
     assert_eq!(
         associate(&mut service, &sae_station_rsn_with_pmkid([0x11; 16])),
-        status_code::INVALID_PMKID
+        StatusCode::INVALID_PMKID
     );
     assert_eq!(
         associate(&mut service, &sae_station_rsn_with_pmkid(SAE_PMKID)),
-        status_code::SUCCESS
+        StatusCode::SUCCESS
     );
 }
 
@@ -2163,7 +2165,7 @@ fn a_wpa3_access_point_refuses_psk_and_stations_without_protection() {
                 )
                 .unwrap()
         ),
-        status_code::INVALID_ELEMENT
+        StatusCode::INVALID_ELEMENT
     );
 }
 
@@ -2189,7 +2191,7 @@ fn begin_management_handshake(
         .unwrap();
     // Message 1 is built; Message 2 answers it.
     let _message1 = service.begin_wpa2_frame::<512>(peer).unwrap();
-    assert_eq!(association_status(action), status_code::SUCCESS);
+    assert_eq!(association_status(action), StatusCode::SUCCESS);
     let ptk = Pmk::from_bytes(SAE_PMK).derive_ptk(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
         PtkContext {
@@ -2558,7 +2560,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                 action,
                 ApMlmeAction::AssociationResponse {
                     peer: PEER,
-                    status: status_code::INVALID_ELEMENT,
+                    status: StatusCode::INVALID_ELEMENT,
                     association_id: None
                 }
             );
@@ -2572,7 +2574,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                 action,
                 ApMlmeAction::AssociationResponse {
                     peer: PEER,
-                    status: status_code::SUCCESS,
+                    status: StatusCode::SUCCESS,
                     association_id: AssociationId::new(1)
                 }
             );
@@ -2687,7 +2689,7 @@ fn refused_on_both_bss_kinds(
 ) {
     let refused = ApMlmeAction::AssociationResponse {
         peer: PEER,
-        status: status_code::INVALID_ELEMENT,
+        status: StatusCode::INVALID_ELEMENT,
         association_id: None,
     };
     let mut storage = AccessPointPeerStorage::new();

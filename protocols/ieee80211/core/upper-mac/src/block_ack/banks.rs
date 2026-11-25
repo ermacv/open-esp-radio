@@ -31,7 +31,7 @@ use oer_protocols_ieee80211_wire::{
         ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_delba, parse_compressed_block_ack_request,
     },
     sequence::SequenceNumber,
-    status::reason_code,
+    status::ReasonCode,
 };
 
 /// Whether the station admits receive agreements now.
@@ -950,7 +950,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
                 let delba = encode_delba(
                     tid,
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
-                    reason_code::TIMEOUT,
+                    ReasonCode::TIMEOUT,
                 );
                 // The reply queue holds ADDBA-sized bodies; the DELBA fills
                 // its prefix.
