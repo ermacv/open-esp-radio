@@ -1,6 +1,6 @@
 //! The nonempty legacy-rate set carried from association into rate selection.
 
-use oer_protocols_ieee80211_wire::phy::{LegacyRate, PhyRate};
+use oer_protocols_ieee80211_wire::phy::LegacyRate;
 use oer_protocols_ieee80211_wire::rates::{LEGACY_RATES, LegacyRateSet, RateSelection};
 
 /// All legacy rates admitted by an association. Unlike
@@ -82,44 +82,6 @@ impl NegotiatedLegacyRates {
     }
 }
 
-/// A legacy rate as its place in the rate table, 1 to 12, so that one word
-/// carries it in four bits; DSSS and CCK rates at the long preamble, as an
-/// association's set admits them.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LegacyRateCode(u8);
-
-impl LegacyRateCode {
-    /// The code of `rate`, by its rate; `None` for a rate of no legacy
-    /// table entry.
-    pub fn of(rate: PhyRate) -> Option<Self> {
-        let PhyRate::Legacy(rate) = rate else {
-            return None;
-        };
-        let place = LEGACY_RATES
-            .iter()
-            .position(|(_, entry)| entry.kbps() == rate.kbps())?;
-        u8::try_from(place.checked_add(1)?).ok().map(Self)
-    }
-
-    /// The code `bits` names, 1 to 12; `None` for any other.
-    pub fn from_bits(bits: u8) -> Option<Self> {
-        let place = usize::from(bits).checked_sub(1)?;
-        LEGACY_RATES.get(place).map(|_| Self(bits))
-    }
-
-    pub const fn bits(self) -> u8 {
-        self.0
-    }
-
-    /// The rate the code names.
-    pub fn rate(self) -> Option<PhyRate> {
-        let place = usize::from(self.0).checked_sub(1)?;
-        LEGACY_RATES
-            .get(place)
-            .map(|(_, rate)| PhyRate::Legacy(*rate))
-    }
-}
-
 /// The fastest rate of `set` no faster than `proposed`, or its slowest if
 /// all exceed it; `proposed` itself when admitted. One pass, each the first
 /// of equals.
@@ -163,18 +125,6 @@ mod tests {
         assert_eq!(basic_dsss.slowest(), LegacyRate::Dsss1M);
         let from_two = NegotiatedLegacyRates::from_rate_elements(&[0x84, 0x0c], &[]).unwrap();
         assert_eq!(from_two.slowest(), LegacyRate::Dsss2M(DsssPreamble::Long));
-    }
-
-    #[test]
-    fn a_legacy_rate_code_names_its_rate_and_nothing_else() {
-        for (place, (_, rate)) in LEGACY_RATES.iter().enumerate() {
-            let code = LegacyRateCode::of(PhyRate::Legacy(*rate)).unwrap();
-            assert_eq!(usize::from(code.bits()), place + 1);
-            assert_eq!(code.rate(), Some(PhyRate::Legacy(*rate)));
-            assert_eq!(LegacyRateCode::from_bits(code.bits()), Some(code));
-        }
-        assert_eq!(LegacyRateCode::from_bits(0), None);
-        assert_eq!(LegacyRateCode::from_bits(13), None);
     }
 
     #[test]

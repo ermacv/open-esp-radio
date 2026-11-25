@@ -22,7 +22,7 @@ use {
 };
 
 mod legacy;
-pub use legacy::{LegacyRateCode, NegotiatedLegacyRates};
+pub use legacy::NegotiatedLegacyRates;
 
 /// What a controller knows of the peer it sends to: the PHY mode of the
 /// link and the peer's receive capabilities.

@@ -59,7 +59,7 @@ pub mod retry;
 pub mod sequence;
 
 pub use ampdu::AmpduRetryPolicy;
-pub use protection::{HeTxopRtsBudget, ProtectEveryHeTxop, ProtectionPolicy, RtsThreshold};
+pub use protection::{HeTxopRtsBudget, ProtectionPolicy, RtsThreshold};
 pub use retry::{AckFailureAccounting, RateLadder, RetryLimits};
 
 pub mod block_ack;

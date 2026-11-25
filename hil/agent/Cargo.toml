@@ -17,7 +17,6 @@ oer-protocols-hil-agent = { path = "../../protocols/hil/agent", default-features
 oer-chips-esp32s31-platform-runtime = { path = "../../chips/esp32s31/platform/runtime" }
 oer-chips-family-platform-runtime = { path = "../../chips/family/platform/runtime" }
 oer-portable-riscv = { path = "../../portable/riscv" }
-embassy-futures = "0.1.2"
 embedded-io-async = "0.7.0"
 
 [lints]

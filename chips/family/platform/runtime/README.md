@@ -143,8 +143,7 @@ A losing terminal requests reset without invoking another recorder.
 Every staged fault slot uses `oer-portable-diagnostics::fault::Record`, layout version 1:
 eight numeric header words (completion, version, payload length, registry class,
 domain, reason, captured hart or an unavailable sentinel, and context), 280
-payload bytes and a checksum, 316 bytes in total. The largest payload is the existing HIL postmortem snapshot. Commit
-publishes completion last; unsupported versions, oversized payloads and corrupt
+payload bytes and a checksum, 316 bytes in total. Commit publishes completion last; unsupported versions, oversized payloads and corrupt
 records return typed errors. There is no previous-layout decoder.
 
 `panic::peek_previous` only reads: it returns a retained panic and writes or
@@ -155,8 +154,8 @@ image reporters likewise clear only after their complete output went out whole
 (`oer_portable_diagnostics::Written::Whole`: the FIFO took every byte and sending
 started, the host's receipt is not observed). A dropped, refused or partly
 written report keeps the record for a later boot.
-HIL acknowledges its platform panic and postmortem after the full boot-evidence
-frame and CRLF are written. Output refusal retains diagnostic bytes. A new boot's
+The HIL console serves the panic and the exception the boot read before its
+report printed and cleared them. Output refusal retains diagnostic bytes. A new boot's
 first terminal may replace an unreported older record. Retention is best effort;
 checksums are not a power-loss or `ResetRtc` retention guarantee.
 

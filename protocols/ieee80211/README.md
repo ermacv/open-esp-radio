@@ -35,7 +35,7 @@ and the runtime's `drive` carries its steps out on the port.
 | `wire/src/data.rs` | MSDU fields (`MsduHeader`, `MsduParts`), data encapsulation plans, MSDU and A-MSDU decapsulation |
 | `wire/src/station/data.rs` | Data codecs, with A-MSDU framing in `station/data/amsdu.rs` |
 | `wire/src/sequence.rs` | Twelve-bit sequence numbers: the checked Sequence Number subfield |
-| `core/upper-mac/src/sequence.rs` | Modulo-4096 sequence arithmetic (`SequenceSpace`) and the separate management/non-QoS and per-TID TX sequence owners of the station and the access point |
+| `core/upper-mac/src/sequence.rs` | Modulo-4096 sequence arithmetic (`SequenceSpace`) and the owner of one transmit sequence space (`SequenceCounter`) |
 | `core/upper-mac/src/ccmp.rs` | CCMP transmit packet numbers and the receive replay frontier of every CCMP user |
 | `contracts/security` | The CCMP-128 temporal-key owner that RSN, the port, the software cipher and a backend share |
 | `core/security/rsn/src/pmksa.rs` | The PMKSA cache of the station and of the access point |

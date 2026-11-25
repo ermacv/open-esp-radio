@@ -2,7 +2,7 @@
 //! No old-layout decoder is provided. Integrity detects damaged bytes; it does
 //! not guarantee retention or an atomic commit across a loss of power.
 
-/// Largest existing observation: the 280-byte HIL postmortem payload.
+/// The octets of observation one record holds.
 pub const PAYLOAD_BYTES: usize = 280;
 pub const VERSION: u32 = 1;
 /// No hart sample was supplied by a pure payload encoder. InvalidHart records

@@ -36,22 +36,6 @@ pub trait HeTxopRtsBudget {
     ) -> u16;
 }
 
-/// No duration estimate: every HE PPDU to an individual receiver is
-/// protected while the BSS advertises a threshold.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct ProtectEveryHeTxop;
-
-impl HeTxopRtsBudget for ProtectEveryHeTxop {
-    fn max_unprotected_apep_bytes(
-        &self,
-        _threshold: HeTxopDurationRtsThreshold,
-        _padding: HePacketPadding,
-        _rate: HeRate,
-    ) -> u16 {
-        0
-    }
-}
-
 impl<B: HeTxopRtsBudget + ?Sized> HeTxopRtsBudget for &B {
     fn max_unprotected_apep_bytes(
         &self,
@@ -183,7 +167,7 @@ impl ProtectionPolicy {
 
     /// The exchange the BSS's HE TXOP Duration RTS Threshold asks before
     /// an individually addressed PPDU at `rate` when the transmitter
-    /// estimates no TXOP duration ([`ProtectEveryHeTxop`]): RTS/CTS at the
+    /// estimates no TXOP duration: RTS/CTS at the
     /// control rate for an HE rate, a single MPDU or an A-MPDU alike, while
     /// the BSS advertises a threshold; no exchange otherwise. The ERP, HT
     /// and length rules of [`Self::select`] take no part.
