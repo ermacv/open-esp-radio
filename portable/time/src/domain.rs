@@ -1,10 +1,10 @@
-//! Checked time in a radio owner's domain and epoch.
+//! Checked time of one named clock, in its epoch.
 //!
-//! Each owner names its domain `D`, an empty type its package declares.
-//! Instants of different domains cannot be compared or subtracted. The
-//! owner validates any additional interface, instance or generation identity.
-//! Raw radio microseconds establish no relation to image-monotonic or
-//! wall-clock time; conversion belongs to the existing clock relations.
+//! A clock's domain `D` is an empty type its owner declares. Instants of
+//! different domains cannot be compared or subtracted. The owner validates
+//! any additional interface, instance or generation identity. Raw
+//! microseconds of one domain establish no relation to another's; conversion
+//! belongs to the clock relations.
 //!
 //! Instants and non-negative durations span the full `u64` microsecond
 //! range. Checked arithmetic returns `None` for an unrepresentable result.
@@ -19,44 +19,46 @@ use core::{
     num::NonZeroU64,
 };
 
-/// A microsecond coordinate in the radio domain and epoch owned by `D`.
+/// An instant of the clock of domain `D`, in microseconds of its epoch.
 ///
-/// The coordinate alone establishes neither an image-monotonic nor a
-/// wall-clock relationship. The owner validates interface, instance and
+/// The coordinate alone establishes no relation to another clock. The owner validates interface, instance and
 /// generation identity where needed.
 ///
 /// Ordering and elapsed-time arithmetic require the same domain, without
 /// requiring the domain marker itself to implement `Copy` or `Ord`:
 ///
 /// ```
-/// use oer_portable_time::{RadioDuration, RadioInstant};
+/// use oer_portable_time::{DomainDuration, DomainInstant};
 ///
 /// enum Radio {}
-/// let earlier = RadioInstant::<Radio>::from_micros(10);
-/// let later = RadioInstant::<Radio>::from_micros(30);
+/// let earlier = DomainInstant::<Radio>::from_micros(10);
+/// let later = DomainInstant::<Radio>::from_micros(30);
 /// assert!(earlier < later);
-/// assert_eq!(later.checked_duration_since(earlier), Some(RadioDuration::from_micros(20)));
+/// assert_eq!(later.checked_duration_since(earlier), Some(DomainDuration::from_micros(20)));
 /// ```
 ///
 /// Different domains cannot be ordered:
 ///
 /// ```compile_fail,E0308
-/// use oer_portable_time::RadioInstant;
+/// use oer_portable_time::DomainInstant;
 ///
 /// enum FirstRadio {}
 /// enum SecondRadio {}
-/// let first = RadioInstant::<FirstRadio>::from_micros(10);
-/// let second = RadioInstant::<SecondRadio>::from_micros(30);
+/// let first = DomainInstant::<FirstRadio>::from_micros(10);
+/// let second = DomainInstant::<SecondRadio>::from_micros(30);
 /// let _ = first < second;
 /// ```
 #[repr(transparent)]
-pub struct RadioInstant<D> {
+pub struct DomainInstant<D> {
     micros: u64,
     domain: PhantomData<fn() -> D>,
 }
 
-impl<D> RadioInstant<D> {
-    /// Construct a coordinate from microseconds in this radio epoch.
+impl<D> DomainInstant<D> {
+    /// The epoch of the domain's clock.
+    pub const EPOCH: Self = Self::from_micros(0);
+
+    /// Construct a coordinate from microseconds in the domain's epoch.
     pub const fn from_micros(micros: u64) -> Self {
         Self {
             micros,
@@ -64,14 +66,14 @@ impl<D> RadioInstant<D> {
         }
     }
 
-    /// The radio coordinate in microseconds, for formula or representation
+    /// The coordinate in microseconds, for formula or representation
     /// boundaries.
     pub const fn as_micros(self) -> u64 {
         self.micros
     }
 
     /// The instant `duration` later, or `None` on overflow.
-    pub const fn checked_add(self, duration: RadioDuration<D>) -> Option<Self> {
+    pub const fn checked_add(self, duration: DomainDuration<D>) -> Option<Self> {
         match self.micros.checked_add(duration.micros) {
             Some(micros) => Some(Self::from_micros(micros)),
             None => None,
@@ -79,7 +81,7 @@ impl<D> RadioInstant<D> {
     }
 
     /// The instant `duration` earlier, or `None` before epoch zero.
-    pub const fn checked_sub(self, duration: RadioDuration<D>) -> Option<Self> {
+    pub const fn checked_sub(self, duration: DomainDuration<D>) -> Option<Self> {
         match self.micros.checked_sub(duration.micros) {
             Some(micros) => Some(Self::from_micros(micros)),
             None => None,
@@ -89,115 +91,114 @@ impl<D> RadioInstant<D> {
     /// The span from `earlier` to `self`, or `None` when `earlier` is later.
     /// Equal instants yield a zero duration.
     ///
-    /// Subtraction across radio domains is rejected:
+    /// Subtraction across domains is rejected:
     ///
     /// ```compile_fail,E0308
-    /// use oer_portable_time::RadioInstant;
+    /// use oer_portable_time::DomainInstant;
     ///
     /// enum FirstRadio {}
     /// enum SecondRadio {}
-    /// let earlier = RadioInstant::<FirstRadio>::from_micros(10);
-    /// let later = RadioInstant::<SecondRadio>::from_micros(30);
+    /// let earlier = DomainInstant::<FirstRadio>::from_micros(10);
+    /// let later = DomainInstant::<SecondRadio>::from_micros(30);
     /// let _ = later.checked_duration_since(earlier);
     /// ```
-    pub const fn checked_duration_since(self, earlier: Self) -> Option<RadioDuration<D>> {
+    pub const fn checked_duration_since(self, earlier: Self) -> Option<DomainDuration<D>> {
         match self.micros.checked_sub(earlier.micros) {
-            Some(micros) => Some(RadioDuration::from_micros(micros)),
+            Some(micros) => Some(DomainDuration::from_micros(micros)),
             None => None,
         }
     }
 }
 
-impl<D> Clone for RadioInstant<D> {
+impl<D> Clone for DomainInstant<D> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<D> Copy for RadioInstant<D> {}
+impl<D> Copy for DomainInstant<D> {}
 
-impl<D> PartialEq for RadioInstant<D> {
+impl<D> PartialEq for DomainInstant<D> {
     fn eq(&self, other: &Self) -> bool {
         self.micros == other.micros
     }
 }
 
-impl<D> Eq for RadioInstant<D> {}
+impl<D> Eq for DomainInstant<D> {}
 
-impl<D> PartialOrd for RadioInstant<D> {
+impl<D> PartialOrd for DomainInstant<D> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<D> Ord for RadioInstant<D> {
+impl<D> Ord for DomainInstant<D> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.micros.cmp(&other.micros)
     }
 }
 
-impl<D> Hash for RadioInstant<D> {
+impl<D> Hash for DomainInstant<D> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.micros.hash(state);
     }
 }
 
-impl<D> fmt::Debug for RadioInstant<D> {
+impl<D> fmt::Debug for DomainInstant<D> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_tuple("RadioInstant")
+            .debug_tuple("DomainInstant")
             .field(&self.micros)
             .finish()
     }
 }
 
-/// A non-negative span of the radio domain `D`, from zero through
-/// `u64::MAX` microseconds.
+/// A non-negative span of the domain `D`, from zero through `u64::MAX`
+/// microseconds.
 ///
 /// A span belongs to the domain whose instants it separates, as
-/// [`RadioInstant`] does: it adds only to an instant of that domain and
-/// combines only with spans of that domain. It is not a monotonic
-/// [`Duration`](crate::Duration); a conversion exists only where a clock
-/// relation between the two domains is defined. Arithmetic rejects
-/// unrepresentable results instead of wrapping or clamping.
+/// [`DomainInstant`] does: it adds only to an instant of that domain and
+/// combines only with spans of that domain. A conversion exists only where a
+/// clock relation between the two domains is defined. Checked arithmetic
+/// rejects unrepresentable results instead of wrapping or clamping.
 ///
 /// ```
-/// use oer_portable_time::{RadioDuration, RadioInstant};
+/// use oer_portable_time::{DomainDuration, DomainInstant};
 ///
 /// enum Radio {}
-/// let start = RadioInstant::<Radio>::from_micros(10);
-/// let span = RadioDuration::<Radio>::from_micros(20);
-/// assert_eq!(start.checked_add(span), Some(RadioInstant::from_micros(30)));
+/// let start = DomainInstant::<Radio>::from_micros(10);
+/// let span = DomainDuration::<Radio>::from_micros(20);
+/// assert_eq!(start.checked_add(span), Some(DomainInstant::from_micros(30)));
 /// ```
 ///
 /// A span of one domain does not move an instant of another:
 ///
 /// ```compile_fail,E0308
-/// use oer_portable_time::{RadioDuration, RadioInstant};
+/// use oer_portable_time::{DomainDuration, DomainInstant};
 ///
 /// enum FirstRadio {}
 /// enum SecondRadio {}
-/// let start = RadioInstant::<FirstRadio>::from_micros(10);
-/// let _ = start.checked_add(RadioDuration::<SecondRadio>::from_micros(20));
+/// let start = DomainInstant::<FirstRadio>::from_micros(10);
+/// let _ = start.checked_add(DomainDuration::<SecondRadio>::from_micros(20));
 /// ```
 ///
 /// Nor do spans of two domains combine:
 ///
 /// ```compile_fail,E0308
-/// use oer_portable_time::RadioDuration;
+/// use oer_portable_time::DomainDuration;
 ///
 /// enum FirstRadio {}
 /// enum SecondRadio {}
-/// let first = RadioDuration::<FirstRadio>::from_micros(10);
-/// let _ = first.checked_add(RadioDuration::<SecondRadio>::from_micros(20));
+/// let first = DomainDuration::<FirstRadio>::from_micros(10);
+/// let _ = first.checked_add(DomainDuration::<SecondRadio>::from_micros(20));
 /// ```
 #[repr(transparent)]
-pub struct RadioDuration<D> {
+pub struct DomainDuration<D> {
     micros: u64,
     domain: PhantomData<fn() -> D>,
 }
 
-impl<D> RadioDuration<D> {
+impl<D> DomainDuration<D> {
     /// The empty span.
     pub const ZERO: Self = Self::from_micros(0);
 
@@ -207,6 +208,18 @@ impl<D> RadioDuration<D> {
             micros,
             domain: PhantomData,
         }
+    }
+
+    /// Construct a duration from milliseconds; every `u32` fits.
+    pub const fn from_millis(millis: u32) -> Self {
+        // A `u32` of milliseconds is below 2^42 microseconds.
+        Self::from_micros((millis as u64).saturating_mul(1_000))
+    }
+
+    /// Construct a duration from seconds; every `u32` fits.
+    pub const fn from_secs(secs: u32) -> Self {
+        // A `u32` of seconds is below 2^52 microseconds.
+        Self::from_micros((secs as u64).saturating_mul(1_000_000))
     }
 
     /// Microseconds, for formula or representation boundaries.
@@ -248,64 +261,64 @@ impl<D> RadioDuration<D> {
     }
 }
 
-impl<D> Clone for RadioDuration<D> {
+impl<D> Clone for DomainDuration<D> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<D> Copy for RadioDuration<D> {}
+impl<D> Copy for DomainDuration<D> {}
 
-impl<D> Default for RadioDuration<D> {
+impl<D> Default for DomainDuration<D> {
     fn default() -> Self {
         Self::ZERO
     }
 }
 
-impl<D> PartialEq for RadioDuration<D> {
+impl<D> PartialEq for DomainDuration<D> {
     fn eq(&self, other: &Self) -> bool {
         self.micros == other.micros
     }
 }
 
-impl<D> Eq for RadioDuration<D> {}
+impl<D> Eq for DomainDuration<D> {}
 
-impl<D> PartialOrd for RadioDuration<D> {
+impl<D> PartialOrd for DomainDuration<D> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<D> Ord for RadioDuration<D> {
+impl<D> Ord for DomainDuration<D> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.micros.cmp(&other.micros)
     }
 }
 
-impl<D> Hash for RadioDuration<D> {
+impl<D> Hash for DomainDuration<D> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.micros.hash(state);
     }
 }
 
-impl<D> fmt::Debug for RadioDuration<D> {
+impl<D> fmt::Debug for DomainDuration<D> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_tuple("RadioDuration")
+            .debug_tuple("DomainDuration")
             .field(&self.micros)
             .finish()
     }
 }
 
-/// A span of the radio domain `D` of at least one microsecond: the duration
+/// A span of the domain `D` of at least one microsecond: the duration
 /// of a window that cannot be empty.
 #[repr(transparent)]
-pub struct NonZeroRadioDuration<D> {
+pub struct NonZeroDomainDuration<D> {
     micros: NonZeroU64,
     domain: PhantomData<fn() -> D>,
 }
 
-impl<D> NonZeroRadioDuration<D> {
+impl<D> NonZeroDomainDuration<D> {
     /// Construct a duration from a non-zero count of microseconds.
     pub const fn from_micros(micros: NonZeroU64) -> Self {
         Self {
@@ -315,7 +328,7 @@ impl<D> NonZeroRadioDuration<D> {
     }
 
     /// The span, or `None` when it is zero.
-    pub const fn new(duration: RadioDuration<D>) -> Option<Self> {
+    pub const fn new(duration: DomainDuration<D>) -> Option<Self> {
         match NonZeroU64::new(duration.micros) {
             Some(micros) => Some(Self::from_micros(micros)),
             None => None,
@@ -323,12 +336,12 @@ impl<D> NonZeroRadioDuration<D> {
     }
 
     /// The span as a possibly-zero duration.
-    pub const fn get(self) -> RadioDuration<D> {
-        RadioDuration::from_micros(self.micros.get())
+    pub const fn get(self) -> DomainDuration<D> {
+        DomainDuration::from_micros(self.micros.get())
     }
 
     /// The sum, or `None` past `u64::MAX` microseconds.
-    pub const fn checked_add(self, other: RadioDuration<D>) -> Option<Self> {
+    pub const fn checked_add(self, other: DomainDuration<D>) -> Option<Self> {
         match self.micros.checked_add(other.micros) {
             Some(micros) => Some(Self::from_micros(micros)),
             None => None,
@@ -336,46 +349,112 @@ impl<D> NonZeroRadioDuration<D> {
     }
 }
 
-impl<D> Clone for NonZeroRadioDuration<D> {
+impl<D> Clone for NonZeroDomainDuration<D> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<D> Copy for NonZeroRadioDuration<D> {}
+impl<D> Copy for NonZeroDomainDuration<D> {}
 
-impl<D> PartialEq for NonZeroRadioDuration<D> {
+impl<D> PartialEq for NonZeroDomainDuration<D> {
     fn eq(&self, other: &Self) -> bool {
         self.micros == other.micros
     }
 }
 
-impl<D> Eq for NonZeroRadioDuration<D> {}
+impl<D> Eq for NonZeroDomainDuration<D> {}
 
-impl<D> PartialOrd for NonZeroRadioDuration<D> {
+impl<D> PartialOrd for NonZeroDomainDuration<D> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<D> Ord for NonZeroRadioDuration<D> {
+impl<D> Ord for NonZeroDomainDuration<D> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.micros.cmp(&other.micros)
     }
 }
 
-impl<D> Hash for NonZeroRadioDuration<D> {
+impl<D> Hash for NonZeroDomainDuration<D> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.micros.hash(state);
     }
 }
 
-impl<D> fmt::Debug for NonZeroRadioDuration<D> {
+impl<D> fmt::Debug for NonZeroDomainDuration<D> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_tuple("NonZeroRadioDuration")
+            .debug_tuple("NonZeroDomainDuration")
             .field(&self.micros)
             .finish()
+    }
+}
+
+/// The image's monotonic clock: the one clock every executor task waits on.
+pub enum Monotonic {}
+
+/// A point on the image's monotonic time, in microseconds since the epoch
+/// of its [`Clock`](crate::Clock).
+///
+/// An instant of another domain is not monotonic time:
+///
+/// ```compile_fail,E0308
+/// use oer_portable_time::{DomainInstant, Instant};
+///
+/// enum Radio {}
+/// let _: Instant = DomainInstant::<Radio>::from_micros(10);
+/// ```
+pub type Instant = DomainInstant<Monotonic>;
+
+/// A non-negative span of monotonic time, in microseconds.
+pub type Duration = DomainDuration<Monotonic>;
+
+/// What only a deadline may use. The other domains' arithmetic never
+/// saturates:
+///
+/// ```compile_fail,E0599
+/// use oer_portable_time::{DomainDuration, DomainInstant};
+///
+/// enum Radio {}
+/// let start = DomainInstant::<Radio>::from_micros(10);
+/// let _ = start.saturating_add(DomainDuration::from_micros(20));
+/// ```
+impl DomainInstant<Monotonic> {
+    /// The deadline `duration` later, or the end of representable time when
+    /// it lies past it: such a deadline never comes, and `u64` microseconds
+    /// outlast any image. Use it for deadlines, never to measure time.
+    pub const fn saturating_add(self, duration: Duration) -> Self {
+        Self::from_micros(self.micros.saturating_add(duration.micros))
+    }
+
+    /// The time from `earlier` to `self`, zero when `earlier` is later.
+    ///
+    /// ```compile_fail,E0599
+    /// use oer_portable_time::DomainInstant;
+    ///
+    /// enum Radio {}
+    /// let start = DomainInstant::<Radio>::from_micros(10);
+    /// let _ = start.saturating_duration_since(start);
+    /// ```
+    pub const fn saturating_duration_since(self, earlier: Self) -> Duration {
+        Duration::from_micros(self.micros.saturating_sub(earlier.micros))
+    }
+}
+
+impl DomainDuration<Monotonic> {
+    /// The difference, zero when `other` is longer.
+    ///
+    /// ```compile_fail,E0599
+    /// use oer_portable_time::DomainDuration;
+    ///
+    /// enum Radio {}
+    /// let span = DomainDuration::<Radio>::from_micros(10);
+    /// let _ = span.saturating_sub(span);
+    /// ```
+    pub const fn saturating_sub(self, other: Self) -> Self {
+        Self::from_micros(self.micros.saturating_sub(other.micros))
     }
 }
 
@@ -389,36 +468,34 @@ pub enum WindowError {
 }
 
 /// A non-empty interval `[start, start + duration)` reserved for one event
-/// on the clock of the port of domain `D`.
+/// on the clock of domain `D`.
 ///
-/// Construction validates the exclusive endpoint against the full radio
-/// epoch. A valid window's [`end`](Self::end) is always representable. Its
+/// Construction validates the exclusive endpoint against the full epoch. A valid window's [`end`](Self::end) is always representable. Its
 /// duration is a span of the same domain:
 ///
 /// ```compile_fail,E0308
-/// use oer_portable_time::{RadioDuration, RadioInstant, RadioWindow};
+/// use oer_portable_time::{DomainDuration, DomainInstant, DomainWindow};
 ///
 /// enum FirstRadio {}
 /// enum SecondRadio {}
-/// let _ = RadioWindow::new(
-///     RadioInstant::<FirstRadio>::from_micros(10),
-///     RadioDuration::<SecondRadio>::from_micros(20),
+/// let _ = DomainWindow::new(
+///     DomainInstant::<FirstRadio>::from_micros(10),
+///     DomainDuration::<SecondRadio>::from_micros(20),
 /// );
 /// ```
-pub struct RadioWindow<D> {
-    start: RadioInstant<D>,
-    duration: RadioDuration<D>,
-    end: RadioInstant<D>,
+pub struct DomainWindow<D> {
+    start: DomainInstant<D>,
+    end: DomainInstant<D>,
 }
 
-impl<D> RadioWindow<D> {
+impl<D> DomainWindow<D> {
     /// Reserve `duration` from `start`.
     ///
     /// Zero duration returns [`WindowError::Empty`]; an unrepresentable
     /// exclusive endpoint returns [`WindowError::Overflow`].
     pub const fn new(
-        start: RadioInstant<D>,
-        duration: RadioDuration<D>,
+        start: DomainInstant<D>,
+        duration: DomainDuration<D>,
     ) -> Result<Self, WindowError> {
         if duration.micros == 0 {
             return Err(WindowError::Empty);
@@ -427,19 +504,15 @@ impl<D> RadioWindow<D> {
             Some(end) => end,
             None => return Err(WindowError::Overflow),
         };
-        Ok(Self {
-            start,
-            duration,
-            end,
-        })
+        Ok(Self { start, end })
     }
 
     /// Reserve a non-zero `duration` from `start`, or `None` when the
     /// exclusive endpoint lies past the epoch: the only way such a window can
     /// fail.
     pub const fn nonempty(
-        start: RadioInstant<D>,
-        duration: NonZeroRadioDuration<D>,
+        start: DomainInstant<D>,
+        duration: NonZeroDomainDuration<D>,
     ) -> Option<Self> {
         match Self::new(start, duration.get()) {
             Ok(window) => Some(window),
@@ -450,34 +523,28 @@ impl<D> RadioWindow<D> {
     /// The same window, starting `lead` earlier and ending where it ends, or
     /// `None` when the earlier start precedes the epoch: the only way it can
     /// fail, since the end stays representable.
-    pub const fn extended_before(self, lead: RadioDuration<D>) -> Option<Self> {
+    pub const fn extended_before(self, lead: DomainDuration<D>) -> Option<Self> {
         match self.start.checked_sub(lead) {
-            // `start + duration` is representable, so `lead + duration`,
-            // which ends at the same instant from an earlier start, is too.
-            Some(start) => match self.duration.checked_add(lead) {
-                Some(duration) => Some(Self {
-                    start,
-                    duration,
-                    end: self.end,
-                }),
-                None => None,
-            },
+            Some(start) => Some(Self {
+                start,
+                end: self.end,
+            }),
             None => None,
         }
     }
 
     /// First reserved instant.
-    pub const fn start(self) -> RadioInstant<D> {
+    pub const fn start(self) -> DomainInstant<D> {
         self.start
     }
 
-    /// Reserved span.
-    pub const fn duration(self) -> RadioDuration<D> {
-        self.duration
+    /// Reserved span. The end lies past the start, so it never wraps.
+    pub const fn duration(self) -> DomainDuration<D> {
+        DomainDuration::from_micros(self.end.micros.wrapping_sub(self.start.micros))
     }
 
     /// First instant after the window.
-    pub const fn end(self) -> RadioInstant<D> {
+    pub const fn end(self) -> DomainInstant<D> {
         self.end
     }
 
@@ -487,57 +554,59 @@ impl<D> RadioWindow<D> {
     }
 }
 
-impl<D> Clone for RadioWindow<D> {
+impl<D> Clone for DomainWindow<D> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<D> Copy for RadioWindow<D> {}
+impl<D> Copy for DomainWindow<D> {}
 
-impl<D> PartialEq for RadioWindow<D> {
+impl<D> PartialEq for DomainWindow<D> {
     fn eq(&self, other: &Self) -> bool {
-        self.start == other.start && self.duration == other.duration
+        self.start == other.start && self.end == other.end
     }
 }
 
-impl<D> Eq for RadioWindow<D> {}
+impl<D> Eq for DomainWindow<D> {}
 
-impl<D> Hash for RadioWindow<D> {
+impl<D> Hash for DomainWindow<D> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.start.hash(state);
-        self.duration.hash(state);
+        self.end.hash(state);
     }
 }
 
-impl<D> fmt::Debug for RadioWindow<D> {
+impl<D> fmt::Debug for DomainWindow<D> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("RadioWindow")
+            .debug_struct("DomainWindow")
             .field("start", &self.start)
-            .field("duration", &self.duration)
+            .field("end", &self.end)
             .finish()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{NonZeroRadioDuration, RadioDuration, RadioInstant, RadioWindow, WindowError};
+    extern crate std;
+
+    use super::{DomainDuration, DomainInstant, DomainWindow, NonZeroDomainDuration, WindowError};
     use core::num::NonZeroU64;
 
     /// A test port's domain.
     enum Port {}
 
-    const fn instant(micros: u64) -> RadioInstant<Port> {
-        RadioInstant::from_micros(micros)
+    const fn instant(micros: u64) -> DomainInstant<Port> {
+        DomainInstant::from_micros(micros)
     }
 
-    const fn duration(micros: u64) -> RadioDuration<Port> {
-        RadioDuration::from_micros(micros)
+    const fn duration(micros: u64) -> DomainDuration<Port> {
+        DomainDuration::from_micros(micros)
     }
 
-    fn window(start: u64, micros: u64) -> RadioWindow<Port> {
-        RadioWindow::new(instant(start), duration(micros)).unwrap()
+    fn window(start: u64, micros: u64) -> DomainWindow<Port> {
+        DomainWindow::new(instant(start), duration(micros)).unwrap()
     }
 
     #[test]
@@ -648,17 +717,17 @@ mod tests {
     }
 
     #[test]
-    fn checked_radio_arithmetic_is_available_in_const_contexts() {
-        const SUM: Option<RadioDuration<Port>> = duration(10).checked_add(duration(20));
-        const DIFFERENCE: Option<RadioDuration<Port>> = duration(20).checked_sub(duration(10));
-        const PRODUCT: Option<RadioDuration<Port>> = duration(10).checked_mul(3);
-        const LATER: Option<RadioInstant<Port>> = instant(10).checked_add(duration(20));
-        const EARLIER: Option<RadioInstant<Port>> = instant(20).checked_sub(duration(10));
-        const ELAPSED: Option<RadioDuration<Port>> =
+    fn checked_arithmetic_is_available_in_const_contexts() {
+        const SUM: Option<DomainDuration<Port>> = duration(10).checked_add(duration(20));
+        const DIFFERENCE: Option<DomainDuration<Port>> = duration(20).checked_sub(duration(10));
+        const PRODUCT: Option<DomainDuration<Port>> = duration(10).checked_mul(3);
+        const LATER: Option<DomainInstant<Port>> = instant(10).checked_add(duration(20));
+        const EARLIER: Option<DomainInstant<Port>> = instant(20).checked_sub(duration(10));
+        const ELAPSED: Option<DomainDuration<Port>> =
             instant(u64::MAX).checked_duration_since(instant(0));
-        const WINDOW: Result<RadioWindow<Port>, WindowError> =
-            RadioWindow::new(instant(0), duration(u64::MAX));
-        const END: RadioInstant<Port> = match WINDOW {
+        const WINDOW: Result<DomainWindow<Port>, WindowError> =
+            DomainWindow::new(instant(0), duration(u64::MAX));
+        const END: DomainInstant<Port> = match WINDOW {
             Ok(window) => window.end(),
             Err(_) => panic!("the full-epoch window is representable"),
         };
@@ -675,13 +744,13 @@ mod tests {
     fn windows_validate_duration_and_the_exclusive_endpoint() {
         for start in [0, 5, u64::MAX] {
             assert_eq!(
-                RadioWindow::new(instant(start), duration(0)),
+                DomainWindow::new(instant(start), duration(0)),
                 Err(WindowError::Empty)
             );
         }
         for (start, micros) in [(u64::MAX, 1), (u64::MAX - 1, 2), (1, u64::MAX)] {
             assert_eq!(
-                RadioWindow::new(instant(start), duration(micros)),
+                DomainWindow::new(instant(start), duration(micros)),
                 Err(WindowError::Overflow)
             );
         }
@@ -720,56 +789,118 @@ mod tests {
         assert_eq!(duration(25).checked_rem(duration(10)), Some(duration(5)));
         assert_eq!(duration(20).checked_rem(duration(10)), Some(duration(0)));
         assert_eq!(duration(5).checked_rem(duration(0)), None);
-        assert_eq!(RadioDuration::<Port>::default(), RadioDuration::ZERO);
+        assert_eq!(DomainDuration::<Port>::default(), DomainDuration::ZERO);
     }
 
     #[test]
     fn a_nonempty_window_fails_only_past_the_epoch() {
         enum D {}
-        let one = NonZeroRadioDuration::from_micros(NonZeroU64::MIN);
+        let one = NonZeroDomainDuration::from_micros(NonZeroU64::MIN);
         assert_eq!(
-            NonZeroRadioDuration::new(RadioDuration::<D>::from_micros(0)),
+            NonZeroDomainDuration::new(DomainDuration::<D>::from_micros(0)),
             None
         );
         assert_eq!(
-            NonZeroRadioDuration::new(RadioDuration::from_micros(1)),
+            NonZeroDomainDuration::new(DomainDuration::from_micros(1)),
             Some(one)
         );
-        let last = RadioWindow::<D>::nonempty(RadioInstant::from_micros(u64::MAX - 1), one)
+        let last = DomainWindow::<D>::nonempty(DomainInstant::from_micros(u64::MAX - 1), one)
             .expect("ends at the last instant");
         assert_eq!(last.end().as_micros(), u64::MAX);
-        assert!(RadioWindow::<D>::nonempty(RadioInstant::from_micros(u64::MAX), one).is_none());
+        assert!(DomainWindow::<D>::nonempty(DomainInstant::from_micros(u64::MAX), one).is_none());
         assert_eq!(
-            one.checked_add(RadioDuration::from_micros(u64::MAX - 1))
+            one.checked_add(DomainDuration::from_micros(u64::MAX - 1))
                 .map(|d| d.get().as_micros()),
             Some(u64::MAX)
         );
-        assert_eq!(one.checked_add(RadioDuration::from_micros(u64::MAX)), None);
+        assert_eq!(one.checked_add(DomainDuration::from_micros(u64::MAX)), None);
     }
 
     #[test]
     fn extending_a_window_before_keeps_its_end_and_fails_only_before_the_epoch() {
         enum D {}
-        let whole = RadioWindow::<D>::new(
-            RadioInstant::from_micros(10),
-            RadioDuration::from_micros(u64::MAX - 10),
+        let whole = DomainWindow::<D>::new(
+            DomainInstant::from_micros(10),
+            DomainDuration::from_micros(u64::MAX - 10),
         )
         .unwrap();
         let extended = whole
-            .extended_before(RadioDuration::from_micros(10))
+            .extended_before(DomainDuration::from_micros(10))
             .expect("starts at the epoch's first instant");
         assert_eq!(extended.start().as_micros(), 0);
         assert_eq!(extended.end().as_micros(), u64::MAX);
         assert_eq!(extended.duration().as_micros(), u64::MAX);
         assert!(
             whole
-                .extended_before(RadioDuration::from_micros(11))
+                .extended_before(DomainDuration::from_micros(11))
                 .is_none()
         );
         let same = whole
-            .extended_before(RadioDuration::from_micros(0))
+            .extended_before(DomainDuration::from_micros(0))
             .unwrap();
         assert_eq!(same.start().as_micros(), 10);
         assert_eq!(same.end().as_micros(), u64::MAX);
+    }
+
+    #[test]
+    fn a_window_is_its_start_and_its_end() {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
+        let hash = |window: DomainWindow<Port>| {
+            let mut hasher = DefaultHasher::new();
+            window.hash(&mut hasher);
+            hasher.finish()
+        };
+        let whole = window(10, 5);
+        assert_eq!(whole, window(10, 5));
+        assert_eq!(hash(whole), hash(window(10, 5)));
+        // The same start, the same end, and neither.
+        for other in [window(10, 6), window(9, 6), window(20, 5)] {
+            assert_ne!(whole, other);
+            assert_ne!(hash(whole), hash(other));
+        }
+    }
+
+    #[test]
+    fn a_value_prints_its_microseconds() {
+        use std::format;
+        assert_eq!(format!("{:?}", instant(7)), "DomainInstant(7)");
+        assert_eq!(format!("{:?}", duration(8)), "DomainDuration(8)");
+        assert_eq!(
+            format!(
+                "{:?}",
+                NonZeroDomainDuration::<Port>::from_micros(NonZeroU64::MIN)
+            ),
+            "NonZeroDomainDuration(1)"
+        );
+        assert_eq!(
+            format!("{:?}", window(1, 2)),
+            "DomainWindow { start: DomainInstant(1), end: DomainInstant(3) }"
+        );
+    }
+
+    #[test]
+    #[expect(clippy::clone_on_copy, reason = "the clone is what is checked")]
+    fn a_span_is_compared_hashed_and_cloned_by_its_microseconds() {
+        use core::cmp::Ordering;
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
+        fn hash<T: Hash>(value: T) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+        let nonzero = |micros| NonZeroDomainDuration::new(duration(micros)).unwrap();
+        assert_eq!(duration(3).clone(), duration(3));
+        assert_ne!(duration(3), duration(4));
+        assert_eq!(duration(3).partial_cmp(&duration(4)), Some(Ordering::Less));
+        assert_ne!(hash(duration(3)), hash(duration(4)));
+        assert_ne!(nonzero(3), nonzero(4));
+        assert_eq!(nonzero(4).partial_cmp(&nonzero(3)), Some(Ordering::Greater));
+        assert_ne!(hash(nonzero(3)), hash(nonzero(4)));
     }
 }

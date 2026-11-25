@@ -37,6 +37,7 @@
 #[cfg(any(test, all(feature = "test-support", not(target_os = "none"))))]
 extern crate std;
 
+mod clock;
 #[cfg(any(test, feature = "test-support"))]
 pub mod conformance;
 mod context;
@@ -45,7 +46,6 @@ mod identity;
 mod installations;
 pub mod lifecycle;
 pub mod pool;
-mod relation;
 pub mod slot;
 mod work;
 
@@ -62,14 +62,11 @@ pub use slot::{
 };
 pub use work::*;
 
+pub use clock::{ClockInfo, ClockSample, RadioStamp};
 pub use pool::{
     BodyLoan, Child, FifoPermitPool, Line, Mint, Permit, PermitPool, PermitSupply, PermitTokens,
     Permits, Place, Places, PoolBuilder, PoolPath, PoolSet, Pools, Root, Seat, Slot, SlotBank,
     SlotLayout, Slots, branded,
-};
-pub use relation::{
-    ClockInfo, ClockRelation, ClockSample, Generation, GenerationSource, Projected,
-    ProjectionError, RadioStamp, RelationRate, RelationSample, Stamp,
 };
 
 /// The result of a port call: `Ok(Ok(_))` served, `Ok(Err(refusal))`

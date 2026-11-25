@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Chip-neutral monotonic time, clock and timer contract for open ESP radio drivers"
+description = "The values of a clock domain, the relation of two domains, and the monotonic clock and timer ports"
 
 [dev-dependencies]
 oer-portable-time-virtual = { path = "../time-virtual" }

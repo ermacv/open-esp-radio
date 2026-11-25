@@ -10,10 +10,10 @@ use oer_protocols_ieee80211_wire::tsf::{TsfTimestamp, time_units_micros};
 pub enum Ieee80211Tsf {}
 
 /// An instant of a TSF, without the interface whose TSF it is.
-pub type TsfInstant = oer_portable_time::RadioInstant<Ieee80211Tsf>;
+pub type TsfInstant = oer_portable_time::DomainInstant<Ieee80211Tsf>;
 
 /// A span of a TSF: beacon intervals, TBTT leads and TWT periods.
-pub type TsfDuration = oer_portable_time::RadioDuration<Ieee80211Tsf>;
+pub type TsfDuration = oer_portable_time::DomainDuration<Ieee80211Tsf>;
 
 /// The length of `units` time units (TU) of 1024 µs of a TSF.
 pub const fn time_units(units: u16) -> TsfDuration {

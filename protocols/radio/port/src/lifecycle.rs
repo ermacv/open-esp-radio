@@ -13,7 +13,7 @@ use core::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
-use oer_portable_time::{Instant, RadioInstant};
+use oer_portable_time::{DomainInstant, Instant};
 
 /// The latest monotonic time, on the backend's clock, by which a stop must
 /// have ended; `None` leaves only the backend's own bounds. Each later stage
@@ -190,7 +190,7 @@ pub trait PortBackend<Id: SlotIdentity>: SlotBodyOwner<Id> {
     fn now<'a, 'p>(
         call: Call,
         view: &'a Self::View<'p>,
-    ) -> impl Future<Output = PortResult<RadioInstant<Self::Domain>, ClockError, Self::Fault>> + 'a
+    ) -> impl Future<Output = PortResult<DomainInstant<Self::Domain>, ClockError, Self::Fault>> + 'a
     where
         Self: 'p,
         Id: 'p,
@@ -477,7 +477,7 @@ impl<'a, 'p, Id: SlotIdentity + 'p, B: PortBackend<Id> + 'p, State> Owner<'a, 'p
     /// Read the backend's radio coordinate without changing admission.
     pub fn now(
         &self,
-    ) -> impl Future<Output = PortResult<RadioInstant<B::Domain>, ClockError, B::Fault>> + '_ {
+    ) -> impl Future<Output = PortResult<DomainInstant<B::Domain>, ClockError, B::Fault>> + '_ {
         B::now(Call::new(), self.view)
     }
     /// Publish quarantine and wake P2 immediately, without waiting or hardware access.

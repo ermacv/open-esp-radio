@@ -7,7 +7,7 @@ use core::{
     pin::{Pin, pin},
     task::{Context, Poll, Waker},
 };
-use oer_portable_time::{Clock, Duration, Instant, RadioInstant, Timer};
+use oer_portable_time::{Clock, DomainInstant, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use std::rc::Rc;
 
@@ -261,13 +261,13 @@ impl<Id: SlotIdentity> PortBackend<Id> for Backend<Id> {
     async fn now<'a, 'p>(
         _: Call,
         _: &'a View<'p, Id>,
-    ) -> PortResult<RadioInstant<()>, ClockError, u8>
+    ) -> PortResult<DomainInstant<()>, ClockError, u8>
     where
         Self: 'p,
         Id: 'p,
         'p: 'a,
     {
-        Ok(Ok(RadioInstant::from_micros(0)))
+        Ok(Ok(DomainInstant::from_micros(0)))
     }
     fn setup<'a, 'p>(_: Call, _: &'a mut View<'p, Id>)
     where

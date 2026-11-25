@@ -268,7 +268,7 @@ macro_rules! port {
                 async fn now<'a, 'p>(
                     _: Call,
                     _: &'a Self::View<'p>,
-                ) -> PortResult<oer_portable_time::RadioInstant<()>, ClockError, u32>
+                ) -> PortResult<oer_portable_time::DomainInstant<()>, ClockError, u32>
                 where
                     Self: 'p,
                     Id: 'p,

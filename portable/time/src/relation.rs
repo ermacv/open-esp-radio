@@ -1,9 +1,7 @@
 //! One relation between two clock domains, and the one projection that
 //! carries time across it.
 //!
-//! A port's radio clock and the image's monotonic clock are one such pair;
-//! an IEEE 802.11 interface's TSF and the port's radio clock are another.
-//! Both use the types here: a [`ClockRelation`] states how the two clocks
+//! A [`ClockRelation`] states how the two clocks
 //! advance, a [`RelationSample`] pairs one reading of each in a
 //! [`Generation`] of the relation, and [`ClockRelation::project`] and
 //! [`ClockRelation::project_back`] carry a coordinate across with its
@@ -15,7 +13,7 @@ use core::{
     marker::PhantomData,
 };
 
-use oer_portable_time::{Coordinate, Duration, Instant, RadioInstant};
+use crate::{DomainDuration, DomainInstant, Duration};
 
 /// How the clocks of two domains advance relative to each other.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -40,14 +38,15 @@ pub enum RelationRate {
 /// A relation of another pair does not project this pair's samples:
 ///
 /// ```compile_fail,E0308
-/// use oer_protocols_radio_port::{ClockRelation, GenerationSource, RelationSample};
-/// use oer_portable_time::{Duration, Instant, RadioInstant};
+/// use oer_portable_time::{
+///     ClockRelation, DomainInstant, Duration, GenerationSource, Instant, RelationSample,
+/// };
 ///
 /// enum Radio {}
 /// enum Tsf {}
-/// let tsf = ClockRelation::<RadioInstant<Tsf>, RadioInstant<Radio>>::affine(200);
+/// let tsf = ClockRelation::<Tsf, Radio>::affine(200);
 /// let sample = RelationSample {
-///     source: RadioInstant::<Radio>::from_micros(0),
+///     source: DomainInstant::<Radio>::from_micros(0),
 ///     target: Instant::from_micros(0),
 ///     uncertainty: Duration::ZERO,
 ///     generation: GenerationSource::new(0).current(),
@@ -122,11 +121,11 @@ impl<A, B> fmt::Debug for ClockRelation<A, B> {
 /// does not compare with it:
 ///
 /// ```compile_fail,E0308
-/// use oer_protocols_radio_port::GenerationSource;
+/// use oer_portable_time::GenerationSource;
 ///
 /// enum Radio {}
 /// enum Tsf {}
-/// let radio = GenerationSource::<Radio, oer_portable_time::Instant>::new(1).current();
+/// let radio = GenerationSource::<Radio, oer_portable_time::Monotonic>::new(1).current();
 /// let tsf = GenerationSource::<Tsf, Radio>::new(1).current();
 /// let _ = radio == tsf;
 /// ```
@@ -188,10 +187,10 @@ impl<A, B> fmt::Debug for Generation<A, B> {
 /// would hand out the same generation for two different breaks.
 ///
 /// ```compile_fail,E0599
-/// use oer_protocols_radio_port::GenerationSource;
+/// use oer_portable_time::GenerationSource;
 ///
 /// enum Radio {}
-/// let source = GenerationSource::<Radio, oer_portable_time::Instant>::new(0);
+/// let source = GenerationSource::<Radio, oer_portable_time::Monotonic>::new(0);
 /// let _ = source.clone();
 /// ```
 pub struct GenerationSource<A, B> {
@@ -244,28 +243,28 @@ impl<A, B> fmt::Debug for GenerationSource<A, B> {
 /// was taken in.
 pub struct Stamp<A, B> {
     /// The coordinate.
-    pub at: A,
+    pub at: DomainInstant<A>,
     /// The relation `at` belongs to.
     pub generation: Generation<A, B>,
 }
 
-impl<A: Copy, B> Clone for Stamp<A, B> {
+impl<A, B> Clone for Stamp<A, B> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<A: Copy, B> Copy for Stamp<A, B> {}
+impl<A, B> Copy for Stamp<A, B> {}
 
-impl<A: PartialEq, B> PartialEq for Stamp<A, B> {
+impl<A, B> PartialEq for Stamp<A, B> {
     fn eq(&self, other: &Self) -> bool {
         self.at == other.at && self.generation == other.generation
     }
 }
 
-impl<A: Eq, B> Eq for Stamp<A, B> {}
+impl<A, B> Eq for Stamp<A, B> {}
 
-impl<A: fmt::Debug, B> fmt::Debug for Stamp<A, B> {
+impl<A, B> fmt::Debug for Stamp<A, B> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Stamp")
@@ -275,42 +274,29 @@ impl<A: fmt::Debug, B> fmt::Debug for Stamp<A, B> {
     }
 }
 
-/// A radio instant with the generation of its clock's relation to the
-/// image's monotonic time.
-///
-/// A port's generation changes whenever that relation breaks (a wake from
-/// sleep), so a stamp converts only with a [`ClockSample`] of its own
-/// generation.
-pub type RadioStamp<D> = Stamp<RadioInstant<D>, Instant>;
-
 /// One paired reading of the clocks of the domains `A` (the source) and `B`
 /// (the target), taken back to back by the owner of their relation, in one
 /// of its generations.
-pub struct RelationSample<A: Coordinate, B: Coordinate> {
+pub struct RelationSample<A, B> {
     /// The source clock's reading.
-    pub source: A,
+    pub source: DomainInstant<A>,
     /// The target clock's reading beside it.
-    pub target: B,
+    pub target: DomainInstant<B>,
     /// How far apart the two readings may lie, on the target clock.
-    pub uncertainty: B::Span,
+    pub uncertainty: DomainDuration<B>,
     /// The generation of the relation the sample belongs to.
     pub generation: Generation<A, B>,
 }
 
-impl<A: Coordinate, B: Coordinate> Clone for RelationSample<A, B> {
+impl<A, B> Clone for RelationSample<A, B> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<A: Coordinate, B: Coordinate> Copy for RelationSample<A, B> {}
+impl<A, B> Copy for RelationSample<A, B> {}
 
-impl<A, B> PartialEq for RelationSample<A, B>
-where
-    A: Coordinate,
-    B: Coordinate,
-    B::Span: PartialEq,
-{
+impl<A, B> PartialEq for RelationSample<A, B> {
     fn eq(&self, other: &Self) -> bool {
         self.source == other.source
             && self.target == other.target
@@ -319,20 +305,9 @@ where
     }
 }
 
-impl<A, B> Eq for RelationSample<A, B>
-where
-    A: Coordinate,
-    B: Coordinate,
-    B::Span: Eq,
-{
-}
+impl<A, B> Eq for RelationSample<A, B> {}
 
-impl<A, B> fmt::Debug for RelationSample<A, B>
-where
-    A: Coordinate + fmt::Debug,
-    B: Coordinate + fmt::Debug,
-    B::Span: fmt::Debug,
-{
+impl<A, B> fmt::Debug for RelationSample<A, B> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("RelationSample")
@@ -344,7 +319,7 @@ where
     }
 }
 
-impl<A: Coordinate, B: Coordinate> RelationSample<A, B> {
+impl<A, B> RelationSample<A, B> {
     /// The sample's source reading as a stamp of its generation.
     pub const fn stamp(&self) -> Stamp<A, B> {
         Stamp {
@@ -354,14 +329,8 @@ impl<A: Coordinate, B: Coordinate> RelationSample<A, B> {
     }
 }
 
-/// One paired reading of a port's radio clock (the source) and the image's
-/// monotonic clock (the target), read by the backend when asked.
-pub type ClockSample<D> = RelationSample<RadioInstant<D>, Instant>;
-
 /// A converted value and how far the true value may lie from it, as a span
-/// `S` of the domain it was converted into: monotonic by default, a radio
-/// domain's [`RadioDuration`](oer_portable_time::RadioDuration) for a projection into
-/// that domain.
+/// `S` of the domain it was converted into, monotonic by default.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Projected<T, S = Duration> {
     /// The converted value.
@@ -381,7 +350,7 @@ pub enum ProjectionError {
     OutOfRange,
 }
 
-impl<A: Coordinate, B: Coordinate> ClockRelation<A, B> {
+impl<A, B> ClockRelation<A, B> {
     /// The target coordinate of the source coordinate `at` of `generation`,
     /// projected from `sample`.
     ///
@@ -393,25 +362,28 @@ impl<A: Coordinate, B: Coordinate> ClockRelation<A, B> {
     /// rounded up to whole microseconds.
     pub fn project(
         self,
-        at: A,
+        at: DomainInstant<A>,
         generation: Generation<A, B>,
         sample: &RelationSample<A, B>,
-    ) -> Result<Projected<B, B::Span>, ProjectionError> {
+    ) -> Result<Projected<DomainInstant<B>, DomainDuration<B>>, ProjectionError> {
         match self.rate {
             RelationRate::Identical => Ok(Projected {
-                at: B::at_micros(at.micros()),
-                uncertainty: B::span(0),
+                at: DomainInstant::from_micros(at.as_micros()),
+                uncertainty: DomainDuration::from_micros(0),
             }),
             RelationRate::Affine { drift_ppm } => {
                 if generation != sample.generation {
                     return Err(ProjectionError::StaleSample);
                 }
-                let (at, distance) =
-                    shift(sample.target.micros(), sample.source.micros(), at.micros())?;
+                let (at, distance) = shift(
+                    sample.target.as_micros(),
+                    sample.source.as_micros(),
+                    at.as_micros(),
+                )?;
                 Ok(Projected {
-                    at: B::at_micros(at),
-                    uncertainty: B::span(drift_bound(
-                        B::span_micros(sample.uncertainty),
+                    at: DomainInstant::from_micros(at),
+                    uncertainty: DomainDuration::from_micros(drift_bound(
+                        sample.uncertainty.as_micros(),
                         distance,
                         drift_ppm,
                     )?),
@@ -427,27 +399,30 @@ impl<A: Coordinate, B: Coordinate> ClockRelation<A, B> {
     /// drift widens.
     pub fn project_back(
         self,
-        at: B,
+        at: DomainInstant<B>,
         sample: &RelationSample<A, B>,
-    ) -> Result<Projected<Stamp<A, B>, A::Span>, ProjectionError> {
+    ) -> Result<Projected<Stamp<A, B>, DomainDuration<A>>, ProjectionError> {
         match self.rate {
             RelationRate::Identical => Ok(Projected {
                 at: Stamp {
-                    at: A::at_micros(at.micros()),
+                    at: DomainInstant::from_micros(at.as_micros()),
                     generation: sample.generation,
                 },
-                uncertainty: A::span(0),
+                uncertainty: DomainDuration::from_micros(0),
             }),
             RelationRate::Affine { drift_ppm } => {
-                let (at, distance) =
-                    shift(sample.source.micros(), sample.target.micros(), at.micros())?;
+                let (at, distance) = shift(
+                    sample.source.as_micros(),
+                    sample.target.as_micros(),
+                    at.as_micros(),
+                )?;
                 Ok(Projected {
                     at: Stamp {
-                        at: A::at_micros(at),
+                        at: DomainInstant::from_micros(at),
                         generation: sample.generation,
                     },
-                    uncertainty: A::span(drift_bound(
-                        B::span_micros(sample.uncertainty),
+                    uncertainty: DomainDuration::from_micros(drift_bound(
+                        sample.uncertainty.as_micros(),
                         distance,
                         drift_ppm,
                     )?),
@@ -461,63 +436,17 @@ impl<A: Coordinate, B: Coordinate> ClockRelation<A, B> {
     /// carries no epoch offset, so it needs no sample.
     pub fn project_span(
         self,
-        span: A::Span,
-    ) -> Result<Projected<B::Span, B::Span>, ProjectionError> {
-        let micros = A::span_micros(span);
+        span: DomainDuration<A>,
+    ) -> Result<Projected<DomainDuration<B>, DomainDuration<B>>, ProjectionError> {
+        let micros = span.as_micros();
         let uncertainty = match self.rate {
             RelationRate::Identical => 0,
             RelationRate::Affine { drift_ppm } => drift_bound(0, micros, drift_ppm)?,
         };
         Ok(Projected {
-            at: B::span(micros),
-            uncertainty: B::span(uncertainty),
+            at: DomainDuration::from_micros(micros),
+            uncertainty: DomainDuration::from_micros(uncertainty),
         })
-    }
-}
-
-/// A port's radio clock of domain `D`: how finely it counts and how it
-/// relates to the image's monotonic time.
-pub struct ClockInfo<D> {
-    /// The smallest step two readings can differ by.
-    pub resolution: Duration,
-    /// The relation of the radio clock (the source) to the monotonic clock
-    /// (the target); `None` when none is known, and the port's instants
-    /// compare only with each other.
-    pub monotonic: Option<ClockRelation<RadioInstant<D>, Instant>>,
-}
-
-impl<D> ClockInfo<D> {
-    /// A radio clock that is the image's monotonic clock, counting in
-    /// microseconds.
-    pub const MONOTONIC_MICROS: Self = Self {
-        resolution: Duration::from_micros(1),
-        monotonic: Some(ClockRelation::IDENTICAL),
-    };
-}
-
-impl<D> Clone for ClockInfo<D> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<D> Copy for ClockInfo<D> {}
-
-impl<D> PartialEq for ClockInfo<D> {
-    fn eq(&self, other: &Self) -> bool {
-        self.resolution == other.resolution && self.monotonic == other.monotonic
-    }
-}
-
-impl<D> Eq for ClockInfo<D> {}
-
-impl<D> fmt::Debug for ClockInfo<D> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("ClockInfo")
-            .field("resolution", &self.resolution)
-            .field("monotonic", &self.monotonic)
-            .finish()
     }
 }
 
@@ -548,3 +477,6 @@ fn drift_bound(uncertainty: u64, distance: u64, drift_ppm: u32) -> Result<u64, P
         .and_then(|drift| uncertainty.checked_add(drift))
         .ok_or(ProjectionError::OutOfRange)
 }
+
+#[cfg(test)]
+mod tests;
