@@ -252,9 +252,7 @@ Stop wakes independently of queue capacity. The HIL network vocabulary
 serializes the core's configuration without constructing a network. Neither
 the neutral device nor the configuration exposes a Wi-Fi core type. TCP has
 no implementation.
-Finite connected-task shutdown lives in `oer-portable-time` behind its non-default
-`connected-tasks` feature, without `embassy-sync`; `oer-portable-cooperate` retains only
-hardware-atom admission and its bounds.
+`oer-portable-cooperate` holds only hardware-atom admission and its bounds.
 Drivers own hardware and wait; adapters bind executors.
 
 Direct normal dependencies on external async crates follow their role,

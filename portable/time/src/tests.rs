@@ -133,32 +133,14 @@ fn a_saturating_deadline_past_the_range_never_comes() {
     );
 }
 
-/// Without its features `oer-portable-time` stays a dependency-free contract
-/// crate: every dependency is optional and only a feature enables it.
+/// `oer-portable-time` is a dependency-free contract crate, with no feature
+/// that could add one.
 #[test]
-fn without_features_the_crate_has_no_dependency() {
+fn the_crate_has_no_dependency_and_no_feature() {
     let manifest: toml::Table = toml::from_str(include_str!("../Cargo.toml")).unwrap();
-    let dependencies = manifest
-        .get("dependencies")
-        .and_then(toml::Value::as_table)
-        .unwrap();
-    for (name, spec) in dependencies {
-        let optional = spec.get("optional").and_then(toml::Value::as_bool) == Some(true);
-        assert!(optional, "`{name}` is not optional");
+    for table in ["dependencies", "build-dependencies", "target", "features"] {
+        assert!(manifest.get(table).is_none(), "`[{table}]`");
     }
-    for table in ["build-dependencies", "target"] {
-        assert!(
-            manifest.get(table).is_none(),
-            "`[{table}]` adds dependencies"
-        );
-    }
-    let defaults = manifest
-        .get("features")
-        .and_then(|features| features.get("default"));
-    assert!(
-        defaults.is_none_or(|default| default.as_array().is_some_and(|list| list.is_empty())),
-        "a default feature"
-    );
 }
 
 #[test]
