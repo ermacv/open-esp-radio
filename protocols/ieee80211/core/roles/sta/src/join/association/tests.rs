@@ -137,7 +137,9 @@ fn association_runtime_accepts_only_selected_peer_response() {
                     0x31, 0x04
                 ]),
             status_code: 0,
-            association_id: 42,
+            association_id: oer_protocols_ieee80211_wire::management::AidField::from_bytes([
+                42, 0xc0
+            ]),
             ht_capability: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
             he: oer_protocols_ieee80211_wire::station::ResponseHeElements::NONE,
             wmm_element: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,

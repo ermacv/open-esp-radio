@@ -309,7 +309,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
         &TEST_ADVERTISEMENT,
         &mut body,
         17,
-        0x0123,
+        crate::management::AssociationId::new(0x0123),
         ht20,
         None,
         ApBssProtection::default(),
@@ -321,7 +321,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
         &TEST_ADVERTISEMENT,
         &mut body,
         0,
-        1,
+        crate::management::AssociationId::new(1),
         ht20,
         None,
         ApBssProtection::default(),
@@ -338,7 +338,7 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
         &TEST_ADVERTISEMENT,
         &mut body,
         0,
-        1,
+        crate::management::AssociationId::new(1),
         ht20,
         Some(peer_ht),
         ApBssProtection::default(),
@@ -355,35 +355,20 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
             &TEST_ADVERTISEMENT,
             &mut body,
             0,
-            0,
+            None,
             ht20,
             None,
             ApBssProtection::default(),
         ),
         Err(ApAssociationResponseError::MissingAssociationId)
     );
-    // The AID field holds 14 bits: a wider association ID is refused, its
-    // high bits never read as the marker.
-    assert_eq!(
-        write_ht_association_response(
-            &TEST_ADVERTISEMENT,
-            &mut body,
-            0,
-            0x4001,
-            ht20,
-            None,
-            ApBssProtection::default(),
-        ),
-        Err(ApAssociationResponseError::AssociationIdOutOfRange)
-    );
-
     let ht40 =
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz40Below).unwrap();
     write_ht_association_response(
         &TEST_ADVERTISEMENT,
         &mut body,
         0,
-        1,
+        crate::management::AssociationId::new(1),
         ht40,
         None,
         ApBssProtection::default(),
@@ -442,24 +427,25 @@ fn peer_disconnect_frames_own_subtype_reason_and_sequence() {
 
 #[test]
 fn tim_bitmap_update_matches_aid_bit_selection() {
-    use crate::beacon::{TimAssociationId, TimVirtualBitmap};
+    use crate::beacon::TimVirtualBitmap;
+    use crate::management::AssociationId;
 
     let mut bitmap = TimVirtualBitmap::<2>::try_new().unwrap();
     bitmap
         .set(
-            TimAssociationId::new(7).unwrap(),
+            AssociationId::new(7).unwrap(),
             crate::station_beacon::BufferedTraffic::Buffered,
         )
         .unwrap();
     bitmap
         .set(
-            TimAssociationId::new(8).unwrap(),
+            AssociationId::new(8).unwrap(),
             crate::station_beacon::BufferedTraffic::Buffered,
         )
         .unwrap();
     bitmap
         .set(
-            TimAssociationId::new(15).unwrap(),
+            AssociationId::new(15).unwrap(),
             crate::station_beacon::BufferedTraffic::Buffered,
         )
         .unwrap();
@@ -501,7 +487,7 @@ fn ps_poll_owns_peer_and_association_id() {
         observe_ap_power_save(&frame),
         Some(ApPowerSaveObservation::PsPoll {
             peer: Eui48::new(peer),
-            association_id: 0x123
+            association_id: crate::management::AidField::from_bytes([0x23, 0xc1])
         })
     );
 }
@@ -722,7 +708,7 @@ fn complete_response_encoders_own_addresses_sequence_and_status() {
         Eui48::new(access_point),
         Eui48::new(peer),
         0,
-        1,
+        crate::management::AssociationId::new(1),
         seq(8),
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
         None,
@@ -746,7 +732,7 @@ fn a_5_ghz_association_response_carries_no_erp_element() {
             &TEST_ADVERTISEMENT,
             &mut body,
             0,
-            1,
+            crate::management::AssociationId::new(1),
             channel,
             None,
             ApBssProtection::default(),
@@ -1016,7 +1002,7 @@ fn a_ps_poll_needs_its_marker_and_a_nonzero_association_id() {
     }
 }
 
-/// The largest association ID the 14-bit AID field holds is written whole
+/// The largest association ID is written whole
 /// with both marker bits, and read whole from a PS-Poll (IEEE Std
 /// 802.11-2020, 9.4.1.8).
 #[test]
@@ -1026,14 +1012,14 @@ fn the_largest_association_id_is_written_and_read_whole() {
         &TEST_ADVERTISEMENT,
         &mut body,
         0,
-        0x3fff,
+        crate::management::AssociationId::new(2007),
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
         None,
         ApBssProtection::default(),
     )
     .unwrap();
     // Capability Information, Status Code, then the AID field.
-    assert_eq!(&body[4..6], &[0xff, 0xff]);
+    assert_eq!(&body[4..6], &[0xd7, 0xc7]);
 
     let peer = [1, 2, 3, 4, 5, 6];
     let mut frame = [0_u8; 16];
@@ -1044,7 +1030,7 @@ fn the_largest_association_id_is_written_and_read_whole() {
         observe_ap_power_save(&frame),
         Some(ApPowerSaveObservation::PsPoll {
             peer: Eui48::new(peer),
-            association_id: 0x3fff
+            association_id: crate::management::AssociationId::new(2007).unwrap().field()
         })
     );
 }

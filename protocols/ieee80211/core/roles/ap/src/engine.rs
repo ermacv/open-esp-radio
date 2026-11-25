@@ -598,7 +598,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 {
                     // A repeated request whose response was lost: the same
                     // success again, no second Message 1.
-                    (0, status.association_id, ApAfter::Nothing)
+                    (0, Some(status.association_id), ApAfter::Nothing)
                 } else if status.phase != ApPeerPhase::Authenticated {
                     return Ok(ApReceived::Nothing);
                 } else {
@@ -638,7 +638,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                         },
                         _ => ApAfter::Nothing,
                     };
-                    (status, association_id.unwrap_or(0), after)
+                    (status, association_id, after)
                 };
                 let sequence = self.service.next_management_sequence();
                 let protection = self.service.bss_protection(self.channel.width());

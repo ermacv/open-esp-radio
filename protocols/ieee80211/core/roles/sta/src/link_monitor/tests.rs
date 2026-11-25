@@ -33,7 +33,7 @@ fn read(elements: &[u8]) -> StaBeacon {
         oer_protocols_ieee80211_wire::station_beacon::parse_sta_beacon(
             &frame,
             Eui48::new(BSSID),
-            1,
+            oer_protocols_ieee80211_wire::management::AidField::from_bytes([1, 0xc0]),
         )
         .unwrap(),
     )

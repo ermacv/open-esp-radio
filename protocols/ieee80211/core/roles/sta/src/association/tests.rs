@@ -43,7 +43,9 @@ mod associated_peer {
             capability_info:
                 oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([0; 2]),
             status_code,
-            association_id: 7,
+            association_id: oer_protocols_ieee80211_wire::management::AidField::from_bytes([
+                7, 0xc0,
+            ]),
             ht_capability: oer_protocols_ieee80211_wire::scan::ElementPresence::Present,
             he: oer_protocols_ieee80211_wire::station::ResponseHeElements::new(
                 &HE20_MCS9_CAPABILITY,

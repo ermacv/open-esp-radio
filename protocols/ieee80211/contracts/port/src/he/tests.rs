@@ -4,6 +4,10 @@ use super::{BssColorScope, BssColorUse, HeAssociation, HeAssociationError, HeBss
 use crate::BssColor;
 use oer_protocols_ieee80211_wire::he::{HeOperation, HeOperationFields, HePeerState};
 
+fn aid(value: u16) -> oer_protocols_ieee80211_wire::management::AidField {
+    oer_protocols_ieee80211_wire::management::AidField::from_bytes(value.to_le_bytes())
+}
+
 /// An HE Operation of default PE 4, BSS color 42 (partial) and the basic
 /// set `0xfffc`.
 fn operation_fields() -> HeOperationFields {
@@ -26,8 +30,8 @@ fn peer() -> HePeerState {
 
 #[test]
 fn an_association_keeps_the_peer_values_it_was_made_of() {
-    let association = HeAssociation::new(&peer(), 1, 7).expect("in range");
-    assert_eq!(association.association_id(), 1);
+    let association = HeAssociation::new(&peer(), aid(1), 7).expect("in range");
+    assert_eq!(association.association_id().value(), 1);
     assert_eq!(association.minimum_mpdu_start_spacing(), 7);
     assert_eq!(association.packet_padding_eight_us(), 2);
     assert_eq!(association.default_packet_extension(), 4);
@@ -68,27 +72,27 @@ fn a_bss_color_is_the_scan_s_and_a_disabled_one_is_transmitted_as_zero() {
 #[test]
 fn values_outside_their_fields_make_no_association() {
     assert_eq!(
-        HeAssociation::new(&peer(), 0, 0),
-        Err(HeAssociationError::AssociationId(0))
+        HeAssociation::new(&peer(), aid(0), 0),
+        Err(HeAssociationError::AssociationId(aid(0)))
     );
     assert_eq!(
-        HeAssociation::new(&peer(), 2008, 0),
-        Err(HeAssociationError::AssociationId(2008))
+        HeAssociation::new(&peer(), aid(2008), 0),
+        Err(HeAssociationError::AssociationId(aid(2008)))
     );
     assert_eq!(
-        HeAssociation::new(&peer(), 1, 8),
+        HeAssociation::new(&peer(), aid(1), 8),
         Err(HeAssociationError::MinimumMpduStartSpacing(8))
     );
     let mut padded = peer();
     padded.packet_padding_eight_us = 3;
     assert_eq!(
-        HeAssociation::new(&padded, 1, 0),
+        HeAssociation::new(&padded, aid(1), 0),
         Err(HeAssociationError::PacketPadding(3))
     );
     let mut hosted = peer();
     hosted.max_co_hosted_bssid_indicator = Some(9);
     assert_eq!(
-        HeAssociation::new(&hosted, 1, 0),
+        HeAssociation::new(&hosted, aid(1), 0),
         Err(HeAssociationError::MaxCoHostedBssidIndicator(9))
     );
 }

@@ -8,6 +8,7 @@
 
 use crate::data::{MsduHeader, MsduParts, PeerQos};
 use crate::frame::{FrameControlFields, FrameType, QosAckPolicy};
+use crate::management::{AidField, AssociationId};
 use oer_protocols_ieee802_wire::{EtherType, Eui48, IndividualAddress};
 
 use crate::{
@@ -45,12 +46,7 @@ const OPEN_SYSTEM_AUTHENTICATION_ALGORITHM: u16 = 0;
 pub enum ApAssociationResponseError {
     LengthOverflow,
     MissingAssociationId,
-    /// An association ID wider than the AID field's 14 bits (IEEE Std
-    /// 802.11-2020, 9.4.1.8).
-    AssociationIdOutOfRange,
-    OutputTooSmall {
-        required: usize,
-    },
+    OutputTooSmall { required: usize },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -870,7 +866,7 @@ pub fn write_ht_association_response_frame_for_security(
     access_point: Eui48,
     peer: Eui48,
     status: u16,
-    association_id: u16,
+    association_id: Option<AssociationId>,
     management_sequence: SequenceNumber,
     channel: Channel,
     peer_ht: Option<HtPeerCapabilities>,
@@ -974,7 +970,7 @@ pub fn write_ht_association_response(
     profile: &Advertisement,
     body: &mut [u8; AP_ASSOCIATION_RESPONSE_BODY_LEN],
     status: u16,
-    association_id: u16,
+    association_id: Option<AssociationId>,
     channel: Channel,
     peer_ht: Option<HtPeerCapabilities>,
     protection: ApBssProtection,
@@ -982,15 +978,11 @@ pub fn write_ht_association_response(
     // The AID field: the association ID with both marker bits set, or zero
     // when the association is refused (IEEE Std 802.11-2020, 9.4.1.8).
     let encoded_association_id = if status == 0 {
-        if association_id == 0 {
-            return Err(ApAssociationResponseError::MissingAssociationId);
-        }
-        crate::management::AssociationId::from_bytes([0; 2])
-            .with_aid(association_id)
-            .map_err(|_| ApAssociationResponseError::AssociationIdOutOfRange)?
-            .with_marker(oer_portable_wire::U8::constant::<3>())
+        association_id
+            .ok_or(ApAssociationResponseError::MissingAssociationId)?
+            .field()
     } else {
-        crate::management::AssociationId::from_bytes([0; 2])
+        AidField::from_bytes([0; 2])
     };
     let ht_capability = ht_capability_ie_for_peer(profile.ht, channel, peer_ht);
     let ht_operation = ht_operation_ie(channel, protection.ht);
@@ -1018,9 +1010,16 @@ pub fn write_ht_association_response(
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApPowerSaveObservation {
-    Sleeping { peer: Eui48 },
-    Active { peer: Eui48 },
-    PsPoll { peer: Eui48, association_id: u16 },
+    Sleeping {
+        peer: Eui48,
+    },
+    Active {
+        peer: Eui48,
+    },
+    PsPoll {
+        peer: Eui48,
+        association_id: AidField,
+    },
 }
 
 /// Parse the RX-derived power-save edge the AP owner uses.
@@ -1045,15 +1044,14 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, Eui48)> {
         && let Ok(ps_poll) = oer_portable_wire::Reader::new(frame).array::<16>()
     {
         let [_, _, a0, a1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5] = *ps_poll;
-        let field = crate::management::AssociationId::from_bytes([a0, a1]);
-        let association_id = field.aid();
-        if field.marker().get() != 3 || association_id == 0 {
+        let field = AidField::from_bytes([a0, a1]);
+        if field.marker().get() != 3 || field.aid().get() == 0 {
             return None;
         }
         return Some((
             ApPowerSaveObservation::PsPoll {
                 peer: Eui48::new([t0, t1, t2, t3, t4, t5]),
-                association_id,
+                association_id: field,
             },
             Eui48::new([r0, r1, r2, r3, r4, r5]),
         ));

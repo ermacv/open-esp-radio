@@ -592,7 +592,7 @@ fn parses_association_response_and_masks_aid() {
     let response =
         parse_association_response(&frame[..58], Eui48::new(LOCAL), Eui48::new(BSSID)).unwrap();
     assert_eq!(response.status_code, 0);
-    assert_eq!(response.association_id, 42);
+    assert_eq!(response.association_id.aid().get(), 42);
     assert_eq!(
         response.ht_capability,
         crate::scan::ElementPresence::Present
@@ -874,7 +874,7 @@ fn wmm_is_accepted_by_a_wmm_element_ht_or_he_alone() {
     let response = |ht_capability, wmm_element, he| AssociationResponse {
         capability_info: crate::management::CapabilityInformation::from_bytes([0; 2]),
         status_code: 0,
-        association_id: 1,
+        association_id: crate::management::AidField::from_bytes([1, 0xc0]),
         ht_capability,
         he,
         wmm_element,
@@ -897,7 +897,7 @@ fn a_response_matches_its_security_by_privacy() {
         capability_info: crate::management::CapabilityInformation::from_bytes([0; 2])
             .with_privacy(privacy),
         status_code: 0,
-        association_id: 1,
+        association_id: crate::management::AidField::from_bytes([1, 0xc0]),
         ht_capability: Absent,
         he: ResponseHeElements::NONE,
         wmm_element: Absent,

@@ -3,6 +3,7 @@
 
 use super::*;
 use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee80211_wire::management::AssociationId;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -100,7 +101,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             .peers
             .iter_mut()
             .zip(&mut storage.management_replay)
-            .zip(1..=u16::from(AccessPointClientLimit::MAX))
+            .zip((1..=u16::from(AccessPointClientLimit::MAX)).filter_map(AssociationId::new))
             .find(|((entry, _), _)| {
                 if existing {
                     entry.as_ref().is_some_and(|entry| entry.address == peer)

@@ -227,7 +227,7 @@ fn protection_update_rewrites_only_erp_and_ht_operation_after_tim_growth() {
     let mut bitmap = crate::beacon::TimVirtualBitmap::<4>::try_new().unwrap();
     bitmap
         .set(
-            crate::beacon::TimAssociationId::new(25).unwrap(),
+            crate::management::AssociationId::new(25).unwrap(),
             crate::station_beacon::BufferedTraffic::Buffered,
         )
         .unwrap();

@@ -252,8 +252,11 @@ fn runtime_limit_is_enforced_before_hardware_moves() {
     );
     assert_eq!(service.associated_count(), 0);
     assert_eq!(service.peers().count(), 2);
-    assert_eq!(service.peer_status(PEER).unwrap().association_id, 1);
-    assert_eq!(service.peer_status(OTHER).unwrap().association_id, 2);
+    assert_eq!(service.peer_status(PEER).unwrap().association_id.value(), 1);
+    assert_eq!(
+        service.peer_status(OTHER).unwrap().association_id.value(),
+        2
+    );
 }
 
 #[test]
@@ -360,10 +363,25 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
     let first = service.admit_downlink(PEER).unwrap();
     assert_eq!(first.disposition(), ApDownlinkDisposition::Buffer);
     service.commit_buffered_unicast(first.identity()).unwrap();
-    let release = service
-        .begin_buffered_unicast_release(first.identity())
+    assert!(service.association_is_current(first.identity()));
+    assert_eq!(
+        service.bound_authorized_peer_status(first.identity()),
+        service.peer_status(PEER)
+    );
+    let poll = |association_id: u16| ApPowerSaveObservation::PsPoll {
+        peer: Eui48::new(PEER),
+        association_id: AssociationId::new(association_id).unwrap().field(),
+    };
+    assert_eq!(
+        service.observe_power_save(poll(2), oer_portable_time::Instant::from_micros(2)),
+        Err(ApServiceError::AssociationIdMismatch)
+    );
+    let ApPowerSaveAction::ReleaseOne(release) = service
+        .observe_power_save(poll(1), oer_portable_time::Instant::from_micros(2))
         .unwrap()
-        .unwrap();
+    else {
+        panic!("a PS-Poll of the peer's own AID releases one frame");
+    };
 
     service.remove_peer(PEER).unwrap();
     service
@@ -721,7 +739,7 @@ fn association_owns_a_bounded_wpa2_state() {
         ApMlmeAction::AssociationResponse {
             peer: PEER,
             status: status_code::SUCCESS,
-            association_id: Some(1),
+            association_id: AssociationId::new(1),
         }
     );
     assert_eq!(
@@ -1366,7 +1384,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
             }
         );
         assert_eq!(
-            service.peer_status(peer).unwrap().association_id,
+            service.peer_status(peer).unwrap().association_id.value(),
             u16::from(suffix)
         );
         assert!(matches!(
@@ -1409,7 +1427,14 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
             status: status_code::SUCCESS,
         }
     );
-    assert_eq!(service.peer_status(overflow).unwrap().association_id, 7);
+    assert_eq!(
+        service
+            .peer_status(overflow)
+            .unwrap()
+            .association_id
+            .value(),
+        7
+    );
 }
 
 #[test]
@@ -2548,7 +2573,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
                 ApMlmeAction::AssociationResponse {
                     peer: PEER,
                     status: status_code::SUCCESS,
-                    association_id: Some(1)
+                    association_id: AssociationId::new(1)
                 }
             );
             assert_eq!(service.associated_count(), 1);

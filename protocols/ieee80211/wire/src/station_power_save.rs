@@ -12,33 +12,9 @@ use crate::{sequence::SequenceNumber, station::StationFrameError};
 
 /// Length of a legacy Null Data MPDU, excluding the hardware-owned FCS.
 pub const STA_NULL_DATA_FRAME_LEN: usize = 24;
-/// Largest Association ID assigned to an infrastructure BSS station.
-pub const STA_MAX_ASSOCIATION_ID: u16 = 2_007;
 
 const NULL_DATA_TO_DS_FRAME_CONTROL: crate::frame::FrameControlFields =
     crate::frame::FrameControlFields::from_bytes([0x48, 0x01]);
-
-/// Nonzero association identifier of an infrastructure BSS station.
-///
-/// An infrastructure BSS may assign only IDs 1 through 2007; keeping the
-/// larger reserved range out of this type rejects an invalid Association
-/// Response.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StaAssociationId(u16);
-
-impl StaAssociationId {
-    pub const fn new(value: u16) -> Option<Self> {
-        if value != 0 && value <= STA_MAX_ASSOCIATION_ID {
-            Some(Self(value))
-        } else {
-            None
-        }
-    }
-
-    pub const fn get(self) -> u16 {
-        self.0
-    }
-}
 
 /// Power-management state advertised by a station to its access point.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
