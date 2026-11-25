@@ -140,8 +140,11 @@ fn resolve_file(
 /// Refuse a cycle and a layer reached twice.
 fn enter(path: &str, stack: &[String], files: &[String]) -> Result<()> {
     if let Some(at) = stack.iter().position(|file| file == path) {
-        let mut cycle = stack.get(at..).unwrap_or_default().join(" → ");
-        cycle.push_str(" → ");
+        let mut cycle = String::new();
+        for file in stack.iter().skip(at) {
+            cycle.push_str(file);
+            cycle.push_str(" → ");
+        }
         cycle.push_str(path);
         return Err(format!("the layers extend in a cycle: {cycle}").into());
     }

@@ -8,7 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-use oer_chips_family_facts::{InterruptContract, Memory, Placement, Region, Symbols};
+use oer_chips_family_facts::{InterruptContract, Memory, Placement, Presence, Region, Symbols};
 use std::{collections::BTreeMap, fs, path::Path};
 
 /// The region name of the mask ROM's code in an interrupt handler rule.
@@ -185,7 +185,7 @@ pub fn audit(contract: &Contract<'_>, elf: &Path, binary: Option<&Path>) -> Resu
                 .copied()
                 .or_else(|| by_demangled_name(&elf, &name));
             let Some(at) = found else {
-                if rule.optional {
+                if rule.presence == Presence::Optional {
                     continue;
                 }
                 return Err(format!("the ELF lacks `{name}`").into());

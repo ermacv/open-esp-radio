@@ -51,9 +51,9 @@ pub fn interrupt_table(facts: &Facts, template: &str) -> Result<String> {
             ),
         );
     }
-    if let Some(start) = table.find("@layout(") {
-        let row = table[start..].lines().next().unwrap_or_default();
-        return Err(format!("{}: `{row}` has no layout entry", facts.id).into());
+    if let Some((_, after)) = table.split_once("@layout(") {
+        let row = after.split_once('\n').map_or(after, |(row, _)| row);
+        return Err(format!("{}: `@layout({row}` has no layout entry", facts.id).into());
     }
     Ok(table)
 }

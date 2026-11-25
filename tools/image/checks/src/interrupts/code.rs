@@ -1,7 +1,7 @@
 //! The executor/task boundary comes from resolution facts, never names.
 
 use super::Result;
-use oer_chips_family_facts::Memory;
+use oer_chips_family_facts::{Memory, RegionKind};
 use oer_tools_image_stack::{
     Analysis, Class, Function, HartStack, Resolutions, Stacks, task_poll_sites,
 };
@@ -231,12 +231,12 @@ impl CodePlacement {
                 let facts = analysis.functions.get(&address)?;
                 let start = u64::from(address);
                 let end = start + u64::from(facts.function.size.max(1));
-                // By the region's attributes: uncached RAM a reset clears is
+                // By the region's attributes: RAM in the DMA window is
                 // the SRAM, cached read-only memory flash, cached RAM PSRAM.
                 let location = match memory.region_of(start, end).map(|at| at.attributes) {
-                    Some(at) if !at.cached && !at.retained => Location::Sram,
-                    Some(at) if at.cached && !at.writable => Location::Flash,
-                    Some(at) if at.cached => Location::Psram,
+                    Some(at) if at.kind == RegionKind::Dma => Location::Sram,
+                    Some(at) if at.cached() && !at.writable() => Location::Flash,
+                    Some(at) if at.cached() => Location::Psram,
                     Some(_) => Location::Other,
                     None if !own.contains(&address) => Location::Rom,
                     None => Location::Other,

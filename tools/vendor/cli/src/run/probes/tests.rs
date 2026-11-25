@@ -24,7 +24,7 @@ fn repository() -> tempfile::TempDir {
         let mut text = format!(
             "schema = 2\nid = \"{chip}\"\nfamily = \"f\"\nisa = \"rv32{isa}\"\n\
              rust-target = \"riscv32{isa}-unknown-none-elf\"\n\
-             boot = \"staged\"\nespflash-chip = \"{chip}\"\nrevisions = []\n\
+             boot = \"staged\"\nespflash-chip = \"{chip}\"\nrevisions = []\nobserved-functions = []\n\
              [properties]\nwifi-bands = []\nbluetooth = []\nieee802154 = false\ncores = 1\n"
         );
         for (role, name) in probes {

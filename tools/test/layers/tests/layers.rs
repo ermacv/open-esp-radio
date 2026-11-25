@@ -6406,8 +6406,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         1,
         BY_PHY_PROGRAMS,
     ),
-    ("chips/family/facts/src/generate.rs", 1, BY_FINAL_CRATES),
-    ("chips/family/facts/src/layers.rs", 1, BY_FINAL_CRATES),
     (
         "chips/family/platform/bootstrap/src/startup.rs",
         3,
@@ -6926,8 +6924,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
         1,
         BY_PHY_PROGRAMS,
     ),
-    ("chips/family/facts/src/lib.rs", 19, BY_FINAL_CRATES),
-    ("chips/family/facts/src/model.rs", 26, BY_FINAL_CRATES),
     (
         "chips/family/platform/executor/src/installations.rs",
         1,
@@ -7924,7 +7920,6 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
         BY_UNOWNED_ROWS,
     ),
     ("chips/family/drivers/watchdog", 1, 2, BY_UNOWNED_ROWS),
-    ("chips/family/facts", 1, 0, BY_FINAL_CRATES),
     ("chips/family/platform/executor", 0, 3, BY_PUMP),
     ("chips/family/platform/interrupt-table", 0, 1, BY_LEVEL_TASK),
     ("chips/family/platform/runtime", 0, 2, BY_EXCEPTION_PATH),
@@ -9527,19 +9522,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "chips/family/facts/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "chips/family/facts/src/lib.rs",
         "clippy::let_underscore_must_use",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "chips/family/facts/src/lib.rs",
-        "clippy::struct_excessive_bools",
         1,
         BY_FINAL_CRATES,
     ),
