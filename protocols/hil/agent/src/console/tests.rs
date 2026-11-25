@@ -964,7 +964,6 @@ fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed
             &intake,
             &base,
             &request,
-            Work::Idle,
         ));
         if refused <= 2 {
             assert_eq!(*platform.retained.borrow(), retained);

@@ -84,6 +84,10 @@ is gone both fail, so every list only shrinks:
     variants;
   - `DROPPED_RESULTS`: a statement `.ok();`, an `unwrap_or_default()`, an
     `unwrap_or_else(|_| …)`;
+  - `NAMED_DISCARDS`: a value bound to one name that begins with `_`
+    (`let _name = …;`), unless its initializer ends in `?`. An entry is a
+    file and a name with their count, so a rename is a new entry. A binding
+    that is correct says what it holds;
   - `KEPT_OUT`: `ManuallyDrop`, `mem::forget`, `Box::leak`, and names
     `Poison…`, `Quarantin…`, `ResetRequired…`, `Unfinished…`;
   - `COMPATIBILITY`: `#[serde(default)]`, `#[serde(alias)]`,

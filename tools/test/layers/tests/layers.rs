@@ -5727,6 +5727,32 @@ fn dropped_result_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     }
 }
 
+/// S5: a value bound to a name that says it is unused, `let _name = …;`: the
+/// binding's name. An initializer that ends in `?` passes its error up, and
+/// is not one; nor is a scope's `let _ = …;`, which a lint holds.
+fn named_discard_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    if ident_at(tokens, at)? != "let" {
+        return None;
+    }
+    let mutable = usize::from(ident_at(tokens, at + 1).is_some_and(|word| word == "mut"));
+    let pattern = at + 1 + mutable;
+    let name = ident_at(tokens, pattern).filter(|name| name.len() > 1 && name.starts_with('_'))?;
+    if !punct_at(tokens, pattern + 1, '=') && !punct_at(tokens, pattern + 1, ':') {
+        return None;
+    }
+    let end = (pattern + 1..tokens.len()).find(|&end| punct_at(tokens, end, ';'))?;
+    let given = (pattern + 1..end).any(|equals| punct_at(tokens, equals, '='));
+    (given && !punct_at(tokens, end - 1, '?')).then_some(name)
+}
+
+/// S5: the named discards of product code, keyed by the file and the name.
+fn named_discards() -> Vec<(String, String)> {
+    scan_hits(&product_code, &named_discard_at, NO_ATTRIBUTE)
+        .into_iter()
+        .map(|(file, name)| (format!("{file}::{name}"), name))
+        .collect()
+}
+
 /// S6: memory kept out of its owner, and a quarantine by name.
 fn kept_out_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     let word = ident_at(tokens, at)?;
@@ -6401,6 +6427,367 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
     ("protocols/network/core/src/dhcp.rs", 1, BY_FINAL_CRATES),
     ("protocols/network/runtime/src/service.rs", 1, BY_PUMP),
 ];
+/// S5: values bound to a name that says they are unused (`let _name = …;`),
+/// by file and name with their count, so a rename is a new entry. A dropped
+/// result names the step that writes its code last; a correct binding says
+/// what it holds. The list only shrinks.
+const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
+    ("chips/esp32s31/app/src/lib.rs::_hart1", 1, BY_PUMP),
+    ("chips/esp32s31/app/src/lib.rs::_note", 1, BY_PUMP),
+    (
+        "chips/esp32s31/hal/src/radio/domain/transaction.rs::_first",
+        1,
+        BY_PHY_OWNER,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs::_leaked",
+        1,
+        BY_TRANSMIT,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs::_initial",
+        1,
+        "correct: the vendor's separate first read of the word, kept for its effect (the method's SOURCE)",
+    ),
+    ("chips/esp32s31/hal/src/system/cores.rs::_clock", 1, BY_PUMP),
+    (
+        "chips/esp32s31/hal/src/system/cores.rs::_held_or_written",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs::_index",
+        1,
+        "correct: evaluates the const proof that the line's byte lies in the CLIC",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs::_installed",
+        1,
+        BY_LEVEL_TASK,
+    ),
+    (
+        "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs::_published",
+        1,
+        BY_LEVEL_TASK,
+    ),
+    (
+        "chips/esp32s31/hal/src/system/platform/port.rs::_unmade",
+        1,
+        BY_UNOWNED_ROWS,
+    ),
+    (
+        "chips/esp32s31/platform/bootstrap/src/profile/startup.rs::_stopped",
+        1,
+        BY_UNOWNED_ROWS,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/exception.rs::_committed",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/exception.rs::_observed",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/exception.rs::_reported",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/exception.rs::_written",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/phy_fault.rs::_committed",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/phy_fault.rs::_reported",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/radio_fault.rs::_committed",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/radio_fault.rs::_reported",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/reset_causes.rs::_reported",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/sampler.rs::_stale",
+        1,
+        "correct: the observation of an interrupt from before the timer's program: acknowledging it is the effect",
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/wifi_fault.rs::_committed",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/wifi_fault.rs::_reported",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/sar_pilot.rs::_new",
+        1,
+        BY_PHY_PROGRAMS,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/sar_pilot.rs::_stale",
+        1,
+        BY_PHY_PROGRAMS,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/target_port/concurrent.rs::_quarantined",
+        1,
+        BY_PHY_PROGRAMS,
+    ),
+    (
+        "chips/family/drivers/usb-serial-jtag/src/ownership.rs::_dropped",
+        1,
+        BY_UNOWNED_ROWS,
+    ),
+    (
+        "chips/family/platform/bootstrap/src/startup.rs::_rates",
+        1,
+        BY_UNOWNED_ROWS,
+    ),
+    (
+        "chips/family/platform/executor/src/doorbell.rs::_bound",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "chips/family/platform/executor/src/peer.rs::_pended",
+        2,
+        "correct: whether this raise pended: a fact raised already is pended already, so the wake holds either way",
+    ),
+    (
+        "chips/family/platform/executor/src/peer/liveness.rs::_changed",
+        1,
+        "correct: the mark is cleared before the scan, which reads every seat whether it was set or not",
+    ),
+    (
+        "chips/family/platform/executor/src/peer/obligation.rs::_held",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/router.rs::_consumed",
+        1,
+        BY_LEVEL_TASK,
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/signal.rs::_pended",
+        1,
+        "correct: whether this raise pended: a fact raised already is pended already, so the wake holds either way",
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/signal.rs::_registered",
+        1,
+        BY_LEVEL_TASK,
+    ),
+    (
+        "chips/family/platform/runtime/src/fatal.rs::_committed",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/family/platform/runtime/src/panic.rs::_committed",
+        3,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/family/platform/runtime/src/panic.rs::_reported",
+        2,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/family/platform/runtime/src/secondary.rs::_never",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/family/platform/runtime/src/trap.rs::_committed",
+        1,
+        BY_EXCEPTION_PATH,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_selection.rs::_unavailable",
+        1,
+        BY_FINAL_CRATES,
+    ),
+    (
+        "portable/memory/src/context_cell.rs::_borrow",
+        1,
+        "correct: a guard held to the end of its scope: it clears the borrow flag",
+    ),
+    (
+        "portable/memory/src/init_in_place.rs::__field",
+        2,
+        "correct: a macro's own name, read further on in it",
+    ),
+    (
+        "portable/memory/src/init_in_place.rs::__fields",
+        1,
+        "correct: a macro's own name, read further on in it",
+    ),
+    (
+        "portable/memory/src/init_in_place.rs::__initialize",
+        1,
+        "correct: a macro's own name, read further on in it",
+    ),
+    (
+        "portable/memory/src/init_in_place.rs::__pointer",
+        1,
+        "correct: a macro's own name, read further on in it",
+    ),
+    (
+        "portable/memory/src/init_in_place.rs::__storage",
+        1,
+        "correct: a macro's own name, read further on in it",
+    ),
+    (
+        "portable/memory/src/init_in_place.rs::__value",
+        1,
+        "correct: a macro's own name, read further on in it",
+    ),
+    (
+        "portable/memory/src/placed.rs::__value",
+        2,
+        "correct: a macro's own name, read further on in it",
+    ),
+    (
+        "portable/memory/src/slot_queue.rs::_installed",
+        1,
+        BY_TRANSMIT,
+    ),
+    ("portable/memory/src/slot_queue.rs::_queued", 2, BY_TRANSMIT),
+    (
+        "portable/riscv/src/instructions.rs::_restore",
+        1,
+        "correct: a guard held to the end of its scope: it restores the interrupt enable",
+    ),
+    (
+        "portable/time/src/connected_tasks.rs::_publication",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "protocols/ieee80211/core/datapath/src/engine.rs::_begun",
+        1,
+        BY_CONTROLLER,
+    ),
+    (
+        "protocols/ieee80211/core/datapath/src/engine.rs::_number",
+        1,
+        BY_CONTROLLER,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::_queued",
+        2,
+        BY_CONTROLLER,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::_sent",
+        1,
+        BY_CONTROLLER,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/installation.rs::_released",
+        1,
+        "correct: what the port released stays the port\'s, and the binding reaches it there",
+    ),
+    (
+        "protocols/network/core/src/block.rs::_fits",
+        1,
+        BY_FINAL_CRATES,
+    ),
+    ("protocols/network/runtime/src/device.rs::_room", 1, BY_PUMP),
+    (
+        "protocols/network/runtime/src/returns.rs::_any",
+        1,
+        "correct: whether anything came home: bringing it is the effect",
+    ),
+    (
+        "protocols/network/runtime/src/returns.rs::_first",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "protocols/network/runtime/src/returns.rs::_free_or_held",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::_any",
+        2,
+        "correct: whether anything came home: bringing it is the effect",
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::_first",
+        1,
+        "correct: which of the two waits ended first: what waits is read after it",
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::_ready",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::_room_is_proven",
+        2,
+        BY_PUMP,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::_settled",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::_socket_closed",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::_any",
+        3,
+        "correct: which of the waits ended first, twice, and whether a loan came back: each is read after it",
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::_either",
+        1,
+        "correct: which of the waits ended first: what waits is read after it",
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::_first_use",
+        1,
+        BY_PUMP,
+    ),
+    (
+        "protocols/network/runtime/src/socket/lent.rs::_any",
+        1,
+        "correct: which of the waits ended first: what waits is read after it",
+    ),
+    (
+        "protocols/network/runtime/src/watch.rs::_previous",
+        1,
+        "correct: the count before the advance; the advance is the effect",
+    ),
+];
 /// S6: memory kept out of its owner and quarantines by name
 /// (`ManuallyDrop`, `mem::forget`, `Box::leak`, a name `Poison…`,
 /// `Quarantin…`, `ResetRequired…`, `Unfinished…`), mentions by file. The
@@ -6800,6 +7187,11 @@ fn results_dropped_or_replaced_are_listed_and_only_shrink() {
 }
 
 #[test]
+fn named_discards_are_listed_and_only_shrink() {
+    assert_scan(&named_discards(), NAMED_DISCARDS);
+}
+
+#[test]
 fn memory_kept_out_and_quarantines_are_listed_and_only_shrink() {
     assert_scan(
         &scan_hits(&product_code, &kept_out_at, NO_ATTRIBUTE),
@@ -6840,6 +7232,7 @@ fn the_rule_lists_name_their_removers() {
         ERROR_STATES,
         STATUS_FAILURES,
         DROPPED_RESULTS,
+        NAMED_DISCARDS,
         KEPT_OUT,
         COMPATIBILITY,
         RAW_REGISTERS,
@@ -6864,6 +7257,63 @@ fn the_rule_lists_name_their_removers() {
             "lower the entry: a.rs (2 -> 1)",
             "new: b.rs (1)",
             "gone, drop the entry: c.rs"
+        ]
+    );
+}
+
+/// A named discard is found by its form, and a renamed one is not the entry
+/// it was.
+#[test]
+fn a_named_discard_is_found_and_a_rename_is_a_new_one() {
+    let found = |source: &str| {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let file = directory.path().join("lib.rs");
+        std::fs::write(&file, source).expect("source");
+        let mut hits = Vec::new();
+        walk_file(&file, &mut |_: &Path, seen: Seen<'_>| {
+            if let Seen::Token(tokens, at) = seen
+                && let Some(name) = named_discard_at(tokens, at)
+            {
+                hits.push((format!("lib.rs::{name}"), name));
+            }
+        });
+        hits
+    };
+    let names = |source: &str| {
+        found(source)
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        names(
+            "fn f() -> R {
+                let _fits = list.push(1);
+                let mut _guard = lock();
+                let _typed: Result<u8, E> = made();
+                let _asked = made()?.then();
+                let _block = { made()? };
+                if ready { let _inner = made(); }
+                let _up = made()?;
+                let _ = made();
+                let _late;
+                let kept = made();
+                let (_one, two) = made();
+            }
+            #[cfg(test)]
+            mod tests { fn t() { let _fits = made(); } }"
+        ),
+        ["_fits", "_guard", "_typed", "_asked", "_block", "_inner"]
+    );
+    let list = [("lib.rs::_fits", 1, NO_STEP)];
+    let before = found("fn f() { let _fits = list.push(1); }");
+    assert!(scan_differences(&before, &list).is_empty());
+    let renamed = found("fn f() { let _room = list.push(1); }");
+    assert_eq!(
+        scan_differences(&renamed, &list),
+        [
+            "new: lib.rs::_room (1)",
+            "gone, drop the entry: lib.rs::_fits"
         ]
     );
 }
@@ -6974,6 +7424,11 @@ fn t8c_print() {
         }
         std::println!("];");
     }
+    std::println!("const NAMED_DISCARDS: &[(&str, usize, &str)] = &[");
+    for (entry, count) in by_file(&named_discards()) {
+        std::println!("    (\"{entry}\", {count}, {}),", remover_name(&entry));
+    }
+    std::println!("];");
 }
 
 // ---- K0: a state is a sum, and one function calls a port's transition -----

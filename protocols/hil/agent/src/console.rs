@@ -102,6 +102,13 @@ impl Counts {
         }
     }
 
+    fn count(&mut self, delivery: &Delivery) {
+        match delivery {
+            Delivery::Whole => self.sent_frames = self.sent_frames.wrapping_add(1),
+            Delivery::Unencoded | Delivery::Broken => self.lose(),
+        }
+    }
+
     fn lose(&mut self) {
         self.dropped = self.dropped.wrapping_add(1);
     }
@@ -148,19 +155,28 @@ impl Writer {
     }
 }
 
-/// Writes an encoded frame whole, counting it or its loss.
-async fn send(counts: &mut Counts, tx: &mut impl Write, written: Written<'_>) -> Delivery {
+/// Writes an encoded frame whole.
+async fn deliver(tx: &mut impl Write, written: Written<'_>) -> Delivery {
     let Ok(frame) = written.0 else {
-        counts.lose();
         return Delivery::Unencoded;
     };
     if write_whole(tx, frame).await.is_ok() && write_whole(tx, b"\r\n").await.is_ok() {
-        counts.sent_frames = counts.sent_frames.wrapping_add(1);
         Delivery::Whole
     } else {
-        counts.lose();
         Delivery::Broken
     }
+}
+
+/// Writes an encoded frame whole, counting it or its loss, and answers which.
+async fn send(counts: &mut Counts, tx: &mut impl Write, written: Written<'_>) -> Delivery {
+    let delivery = deliver(tx, written).await;
+    counts.count(&delivery);
+    delivery
+}
+
+/// As [`send`], for a frame whose loss is answered by the count alone.
+async fn tell(counts: &mut Counts, tx: &mut impl Write, written: Written<'_>) {
+    counts.count(&deliver(tx, written).await);
 }
 
 /// Writes `Rejected(reason)` as the answer to `request`.
@@ -172,7 +188,7 @@ async fn reject(
     reason: RejectReason,
 ) {
     let written = writer.frames.frame(boot, request).write(&Rejected(reason));
-    let _sent = send(&mut writer.counts, tx, written).await;
+    tell(&mut writer.counts, tx, written).await;
 }
 
 /// The base module's answer to `request` for an image serving `image_keys`
@@ -202,13 +218,6 @@ struct Base<'a, P> {
     platform: &'a P,
 }
 
-/// Whether a command is in work.
-#[derive(Clone, Copy)]
-enum Work {
-    Idle,
-    Busy,
-}
-
 /// What feeding bytes came to.
 enum Fed<C> {
     /// Every byte was taken.
@@ -217,9 +226,42 @@ enum Fed<C> {
     Command(RequestIdentity, C, usize),
 }
 
-/// Feeds `bytes` to the intake, answering the base module and the image's
-/// observations as they are decoded; a command of the image is given back
-/// while idle and refused busy while one is in work.
+/// Feeds one byte to the intake, answering the base module and the image's
+/// observations as they are decoded; a command of the image is given back.
+async fn feed_byte<P: Platform, R: Serve<O>, O, E: Write>(
+    writer: &mut Writer,
+    observer: &mut O,
+    tx: &mut E,
+    intake: &Intake<'_>,
+    base: &Base<'_, P>,
+    byte: u8,
+) -> Option<(RequestIdentity, R::Command)> {
+    let sent = writer.counts.sent();
+    match intake.receive_byte::<R>(&mut writer.decoder, byte, sent)? {
+        Request::Answer(identity, answer) => {
+            let frame = writer.frames.frame(base.boot, identity);
+            let written = base_frame(frame, &answer, base.image_keys, base.platform);
+            let sent = send(&mut writer.counts, tx, written).await;
+            if let (Delivery::Whole, Answer::Boot) = (sent, &answer) {
+                base.platform.boot_evidence_written();
+            }
+            None
+        }
+        Request::Serve(identity, own) => {
+            match own.serve(observer, writer.frames.frame(base.boot, identity)) {
+                Served::Observed(written) => {
+                    if let Delivery::Unencoded = send(&mut writer.counts, tx, written).await {
+                        reject(writer, tx, base.boot, identity, RejectReason::Internal).await;
+                    }
+                    None
+                }
+                Served::Command(command) => Some((identity, command)),
+            }
+        }
+    }
+}
+
+/// Feeds `bytes` while no command is in work: the first one decoded ends it.
 async fn feed<P: Platform, R: Serve<O>, O, E: Write>(
     writer: &mut Writer,
     observer: &mut O,
@@ -227,42 +269,33 @@ async fn feed<P: Platform, R: Serve<O>, O, E: Write>(
     intake: &Intake<'_>,
     base: &Base<'_, P>,
     bytes: &[u8],
-    work: Work,
 ) -> Fed<R::Command> {
     for (index, &byte) in bytes.iter().enumerate() {
-        let sent = writer.counts.sent();
-        let Some(request) = intake.receive_byte::<R>(&mut writer.decoder, byte, sent) else {
-            continue;
-        };
-        match request {
-            Request::Answer(identity, answer) => {
-                let frame = writer.frames.frame(base.boot, identity);
-                let written = base_frame(frame, &answer, base.image_keys, base.platform);
-                let sent = send(&mut writer.counts, tx, written).await;
-                if let (Delivery::Whole, Answer::Boot) = (sent, &answer) {
-                    base.platform.boot_evidence_written();
-                }
-            }
-            Request::Serve(identity, own) => {
-                match own.serve(observer, writer.frames.frame(base.boot, identity)) {
-                    Served::Observed(written) => {
-                        if let Delivery::Unencoded = send(&mut writer.counts, tx, written).await {
-                            reject(writer, tx, base.boot, identity, RejectReason::Internal).await;
-                        }
-                    }
-                    Served::Command(command) => match work {
-                        Work::Idle => {
-                            return Fed::Command(identity, command, index.saturating_add(1));
-                        }
-                        Work::Busy => {
-                            reject(writer, tx, base.boot, identity, RejectReason::Busy).await;
-                        }
-                    },
-                }
-            }
+        if let Some((identity, command)) =
+            feed_byte::<_, R, O, E>(writer, observer, tx, intake, base, byte).await
+        {
+            return Fed::Command(identity, command, index.saturating_add(1));
         }
     }
     Fed::Done
+}
+
+/// Feeds `bytes` while a command is in work: another is refused busy.
+async fn feed_busy<P: Platform, R: Serve<O>, O, E: Write>(
+    writer: &mut Writer,
+    observer: &mut O,
+    tx: &mut E,
+    intake: &Intake<'_>,
+    base: &Base<'_, P>,
+    bytes: &[u8],
+) {
+    for &byte in bytes {
+        if let Some((identity, _)) =
+            feed_byte::<_, R, O, E>(writer, observer, tx, intake, base, byte).await
+        {
+            reject(writer, tx, base.boot, identity, RejectReason::Busy).await;
+        }
+    }
 }
 
 /// Serves the endpoint for the boot `boot` until the chip resets: writes
@@ -301,7 +334,7 @@ where
             },
         )
         .write(&hello);
-    let _sent = send(&mut writer.counts, &mut endpoint, written).await;
+    tell(&mut writer.counts, &mut endpoint, written).await;
     // What the early writer dropped before it gave up the peripheral: a
     // loss is never silent.
     let lost = P::take_lost();
@@ -338,17 +371,7 @@ where
                 start = end;
                 continue;
             };
-            match feed::<_, R, O, E>(
-                writer,
-                observer,
-                &mut endpoint,
-                intake,
-                &base,
-                bytes,
-                Work::Idle,
-            )
-            .await
-            {
+            match feed::<_, R, O, E>(writer, observer, &mut endpoint, intake, &base, bytes).await {
                 Fed::Done => start = end,
                 Fed::Command(identity, command, used) => {
                     start = start.saturating_add(used).min(end);
@@ -361,16 +384,8 @@ where
         let mut work = pin!(command.run(commander));
         let ran = loop {
             if let Some(bytes) = chunk.get(start..end).filter(|bytes| !bytes.is_empty()) {
-                let _fed = feed::<_, R, O, E>(
-                    writer,
-                    observer,
-                    &mut endpoint,
-                    intake,
-                    &base,
-                    bytes,
-                    Work::Busy,
-                )
-                .await;
+                feed_busy::<_, R, O, E>(writer, observer, &mut endpoint, intake, &base, bytes)
+                    .await;
                 start = end;
             }
             match select(work.as_mut(), endpoint.read(&mut chunk)).await {
