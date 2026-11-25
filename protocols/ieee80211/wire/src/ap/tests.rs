@@ -22,7 +22,7 @@ fn msdu<'p>(
     crate::data::MsduParts {
         destination: Eui48::new(destination),
         source: Eui48::new(source),
-        ether_type,
+        ether_type: EtherType::new(ether_type),
         payload,
     }
 }
@@ -36,7 +36,7 @@ fn ap_eapol_data_frame_uses_from_ds_address_mapping() {
         access_point: Eui48::new(access_point),
         destination: Eui48::new(peer),
         sequence_number: seq(9),
-        ether_type: 0x888e,
+        ether_type: EtherType::new(0x888e),
         payload: &[1, 2, 3],
     }
     .encode(&mut output)
@@ -1095,7 +1095,7 @@ fn data_goes_only_from_a_nonzero_individual_access_point_to_such_a_peer() {
             access_point: Eui48::new(access_point),
             destination: Eui48::new(peer),
             sequence_number: seq(0),
-            ether_type: 0x888e,
+            ether_type: EtherType::new(0x888e),
             payload: &[1],
         }
         .encode(&mut [0; 128])

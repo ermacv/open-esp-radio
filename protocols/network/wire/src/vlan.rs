@@ -33,7 +33,7 @@ impl VlanTag {
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
         let mut reader = Reader::new(payload);
         let tci = VlanTci::from_bytes(reader.read::<2>()?);
-        let ether_type = EtherType::new(reader.u16_be()?);
+        let ether_type = EtherType::read(&mut reader)?;
         Ok((Self { tci, ether_type }, reader.remaining()))
     }
 }

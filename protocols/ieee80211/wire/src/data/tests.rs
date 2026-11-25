@@ -10,7 +10,7 @@ const fn msdu(destination: [u8; 6]) -> MsduHeader {
     MsduHeader {
         destination: Eui48::new(destination),
         source: Eui48::new(SOURCE),
-        ether_type: 0x0800,
+        ether_type: EtherType::new(0x0800),
     }
 }
 
@@ -99,7 +99,7 @@ fn station_decapsulation_reverses_from_ds_rfc1042_data() {
 
     assert_eq!(decoded.destination, Eui48::new(DESTINATION));
     assert_eq!(decoded.source, Eui48::new(SOURCE));
-    assert_eq!(decoded.ether_type, 0x0800);
+    assert_eq!(decoded.ether_type, EtherType::new(0x0800));
     assert_eq!(decoded.payload_offset, header_length + LLC_SNAP_HEADER_LEN);
     assert_eq!(
         &mpdu[decoded.payload_offset..][..decoded.payload_length],
@@ -132,7 +132,7 @@ fn protected_station_decapsulation_accepts_a_separate_ccmp_header() {
     )
     .unwrap();
 
-    assert_eq!(decoded.ether_type, 0x0806);
+    assert_eq!(decoded.ether_type, EtherType::new(0x0806));
     assert_eq!(decoded.destination, Eui48::new(DESTINATION));
     assert_eq!(decoded.source, Eui48::new(SOURCE));
     assert_eq!(
@@ -151,7 +151,7 @@ fn protected_station_decapsulation_accepts_a_separate_ccmp_header() {
     let frame = frames.next().unwrap().unwrap();
     assert_eq!(frame.destination, Eui48::new(DESTINATION));
     assert_eq!(frame.source, Eui48::new(SOURCE));
-    assert_eq!(frame.ether_type, 0x0806);
+    assert_eq!(frame.ether_type, EtherType::new(0x0806));
     assert_eq!(frame.payload, payload);
     assert!(frames.next().is_none());
 }
@@ -188,11 +188,11 @@ fn station_amsdu_iterator_removes_subframe_length_llc_and_padding() {
     let first = subframes.next().unwrap().unwrap();
     assert_eq!(first.destination, Eui48::new(DESTINATION));
     assert_eq!(first.source, Eui48::new(SOURCE));
-    assert_eq!(first.ether_type, 0x0800);
+    assert_eq!(first.ether_type, EtherType::new(0x0800));
     assert_eq!(first.payload, &[1, 2]);
     let second = subframes.next().unwrap().unwrap();
     assert_eq!(second.destination, Eui48::new([0xff; 6]));
-    assert_eq!(second.ether_type, 0x0806);
+    assert_eq!(second.ether_type, EtherType::new(0x0806));
     assert_eq!(second.payload, &[3, 4, 5]);
     assert!(subframes.next().is_none());
 
@@ -209,7 +209,7 @@ fn station_amsdu_iterator_removes_subframe_length_llc_and_padding() {
     assert_eq!(unified_first.payload, &[1, 2]);
     let unified_second = frames.next().unwrap().unwrap();
     assert_eq!(unified_second.destination, Eui48::new([0xff; 6]));
-    assert_eq!(unified_second.ether_type, 0x0806);
+    assert_eq!(unified_second.ether_type, EtherType::new(0x0806));
     assert_eq!(unified_second.payload, &[3, 4, 5]);
     assert!(frames.next().is_none());
 
@@ -229,7 +229,7 @@ fn station_amsdu_iterator_removes_subframe_length_llc_and_padding() {
     assert!(ap_frames.next().is_none());
 
     assert_eq!(second.destination, Eui48::new([0xff; 6]));
-    assert_eq!(second.ether_type, 0x0806);
+    assert_eq!(second.ether_type, EtherType::new(0x0806));
     assert_eq!(second.payload, &[3, 4, 5]);
 }
 
@@ -529,7 +529,7 @@ fn an_msdu_header_parses_from_the_networks_ethernet_frame() {
     let (header, payload) = MsduHeader::parse(&frame).unwrap();
     assert_eq!(header.destination, Eui48::new([2, 0, 0, 0, 0, 0x10]));
     assert_eq!(header.source, Eui48::new([2, 0, 0, 0, 0, 1]));
-    assert_eq!(header.ether_type, 0x888e);
+    assert_eq!(header.ether_type, EtherType::new(0x888e));
     assert_eq!(payload, [0xaa, 0xbb]);
     assert_eq!(MsduHeader::parse(&frame[..13]), Err(MsduTooShort));
 }

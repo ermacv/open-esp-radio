@@ -18,7 +18,7 @@
 //! it goes out.
 
 use oer_portable_time::{Duration, Instant};
-use oer_protocols_ieee802_wire::{Eui48, Eui48Kind, IndividualAddress};
+use oer_protocols_ieee802_wire::{EtherType, Eui48, Eui48Kind, IndividualAddress};
 use oer_protocols_ieee80211_core_security_rsn::{
     OwnedEapolFrame, RsnInterface, frames::RsnTxFrame,
 };
@@ -61,9 +61,6 @@ use crate::service::{
 /// The EAPOL-Key frames the engine carries.
 pub const AP_EAPOL_CAPACITY: usize =
     oer_protocols_ieee80211_core_security_rsn::frames::RSN_TX_EAPOL_CAPACITY;
-
-/// The EtherType of EAPOL (IEEE Std 802.1X-2020, 11.1.4).
-pub const EAPOL_ETHER_TYPE: u16 = 0x888e;
 
 /// How long the access point answers no further Probe Request after one:
 /// one response per interval, whatever its sender. The archive's policy.
@@ -172,7 +169,7 @@ pub struct ApMsdu<'f> {
     /// Its source: the peer.
     pub source: [u8; 6],
     /// The EtherType of its LLC/SNAP header.
-    pub ether_type: u16,
+    pub ether_type: EtherType,
     /// Its payload, in the received frame.
     pub payload: &'f [u8],
 }
@@ -475,13 +472,13 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
             return ApReceived::Nothing;
         };
         match status.phase {
-            ApPeerPhase::Securing if ether_type == EAPOL_ETHER_TYPE => ApReceived::Eapol {
+            ApPeerPhase::Securing if ether_type == EtherType::EAPOL => ApReceived::Eapol {
                 peer: peer.octets(),
                 body: payload,
             },
             ApPeerPhase::Authorized if admitted.protected() || !self.protects() => {
                 let _ = self.service.observe_activity(peer.octets(), now);
-                if ether_type == EAPOL_ETHER_TYPE {
+                if ether_type == EtherType::EAPOL {
                     // A rekey is not served; the frame changes nothing.
                     return ApReceived::Nothing;
                 }
@@ -874,7 +871,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
             access_point: Eui48::new(self.address()),
             destination: Eui48::new(peer),
             sequence_number: sequence,
-            ether_type: EAPOL_ETHER_TYPE,
+            ether_type: EtherType::EAPOL,
             payload: frame.as_bytes(),
         }
         .encode(output)?;
@@ -1028,7 +1025,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         &self,
         destination: [u8; 6],
         source: [u8; 6],
-        ether_type: u16,
+        ether_type: EtherType,
         tid: WmmUserPriority,
     ) -> Result<Option<ApMsduPlan>, ApEngineError> {
         let group = matches!(Eui48::new(destination).kind(), Eui48Kind::Group(_));
@@ -1163,7 +1160,7 @@ const MAX_DATA_PREFIX: usize = oer_protocols_ieee80211_wire::data::IEEE80211_QOS
 pub struct ApMsduPlan {
     peer: [u8; 6],
     source: [u8; 6],
-    ether_type: u16,
+    ether_type: EtherType,
     qos: PeerQos,
     tid: WmmUserPriority,
     kind: ApFrameKind,

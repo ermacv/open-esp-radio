@@ -6,7 +6,7 @@ use crate::data::{
     RFC1042_LLC_SNAP_PREFIX,
 };
 use crate::frame::MacHeader;
-use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 
 /// The prefix of every data MPDU a station sends to its access point on one
 /// association: the MAC header, the CCMP header's room on a protected link
@@ -39,7 +39,7 @@ pub struct StaDataHeaderFields {
     /// The TID of a QoS data MPDU; unused without QoS.
     pub priority: WmmUserPriority,
     /// The EtherType the LLC/SNAP header names.
-    pub ether_type: u16,
+    pub ether_type: EtherType,
 }
 
 impl StaDataHeaderTemplate {
@@ -59,7 +59,7 @@ impl StaDataHeaderTemplate {
             MsduHeader {
                 destination: Eui48::ZERO,
                 source: source.get(),
-                ether_type: 0,
+                ether_type: EtherType::new(0),
             },
             WmmUserPriority::UP0,
             peer_qos,
@@ -142,7 +142,11 @@ impl StaDataHeaderTemplate {
     /// The prefix's octets: the MAC header, a zero CCMP header on a
     /// protected link (the backend writes the packet number and key ID) and
     /// LLC/SNAP naming `ether_type`; [`Self::prefix_len`] of them.
-    fn octets(&self, header: &MacHeader, ether_type: u16) -> impl Iterator<Item = u8> + use<> {
+    fn octets(
+        &self,
+        header: &MacHeader,
+        ether_type: EtherType,
+    ) -> impl Iterator<Item = u8> + use<> {
         let ccmp = match self.protection {
             LinkProtection::Open => 0,
             LinkProtection::Ccmp => CCMP_HEADER_LEN,
@@ -151,7 +155,7 @@ impl StaDataHeaderTemplate {
             .octets()
             .chain(core::iter::repeat_n(0, ccmp))
             .chain(RFC1042_LLC_SNAP_PREFIX)
-            .chain(crate::data::EtherTypeField::of(ether_type).to_bytes())
+            .chain(ether_type.octets())
     }
 
     /// Write the prefix of the MPDU of `fields` flush against the end of
@@ -274,7 +278,7 @@ mod tests {
                             destination: Eui48::new(destination),
                             sequence_number: SequenceNumber::new(sequence).unwrap(),
                             priority: WmmUserPriority::new(priority).unwrap(),
-                            ether_type,
+                            ether_type: EtherType::new(ether_type),
                         };
                         let mut expected = [0xee; 64];
                         let length = encoded(peer_qos, protection, fields, &mut expected);
@@ -301,13 +305,13 @@ mod tests {
                 destination: Eui48::new([2, 0, 0, 0, 0, 3]),
                 sequence_number: SequenceNumber::new(4_095).unwrap(),
                 priority: WmmUserPriority::UP7,
-                ether_type: 0x86dd,
+                ether_type: EtherType::new(0x86dd),
             };
             let second = StaDataHeaderFields {
                 destination: Eui48::new([2, 0, 0, 0, 0, 4]),
                 sequence_number: SequenceNumber::new(1).unwrap(),
                 priority: WmmUserPriority::UP2,
-                ether_type: 0x0800,
+                ether_type: EtherType::new(0x0800),
             };
             let mut output = [0; 64];
             template.write_before(first, &mut output);
@@ -342,7 +346,7 @@ mod tests {
                 destination: Eui48::new([2, 0, 0, 0, 0, 3]),
                 sequence_number: SequenceNumber::new(42).unwrap(),
                 priority: WmmUserPriority::UP5,
-                ether_type: 0x0800,
+                ether_type: EtherType::new(0x0800),
             };
             let mut expected = [0xee; 64];
             encoded(peer_qos, protection, fields, &mut expected);

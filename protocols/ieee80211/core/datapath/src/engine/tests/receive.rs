@@ -161,11 +161,7 @@ fn management_and_eapol_are_read_by_the_controller_inside_the_round() {
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&beacon(1), meta());
         around.port.land(
-            &data(
-                2,
-                oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL,
-                7,
-            ),
+            &data(2, oer_protocols_ieee802_wire::EtherType::EAPOL.value(), 7),
             meta(),
         );
         let _ = engine.received(&mut around.turn());
@@ -173,11 +169,7 @@ fn management_and_eapol_are_read_by_the_controller_inside_the_round() {
         assert_eq!(around.told.frames[0], (Some(0), beacon(1)));
         assert_eq!(
             around.told.frames[1].1,
-            data(
-                2,
-                oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL,
-                7
-            )
+            data(2, oer_protocols_ieee802_wire::EtherType::EAPOL.value(), 7)
         );
         assert!(around.net.received.is_empty());
         assert_eq!(around.port.places_held(), 0, "both went back");
@@ -542,7 +534,7 @@ fn a_protected_link_takes_unprotected_eapol_alone() {
             };
             let _ = free.link(link, &mut around.turn());
         }
-        let eapol = oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
+        let eapol = oer_protocols_ieee802_wire::EtherType::EAPOL.value();
         around.port.land(&data(1, IPV4, 1), meta());
         around.port.land(&data(2, eapol, 2), meta());
         around.port.land(&protected(3, 3), verified());

@@ -67,12 +67,11 @@
 //! awaits its end: there is no queue of actions to overflow.
 
 use core::marker::PhantomData;
-use oer_protocols_ieee802_wire::{Eui48, GroupAddress, IndividualAddress};
+use oer_protocols_ieee802_wire::{EtherType, Eui48, GroupAddress, IndividualAddress};
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 /// Why an EAPOL-Key packet is not one, as [`StaDisconnectReason::InvalidEapol`]
 /// carries it.
 pub use oer_protocols_ieee80211_wire::eapol::EapolParseError;
-use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::status::reason_code;
 
 use crate::events::{ConnectStep, RsnDrop, ScanOutcome, StaEvent};
@@ -5676,7 +5675,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                         bssid,
                         destination: bssid.get(),
                         sequence_number,
-                        ether_type: ETHER_TYPE_EAPOL,
+                        ether_type: EtherType::EAPOL,
                         payload: eapol,
                     }
                     .encode(frame)
@@ -6974,7 +6973,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             user_priority: priority.value(),
             peer_qos,
             ccmp_header: [0; 8],
-            ether_type: ETHER_TYPE_EAPOL,
+            ether_type: EtherType::EAPOL,
             payload: eapol,
         };
         Ok(self

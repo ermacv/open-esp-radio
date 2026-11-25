@@ -62,7 +62,6 @@ pub mod data;
 pub mod eapol;
 pub mod element;
 mod encoding;
-pub mod ethertype;
 pub mod extensions;
 pub mod qos;
 

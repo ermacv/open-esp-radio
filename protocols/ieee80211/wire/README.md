@@ -15,8 +15,7 @@ Besides the frame bodies of the roles, the formats include the Frame Control
 field with named management and control subtypes, the management MAC header
 (`management::ManagementHeader`), Sequence Control access, the Block Ack
 Action and Compressed BlockAckReq codecs, the Timestamp field and the time
-unit (`tsf`), status and reason codes (`status`), EtherType values
-(`ethertype`), the EAPOL-Key Key Information field and KDEs (`eapol`), the SAE
+unit (`tsf`), status and reason codes (`status`), the EAPOL-Key Key Information field and KDEs (`eapol`), the SAE
 Commit and Confirm body codecs, whose scalar, element and confirm are byte
 values for `oer-protocols-ieee80211-core-security-rsn` to interpret, and extension element IDs
 (`sae`), the AAD and nonce of a CCMP-protected MPDU (`ccmp::protected`),

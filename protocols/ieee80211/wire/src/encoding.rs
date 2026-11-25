@@ -202,7 +202,7 @@ impl<'a> AmsduBody<'a> {
                         .to_bytes(),
                     ),
                     Fragment::Borrowed(&RFC1042_LLC_SNAP_PREFIX),
-                    Fragment::Word(crate::data::EtherTypeField::of(frame.ether_type).to_bytes()),
+                    Fragment::Word(frame.ether_type.octets()),
                     Fragment::Borrowed(frame.payload),
                     Fragment::Borrowed(padding),
                 ]
@@ -213,7 +213,7 @@ impl<'a> AmsduBody<'a> {
 #[cfg(test)]
 mod tests {
     use super::FrameParts;
-    use oer_protocols_ieee802_wire::Eui48;
+    use oer_protocols_ieee802_wire::{EtherType, Eui48};
 
     #[test]
     fn overlapping_moves_match_memmove_and_refuse_invalid_ranges_without_writes() {
@@ -283,7 +283,7 @@ mod tests {
         super::MsduParts {
             destination: Eui48::new(destination),
             source: Eui48::new(source),
-            ether_type: 0x0800,
+            ether_type: EtherType::new(0x0800),
             payload,
         }
     }
@@ -319,7 +319,7 @@ mod tests {
                 super::MsduParts {
                     destination: Eui48::new([0xa5; 6]),
                     source: Eui48::new([0xa5; 6]),
-                    ether_type: 0xa5a5,
+                    ether_type: EtherType::new(0xa5a5),
                     payload: &[],
                 },
             ];

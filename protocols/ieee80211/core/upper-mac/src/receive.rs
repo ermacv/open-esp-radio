@@ -161,7 +161,7 @@ impl<'a> AdmittedData<'a> {
 mod tests {
     extern crate std;
     use super::*;
-    use oer_protocols_ieee802_wire::IndividualAddress;
+    use oer_protocols_ieee802_wire::{EtherType, IndividualAddress};
     use oer_protocols_ieee80211_wire::ccmp::{CcmpKeyId, CcmpPacketNumber, GroupKeyId};
     use oer_protocols_ieee80211_wire::data::PeerQos;
     use oer_protocols_ieee80211_wire::security::LinkProtection;
@@ -292,7 +292,7 @@ mod tests {
         .unwrap();
         assert!(admitted.protected());
         let msdu = admitted.msdus().unwrap().next().unwrap().unwrap();
-        assert_eq!(msdu.ether_type, 0x0800);
+        assert_eq!(msdu.ether_type, EtherType::new(0x0800));
         assert_eq!(msdu.payload, [9, 8]);
         assert_eq!(msdu.destination, Eui48::new([6; 6]));
         assert_eq!(msdu.source, Eui48::new([4; 6]));
@@ -352,7 +352,7 @@ mod tests {
                 }
                 let admitted = admit(&frame, Integrity::DecryptedAndVerified, &mut replay).unwrap();
                 let parts = admitted.msdus().unwrap().next().unwrap().unwrap();
-                assert_eq!(parts.ether_type, 0x888e);
+                assert_eq!(parts.ether_type, EtherType::new(0x888e));
                 assert_eq!(parts.payload, [1, 2, 3]);
                 if protected == LinkProtection::Ccmp {
                     assert!(matches!(
@@ -411,7 +411,7 @@ mod tests {
                 if matches!(subtype, 0..=3 | 8..=11) {
                     let admitted = result.unwrap();
                     let parts = admitted.msdus().unwrap().next().unwrap().unwrap();
-                    assert_eq!(parts.ether_type, 0x888e);
+                    assert_eq!(parts.ether_type, EtherType::new(0x888e));
                     assert_eq!(parts.payload, [1, 2, 3]);
                 } else {
                     assert!(

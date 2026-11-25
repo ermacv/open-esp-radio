@@ -30,7 +30,7 @@
 //!   reaches the head ([`RxRefusal::LinkHeld`]).
 
 use oer_portable_time::{Duration, Instant};
-use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_ieee80211_contracts_port::{
     EthernetAddresses, Lendable, ReceivePort, Received, Rest as PortRest, Round, RxCryptoStatus,
     RxEvidence, RxHead, RxHeader, RxMetadata, UnitHandle,
@@ -38,7 +38,6 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_core_installation::Rest;
 use oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN;
 use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, decapsulate_data_frames};
-use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::security::LinkProtection;
 
 use super::{Agreements, Carrying, Network, Told};
@@ -766,7 +765,7 @@ fn route<M: RxMetadata>(
 
 /// Whether a data frame's first MSDU is EAPOL.
 fn eapol<M>(view: &Received<'_, M>) -> bool {
-    matches!(first_ether_type(view), Some(ETHER_TYPE_EAPOL))
+    matches!(first_ether_type(view), Some(EtherType::EAPOL))
 }
 
 /// Whether the port's evidence says the frame was decrypted and its
@@ -802,7 +801,7 @@ const fn role_of(header: &RxHeader) -> DataInterfaceRole {
 }
 
 /// The EtherType of a data frame's first MSDU, when it decapsulates.
-fn first_ether_type<M>(view: &Received<'_, M>) -> Option<u16> {
+fn first_ether_type<M>(view: &Received<'_, M>) -> Option<EtherType> {
     let RxHead::Frame(header) = view.head else {
         return None;
     };
