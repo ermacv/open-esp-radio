@@ -17,7 +17,7 @@ fn qos(tid: u8) -> QosControl {
 fn header_to<R: ReceiverAddress>(
     frame_control: u16,
     receiver: [u8; 6],
-    kind: impl FnOnce([u8; 6]) -> Option<R>,
+    kind: impl FnOnce(Eui48) -> Option<R>,
     address4: Option<[u8; 6]>,
     qos: Option<QosControl>,
     ht_control: Option<[u8; 4]>,
@@ -59,10 +59,10 @@ fn header(
 
 #[test]
 fn a_receiver_address_is_individual_or_group_by_its_group_bit() {
-    assert!(IndividualAddress::new(A).is_some());
-    assert!(IndividualAddress::new([0xff; 6]).is_none());
-    assert!(GroupAddress::new([0xff; 6]).is_some());
-    assert!(GroupAddress::new(A).is_none());
+    assert!(IndividualAddress::new(Eui48::new(A)).is_some());
+    assert!(IndividualAddress::new(Eui48::new([0xff; 6])).is_none());
+    assert!(GroupAddress::new(Eui48::new([0xff; 6])).is_some());
+    assert!(GroupAddress::new(Eui48::new(A)).is_none());
 }
 
 #[test]
@@ -107,10 +107,10 @@ fn the_qos_ack_policy_follows_the_frames_response() {
 
 #[test]
 fn group_qos_frames_encode_no_ack_without_an_individual_response() {
-    let group = GroupAddress::new([0xff; 6]).unwrap();
+    let group = GroupAddress::new(Eui48::new([0xff; 6])).unwrap();
     let header = header_to(
         0x0288,
-        group.get(),
+        group.get().octets(),
         GroupAddress::new,
         None,
         Some(qos(3)),
@@ -121,7 +121,7 @@ fn group_qos_frames_encode_no_ack_without_an_individual_response() {
     header.encode(&mut out).unwrap();
     assert_eq!(out[24] & 0b0110_0000, 0b0010_0000);
     assert_eq!(out[24] & 0x0f, 3);
-    assert_eq!(&out[4..10], &group.get());
+    assert_eq!(&out[4..10], &group.get().octets());
 }
 
 #[test]

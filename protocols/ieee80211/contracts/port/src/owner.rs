@@ -165,7 +165,7 @@
 
 use core::marker::PhantomData;
 use oer_portable_bounded::Index;
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee802_wire::{Eui48, GroupAddress, IndividualAddress};
 use oer_protocols_ieee80211_wire::frame::{
     FrameControl, MacHeader, QosAckPolicy, QosControl as QosControlField,
 };
@@ -608,26 +608,6 @@ impl<'t, K: Ieee80211Capabilities> PortRate<'t, K> {
     }
 }
 
-/// The receiver of a group frame: its address has the group bit set.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GroupAddress([u8; 6]);
-
-impl GroupAddress {
-    /// `address`, when its group bit is set.
-    pub const fn new(address: [u8; 6]) -> Option<Self> {
-        if address[0] & 1 == 1 {
-            Some(Self(address))
-        } else {
-            None
-        }
-    }
-
-    /// The address.
-    pub const fn get(self) -> [u8; 6] {
-        self.0
-    }
-}
-
 /// A traffic identifier, 0 to 15.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Tid(oer_portable_wire::U8<4>);
@@ -722,8 +702,8 @@ impl QosControl {
 /// Only preparation derives Protected from the operation's protection:
 ///
 /// ```compile_fail,E0624
+/// use oer_protocols_ieee802_wire::IndividualAddress;
 /// use oer_protocols_ieee80211_contracts_port::HeaderSpec;
-/// use oer_protocols_ieee80211_wire::address::IndividualAddress;
 /// fn flag(header: HeaderSpec<IndividualAddress>) {
 ///     let _header = header.with_protection(false);
 /// }
@@ -760,18 +740,18 @@ pub struct HeaderSpec<A> {
 /// [`GroupAddress`].
 pub trait ReceiverAddress: Copy {
     /// The address.
-    fn address(self) -> [u8; 6];
+    fn address(self) -> Eui48;
 }
 
 impl ReceiverAddress for IndividualAddress {
-    fn address(self) -> [u8; 6] {
+    fn address(self) -> Eui48 {
         self.get()
     }
 }
 
 impl ReceiverAddress for GroupAddress {
-    fn address(self) -> [u8; 6] {
-        self.0
+    fn address(self) -> Eui48 {
+        self.get()
     }
 }
 
@@ -792,7 +772,7 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
     /// header writes its own ([`ResponseHeader::encode`]).
     pub fn from_mac_header(
         header: MacHeader,
-        receiver: impl FnOnce([u8; 6]) -> Option<A>,
+        receiver: impl FnOnce(Eui48) -> Option<A>,
     ) -> Option<Self> {
         let receiver = receiver(header.address1())?;
         let header =
@@ -897,8 +877,8 @@ mod response_header {
 /// An individual header must have a checked response kind:
 ///
 /// ```compile_fail,E0599
+/// use oer_protocols_ieee802_wire::IndividualAddress;
 /// use oer_protocols_ieee80211_contracts_port::{HeaderSpec, ResponseHeader};
-/// use oer_protocols_ieee80211_wire::address::IndividualAddress;
 /// fn raw(header: HeaderSpec<IndividualAddress>, out: &mut [u8]) {
 ///     let _ = header.encode(out);
 /// }
@@ -907,8 +887,9 @@ mod response_header {
 /// Each accepted header type carries its own response policy:
 ///
 /// ```
+/// use oer_protocols_ieee802_wire::GroupAddress;
 /// use oer_protocols_ieee80211_contracts_port::{
-///     AckHeader, GroupAddress, HeaderSpec, NoAckHeader, ResponseHeader, StorageTooShort,
+///     AckHeader, HeaderSpec, NoAckHeader, ResponseHeader, StorageTooShort,
 /// };
 /// fn typed(
 ///     ack: AckHeader, no_ack: NoAckHeader, group: HeaderSpec<GroupAddress>, out: &mut [u8],

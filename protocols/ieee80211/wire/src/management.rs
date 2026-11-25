@@ -1,6 +1,7 @@
 //! Allocation-free IEEE 802.11 management-frame construction.
 
 use oer_portable_wire::PrefixLength;
+use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
 
 use crate::sequence::SequenceNumber;
 
@@ -10,7 +11,6 @@ pub const MAX_SUPPORTED_RATES_LEN: usize = 24;
 
 const PROBE_REQUEST_FRAME_CONTROL: crate::frame::FrameControlFields =
     crate::frame::FrameControlFields::from_bytes([0x40, 0x00]);
-pub const BROADCAST_ADDRESS: [u8; 6] = [0xff; 6];
 const SSID_ELEMENT_ID: u8 = 0;
 const SUPPORTED_RATES_ELEMENT_ID: u8 = 1;
 const EXTENDED_SUPPORTED_RATES_ELEMENT_ID: u8 = 50;
@@ -31,9 +31,9 @@ pub enum ProbeRequestError {
 /// memory, so this type needs neither allocation nor global buffers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProbeRequest<'a> {
-    pub destination: [u8; 6],
-    pub source: [u8; 6],
-    pub bssid: [u8; 6],
+    pub destination: Eui48,
+    pub source: Eui48,
+    pub bssid: Eui48,
     pub sequence_number: SequenceNumber,
     pub ssid: &'a [u8],
     pub supported_rates: &'a [u8],
@@ -74,9 +74,9 @@ impl ProbeRequest<'_> {
             &mut header,
             &PROBE_REQUEST_FRAME_CONTROL.to_bytes(),
         );
-        crate::encoding::write_array::<4, _, _>(&mut header, &self.destination);
-        crate::encoding::write_array::<10, _, _>(&mut header, &self.source);
-        crate::encoding::write_array::<16, _, _>(&mut header, &self.bssid);
+        crate::encoding::write_array::<4, _, _>(&mut header, &self.destination.octets());
+        crate::encoding::write_array::<10, _, _>(&mut header, &self.source.octets());
+        crate::encoding::write_array::<16, _, _>(&mut header, &self.bssid.octets());
         crate::encoding::write_array::<22, _, _>(
             &mut header,
             &self.sequence_number.sequence_control().to_bytes(),
@@ -113,11 +113,11 @@ pub struct ManagementHeader {
     pub frame_control: crate::frame::FrameControlFields,
     pub duration: crate::frame::DurationId,
     /// Address 1: the receiver.
-    pub receiver: [u8; 6],
+    pub receiver: Eui48,
     /// Address 2: the transmitter.
-    pub transmitter: [u8; 6],
+    pub transmitter: Eui48,
     /// Address 3: the BSSID.
-    pub bssid: [u8; 6],
+    pub bssid: Eui48,
     pub sequence_control: crate::sequence::SequenceControl,
 }
 
@@ -160,9 +160,9 @@ impl ManagementHeader {
         Self {
             frame_control: crate::frame::FrameControlFields::from_bytes([f0, f1]),
             duration: crate::frame::DurationId::from_bytes([d0, d1]),
-            receiver: [r0, r1, r2, r3, r4, r5],
-            transmitter: [t0, t1, t2, t3, t4, t5],
-            bssid: [b0, b1, b2, b3, b4, b5],
+            receiver: Eui48::new([r0, r1, r2, r3, r4, r5]),
+            transmitter: Eui48::new([t0, t1, t2, t3, t4, t5]),
+            bssid: Eui48::new([b0, b1, b2, b3, b4, b5]),
             sequence_control: crate::sequence::SequenceControl::from_bytes([s0, s1]),
         }
     }
@@ -171,9 +171,9 @@ impl ManagementHeader {
     pub const fn to_bytes(self) -> [u8; MANAGEMENT_HEADER_LEN] {
         let [f0, f1] = self.frame_control.to_bytes();
         let [d0, d1] = self.duration.to_bytes();
-        let [r0, r1, r2, r3, r4, r5] = self.receiver;
-        let [t0, t1, t2, t3, t4, t5] = self.transmitter;
-        let [b0, b1, b2, b3, b4, b5] = self.bssid;
+        let [r0, r1, r2, r3, r4, r5] = self.receiver.octets();
+        let [t0, t1, t2, t3, t4, t5] = self.transmitter.octets();
+        let [b0, b1, b2, b3, b4, b5] = self.bssid.octets();
         let [s0, s1] = self.sequence_control.to_bytes();
         [
             f0, f1, d0, d1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5, b0, b1, b2, b3, b4, b5,
@@ -183,8 +183,7 @@ impl ManagementHeader {
 
     /// Whether Address 1 is a group address.
     pub const fn group_receiver(&self) -> bool {
-        let [first, ..] = self.receiver;
-        crate::address::AddressFlags::from_bytes([first]).group()
+        matches!(self.receiver.kind(), Eui48Kind::Group(_))
     }
 }
 

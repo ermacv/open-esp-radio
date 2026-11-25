@@ -57,11 +57,11 @@ fn generated_frames_are_accepted_by_the_production_probe_parser() {
             oer_protocols_ieee80211_wire::ap::parse_ap_management_request(
                 &ADVERTISEMENT,
                 &frame[9..],
-                bssid
+                oer_protocols_ieee802_wire::Eui48::new(bssid)
             ),
             Some(
                 oer_protocols_ieee80211_wire::ap::ApManagementRequest::Probe {
-                    peer: r.source,
+                    peer: oer_protocols_ieee802_wire::Eui48::new(r.source),
                     ssid: b"test"
                 }
             )

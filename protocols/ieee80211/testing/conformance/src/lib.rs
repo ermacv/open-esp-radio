@@ -30,6 +30,7 @@
 extern crate std;
 
 use core::task::{Context, Poll, Waker};
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 use std::vec::Vec;
 
 use core::num::NonZeroU8;
@@ -44,7 +45,6 @@ use oer_protocols_ieee80211_contracts_port::{
     QueueRight, RadioPort, ReceivePort, Round, Settled, SingleOutcome, SinglePlace, StartPoll,
     StopFrom, StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome, ValueCommand, ValueEnd,
 };
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::frame::MacHeader;
 use oer_protocols_ieee80211_wire::phy::{
     HtGuardInterval, HtMcs, HtRate, LegacyRate, PpduBandwidth,
@@ -337,7 +337,7 @@ fn data_run<'id, H, const S: usize, const G: usize, const A: usize, const D: usi
         agreements,
     } = rights.data.take().expect("the data's rights are home");
     let peer =
-        oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 2]).unwrap();
+        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 2])).unwrap();
     let (place, end) = pairwise_command(
         harness,
         place,

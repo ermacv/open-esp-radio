@@ -8,6 +8,7 @@ use crate::model::{Running, running};
 use crate::plane::{AggregateRate, HtLimits, PpduKind};
 use core::num::NonZeroU8;
 use oer_portable_time::Duration;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::DataPort;
 use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, FrameSet, HEADROOM, MpduStartSpacing, Ppdu, Protection, RetryStage,
@@ -363,8 +364,9 @@ pub(super) fn station_link(attempts: u8, lifetime: Duration) -> StationLink<Mode
     StationLink {
         data: DataLink {
             header: StaDataHeaderTemplate::new(
-                OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
-                Bssid::new(IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap()).unwrap(),
+                OwnAddress::new(IndividualAddress::new(Eui48::new(STATION)).unwrap()),
+                Bssid::new(IndividualAddress::new(Eui48::new(ACCESS_POINT_ADDRESS)).unwrap())
+                    .unwrap(),
                 PeerQos::Qos,
                 LinkProtection::Open,
             )
@@ -544,7 +546,7 @@ const HOUR: Duration = Duration::from_secs(3600);
 /// key of packet numbers from one.
 fn key_change(byte: u8) -> KeyChange<Key> {
     KeyChange {
-        peer: IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
+        peer: IndividualAddress::new(Eui48::new(ACCESS_POINT_ADDRESS)).unwrap(),
         key: oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[byte; 16]),
         spp: oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         transmit: InstalledCcmpTxKey::install(TestKey, CcmpPacketNumberStep::ONE),
@@ -1029,8 +1031,8 @@ fn a_link_without_qos_names_no_tid() {
         }
         let mut link = station_link(2, HOUR);
         link.data.header = StaDataHeaderTemplate::new(
-            OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
-            Bssid::new(IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap()).unwrap(),
+            OwnAddress::new(IndividualAddress::new(Eui48::new(STATION)).unwrap()),
+            Bssid::new(IndividualAddress::new(Eui48::new(ACCESS_POINT_ADDRESS)).unwrap()).unwrap(),
             PeerQos::NonQos,
             LinkProtection::Open,
         )

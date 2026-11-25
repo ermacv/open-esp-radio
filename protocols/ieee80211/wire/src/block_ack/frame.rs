@@ -4,6 +4,7 @@
 
 use crate::frame::{ControlSubtype, FrameControlFields, QosControl};
 use crate::sequence::{SequenceControl, SequenceNumber};
+use oer_protocols_ieee802_wire::Eui48;
 
 pub const BLOCK_ACK_CATEGORY: u8 = 3;
 pub const ADDBA_REQUEST_ACTION: u8 = 0;
@@ -170,8 +171,8 @@ pub const BLOCK_ACK_REQUEST_LEN: usize = 20;
 /// and TA, writes BAR Control `(tid << 12) | 0x0004` and Starting Sequence
 /// Control `ssn << 4`, and clears the Retry bit.
 pub fn encode_block_ack_request(
-    receiver: [u8; 6],
-    transmitter: [u8; 6],
+    receiver: Eui48,
+    transmitter: Eui48,
     tid: u8,
     starting_sequence: SequenceNumber,
 ) -> [u8; BLOCK_ACK_REQUEST_LEN] {
@@ -180,8 +181,8 @@ pub fn encode_block_ack_request(
         &mut frame,
         &BLOCK_ACK_REQUEST_FRAME_CONTROL.to_bytes(),
     );
-    crate::encoding::write_array::<4, _, _>(&mut frame, &receiver);
-    crate::encoding::write_array::<10, _, _>(&mut frame, &transmitter);
+    crate::encoding::write_array::<4, _, _>(&mut frame, &receiver.octets());
+    crate::encoding::write_array::<10, _, _>(&mut frame, &transmitter.octets());
     let tid = QosControl::from_bytes([tid, 0]).tid();
     let control = BarControlFields::from_bytes([4, 0]).with_tid(tid);
     crate::encoding::write_array::<16, _, _>(&mut frame, &control.to_bytes());
@@ -319,8 +320,8 @@ pub fn encode_delba(
 /// answer is compressed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CompressedBlockAckRequest {
-    pub receiver: [u8; 6],
-    pub transmitter: [u8; 6],
+    pub receiver: Eui48,
+    pub transmitter: Eui48,
     pub tid: u8,
     pub starting_sequence: SequenceNumber,
 }
@@ -351,8 +352,8 @@ pub fn parse_compressed_block_ack_request(frame: &[u8]) -> Option<CompressedBloc
     {
         return None;
     }
-    let (&receiver, rest) = rest.split_first_chunk::<6>()?;
-    let (&transmitter, rest) = rest.split_first_chunk::<6>()?;
+    let (&receiver, rest) = rest.split_first_chunk::<{ Eui48::LEN }>()?;
+    let (&transmitter, rest) = rest.split_first_chunk::<{ Eui48::LEN }>()?;
     let (&[c0, c1, s0, s1], _) = rest.split_first_chunk::<4>()?;
     let parameters = BarControlFields::from_bytes([c0, c1]);
     if parameters.bar_type() != COMPRESSED_BAR_TYPE {
@@ -363,8 +364,8 @@ pub fn parse_compressed_block_ack_request(frame: &[u8]) -> Option<CompressedBloc
         return None;
     }
     Some(CompressedBlockAckRequest {
-        receiver,
-        transmitter,
+        receiver: Eui48::new(receiver),
+        transmitter: Eui48::new(transmitter),
         tid: parameters.tid().get(),
         starting_sequence: SequenceNumber::from_sequence_control(
             crate::sequence::SequenceControl::from_bytes([s0, s1]),

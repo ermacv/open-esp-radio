@@ -5,6 +5,7 @@
 
 use crate::ccmp::GroupKeyId;
 use crate::security::rsn::RSN_OUI;
+use oer_protocols_ieee802_wire::Eui48;
 
 oer_portable_wire::bitfield! {
     /// The Key Information field of an EAPOL-Key frame, big-endian on air.
@@ -76,7 +77,7 @@ impl KeyReplayCounter {
 ///
 /// SOURCE: IEEE Std 802.1X-2020, 11.1.1, Table 11-1 (PAE group addresses:
 /// the nearest non-TPMR bridge group address 01-80-C2-00-00-03).
-pub const PAE_GROUP_ADDRESS: [u8; 6] = [0x01, 0x80, 0xc2, 0x00, 0x00, 0x03];
+pub const PAE_GROUP_ADDRESS: Eui48 = Eui48::new([0x01, 0x80, 0xc2, 0x00, 0x00, 0x03]);
 
 /// Element ID of a Key Data Encapsulation: the vendor-specific element ID.
 ///

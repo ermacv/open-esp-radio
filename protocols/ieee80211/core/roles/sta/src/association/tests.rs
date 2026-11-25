@@ -1,4 +1,5 @@
 mod associated_peer {
+    use oer_protocols_ieee802_wire::Eui48;
     use oer_protocols_ieee80211_core_upper_mac::protection::{BasicRates, HePacketPadding};
 
     use oer_protocols_ieee80211_wire::{
@@ -19,7 +20,7 @@ mod associated_peer {
     fn he_access_point() -> ScanRecord {
         let mut access_point = ScanRecord::new(
             oer_protocols_ieee80211_wire::address::Bssid::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1]))
                     .unwrap(),
             )
             .unwrap(),
@@ -117,7 +118,7 @@ mod associated_peer {
     fn the_peer_carries_every_bss_protection_fact() {
         let mut access_point = ScanRecord::new(
             oer_protocols_ieee80211_wire::address::Bssid::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+                oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1]))
                     .unwrap(),
             )
             .unwrap(),

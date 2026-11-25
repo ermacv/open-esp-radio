@@ -136,9 +136,9 @@ fn a_new_profile_forgets_the_previous_networks_cached_associations() {
         world.station.set_profile(open_profile(b"first")).unwrap();
         let bssid = |last| {
             oer_protocols_ieee80211_wire::address::Bssid::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new([
+                oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([
                     2, 0, 0, 0, 0, last,
-                ])
+                ]))
                 .unwrap(),
             )
             .unwrap()

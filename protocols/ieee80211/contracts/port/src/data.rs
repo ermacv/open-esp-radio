@@ -9,12 +9,12 @@
 
 use core::marker::PhantomData;
 use core::task::Context;
+use oer_protocols_ieee802_wire::IndividualAddress;
 
 use oer_portable_bounded::Index;
 
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_ieee80211_wire::security::Spp;

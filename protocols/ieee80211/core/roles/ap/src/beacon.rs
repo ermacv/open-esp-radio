@@ -14,6 +14,7 @@
 //! due at the next TBTT; the access point's owner moves the port and the
 //! template is written again for the new channel ([`ApBeacon::rewrite`]).
 
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::beacon::{
     BeaconTemplateError, dtim, insert_after_tim, remove_elements, write_channel_switch_count,
 };
@@ -139,7 +140,7 @@ impl<'storage> ApBeacon<'storage> {
         let written = write_ht_beacon(
             advertisement,
             storage,
-            access_point,
+            Eui48::new(access_point),
             ssid,
             channel,
             beacon_interval_tu,
@@ -182,7 +183,7 @@ impl<'storage> ApBeacon<'storage> {
         self.len = write_ht_beacon(
             advertisement,
             self.storage,
-            access_point,
+            Eui48::new(access_point),
             ssid,
             channel,
             beacon_interval_tu,

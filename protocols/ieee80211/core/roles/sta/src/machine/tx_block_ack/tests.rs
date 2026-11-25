@@ -35,7 +35,7 @@ fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckActi
 }
 
 /// An admitted association whose TID 0 agreement is operational.
-fn operational() -> StaTxBlockAck {
+pub(crate) fn operational() -> StaTxBlockAck {
     let mut tx = StaTxBlockAck::new(POLICY).unwrap();
     tx.associate(BlockAckAdmission::Admitted);
     tx.traffic(0, at(0));

@@ -1,5 +1,6 @@
 //! Owned frames at the network queue boundary, held as MSDU fields.
 
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::data::{MsduHeader, MsduParts};
 
 /// Maximum Ethernet-II payload stored by one network queue slot.
@@ -22,10 +23,11 @@ pub struct FrameTooLong {
 /// A network adapter constructs a frame from its checked Ethernet parts:
 ///
 /// ```
+/// use oer_protocols_ieee802_wire::Eui48;
 /// use oer_protocols_ieee80211_wire::data::MsduParts;
 /// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 /// let parts = MsduParts {
-///     destination: [0xff; 6], source: [2, 0, 0, 0, 0, 1],
+///     destination: Eui48::BROADCAST, source: Eui48::new([2, 0, 0, 0, 0, 1]),
 ///     ether_type: 0x0800, payload: &[1, 2, 3],
 /// };
 /// let frame = EthernetFrame::from_parts(parts).unwrap();
@@ -73,8 +75,8 @@ impl EthernetFrame {
     pub const fn empty() -> Self {
         Self {
             header: MsduHeader {
-                destination: [0; 6],
-                source: [0; 6],
+                destination: Eui48::ZERO,
+                source: Eui48::ZERO,
                 ether_type: 0,
             },
             payload: heapless::Vec::new(),
@@ -121,8 +123,8 @@ impl oer_protocols_network_port::EthernetFrame for EthernetFrame {
     > {
         let parts = self.parts();
         Ok(oer_protocols_network_port::EthernetFrameView {
-            destination: parts.destination,
-            source: parts.source,
+            destination: parts.destination.octets(),
+            source: parts.source.octets(),
             ether_type: parts.ether_type,
             payload: parts.payload,
         })
@@ -169,8 +171,8 @@ impl EthernetFrame {
             .get(plan.payload.clone())
             .ok_or(PlannedCopyError::OutsideFrame)?;
         Self::from_parts(MsduParts {
-            destination: plan.destination,
-            source: plan.source,
+            destination: Eui48::new(plan.destination),
+            source: Eui48::new(plan.source),
             ether_type: plan.ether_type,
             payload,
         })
@@ -182,8 +184,8 @@ impl<'frame> MsduDelivery<'frame> {
     /// Its fields and payload range, without the borrow.
     pub fn plan(&self) -> MsduPlan {
         MsduPlan {
-            destination: self.parts.destination,
-            source: self.parts.source,
+            destination: self.parts.destination.octets(),
+            source: self.parts.source.octets(),
             ether_type: self.parts.ether_type,
             payload: self.payload.clone(),
         }
@@ -215,8 +217,8 @@ mod tests {
     fn a_delivery_locates_its_payload_in_the_mpdu_only() {
         let frame = [0_u8, 1, 2, 3, 4, 5, 6, 7];
         let parts = |payload| MsduParts {
-            destination: [1; 6],
-            source: [2; 6],
+            destination: Eui48::new([1; 6]),
+            source: Eui48::new([2; 6]),
             ether_type: 0x0800,
             payload,
         };
@@ -238,8 +240,8 @@ mod tests {
     #[test]
     fn fields_and_maximum_payload_are_kept_without_truncation() {
         let parts = MsduParts {
-            destination: [0xab; 6],
-            source: [0xcd; 6],
+            destination: Eui48::new([0xab; 6]),
+            source: Eui48::new([0xcd; 6]),
             ether_type: 0xabcd,
             payload: &[0xab; MAX_ETHERNET_PAYLOAD_LEN],
         };

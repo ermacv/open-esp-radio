@@ -2,9 +2,9 @@
 
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_protocols_ieee802_wire::Eui48Kind;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::{
-    address::AddressFlags,
     ccmp::protected::{CCMP_MIC_LEN, ProtectedMpdu, ProtectedMpduError},
     ccmp::{CCMP_HEADER_LEN, CcmpHeaderError, CcmpKeyId, CcmpPacketNumber},
     frame::DecodedHeader,
@@ -54,8 +54,7 @@ impl<'a> ManagementCcmpFrame<'a> {
         if !header.control().is_management_frame() {
             return Err(ManagementCcmpError::MalformedHeader);
         }
-        let [first, ..] = header.receiver();
-        if AddressFlags::from_bytes([first]).group() {
+        if matches!(header.receiver().kind(), Eui48Kind::Group(_)) {
             return Err(ManagementCcmpError::GroupAddressed);
         }
         let mpdu = ProtectedMpdu::parse(frame).map_err(|error| match error {

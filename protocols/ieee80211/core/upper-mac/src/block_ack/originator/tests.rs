@@ -1,4 +1,5 @@
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee802_wire::Eui48;
 
 use super::*;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -325,8 +326,8 @@ const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
 const LOCAL: [u8; 6] = [2, 0, 0, 0, 0, 1];
 fn bar(start: u16) -> [u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN] {
     oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
-        PEER,
-        LOCAL,
+        Eui48::new(PEER),
+        Eui48::new(LOCAL),
         0,
         sequence(start),
     )

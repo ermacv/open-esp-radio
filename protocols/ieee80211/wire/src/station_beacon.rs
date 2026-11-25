@@ -7,6 +7,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::frame::FrameControlFields;
+use oer_protocols_ieee802_wire::Eui48;
 
 const BEACON_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0x80, 0x00]);
 const FIXED_BEACON_LENGTH: usize = 36;
@@ -99,7 +100,7 @@ pub struct StaBeaconFrame<'a> {
 /// Parse one beacon from the associated BSS and locate the station's TIM bit.
 pub fn parse_sta_beacon(
     mpdu: &[u8],
-    expected_bssid: [u8; 6],
+    expected_bssid: Eui48,
     association_id: u16,
 ) -> Result<StaBeaconFrame<'_>, StaBeaconError> {
     let mut reader = oer_portable_wire::Reader::new(mpdu);
@@ -150,7 +151,9 @@ pub fn parse_sta_beacon(
     if frame_control.type_and_subtype() != BEACON_FRAME_CONTROL.type_and_subtype() {
         return Err(StaBeaconError::NotBeacon);
     }
-    if [a0, a1, a2, a3, a4, a5] != expected_bssid || [b0, b1, b2, b3, b4, b5] != expected_bssid {
+    if Eui48::new([a0, a1, a2, a3, a4, a5]) != expected_bssid
+        || Eui48::new([b0, b1, b2, b3, b4, b5]) != expected_bssid
+    {
         return Err(StaBeaconError::ForeignBssid);
     }
     let interval_tu = crate::management::BeaconIntervalField::from_bytes([i0, i1]).time_units();

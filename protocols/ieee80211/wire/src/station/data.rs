@@ -4,6 +4,7 @@ use super::*;
 use crate::address::{Bssid, OwnAddress};
 use crate::data::{MsduHeader, PeerQos};
 use crate::frame::QosAckPolicy;
+use oer_protocols_ieee802_wire::Eui48;
 
 mod amsdu;
 pub use amsdu::{StaProtectedAmsduFrame, sta_protected_amsdu_frame_length};
@@ -18,7 +19,7 @@ pub use template::{StaDataHeaderFields, StaDataHeaderTemplate};
 pub struct StaDataFrame<'a> {
     pub source: OwnAddress,
     pub bssid: Bssid,
-    pub destination: [u8; 6],
+    pub destination: Eui48,
     pub sequence_number: SequenceNumber,
     pub ether_type: u16,
     pub payload: &'a [u8],
@@ -50,7 +51,7 @@ impl StaDataFrame<'_> {
 pub struct StaOpenDataFrame<'a> {
     pub source: OwnAddress,
     pub bssid: Bssid,
-    pub destination: [u8; 6],
+    pub destination: Eui48,
     pub sequence_number: SequenceNumber,
     /// The TID of a QoS data MPDU; unused without QoS.
     pub priority: WmmUserPriority,
@@ -62,7 +63,6 @@ pub struct StaOpenDataFrame<'a> {
 impl StaOpenDataFrame<'_> {
     /// Write the MPDU without FCS; returns its length.
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
-        validate_peer(self.bssid.get())?;
         let plan = plan_data_encapsulation(
             DataInterfaceRole::Station,
             self.bssid.get(),
@@ -105,7 +105,7 @@ impl StaOpenDataFrame<'_> {
 pub struct StaProtectedDataFrame<'a> {
     pub source: OwnAddress,
     pub bssid: Bssid,
-    pub destination: [u8; 6],
+    pub destination: Eui48,
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
     pub peer_qos: PeerQos,
@@ -129,7 +129,6 @@ impl StaProtectedDataFrame<'_> {
         he_control: DataHeControl,
         output: &mut [u8],
     ) -> Result<usize, StationFrameError> {
-        validate_peer(self.bssid.get())?;
         let priority = WmmUserPriority::new(self.user_priority)
             .ok_or(StationFrameError::UserPriorityOutOfRange)?;
         if self.peer_qos == PeerQos::NonQos

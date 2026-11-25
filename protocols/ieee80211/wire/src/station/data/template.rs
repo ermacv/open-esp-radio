@@ -6,6 +6,7 @@ use crate::data::{
     RFC1042_LLC_SNAP_PREFIX,
 };
 use crate::frame::MacHeader;
+use oer_protocols_ieee802_wire::Eui48;
 
 /// The prefix of every data MPDU a station sends to its access point on one
 /// association: the MAC header, the CCMP header's room on a protected link
@@ -32,7 +33,7 @@ pub struct StaDataHeaderTemplate {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaDataHeaderFields {
     /// Address 3: the MSDU's destination.
-    pub destination: [u8; 6],
+    pub destination: Eui48,
     /// The Sequence Number of the unfragmented MPDU.
     pub sequence_number: SequenceNumber,
     /// The TID of a QoS data MPDU; unused without QoS.
@@ -43,21 +44,20 @@ pub struct StaDataHeaderFields {
 
 impl StaDataHeaderTemplate {
     /// The template of the association of `source` with `bssid`, QoS data
-    /// when the access point negotiated QoS; `None` for a BSSID a station
-    /// sends no data to.
+    /// when the access point negotiated QoS; `None` when the planned header
+    /// does not decode back.
     pub fn new(
         source: OwnAddress,
         bssid: Bssid,
         peer_qos: PeerQos,
         protection: LinkProtection,
     ) -> Option<Self> {
-        validate_peer(bssid.get()).ok()?;
         let plan = plan_data_encapsulation(
             DataInterfaceRole::Station,
             bssid.get(),
             source.get(),
             MsduHeader {
-                destination: [0; 6],
+                destination: Eui48::ZERO,
                 source: source.get(),
                 ether_type: 0,
             },
@@ -88,12 +88,12 @@ impl StaDataHeaderTemplate {
     }
 
     /// The BSSID the template's data goes to: Address 1.
-    pub const fn bssid(&self) -> [u8; 6] {
+    pub const fn bssid(&self) -> Eui48 {
         self.header.address1()
     }
 
     /// The station's own address: Address 2.
-    pub const fn source(&self) -> [u8; 6] {
+    pub const fn source(&self) -> Eui48 {
         self.header.address2()
     }
 
@@ -193,17 +193,17 @@ impl StaDataHeaderTemplate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::address::IndividualAddress;
+    use oer_protocols_ieee802_wire::IndividualAddress;
 
     const LOCAL: [u8; 6] = [2, 0, 0, 0, 0, 1];
     const BSSID: [u8; 6] = [2, 0, 0, 0, 0, 2];
 
     fn source() -> OwnAddress {
-        OwnAddress::new(IndividualAddress::new(LOCAL).unwrap())
+        OwnAddress::new(IndividualAddress::new(Eui48::new(LOCAL)).unwrap())
     }
 
     fn bssid() -> Bssid {
-        Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap()
+        Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap()
     }
 
     /// Today's full encode of the same MPDU without payload: the oracle.
@@ -253,8 +253,8 @@ mod tests {
         let template =
             StaDataHeaderTemplate::new(source(), bssid(), PeerQos::Qos, LinkProtection::Open)
                 .unwrap();
-        assert_eq!(template.bssid(), BSSID);
-        assert_eq!(template.source(), LOCAL);
+        assert_eq!(template.bssid(), Eui48::new(BSSID));
+        assert_eq!(template.source(), Eui48::new(LOCAL));
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
                         (BSSID, 0x888e),
                     ] {
                         let fields = StaDataHeaderFields {
-                            destination,
+                            destination: Eui48::new(destination),
                             sequence_number: SequenceNumber::new(sequence).unwrap(),
                             priority: WmmUserPriority::new(priority).unwrap(),
                             ether_type,
@@ -298,13 +298,13 @@ mod tests {
             let template =
                 StaDataHeaderTemplate::new(source(), bssid(), peer_qos, protection).unwrap();
             let first = StaDataHeaderFields {
-                destination: [2, 0, 0, 0, 0, 3],
+                destination: Eui48::new([2, 0, 0, 0, 0, 3]),
                 sequence_number: SequenceNumber::new(4_095).unwrap(),
                 priority: WmmUserPriority::UP7,
                 ether_type: 0x86dd,
             };
             let second = StaDataHeaderFields {
-                destination: [2, 0, 0, 0, 0, 4],
+                destination: Eui48::new([2, 0, 0, 0, 0, 4]),
                 sequence_number: SequenceNumber::new(1).unwrap(),
                 priority: WmmUserPriority::UP2,
                 ether_type: 0x0800,
@@ -312,7 +312,7 @@ mod tests {
             let mut output = [0; 64];
             template.write_before(first, &mut output);
             let header = template.write_before(second, &mut output);
-            assert_eq!(header.address3(), [2, 0, 0, 0, 0, 4]);
+            assert_eq!(header.address3(), Eui48::new([2, 0, 0, 0, 0, 4]));
             assert_eq!(
                 SequenceNumber::from_sequence_control(header.sequence_control()),
                 SequenceNumber::new(1).unwrap()
@@ -339,7 +339,7 @@ mod tests {
             let length = template.prefix_len();
             assert!(length <= StaDataHeaderTemplate::MAX_PREFIX_LEN);
             let fields = StaDataHeaderFields {
-                destination: [2, 0, 0, 0, 0, 3],
+                destination: Eui48::new([2, 0, 0, 0, 0, 3]),
                 sequence_number: SequenceNumber::new(42).unwrap(),
                 priority: WmmUserPriority::UP5,
                 ether_type: 0x0800,
@@ -368,9 +368,11 @@ mod tests {
         assert!(template.serves(source(), bssid(), PeerQos::Qos, LinkProtection::Ccmp));
         assert!(!template.serves(source(), bssid(), PeerQos::NonQos, LinkProtection::Ccmp));
         assert!(!template.serves(source(), bssid(), PeerQos::Qos, LinkProtection::Open));
-        let other = OwnAddress::new(IndividualAddress::new([2, 0, 0, 0, 0, 9]).unwrap());
+        let other =
+            OwnAddress::new(IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 9])).unwrap());
         assert!(!template.serves(other, bssid(), PeerQos::Qos, LinkProtection::Ccmp));
-        let other = Bssid::new(IndividualAddress::new([2, 0, 0, 0, 0, 9]).unwrap()).unwrap();
+        let other =
+            Bssid::new(IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 9])).unwrap()).unwrap();
         assert!(!template.serves(source(), other, PeerQos::Qos, LinkProtection::Ccmp));
     }
 }

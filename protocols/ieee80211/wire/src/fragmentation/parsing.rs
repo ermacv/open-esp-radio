@@ -7,6 +7,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::frame::FrameControlFields;
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 
 use crate::ccmp::CcmpHeader;
 use crate::sequence::SequenceNumber;
@@ -59,9 +60,7 @@ fn parse_data_fragment<'frame>(
     if header.qos_amsdu_present {
         return Err(OpenDataFragmentError::AmsduUnsupported);
     }
-    if header.identity.receiver_address == [0; 6]
-        || crate::address::AddressFlags::from_bytes([header.identity.receiver_address[0]]).group()
-    {
+    if IndividualAddress::for_interface(header.identity.receiver_address).is_err() {
         // IEEE fragmentation is defined only for an individual Address 1.
         // Ordinary group-addressed MPDUs remain valid and therefore this
         // check belongs to the fragment constructor, not the shared identity
@@ -69,7 +68,7 @@ fn parse_data_fragment<'frame>(
         return Err(OpenDataFragmentError::InvalidReceiver);
     }
     let destination = header.identity.destination();
-    if destination == [0; 6] || crate::address::AddressFlags::from_bytes([destination[0]]).group() {
+    if IndividualAddress::for_interface(destination).is_err() {
         // In To-DS/AP direction Address 1 is the individual BSSID while
         // Address 3 is the MSDU destination. Fragmentation is forbidden for
         // that group-addressed MSDU even though its immediate receiver is
@@ -136,9 +135,9 @@ fn parse_data_header(
     // frame shorter than it is truncated whatever its Frame Control says.
     let frame_control = FrameControlFields::from_bytes(reader.read().map_err(truncated)?);
     let _duration: [u8; 2] = reader.read().map_err(truncated)?;
-    let receiver_address: [u8; 6] = reader.read().map_err(truncated)?;
-    let transmitter_address: [u8; 6] = reader.read().map_err(truncated)?;
-    let address3: [u8; 6] = reader.read().map_err(truncated)?;
+    let receiver_address = Eui48::read(&mut reader).map_err(truncated)?;
+    let transmitter_address = Eui48::read(&mut reader).map_err(truncated)?;
+    let address3 = Eui48::read(&mut reader).map_err(truncated)?;
     let sequence_control =
         crate::sequence::SequenceControl::from_bytes(reader.read().map_err(truncated)?);
     let remainder = reader.remaining();
@@ -173,9 +172,7 @@ fn parse_data_header(
     } else {
         (None, remainder)
     };
-    if transmitter_address == [0; 6]
-        || crate::address::AddressFlags::from_bytes([transmitter_address[0]]).group()
-    {
+    if IndividualAddress::for_interface(transmitter_address).is_err() {
         return Err(OpenDataFragmentError::InvalidTransmitter);
     }
     Ok(ParsedOpenDataHeader {

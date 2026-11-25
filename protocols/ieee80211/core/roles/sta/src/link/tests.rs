@@ -1,10 +1,10 @@
 //! The link's receive admission, as its holder runs it without the station.
 
 use super::*;
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 use oer_protocols_ieee80211_contracts_port::{
     Channel, ChannelWidth, RxCryptoStatus, RxEvidence, RxMeta,
 };
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 use std::vec::Vec;
 
@@ -15,8 +15,8 @@ const PEER: [u8; 6] = [2, 0, 0, 0, 0, 3];
 /// The receive admission of a protected link with `replay`.
 fn protected_link(replay: CcmpRxReplayEpoch) -> RxLink {
     RxLink::new(
-        OwnAddress::new(IndividualAddress::new(LOCAL).unwrap()),
-        Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
+        OwnAddress::new(IndividualAddress::new(Eui48::new(LOCAL)).unwrap()),
+        Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap(),
         oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp,
         Some(replay),
     )
@@ -101,8 +101,8 @@ fn a_decrypted_data_mpdu_gives_its_msdu_and_an_unverified_or_eapol_one_none() {
     let frame = received_frame(0x4288, 0x0800, 1, 0);
     let parts = received(&mut link, &frame, &decrypted()).unwrap();
     assert_eq!(parts.len(), 1);
-    assert_eq!(parts[0].parts.source, PEER);
-    assert_eq!(parts[0].parts.destination, LOCAL);
+    assert_eq!(parts[0].parts.source, Eui48::new(PEER));
+    assert_eq!(parts[0].parts.destination, Eui48::new(LOCAL));
     assert_eq!(parts[0].parts.payload, &[0xcd; 20]);
     // Protected but not verified: nothing for the network.
     let frame = received_frame(0x4288, 0x0800, 2, 0);
@@ -263,8 +263,8 @@ fn unprotected_data_of_a_protected_link_is_refused_and_foreign_open_eapol_goes_n
 /// call does.
 #[test]
 fn a_fault_the_station_reports_later_ends_the_links_data() {
-    let address = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
-    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    let address = OwnAddress::new(IndividualAddress::new(Eui48::new(LOCAL)).unwrap());
+    let bssid = Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap();
     let mut link = LinkHandover::<()>::for_test(
         1,
         address,

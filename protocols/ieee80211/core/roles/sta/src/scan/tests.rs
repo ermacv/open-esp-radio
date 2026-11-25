@@ -1,5 +1,6 @@
 use super::{BssObservation, ScanCompleteness, ScanObservation, ScanTable, best_matching_ssid};
 use oer_portable_time::Instant;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::{
     ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
     scan::{
@@ -51,7 +52,7 @@ fn vacant_scan_slots_never_appear_as_observations() {
     assert_eq!(table.records().count(), 1);
     assert_eq!(
         table.records().next().unwrap().bssid.get(),
-        [2, 0, 0, 0, 0, 2]
+        Eui48::new([2, 0, 0, 0, 0, 2])
     );
 }
 
@@ -114,7 +115,10 @@ fn get_returns_the_record_an_observation_names() {
     else {
         panic!("a second BSSID is inserted");
     };
-    assert_eq!(table.get(index).unwrap().bssid.get(), [2, 0, 0, 0, 0, 1]);
+    assert_eq!(
+        table.get(index).unwrap().bssid.get(),
+        Eui48::new([2, 0, 0, 0, 0, 1])
+    );
     assert_eq!(table.observations().nth(second).unwrap().rssi, Some(-50));
     assert!(table.get(2).is_none());
     assert!(table.get(usize::MAX).is_none());
@@ -132,7 +136,7 @@ fn a_group_bssid_cannot_enter_the_scan_table() {
     frame[16] = 2;
     assert_eq!(
         parse_management(&frame).unwrap().bssid.get(),
-        [2, 2, 3, 4, 5, 6]
+        Eui48::new([2, 2, 3, 4, 5, 6])
     );
 }
 
@@ -204,7 +208,7 @@ fn parses_beacon_into_owned_bounded_record() {
     assert_eq!(
         record.bssid,
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 2, 3, 4, 5, 6])
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 2, 3, 4, 5, 6]))
                 .unwrap()
         )
         .unwrap()
@@ -433,7 +437,7 @@ fn the_scan_table_keeps_the_stations_erp_decision() {
 fn ht40_geometry_requires_matching_capability_and_operation() {
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1]))
                 .unwrap(),
         )
         .unwrap(),
@@ -460,7 +464,7 @@ fn ht40_geometry_requires_matching_capability_and_operation() {
 fn ht_short_guard_intervals_are_read_from_capability_info() {
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1]))
                 .unwrap(),
         )
         .unwrap(),
@@ -575,7 +579,7 @@ fn latest_hidden_beacon_preserves_probe_response_ssid() {
 fn strongest_exact_ssid_ignores_invalid_channel() {
     let mut records = [ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1]))
                 .unwrap(),
         )
         .unwrap(),
@@ -882,7 +886,7 @@ fn a_setter_refuses_a_value_longer_than_its_buffer_and_keeps_the_record() {
     let value = [0xa5_u8; 300];
     let empty = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1]))
                 .unwrap(),
         )
         .unwrap(),

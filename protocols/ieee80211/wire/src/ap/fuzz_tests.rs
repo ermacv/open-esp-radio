@@ -1,7 +1,7 @@
 //! The access point's parsers of received frames never panic.
 
 use super::*;
-use crate::address::{Bssid, IndividualAddress, OwnAddress};
+use crate::address::{Bssid, OwnAddress};
 use crate::ap::profile::tests::TEST_ADVERTISEMENT;
 use crate::fuzz::{FULL, QUICK, inputs};
 use crate::sequence::seq;
@@ -9,17 +9,18 @@ use crate::station::{
     OpenAuthenticationRequest, SaeAuthenticationFrame, StaManagementFrame, StaManagementSubtype,
 };
 use crate::station_power_save::{StaNullDataFrame, StaPowerManagement};
+use oer_protocols_ieee802_wire::IndividualAddress;
 use std::vec::Vec;
 
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
 
 fn source() -> OwnAddress {
-    OwnAddress::new(IndividualAddress::new(PEER).unwrap())
+    OwnAddress::new(IndividualAddress::new(Eui48::new(PEER)).unwrap())
 }
 
 fn bssid() -> Bssid {
-    Bssid::new(IndividualAddress::new(ACCESS_POINT).unwrap()).unwrap()
+    Bssid::new(IndividualAddress::new(Eui48::new(ACCESS_POINT)).unwrap()).unwrap()
 }
 
 /// A management header from the peer to this access point.
@@ -128,13 +129,15 @@ fn management(count: usize) {
     let seeds = management_seeds();
     for seed in &seeds {
         assert!(
-            parse_ap_management_request(&TEST_ADVERTISEMENT, seed, ACCESS_POINT).is_some(),
+            parse_ap_management_request(&TEST_ADVERTISEMENT, seed, Eui48::new(ACCESS_POINT))
+                .is_some(),
             "seed {seed:02x?} parses"
         );
     }
     let seeds: Vec<&[u8]> = seeds.iter().map(Vec::as_slice).collect();
     inputs(&seeds, count, 128, |bytes| {
-        if let Some(request) = parse_ap_management_request(&TEST_ADVERTISEMENT, bytes, ACCESS_POINT)
+        if let Some(request) =
+            parse_ap_management_request(&TEST_ADVERTISEMENT, bytes, Eui48::new(ACCESS_POINT))
         {
             match request {
                 ApManagementRequest::Association {
@@ -191,13 +194,16 @@ fn power_save(count: usize) {
     }
     .encode(&mut null_data)
     .unwrap();
-    assert!(observe_ap_power_save_for_access_point(&ps_poll, ACCESS_POINT).is_some());
+    assert!(observe_ap_power_save_for_access_point(&ps_poll, Eui48::new(ACCESS_POINT)).is_some());
     assert!(observe_ap_power_save(&data).is_some());
-    assert!(observe_ap_null_data_power_save_for_access_point(&null_data, ACCESS_POINT).is_some());
+    assert!(
+        observe_ap_null_data_power_save_for_access_point(&null_data, Eui48::new(ACCESS_POINT))
+            .is_some()
+    );
     inputs(&[&ps_poll, &data, &null_data], count, 48, |bytes| {
         let _ = observe_ap_power_save(bytes);
-        let _ = observe_ap_power_save_for_access_point(bytes, ACCESS_POINT);
-        let _ = observe_ap_null_data_power_save_for_access_point(bytes, ACCESS_POINT);
+        let _ = observe_ap_power_save_for_access_point(bytes, Eui48::new(ACCESS_POINT));
+        let _ = observe_ap_null_data_power_save_for_access_point(bytes, Eui48::new(ACCESS_POINT));
     });
 }
 

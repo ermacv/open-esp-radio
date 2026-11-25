@@ -50,6 +50,7 @@
 //! (`DataRights::data`, [`DATA_SINGLES`]); a station's layout has none.
 
 use core::marker::PhantomData;
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::{Duration, Instant};
@@ -68,7 +69,7 @@ use oer_protocols_ieee80211_core_upper_mac::block_ack::{
     BankCommand, BankTicket, RX_BLOCK_ACK_WINDOW, ReplyPlace, RxAgreements, RxBlockAckStorage,
     RxBlockAckTypes,
 };
-use oer_protocols_ieee80211_wire::address::{Bssid, IndividualAddress};
+use oer_protocols_ieee80211_wire::address::Bssid;
 use oer_protocols_ieee80211_wire::block_ack::frame::ADDBA_ACTION_BODY_LEN;
 use oer_protocols_ieee80211_wire::data::{
     DataInterfaceRole, LLC_SNAP_HEADER_LEN, MsduHeader, PeerQos, plan_data_encapsulation,
@@ -2997,7 +2998,7 @@ where
         let bssid = link.and_then(|(bssid, ..)| Bssid::new(IndividualAddress::new(bssid)?));
         let reorder = Reorder {
             agreements,
-            local: link.map_or([0; 6], |(_, own, ..)| own),
+            local: link.map_or([0; 6], |(_, own, ..)| own.octets()),
             bssid,
             admitted: match link {
                 Some((.., PeerQos::Qos)) => RxAgreements::Admitted,
@@ -3014,9 +3015,9 @@ where
                 flow,
                 peer_of: |header: &RxHeader| {
                     let (bssid, own, protection, _) = link?;
-                    let to_us =
-                        header.receiver == own || IndividualAddress::new(header.receiver).is_none();
-                    (header.transmitter == bssid && to_us).then_some(RxPeer {
+                    let to_us = Eui48::new(header.receiver) == own
+                        || IndividualAddress::new(Eui48::new(header.receiver)).is_none();
+                    (Eui48::new(header.transmitter) == bssid && to_us).then_some(RxPeer {
                         peer: 0,
                         protection,
                         carrying: carrying?,
@@ -3234,7 +3235,7 @@ where
             .iter()
             .zip(0_u8..)
             .find_map(|(entry, peer)| match entry {
-                Entry::Linked(linked) if linked.link.client == header.destination => {
+                Entry::Linked(linked) if Eui48::new(linked.link.client) == header.destination => {
                     Some((peer, linked.link.qos))
                 }
                 _ => None,
@@ -3662,8 +3663,8 @@ impl<
         };
         let encapsulation = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
-            link.access_point,
-            link.access_point,
+            Eui48::new(link.access_point),
+            Eui48::new(link.access_point),
             msdu_header,
             tid,
             link.qos,

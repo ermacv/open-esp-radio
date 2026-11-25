@@ -85,7 +85,7 @@ fn a_header_s_layout_is_the_one_its_frame_control_names() {
     assert_eq!(
         layout(0x0308),
         HeaderLayout::Data {
-            direction: DataDirection::Wds([4, 3, 2, 1, 0, 9])
+            direction: DataDirection::Wds(Eui48::new([4, 3, 2, 1, 0, 9]))
         }
     );
     assert_eq!(
@@ -208,9 +208,12 @@ fn a_three_address_qos_data_frame_has_no_address4() {
     // QoS Data, From DS: QoS Control and the body follow Sequence Control.
     let frame = addressed([0x88, 0x02], 40);
     let fields = AddressFields::parse(&frame).unwrap();
-    assert_eq!(fields.receiver(), address_at(&frame, 4));
-    assert_eq!(fields.transmitter(), Some(address_at(&frame, 10)));
-    assert_eq!(fields.address3(), Some(address_at(&frame, 16)));
+    assert_eq!(fields.receiver(), Eui48::new(address_at(&frame, 4)));
+    assert_eq!(
+        fields.transmitter(),
+        Some(Eui48::new(address_at(&frame, 10)))
+    );
+    assert_eq!(fields.address3(), Some(Eui48::new(address_at(&frame, 16))));
     assert_eq!(
         fields.sequence_control(),
         Some(SequenceControl::from_bytes([22, 23]))
@@ -220,8 +223,8 @@ fn a_three_address_qos_data_frame_has_no_address4() {
     assert_eq!(
         fields.rest(),
         AfterReceiver::Three {
-            transmitter: address_at(&frame, 10),
-            address3: address_at(&frame, 16),
+            transmitter: Eui48::new(address_at(&frame, 10)),
+            address3: Eui48::new(address_at(&frame, 16)),
             sequence_control: SequenceControl::from_bytes([22, 23]),
         }
     );
@@ -231,7 +234,7 @@ fn a_three_address_qos_data_frame_has_no_address4() {
 fn a_four_address_data_frame_holds_address4_or_is_truncated() {
     let frame = addressed([0x88, 0x03], 40);
     let fields = AddressFields::parse(&frame).unwrap();
-    assert_eq!(fields.address4(), Some(address_at(&frame, 24)));
+    assert_eq!(fields.address4(), Some(Eui48::new(address_at(&frame, 24))));
     assert_eq!(fields.addresses().count(), 4);
     assert_eq!(
         AddressFields::parse(&frame[..29]),
@@ -259,7 +262,7 @@ fn management_and_data_frames_need_their_whole_three_address_header() {
 fn control_frames_hold_a_transmitter_only_by_subtype() {
     let rts = addressed([0xb4, 0x00], 16);
     let fields = AddressFields::parse(&rts).unwrap();
-    assert_eq!(fields.transmitter(), Some(address_at(&rts, 10)));
+    assert_eq!(fields.transmitter(), Some(Eui48::new(address_at(&rts, 10))));
     assert_eq!(fields.address3(), None);
     assert_eq!(
         AddressFields::parse(&rts[..15]),
@@ -315,7 +318,7 @@ fn every_control_subtype_has_a_known_or_refused_layout() {
             Some(true) => {
                 assert_eq!(
                     AddressFields::parse(&frame).unwrap().transmitter(),
-                    Some(address_at(&frame, 10)),
+                    Some(Eui48::new(address_at(&frame, 10))),
                     "subtype {subtype}"
                 );
                 assert_eq!(
@@ -382,11 +385,11 @@ fn a_decoded_header_reads_each_field_from_its_place() {
     let decoded = DecodedHeader::decode(&octets).unwrap();
     assert_eq!(decoded.control().fields().to_bytes(), [0x88, 0x83]);
     assert_eq!(decoded.duration().value(), 0x5634);
-    assert_eq!(decoded.receiver(), [0xff; 6]);
-    assert_eq!(decoded.transmitter(), A);
-    assert_eq!(decoded.address3(), B);
+    assert_eq!(decoded.receiver(), Eui48::new([0xff; 6]));
+    assert_eq!(decoded.transmitter(), Eui48::new(A));
+    assert_eq!(decoded.address3(), Eui48::new(B));
     assert_eq!(decoded.sequence_control().to_bytes(), [0x9a, 0x78]);
-    assert_eq!(decoded.address4(), Some([4, 3, 2, 1, 0, 9]));
+    assert_eq!(decoded.address4(), Some(Eui48::new([4, 3, 2, 1, 0, 9])));
     assert_eq!(decoded.qos(), Some(qos()));
     assert_eq!(decoded.ht_control(), Some([0x10, 0x20, 0x30, 0x40]));
     assert_eq!(decoded.body(), &[] as &[u8]);
@@ -398,13 +401,13 @@ fn a_decoded_header_reads_each_field_from_its_place() {
 fn a_builder_changes_its_field_alone() {
     let header = MacHeader::decode(&header_octets(0x0388).unwrap()).unwrap();
     let changed = header
-        .with_address1(A)
-        .with_address3(A)
+        .with_address1(Eui48::new(A))
+        .with_address3(Eui48::new(A))
         .with_sequence_control(SequenceControl::from_bytes([1, 2]))
         .with_protected(FrameProtection::Protected);
-    assert_eq!(changed.address1(), A);
+    assert_eq!(changed.address1(), Eui48::new(A));
     assert_eq!(changed.address2(), header.address2());
-    assert_eq!(changed.address3(), A);
+    assert_eq!(changed.address3(), Eui48::new(A));
     assert_eq!(changed.sequence_control().to_bytes(), [1, 2]);
     assert!(changed.control().protected());
     assert_eq!(changed.layout(), header.layout());

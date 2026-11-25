@@ -25,7 +25,7 @@ fn decodes_dtim_group_and_partial_virtual_bitmap_for_local_aid() {
     // two in bits 7:1 and therefore body bitmap byte zero names AID16..23.
     let frame = beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0x03, 0x02]);
     assert_eq!(
-        parse_sta_beacon(&frame, BSSID, 17).map(|beacon| beacon.observation),
+        parse_sta_beacon(&frame, Eui48::new(BSSID), 17).map(|beacon| beacon.observation),
         Ok(StaBeaconObservation {
             timestamp_tsf: crate::tsf::TsfTimestamp::from_micros(0x0102_0304_0506_0708),
             interval_tu: 100,
@@ -53,7 +53,7 @@ fn carries_the_wmm_parameter_element_of_the_beacon() {
         0x43, 94, 0, 0x62, 0x32, 47, 0,
     ];
     elements.extend_from_slice(&wmm);
-    let observation = parse_sta_beacon(&beacon(&elements), BSSID, 1)
+    let observation = parse_sta_beacon(&beacon(&elements), Eui48::new(BSSID), 1)
         .unwrap()
         .observation;
     assert_eq!(
@@ -65,7 +65,7 @@ fn carries_the_wmm_parameter_element_of_the_beacon() {
     // A WMM Information element is not a parameter set.
     let information = beacon(&[221, 7, 0x00, 0x50, 0xf2, 0x02, 0, 1, 0x07]);
     assert_eq!(
-        parse_sta_beacon(&information, BSSID, 1)
+        parse_sta_beacon(&information, Eui48::new(BSSID), 1)
             .unwrap()
             .observation
             .edca,
@@ -78,13 +78,13 @@ fn rejects_foreign_or_structurally_incomplete_beacons() {
     let mut foreign = beacon(&[TIM_ELEMENT_ID, 4, 1, 3, 0, 0]);
     foreign[10] ^= 1;
     assert_eq!(
-        parse_sta_beacon(&foreign, BSSID, 1),
+        parse_sta_beacon(&foreign, Eui48::new(BSSID), 1),
         Err(StaBeaconError::ForeignBssid)
     );
 
     let malformed = beacon(&[TIM_ELEMENT_ID, 5, 1, 3, 0, 0]);
     assert_eq!(
-        parse_sta_beacon(&malformed, BSSID, 1),
+        parse_sta_beacon(&malformed, Eui48::new(BSSID), 1),
         Err(StaBeaconError::MalformedInformationElement)
     );
 }
@@ -109,7 +109,7 @@ fn decodes_erp_ht_and_he_protection_fields() {
         0xff,
     ]);
     let frame = beacon(&elements);
-    let parsed = parse_sta_beacon(&frame, BSSID, 1).unwrap();
+    let parsed = parse_sta_beacon(&frame, Eui48::new(BSSID), 1).unwrap();
     assert_eq!(
         parsed.observation.protection,
         StaBeaconProtection {
@@ -130,7 +130,7 @@ fn decodes_erp_ht_and_he_protection_fields() {
         0xfd,
         0xff,
     ];
-    let observation = parse_sta_beacon(&beacon(&disabled), BSSID, 1)
+    let observation = parse_sta_beacon(&beacon(&disabled), Eui48::new(BSSID), 1)
         .unwrap()
         .observation;
     assert_eq!(observation.protection, StaBeaconProtection::UNPROTECTED);
@@ -142,12 +142,12 @@ fn a_beacon_hands_every_erp_element_over_unchosen() {
     for order in [[0x02, 0x00], [0x00, 0x02]] {
         let elements = [ERP_ELEMENT_ID, 1, order[0], ERP_ELEMENT_ID, 1, order[1]];
         let frame = beacon(&elements);
-        let parsed = parse_sta_beacon(&frame, BSSID, 1).unwrap();
+        let parsed = parse_sta_beacon(&frame, Eui48::new(BSSID), 1).unwrap();
         assert!(parsed.erp.unwrap().information().eq(order));
     }
     // A damaged ERP element spoils the ERP view, not the beacon.
     let frame = beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0, 0, ERP_ELEMENT_ID, 2, 0x02, 0x02]);
-    let parsed = parse_sta_beacon(&frame, BSSID, 1).unwrap();
+    let parsed = parse_sta_beacon(&frame, Eui48::new(BSSID), 1).unwrap();
     assert_eq!(
         parsed.erp,
         Err(crate::protection::ErpElementsError::ErpLength)
@@ -161,7 +161,8 @@ fn a_beacon_carries_its_bss_s_channel_switch_announcement() {
 
     let frame = beacon(&[37, 3, 1, 11, 4, 62, 1, 3]);
     assert_eq!(
-        parse_sta_beacon(&frame, BSSID, 17).map(|beacon| beacon.observation.channel_switch),
+        parse_sta_beacon(&frame, Eui48::new(BSSID), 17)
+            .map(|beacon| beacon.observation.channel_switch),
         Ok(Some(Ok(ChannelSwitch {
             mode: ChannelSwitchMode::StopTransmitting,
             channel_number: 11,
@@ -174,7 +175,7 @@ fn a_beacon_carries_its_bss_s_channel_switch_announcement() {
     // traffic indication still counts.
     let observation = parse_sta_beacon(
         &beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0, 0, 37, 3, 7, 11, 4]),
-        BSSID,
+        Eui48::new(BSSID),
         17,
     )
     .unwrap()
@@ -216,7 +217,7 @@ fn parse_sta_beacon_never_panics(count: usize) {
     crate::fuzz::inputs(&seeds, count, 160, |mpdu| {
         round = round.wrapping_add(1);
         let association_id = [0, 1, 17, 2007, 0x3fff, 0xffff][round % 6];
-        let Ok(beacon) = parse_sta_beacon(mpdu, BSSID, association_id) else {
+        let Ok(beacon) = parse_sta_beacon(mpdu, Eui48::new(BSSID), association_id) else {
             return;
         };
         if let Ok(erp) = beacon.erp {
@@ -245,7 +246,7 @@ fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
     // AID 2007 is bit seven of octet 250; a bitmap offset of 250 (encoded
     // 250 in bits 7:1) makes it the first bitmap octet.
     let frame = beacon(&[TIM_ELEMENT_ID, 4, 1, 3, 250, 0x80]);
-    let tim = parse_sta_beacon(&frame, BSSID, 2007)
+    let tim = parse_sta_beacon(&frame, Eui48::new(BSSID), 2007)
         .unwrap()
         .observation
         .tim
@@ -258,7 +259,7 @@ fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
         &[TIM_ELEMENT_ID, 4, 0, 0, 0, 0],
     ] {
         assert_eq!(
-            parse_sta_beacon(&beacon(tim), BSSID, 1),
+            parse_sta_beacon(&beacon(tim), Eui48::new(BSSID), 1),
             Err(StaBeaconError::MalformedTim)
         );
     }
@@ -266,11 +267,11 @@ fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
     let mut frame = beacon(&[]);
     frame.push(TIM_ELEMENT_ID);
     assert_eq!(
-        parse_sta_beacon(&frame, BSSID, 1),
+        parse_sta_beacon(&frame, Eui48::new(BSSID), 1),
         Err(StaBeaconError::MalformedInformationElement)
     );
     assert_eq!(
-        parse_sta_beacon(&frame[..FIXED_BEACON_LENGTH - 1], BSSID, 1),
+        parse_sta_beacon(&frame[..FIXED_BEACON_LENGTH - 1], Eui48::new(BSSID), 1),
         Err(StaBeaconError::Truncated)
     );
 }

@@ -65,6 +65,7 @@ mod transmit;
 
 use super::*;
 use crate::security_policy::AP_WPA2_PERSONAL_RSN_ELEMENT;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_security_cipher::aes::{RsnKeyData, SoftwareAes128};
 use oer_protocols_ieee80211_core_security_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
@@ -337,7 +338,9 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
         .unwrap();
     service
         .observe_power_save(
-            ApPowerSaveObservation::Sleeping { peer: PEER },
+            ApPowerSaveObservation::Sleeping {
+                peer: Eui48::new(PEER),
+            },
             oer_portable_time::Instant::from_micros(2),
         )
         .unwrap();
@@ -2288,8 +2291,8 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     let mut first = [0; 64];
     let len = ApManagementFrame {
         subtype: ApManagementSubtype::Action,
-        access_point: AP,
-        peer: [0xff; 6],
+        access_point: Eui48::new(AP),
+        peer: Eui48::new([0xff; 6]),
         sequence_number: SequenceNumber::ZERO,
         body: &[0, 4, 37, 3, 0, 6, 3],
     }
@@ -2301,6 +2304,15 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
         service.protect_group_management(&mut invalid, len),
         Err(ApGroupManagementError::InvalidFrame)
     );
+    // Another BSSID, and an individual receiver.
+    for (at, bit) in [(16, 2), (4, 1)] {
+        let mut invalid = first;
+        invalid[at] ^= bit;
+        assert_eq!(
+            service.protect_group_management(&mut invalid, len),
+            Err(ApGroupManagementError::InvalidFrame)
+        );
+    }
     let mut second = first;
     let protected = service.protect_group_management(&mut first, len).unwrap();
     assert_eq!(
@@ -2523,8 +2535,8 @@ fn an_inconsistent_bip_owner_returns_no_management_key_without_mutating_the_fram
     let mut frame = [0; 64];
     let length = ApManagementFrame {
         subtype: ApManagementSubtype::Action,
-        access_point: AP,
-        peer: [0xff; 6],
+        access_point: Eui48::new(AP),
+        peer: Eui48::new([0xff; 6]),
         sequence_number: SequenceNumber::ZERO,
         body: &[0, 4],
     }
@@ -2562,8 +2574,8 @@ fn group_management_reports_ipn_exhaustion_and_keeps_the_announced_frontier() {
     let mut frame = [0; 64];
     let length = ApManagementFrame {
         subtype: ApManagementSubtype::Action,
-        access_point: AP,
-        peer: [0xff; 6],
+        access_point: Eui48::new(AP),
+        peer: Eui48::new([0xff; 6]),
         sequence_number: SequenceNumber::ZERO,
         body: &[0, 4],
     }
@@ -2707,7 +2719,9 @@ fn a_buffered_unicast_completion_counts_only_against_the_release_in_flight() {
         .unwrap();
     service
         .observe_power_save(
-            ApPowerSaveObservation::Sleeping { peer: PEER },
+            ApPowerSaveObservation::Sleeping {
+                peer: Eui48::new(PEER),
+            },
             oer_portable_time::Instant::from_micros(2),
         )
         .unwrap();

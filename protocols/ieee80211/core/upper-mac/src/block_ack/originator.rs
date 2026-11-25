@@ -17,6 +17,7 @@
 //! a refusal, ends them.
 
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee802_wire::Eui48;
 
 use super::{
     AddbaRequest, BlockAckAction, OperationalTxBlockAck, TxBlockAckAlarm, TxBlockAckConfig,
@@ -464,8 +465,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             .on_delivered(starting_sequence, bitmap)?;
         Some(
             oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
-                receiver,
-                transmitter,
+                Eui48::new(receiver),
+                Eui48::new(transmitter),
                 tid,
                 next,
             ),
@@ -492,8 +493,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             .on_expired(starting_sequence, bitmap)?;
         Some(
             oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
-                receiver,
-                transmitter,
+                Eui48::new(receiver),
+                Eui48::new(transmitter),
                 tid,
                 next,
             ),

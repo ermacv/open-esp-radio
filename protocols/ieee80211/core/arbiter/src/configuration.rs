@@ -7,14 +7,13 @@
 //! after the complete MAC service capability profile is known.
 
 use core::fmt;
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 
 use crate::interface::{BoundVirtualInterface, VifId, VirtualInterface};
 use oer_protocols_ieee80211_contracts_port::{
     ChannelContextId, MacServiceCapabilities, MonitorTapPoint, VifRole,
 };
 use oer_protocols_ieee80211_core_upper_mac::monitor::MonitorFilter;
-
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
 
 /// Configuration needed when creating a station protocol owner.
 ///
@@ -168,10 +167,10 @@ impl WifiConfig {
     ) -> Result<WifiPlan, WifiConfigError> {
         if self
             .station
-            .is_some_and(|station| station.address.get() == [0; 6])
+            .is_some_and(|station| station.address.get() == Eui48::ZERO)
             || self
                 .access_point
-                .is_some_and(|ap| ap.address.get() == [0; 6])
+                .is_some_and(|ap| ap.address.get() == Eui48::ZERO)
         {
             return Err(WifiConfigError::UnspecifiedInterfaceAddress);
         }
@@ -222,7 +221,11 @@ impl WifiConfig {
 
         let station = self.station.map(|config| {
             BoundVirtualInterface::new(
-                VirtualInterface::new(VifId::PRIMARY, VifRole::Station, config.address.get()),
+                VirtualInterface::new(
+                    VifId::PRIMARY,
+                    VifRole::Station,
+                    config.address.get().octets(),
+                ),
                 ChannelContextId::PRIMARY,
             )
         });
@@ -233,7 +236,7 @@ impl WifiConfig {
                 VifId::PRIMARY
             };
             BoundVirtualInterface::new(
-                VirtualInterface::new(id, VifRole::AccessPoint, config.address.get()),
+                VirtualInterface::new(id, VifRole::AccessPoint, config.address.get().octets()),
                 ChannelContextId::PRIMARY,
             )
         });

@@ -1,7 +1,7 @@
 # oer-protocols-network-wire
 
 Allocation-free Ethernet II, VLAN tag, ARP, IPv4, IPv6, ICMPv4 echo, TCP and
-UDP header fields, DHCP messages and the Internet checksum. Its one dependency is `oer-portable-wire`.
+UDP header fields, DHCP messages and the Internet checksum. It may depend on `oer-portable-wire` and the IEEE 802 wire alone.
 
 | Module | Fields |
 | --- | --- |

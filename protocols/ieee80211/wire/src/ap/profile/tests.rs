@@ -1,6 +1,7 @@
 use super::*;
 use crate::security::{BssSecurityElements, test_elements};
 use crate::sequence::seq;
+use oer_protocols_ieee802_wire::Eui48;
 
 pub(crate) const TEST_ADVERTISEMENT: crate::ap::profile::Advertisement = {
     use crate::{
@@ -146,7 +147,7 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
     write_ht_beacon(
         &profile,
         &mut beacon,
-        address,
+        Eui48::new(address),
         &Ssid::new(b"profile").unwrap(),
         crate::channel::Channel::from_ghz2_4_channel(channel),
         100,
@@ -161,8 +162,8 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
     write_ht_association_response_frame_for_security(
         &profile,
         &mut response,
-        address,
-        peer,
+        Eui48::new(address),
+        Eui48::new(peer),
         0,
         1,
         seq(0),
@@ -186,7 +187,7 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
     request[16..22].copy_from_slice(&address);
     request[28..].copy_from_slice(&[1, 3, 108, 0x82, 0x84]);
     assert!(matches!(
-        parse_ap_management_request(&profile, &request, address),
+        parse_ap_management_request(&profile, &request, Eui48::new(address)),
         Some(ApManagementRequest::Association {
             maximum_legacy_rate_500kbps: 4,
             ..

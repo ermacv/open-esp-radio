@@ -12,6 +12,7 @@ oer-portable-crypto = { path = "../../../../../portable/crypto" }
 oer-protocols-ieee80211-core-security-cipher = { path = "../../security/cipher" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../upper-mac" }
 oer-protocols-ieee80211-wire = { path = "../../../wire" }
+oer-protocols-ieee802-wire = { path = "../../../../ieee802/wire" }
 oer-protocols-ieee80211-core-security-rsn = { path = "../../security/rsn" }
 oer-portable-time = { path = "../../../../../portable/time" }
 oer-protocols-ieee80211-contracts-security = { path = "../../../contracts/security" }

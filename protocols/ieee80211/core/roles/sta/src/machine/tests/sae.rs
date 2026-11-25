@@ -352,7 +352,7 @@ fn invalid_confirm_returns_credits_and_never_caches_the_pmk() {
                 .pmksa
                 .resume(
                     oer_protocols_ieee80211_wire::address::Bssid::new(
-                        IndividualAddress::new(BSSID).unwrap()
+                        IndividualAddress::new(Eui48::new(BSSID)).unwrap()
                     )
                     .unwrap(),
                     SSID

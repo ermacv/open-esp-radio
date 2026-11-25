@@ -6,11 +6,12 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-use crate::address::{Bssid, IndividualAddress};
+use crate::address::Bssid;
 use crate::ht::{
     HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN, HtPeerCapabilities, ht_peer_capabilities,
 };
 use crate::protection::{ErpElements, ErpElementsError};
+use oer_protocols_ieee802_wire::IndividualAddress;
 
 pub const RSN_IE_CAPACITY: usize = 64;
 pub const RSNXE_CAPACITY: usize = 16;
@@ -425,9 +426,8 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     let element_bytes = reader.remaining();
     let mut elements = oer_portable_wire::Reader::new(element_bytes);
     let [t0, t1, t2, t3, t4, t5, t6, t7, i0, i1, c0, c1] = *fixed;
-    let [b0, b1, b2, b3, b4, b5] = header.address3();
 
-    let bssid = Bssid::new(IndividualAddress::new([b0, b1, b2, b3, b4, b5])?)?;
+    let bssid = Bssid::new(IndividualAddress::new(header.address3())?)?;
     let mut record = ScanRecord::new(bssid);
     record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
     record.beacon_interval_tu =
@@ -586,9 +586,12 @@ fn exact_element<const N: usize>(header: [u8; 2], value: &[u8]) -> Option<[u8; N
 #[cfg(test)]
 mod record_tests {
     use super::*;
+    use oer_protocols_ieee802_wire::Eui48;
 
     fn record() -> ScanRecord {
-        ScanRecord::new(Bssid::new(IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap()).unwrap())
+        ScanRecord::new(
+            Bssid::new(IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1])).unwrap()).unwrap(),
+        )
     }
 
     /// A 40 MHz BSS needs both the HT capability's 40 MHz bit and the HT

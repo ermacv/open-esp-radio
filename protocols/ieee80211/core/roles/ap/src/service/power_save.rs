@@ -124,7 +124,9 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 } else {
                     ApPeerPowerState::Active
                 };
-                let binding = self.bind_peer(peer).ok_or(ApServiceError::UnknownPeer)?;
+                let binding = self
+                    .bind_peer(peer.octets())
+                    .ok_or(ApServiceError::UnknownPeer)?;
                 self.observe_bound_power_state(binding, requested, now)
             }
             ApPowerSaveObservation::PsPoll {
@@ -133,7 +135,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             } => {
                 let inactive_timeout = self.inactive_timeout.duration();
                 let release_already_pending = {
-                    let existing = self.checked_peer_mut(peer)?;
+                    let existing = self.checked_peer_mut(peer.octets())?;
                     if existing.phase != ApPeerPhase::Authorized
                         || existing.power_state != ApPeerPowerState::Sleeping
                     {
@@ -153,7 +155,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 if release_already_pending {
                     return Ok(ApPowerSaveAction::None);
                 }
-                let identity = self.checked_peer(peer)?.association_identity();
+                let identity = self.checked_peer(peer.octets())?.association_identity();
                 Ok(match self.begin_buffered_unicast_release(identity)? {
                     Some(release) => ApPowerSaveAction::ReleaseOne(release),
                     None => ApPowerSaveAction::None,

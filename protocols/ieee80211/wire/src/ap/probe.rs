@@ -5,6 +5,7 @@
 //! own advertisement and takes no received bytes.
 
 use crate::sequence::SequenceNumber;
+use oer_protocols_ieee802_wire::Eui48;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResponseError {
@@ -51,7 +52,7 @@ pub fn matches_ssid(beacon: &[u8], requested: &[u8]) -> bool {
 /// owner and its TIM/TBTT cursor are untouched. TSF uses the same clock as beacons.
 pub fn write_response(
     beacon: &[u8],
-    peer: [u8; 6],
+    peer: Eui48,
     sequence: SequenceNumber,
     timestamp_micros: u64,
     output: &mut [u8],
@@ -81,7 +82,7 @@ pub fn write_response(
     let mut fixed = *fixed;
     crate::encoding::write_array::<0, _, _>(&mut fixed, &[0x50, 0]);
     fixed[2..4].fill(0);
-    crate::encoding::write_array::<4, _, _>(&mut fixed, &peer);
+    crate::encoding::write_array::<4, _, _>(&mut fixed, &peer.octets());
     crate::encoding::write_array::<22, _, _>(&mut fixed, &sequence.sequence_control().to_bytes());
     crate::encoding::write_array::<24, _, _>(
         &mut fixed,

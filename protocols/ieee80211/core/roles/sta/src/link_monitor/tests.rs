@@ -1,4 +1,5 @@
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::{
     protection::ErpProtection, station_beacon::StaBeaconProtection,
 };
@@ -29,7 +30,12 @@ fn read(elements: &[u8]) -> StaBeacon {
     frame[32..34].copy_from_slice(&100_u16.to_le_bytes());
     frame.extend_from_slice(elements);
     StaBeacon::new(
-        oer_protocols_ieee80211_wire::station_beacon::parse_sta_beacon(&frame, BSSID, 1).unwrap(),
+        oer_protocols_ieee80211_wire::station_beacon::parse_sta_beacon(
+            &frame,
+            Eui48::new(BSSID),
+            1,
+        )
+        .unwrap(),
     )
 }
 

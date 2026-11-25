@@ -163,3 +163,30 @@ fn a_header_without_its_addresses_is_malformed() {
         StaApRxRoute::Interface(StaApVif::AccessPoint)
     );
 }
+
+#[test]
+fn a_management_frame_is_routed_by_each_address_alone() {
+    const FOREIGN: [u8; 6] = [0x02, 0, 0, 0, 0, 9];
+    const ACTION: u16 = 13 << 4;
+    let route = |receiver, transmitter, bssid| {
+        classify_sta_ap_rx(&frame(ACTION, receiver, transmitter, bssid), ADDRESSES)
+    };
+    for (frame, expected) in [
+        // To the group, from the station's BSS by either address.
+        ((GROUP, UPLINK, FOREIGN), Some(StaApVif::Station)),
+        ((GROUP, FOREIGN, UPLINK), Some(StaApVif::Station)),
+        ((GROUP, FOREIGN, FOREIGN), None),
+        // To another station, from the station's BSS.
+        ((FOREIGN, UPLINK, UPLINK), None),
+        // To the access point by either address.
+        ((AP, FOREIGN, FOREIGN), Some(StaApVif::AccessPoint)),
+        ((FOREIGN, FOREIGN, AP), Some(StaApVif::AccessPoint)),
+        ((FOREIGN, FOREIGN, FOREIGN), None),
+    ] {
+        assert_eq!(
+            route(frame.0, frame.1, frame.2),
+            expected.map_or(StaApRxRoute::Foreign, StaApRxRoute::Interface),
+            "{frame:?}"
+        );
+    }
+}

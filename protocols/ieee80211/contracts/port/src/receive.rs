@@ -52,9 +52,9 @@ impl RxHeader {
         let body = frame.len().checked_sub(decoded.body().len())?;
         Some(Self {
             control: decoded.control(),
-            receiver: decoded.receiver(),
-            transmitter: decoded.transmitter(),
-            address3: decoded.address3(),
+            receiver: decoded.receiver().octets(),
+            transmitter: decoded.transmitter().octets(),
+            address3: decoded.address3().octets(),
             sequence_control: decoded.sequence_control(),
             qos: decoded.qos(),
             body: u16::try_from(body).ok()?,
@@ -392,3 +392,6 @@ impl<'id, P: ReceivePort<'id>> Unit<'_, '_, 'id, P> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

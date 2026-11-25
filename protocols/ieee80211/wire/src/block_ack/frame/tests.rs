@@ -47,8 +47,8 @@ fn parses_all_block_ack_action_bodies() {
 #[test]
 fn block_ack_request_names_the_tid_and_window_start() {
     let frame = encode_block_ack_request(
-        [0x20, 0x21, 0x22, 0x23, 0x24, 0x25],
-        [2, 3, 4, 5, 6, 7],
+        Eui48::new([0x20, 0x21, 0x22, 0x23, 0x24, 0x25]),
+        Eui48::new([2, 3, 4, 5, 6, 7]),
         6,
         SequenceNumber::new(0x123).unwrap(),
     );
@@ -260,12 +260,12 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
 
 #[test]
 fn a_compressed_bar_round_trips_and_other_variants_are_refused() {
-    let frame = encode_block_ack_request([2; 6], [4; 6], 6, seq(0x123));
+    let frame = encode_block_ack_request(Eui48::new([2; 6]), Eui48::new([4; 6]), 6, seq(0x123));
     assert_eq!(
         parse_compressed_block_ack_request(&frame),
         Some(CompressedBlockAckRequest {
-            receiver: [2; 6],
-            transmitter: [4; 6],
+            receiver: Eui48::new([2; 6]),
+            transmitter: Eui48::new([4; 6]),
             tid: 6,
             starting_sequence: seq(0x123),
         })

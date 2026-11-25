@@ -5,6 +5,7 @@
 //! the clock relation; this codec does not read a backend or executor clock.
 
 use crate::frame::FrameControlFields;
+use oer_protocols_ieee802_wire::Eui48;
 
 use crate::{
     ap::profile::Advertisement,
@@ -174,7 +175,7 @@ const BEACON_FRAME_CONTROL: crate::frame::FrameControlFields =
 pub fn write_ht_beacon(
     profile: &Advertisement,
     output: &mut [u8],
-    access_point: [u8; 6],
+    access_point: Eui48,
     ssid: &Ssid,
     channel: Channel,
     beacon_interval_tu: u16,
@@ -215,8 +216,8 @@ pub fn write_ht_beacon(
     let mut fixed = [0; MANAGEMENT_HEADER_LEN + BEACON_FIXED_BODY_LEN];
     crate::encoding::write_array::<0, _, _>(&mut fixed, &BEACON_FRAME_CONTROL.to_bytes());
     fixed[4..10].fill(0xff);
-    crate::encoding::write_array::<10, _, _>(&mut fixed, &access_point);
-    crate::encoding::write_array::<16, _, _>(&mut fixed, &access_point);
+    crate::encoding::write_array::<10, _, _>(&mut fixed, &access_point.octets());
+    crate::encoding::write_array::<16, _, _>(&mut fixed, &access_point.octets());
     crate::encoding::write_array::<22, _, _>(
         &mut fixed,
         &management_sequence.sequence_control().to_bytes(),

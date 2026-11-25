@@ -16,6 +16,7 @@ heapless = "0.9.3"
 oer-protocols-ieee80211-core-upper-mac = { path = "../upper-mac" }
 oer-protocols-ieee80211-contracts-security = { path = "../../contracts/security" }
 oer-protocols-ieee80211-wire = { path = "../../wire" }
+oer-protocols-ieee802-wire = { path = "../../../ieee802/wire" }
 
 [dev-dependencies]
 oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }

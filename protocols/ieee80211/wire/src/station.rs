@@ -17,6 +17,7 @@ use crate::{
     security::LinkProtection,
     sequence::SequenceNumber,
 };
+use oer_protocols_ieee802_wire::Eui48;
 
 const OPEN_AUTHENTICATION_FRAME_CONTROL: crate::frame::FrameControlFields =
     crate::frame::FrameControlFields::from_bytes([0xb0, 0x00]);
@@ -51,7 +52,6 @@ const POWER_CAPABILITY_IE_LEN: usize = 4;
 const HT_AMSDU_BASELINE_MAX_LEN: usize = 3_839;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationFrameError {
-    InvalidBssid,
     SsidTooLong,
     NoSupportedRates,
     TooManySupportedRates,
@@ -85,28 +85,18 @@ pub use management::{
 };
 pub use security::SelectedRsn;
 
-pub(crate) fn validate_peer(bssid: [u8; 6]) -> Result<(), StationFrameError> {
-    if bssid == [0; 6]
-        || bssid == [0xff; 6]
-        || crate::address::AddressFlags::from_bytes([bssid[0]]).group()
-    {
-        return Err(StationFrameError::InvalidBssid);
-    }
-    Ok(())
-}
-
 fn management_header(
     frame_control: crate::frame::FrameControlFields,
-    destination: [u8; 6],
-    source: [u8; 6],
-    bssid: [u8; 6],
+    destination: Eui48,
+    source: Eui48,
+    bssid: Eui48,
     sequence_number: SequenceNumber,
 ) -> [u8; MANAGEMENT_HEADER_LEN] {
     let mut frame = [0; MANAGEMENT_HEADER_LEN];
     crate::encoding::write_array::<0, _, _>(&mut frame, &frame_control.to_bytes());
-    crate::encoding::write_array::<4, _, _>(&mut frame, &destination);
-    crate::encoding::write_array::<10, _, _>(&mut frame, &source);
-    crate::encoding::write_array::<16, _, _>(&mut frame, &bssid);
+    crate::encoding::write_array::<4, _, _>(&mut frame, &destination.octets());
+    crate::encoding::write_array::<10, _, _>(&mut frame, &source.octets());
+    crate::encoding::write_array::<16, _, _>(&mut frame, &bssid.octets());
     crate::encoding::write_array::<22, _, _>(
         &mut frame,
         &sequence_number.sequence_control().to_bytes(),
@@ -117,9 +107,9 @@ fn management_header(
 /// The fields of a received management header the station parsers match.
 struct ReceivedManagementHeader {
     frame_control: crate::frame::FrameControlFields,
-    receiver: [u8; 6],
-    transmitter: [u8; 6],
-    bssid: [u8; 6],
+    receiver: Eui48,
+    transmitter: Eui48,
+    bssid: Eui48,
 }
 
 /// Split a received management frame into its header fields, the six-byte
@@ -130,9 +120,9 @@ fn split_received_management(frame: &[u8]) -> Option<(ReceivedManagementHeader, 
     let mut reader = oer_portable_wire::Reader::new(frame);
     let frame_control = crate::frame::FrameControlFields::from_bytes(reader.read().ok()?);
     let _duration: [u8; 2] = reader.read().ok()?;
-    let receiver = reader.read().ok()?;
-    let transmitter = reader.read().ok()?;
-    let bssid = reader.read().ok()?;
+    let receiver = Eui48::read(&mut reader).ok()?;
+    let transmitter = Eui48::read(&mut reader).ok()?;
+    let bssid = Eui48::read(&mut reader).ok()?;
     let _sequence_control: [u8; 2] = reader.read().ok()?;
     let fixed = reader.read().ok()?;
     Some((
