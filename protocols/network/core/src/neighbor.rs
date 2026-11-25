@@ -148,6 +148,45 @@ impl<const N: usize> Neighbors<N> {
         serial: u64,
         needed: impl Fn([u8; 4]) -> bool,
     ) -> Lookup {
+        for entry in &self.entries {
+            match *entry {
+                Entry::Known {
+                    address: known,
+                    expires,
+                    ..
+                } if known == address && now < expires => return Lookup::Known,
+                Entry::Asking { address: asked, .. } if asked == address => {
+                    return Lookup::Asking;
+                }
+                Entry::Known { .. } | Entry::Asking { .. } | Entry::Free => {}
+            }
+        }
+        match self.room_for(address, needed) {
+            Some(index) => {
+                self.ask_in(index, now, address, serial);
+                Lookup::Asking
+            }
+            None => Lookup::Full,
+        }
+    }
+
+    /// Begin asking for `address`, which has no entry, where
+    /// [`Self::resolve`] would. With every entry needed nothing is asked: a
+    /// later tick comes to it again.
+    pub(crate) fn ask(
+        &mut self,
+        now: Instant,
+        address: [u8; 4],
+        serial: u64,
+        needed: impl Fn([u8; 4]) -> bool,
+    ) {
+        if let Some(index) = self.room_for(address, needed) {
+            self.ask_in(index, now, address, serial);
+        }
+    }
+
+    /// The entry to ask for `address` in, if there is one.
+    fn room_for(&self, address: [u8; 4], needed: impl Fn([u8; 4]) -> bool) -> Option<usize> {
         let mut oldest: Option<(usize, Instant)> = None;
         let mut free = None;
         let mut own = None;
@@ -159,35 +198,29 @@ impl<const N: usize> Neighbors<N> {
                     ..
                 } => {
                     if known == address {
-                        if now < expires {
-                            return Lookup::Known;
-                        }
                         own = Some(index);
                     }
                     if !needed(known) && oldest.is_none_or(|(_, at)| expires < at) {
                         oldest = Some((index, expires));
                     }
                 }
-                Entry::Asking { address: asked, .. } if asked == address => {
-                    return Lookup::Asking;
-                }
                 Entry::Asking { .. } => {}
                 Entry::Free => free = free.or(Some(index)),
             }
         }
-        let Some(entry) = own
-            .or(free)
-            .or(oldest.map(|(index, _)| index))
-            .and_then(|index| self.entries.get_mut(index))
-        else {
-            return Lookup::Full;
+        own.or(free).or(oldest.map(|(index, _)| index))
+    }
+
+    /// Ask for `address` in the entry `index`, whatever it held.
+    fn ask_in(&mut self, index: usize, now: Instant, address: [u8; 4], serial: u64) {
+        let Some(entry) = self.entries.get_mut(index) else {
+            return;
         };
         let replaced = matches!(entry, Entry::Known { .. });
         *entry = Self::asking(now, address, serial);
         if replaced {
             self.moved();
         }
-        Lookup::Asking
     }
 
     const fn asking(now: Instant, address: [u8; 4], serial: u64) -> Entry {

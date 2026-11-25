@@ -207,6 +207,17 @@ impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
     }
 }
 
+/// A place [`Places::vacant`] found free: the right to start one command in
+/// it, before anything else starts there.
+#[derive(Debug)]
+pub(crate) struct Vacant(u8);
+
+impl Vacant {
+    pub(crate) const fn number(&self) -> u8 {
+        self.0
+    }
+}
+
 /// A socket's places: `CREDITS` for commands and one for its close, whose
 /// number is `CREDITS`.
 #[derive(Debug)]
@@ -374,33 +385,31 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         }
     }
 
-    /// The number of a free place, which [`Self::start`] takes next.
-    pub(crate) fn vacant(&self) -> Option<u8> {
-        self.free.head().or_else(|| {
-            (self.fresh < CREDITS)
-                .then(|| u8::try_from(self.fresh).ok())
-                .flatten()
-        })
+    /// A free place, which [`Self::start`] takes.
+    pub(crate) fn vacant(&self) -> Option<Vacant> {
+        self.free
+            .head()
+            .or_else(|| {
+                (self.fresh < CREDITS)
+                    .then(|| u8::try_from(self.fresh).ok())
+                    .flatten()
+            })
+            .map(Vacant)
     }
 
-    /// Run `run` as `serial`'s command in the place [`Self::vacant`] named.
-    /// Whether it was still free.
-    pub(crate) fn start(&mut self, number: u8, serial: u64, run: Run<'m, B, SIZE, T>) -> bool {
-        if self.vacant() != Some(number) {
-            return false;
-        }
+    /// Run `run` as `serial`'s command in `vacant`.
+    pub(crate) fn start(&mut self, vacant: Vacant, serial: u64, run: Run<'m, B, SIZE, T>) {
+        let Vacant(number) = vacant;
         // With no freed place, the vacant one is the first never used.
         if self.free.head().is_none() {
             self.fresh = self.fresh.saturating_add(1);
         }
-        let Some(place) = self.get_mut(number) else {
-            return false;
-        };
-        place.observed = true;
-        place.serial = serial;
+        if let Some(place) = self.get_mut(number) {
+            place.observed = true;
+            place.serial = serial;
+        }
         // The place was free: nothing of it is moved out.
         self.put(number, run);
-        true
     }
 
     /// End the command in `number` as `outcome`, if it runs, its block to
@@ -411,14 +420,25 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> bool {
-        let Some(place) = self.get(number).filter(|place| place.run.running()) else {
-            return false;
-        };
-        let protected = place.run.hop().is_some();
-        if let Some(Run::Sending(sending)) = self.finish(number, outcome) {
+        let protected = self
+            .get(number)
+            .is_some_and(|place| place.run.hop().is_some());
+        self.end_running(number, outcome, pool);
+        protected
+    }
+
+    /// As [`Self::end`], for who does not ask of the protection.
+    fn end_running<const BLOCKS: usize>(
+        &mut self,
+        number: u8,
+        outcome: Outcome,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) {
+        if self.get(number).is_some_and(|place| place.run.running())
+            && let Some(Run::Sending(sending)) = self.finish(number, outcome)
+        {
             pool.give(sending.block);
         }
-        protected
     }
 
     /// End declared work in `number` as `outcome`: it holds no block.
@@ -538,8 +558,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         address: Option<[u8; 4]>,
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
-    ) -> bool {
-        let mut released = false;
+    ) {
         let mut at = self.running.head();
         for _ in 0..=CREDITS {
             let Some(number) = at else {
@@ -550,19 +569,23 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
             };
             at = place.next();
             if address.is_none_or(|address| place.run.hop() == Some(address)) {
-                released |= self.end(number, outcome, pool);
+                self.end_running(number, outcome, pool);
             }
         }
-        released
     }
 
-    /// Every running command ends `outcome`; whether one held a neighbor.
+    /// Whether a running command protects a neighbor.
+    pub(crate) fn protects(&self) -> bool {
+        self.running().any(|(_, place)| place.run.hop().is_some())
+    }
+
+    /// Every running command ends `outcome`.
     pub(crate) fn end_all<const BLOCKS: usize>(
         &mut self,
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
-    ) -> bool {
-        self.end_through(None, outcome, pool)
+    ) {
+        self.end_through(None, outcome, pool);
     }
 
     /// The close finished at once, as `serial`'s command: its end is told as

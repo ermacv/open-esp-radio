@@ -8342,12 +8342,8 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_PUMP,
     ),
     (
-        "protocols/network/core/src/payload.rs::Payload.left",
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/network/port/src/slot.rs::Slot.held",
-        BY_FINAL_CRATES,
+        "correct: the run the port knows its buffer holds, absent when it knows of none (tasks/429)",
     ),
     (
         "protocols/network/runtime/src/local.rs::Producer.at",

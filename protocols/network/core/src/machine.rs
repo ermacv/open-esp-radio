@@ -32,7 +32,7 @@ use crate::interface::{
 use crate::loans::{LoansRefused, NotLent};
 use crate::neighbor::{Holds, Lookup, Neighbors};
 use crate::payload::Payload;
-use crate::places::{Declared, Place, Places, Run, Sending};
+use crate::places::{Declared, Place, Places, Run, Sending, Vacant};
 use oer_protocols_network_port::{Held, Slot};
 
 /// RFC 1122, 3.2.1.7: a default time to live large enough for the Internet.
@@ -667,6 +667,21 @@ pub struct LendTo {
     pub data: core::ops::Range<usize>,
 }
 
+/// How an open socket takes a datagram.
+#[derive(Clone, Copy)]
+enum Receives {
+    Copied,
+    Lent,
+}
+
+/// A datagram for an open socket, its data still in the frame.
+struct Arrived<'f> {
+    flow: u8,
+    receives: Receives,
+    remote: Remote,
+    data: &'f [u8],
+}
+
 /// How a socket takes what it receives.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Mode {
@@ -787,7 +802,7 @@ fn end_waiting<
     pool: &mut Pool<'m, B, SIZE, BLOCKS>,
 ) {
     for socket in sockets {
-        let _released = socket.places.end_through(Some(address), outcome, pool);
+        socket.places.end_through(Some(address), outcome, pool);
     }
 }
 
@@ -923,9 +938,8 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
 }
 
 /// A free place a datagram may run in, and the neighbor it goes through.
-#[derive(Clone, Copy)]
 struct Admitted {
-    number: u8,
+    vacant: Vacant,
     hop: Option<[u8; 4]>,
 }
 
@@ -1073,7 +1087,7 @@ impl<
         }
         self.version = self.version.wrapping_add(1);
         for socket in &mut self.sockets {
-            let _released = socket.places.end_all(Outcome::Readdressed, pool);
+            socket.places.end_all(Outcome::Readdressed, pool);
         }
         self.echoes.take_all(|owed| {
             pool.give(owed.block);
@@ -1353,7 +1367,7 @@ impl<
                 open.serial == socket.serial && matches!(open.opened, Opened::Open { .. })
             })
             .ok_or(SendRefusal::Stale)?;
-        let number = open.places.vacant().ok_or(SendRefusal::NoPlace)?;
+        let vacant = open.places.vacant().ok_or(SendRefusal::NoPlace)?;
         let ipv4 = usable.ok_or(SendRefusal::NoAddress)?;
         // What the last datagram to this remote prepared holds: its route
         // and its neighbor are this one's, and the neighbor is known, so a
@@ -1369,7 +1383,7 @@ impl<
             if reserved {
                 return Err(SendRefusal::NeighborsFull);
             }
-            return Ok(Admitted { number, hop });
+            return Ok(Admitted { vacant, hop });
         }
         let (hop, known) = if self.is_broadcast(remote.address) {
             (None, true)
@@ -1384,7 +1398,7 @@ impl<
         if known {
             self.prepare(now, socket, remote, hop, ipv4.address());
         }
-        Ok(Admitted { number, hop })
+        Ok(Admitted { vacant, hop })
     }
 
     /// Prepare `socket`'s next datagrams to `remote` through `hop`, whose
@@ -1453,16 +1467,16 @@ impl<
         run: impl FnOnce(Option<[u8; 4]>) -> Run<'m, B, SIZE, T>,
     ) -> CommandId<B> {
         let serial = self.next_serial();
+        let Admitted { vacant, hop } = admitted;
+        let place = vacant.number();
         // `admit` found this place free in this open socket, and nothing ran
         // since.
         if let Some(open) = self.socket_mut(socket.index, socket.serial) {
-            let _started = open
-                .places
-                .start(admitted.number, serial, run(admitted.hop));
+            open.places.start(vacant, serial, run(hop));
         }
         CommandId {
             socket: socket.index,
-            place: admitted.number,
+            place,
             serial,
             brand: PhantomData,
         }
@@ -1654,7 +1668,8 @@ impl<
         while let Some(datagram) = open.received.pop_front() {
             pool.give(datagram.block);
         }
-        let released = open.places.end_all(Outcome::Closed, pool);
+        let released = open.places.protects();
+        open.places.end_all(Outcome::Closed, pool);
         open.places.close(serial);
         if released {
             self.neighbors_moved();
@@ -1689,7 +1704,9 @@ impl<
             payload,
         };
         // A frame given as octets is no port's buffer: it is copied.
-        let _copied = self.input_view(now, view, Holding::Copied(CopyReason::Format), pool, events);
+        if let Some(arrived) = self.arrived(now, view, pool, events) {
+            self.copy_in(arrived, pool, events);
+        }
     }
 
     /// As [`Self::input`], for a frame whose fields a port read apart from its
@@ -1704,6 +1721,46 @@ impl<
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) -> Option<LendTo> {
+        let payload = frame.payload;
+        let arrived = self.arrived(now, frame, pool, events)?;
+        match (arrived.receives, holding) {
+            (Receives::Lent, Holding::Lendable) => {
+                // The data lies inside `payload`, which the parse sliced.
+                let data = arrived.data;
+                let at = data.as_ptr().addr().checked_sub(payload.as_ptr().addr());
+                let Some((at, end)) = at.and_then(|at| Some((at, at.checked_add(data.len())?)))
+                else {
+                    report(events, || NetEvent::Malformed);
+                    return None;
+                };
+                Some(LendTo {
+                    flow: arrived.flow,
+                    remote: arrived.remote,
+                    data: at..end,
+                })
+            }
+            (Receives::Lent, Holding::Copied(CopyReason::Pressure)) => {
+                report(events, || NetEvent::PressureCopy);
+                None
+            }
+            // The device's copy by the frame's form: into a block of the
+            // socket's group, as a copying socket takes it.
+            (Receives::Lent, Holding::Copied(CopyReason::Format)) | (Receives::Copied, _) => {
+                self.copy_in(arrived, pool, events);
+                None
+            }
+        }
+    }
+
+    /// Take one received frame but a datagram for a socket, which comes back
+    /// to be copied or lent.
+    fn arrived<'f, const BLOCKS: usize>(
+        &mut self,
+        now: Instant,
+        frame: EthernetFrameView<'f>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+        events: &mut impl EventSink<NetEvent>,
+    ) -> Option<Arrived<'f>> {
         if frame.destination != self.interface.hardware() && frame.destination != BROADCAST_HARDWARE
         {
             return None;
@@ -1713,7 +1770,7 @@ impl<
             self.input_arp(now, frame.payload, events);
             None
         } else if ether_type == EtherType::IPV4 {
-            self.input_ipv4(now, frame.payload, holding, pool, events)
+            self.input_ipv4(now, frame.payload, pool, events)
         } else {
             None
         }
@@ -1755,14 +1812,13 @@ impl<
         }
     }
 
-    fn input_ipv4<const BLOCKS: usize>(
+    fn input_ipv4<'f, const BLOCKS: usize>(
         &mut self,
         now: Instant,
-        payload: &[u8],
-        holding: Holding,
+        payload: &'f [u8],
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
-    ) -> Option<LendTo> {
+    ) -> Option<Arrived<'f>> {
         let Ok(packet) = Ipv4Header::parse(payload) else {
             report(events, || NetEvent::Malformed);
             return None;
@@ -1842,47 +1898,49 @@ impl<
             return None;
         }
         let found = (0_u8..)
-            .zip(self.sockets.iter_mut())
-            .find(|(_, socket)| socket.opened.port() == Some(port));
-        let Some((index, socket)) = found else {
+            .zip(&self.sockets)
+            .find_map(|(flow, socket)| match &socket.opened {
+                Opened::Open {
+                    port: bound, mode, ..
+                } if *bound == port => Some((flow, *mode)),
+                Opened::Open { .. } | Opened::Closed => None,
+            });
+        let Some((flow, mode)) = found else {
             report(events, || NetEvent::NoSocket);
             return None;
         };
-        if socket.opened.mode() == Some(Mode::SendOnly) {
-            report(events, || NetEvent::SendOnly);
-            return None;
-        }
-        if socket.opened.mode() == Some(Mode::Lend) {
-            match holding {
-                Holding::Lendable => {
-                    // `data` lies inside `payload`, which the parse sliced.
-                    let at = data.as_ptr().addr().checked_sub(payload.as_ptr().addr());
-                    let Some((at, end)) = at.and_then(|at| Some((at, at.checked_add(data.len())?)))
-                    else {
-                        report(events, || NetEvent::Malformed);
-                        return None;
-                    };
-                    return Some(LendTo {
-                        flow: index,
-                        remote: Remote {
-                            address: source,
-                            port: header.ports.source,
-                        },
-                        data: at..end,
-                    });
-                }
-                Holding::Copied(CopyReason::Pressure) => {
-                    report(events, || NetEvent::PressureCopy);
-                    return None;
-                }
-                // The device's copy by the frame's form: into a block of the
-                // socket's group, as a copying socket takes it.
-                Holding::Copied(CopyReason::Format) => {}
+        let receives = match mode {
+            Mode::Copy => Receives::Copied,
+            Mode::Lend => Receives::Lent,
+            Mode::SendOnly => {
+                report(events, || NetEvent::SendOnly);
+                return None;
             }
-        }
+        };
+        Some(Arrived {
+            flow,
+            receives,
+            remote: Remote {
+                address: source,
+                port: header.ports.source,
+            },
+            data,
+        })
+    }
+
+    /// Copy `arrived` into a block of its socket's group.
+    fn copy_in<const BLOCKS: usize>(
+        &mut self,
+        arrived: Arrived<'_>,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+        events: &mut impl EventSink<NetEvent>,
+    ) {
+        let Some(socket) = self.sockets.get_mut(usize::from(arrived.flow)) else {
+            return;
+        };
         if socket.received.is_full() {
             report(events, || NetEvent::ReceiveFull);
-            return None;
+            return;
         }
         let Some(mut block) = pool.take_as(socket.group) else {
             report(events, || {
@@ -1892,25 +1950,21 @@ impl<
                     NetEvent::GroupLimit
                 }
             });
-            return None;
+            return;
         };
-        if block.fill(data).is_err() {
+        if block.fill(arrived.data).is_err() {
             pool.give(block);
             report(events, || NetEvent::TooLong);
-            return None;
+            return;
         }
         let datagram = Datagram {
-            remote: Remote {
-                address: source,
-                port: header.ports.source,
-            },
+            remote: arrived.remote,
             block,
         };
         if let Err(datagram) = socket.received.push_back(datagram) {
             pool.give(datagram.block);
             report(events, || NetEvent::ReceiveFull);
         }
-        None
     }
 
     /// A server's message to the client port.
@@ -2056,7 +2110,7 @@ impl<
         {
             serial = serial.wrapping_add(1);
             let (sockets, echoes) = (&self.sockets, &self.echoes);
-            let _lookup = self.neighbors.resolve(now, hop, serial, |address| {
+            self.neighbors.ask(now, hop, serial, |address| {
                 data_needs(sockets, echoes, address) || address == hop
             });
         }
