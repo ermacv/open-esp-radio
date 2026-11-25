@@ -1652,7 +1652,7 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
         service.watch(watch).unwrap();
         assert_eq!(service.watch(watch), Err(WatchRefused::Taken));
         let first = watch.changes();
-        assert_eq!(watch.read().unwrap().configuration.unwrap().ipv4, None);
+        assert_eq!(watch.read().unwrap().configuration.unwrap().ipv4(), None);
         let mut events = ();
         {
             let mut run = pin!(service.run(clock, &mut events));
@@ -1695,8 +1695,8 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
             // The watch has the address, published at the turn's end.
             assert_ne!(watch.changes(), first);
             let configuration = watch.read().unwrap().configuration.unwrap();
-            assert_eq!(configuration.ipv4.unwrap().address(), OUR_IP);
-            assert_eq!(configuration.lease.unwrap().server, PEER_IP);
+            assert_eq!(configuration.ipv4().unwrap().address(), OUR_IP);
+            assert_eq!(configuration.lease().unwrap().server, PEER_IP);
             // The address version released the hold: the offer went.
             script.wake();
             settle(&mut run, &count, &waker);
@@ -1709,7 +1709,13 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
                 ]
             );
             // T1 is half of 600 s from the REQUEST.
-            let lease = watch.read().unwrap().configuration.unwrap().lease.unwrap();
+            let lease = watch
+                .read()
+                .unwrap()
+                .configuration
+                .unwrap()
+                .lease()
+                .unwrap();
             assert_eq!(lease.obtained, clock.now());
             assert_eq!(
                 lease.renew,
@@ -1818,7 +1824,15 @@ fn dropping_the_service_ends_the_watch_and_wakes_its_reader() {
         } = direct(right);
         let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
         service.watch(watch).unwrap();
-        assert!(watch.read().unwrap().configuration.unwrap().ipv4.is_some());
+        assert!(
+            watch
+                .read()
+                .unwrap()
+                .configuration
+                .unwrap()
+                .ipv4()
+                .is_some()
+        );
         let seen = watch.changes();
         let (count, waker) = counter();
         let cx = &mut Context::from_waker(&waker);

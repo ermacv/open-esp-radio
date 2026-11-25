@@ -135,9 +135,9 @@ pub use echo::{ECHOES, IcmpDrop, RATE as ECHO_RATE};
 pub use interface::{Interface, InterfaceError, Ipv4};
 pub use loans::{Loan, Loans, LoansRefused, NotLent};
 pub use machine::{
-    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Ends, Eviction,
-    FillFailed, Grant, LendTo, NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults,
-    SendRefusal, SendRefused, SocketId, StaleSocket, WorkId,
+    AddressState, CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Ends,
+    Eviction, FillFailed, Grant, LendTo, NetEvent, OpenRefused, Outcome, Queued, Remote,
+    RetiredResults, SendRefusal, SendRefused, SocketId, StaleSocket, WorkId,
 };
 pub use owner::{Broken, Intake, LentDatagram, NetworkOwner, Retired, Transmitted, Unsent};
 pub use payload::{Payload, PayloadFull};

@@ -64,21 +64,34 @@ pub const DNS_SERVERS: usize = 3;
 /// value in seconds, some 136 years.
 const INFINITE: u32 = u32::MAX;
 
-/// The client's state, RFC 2131, 4.4, Figure 5.
+/// The client's state, RFC 2131, 4.4, Figure 5, with the lease it holds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DhcpState {
     /// INIT and SELECTING: a DISCOVER is owed or waits for an OFFER.
     Selecting,
     /// A REQUEST answers an OFFER.
     Requesting,
-    Bound,
+    Bound(Lease),
     /// Past T1: REQUESTs go to the server that leased the address.
-    Renewing,
+    Renewing(Lease),
     /// Past T2: REQUESTs go to every server.
-    Rebinding,
+    Rebinding(Lease),
     /// INIT-REBOOT and REBOOTING: the link came back, and a REQUEST asks to
     /// keep the lease; the address stays in use meanwhile, RFC 2131, 3.7.
-    Rebooting,
+    Rebooting(Lease),
+}
+
+impl DhcpState {
+    /// The lease held there.
+    pub const fn lease(&self) -> Option<&Lease> {
+        match self {
+            Self::Bound(lease)
+            | Self::Renewing(lease)
+            | Self::Rebinding(lease)
+            | Self::Rebooting(lease) => Some(lease),
+            Self::Selecting | Self::Requesting => None,
+        }
+    }
 }
 
 /// The domain name servers of a lease, in the server's order.
@@ -163,15 +176,6 @@ pub enum LeaseFault {
     /// The lease, counted from its REQUEST, ended before its ACK came:
     /// RFC 2131, 4.4.5 has its address no longer used.
     Expired,
-}
-
-/// What a message or a time did to the interface's address.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Change {
-    /// A lease is held, new or extended.
-    Leased(Ipv4),
-    /// The lease ended: expired, or refused by a NAK.
-    Lost,
 }
 
 /// Where a message goes.
@@ -428,10 +432,10 @@ impl Client {
         match self.phase {
             Phase::Init | Phase::Selecting { .. } => DhcpState::Selecting,
             Phase::Requesting { .. } => DhcpState::Requesting,
-            Phase::Bound(_) => DhcpState::Bound,
-            Phase::Renewing { .. } => DhcpState::Renewing,
-            Phase::Rebinding { .. } => DhcpState::Rebinding,
-            Phase::Rebooting { .. } => DhcpState::Rebooting,
+            Phase::Bound(lease) => DhcpState::Bound(lease),
+            Phase::Renewing { lease, .. } => DhcpState::Renewing(lease),
+            Phase::Rebinding { lease, .. } => DhcpState::Rebinding(lease),
+            Phase::Rebooting { lease, .. } => DhcpState::Rebooting(lease),
         }
     }
 
@@ -480,21 +484,18 @@ impl Client {
 
     /// Advance to `now`: expire the lease, enter RENEWING or REBINDING, and
     /// owe what a retransmission time asks for.
-    pub(crate) fn tick(&mut self, now: Instant, serial: &mut u64) -> Option<Change> {
-        let mut change = None;
+    pub(crate) fn tick(&mut self, now: Instant, serial: &mut u64) {
         // Each pass moves the phase forward or stops: Rebooting → Bound →
         // Renewing → Rebinding at most.
         for _ in 0..4 {
             if self.expired(now) {
                 // RFC 2131, 4.4.5: the client MUST stop using the address.
                 self.restart(now, serial);
-                change = Some(Change::Lost);
             }
             if !self.step(now, serial) {
                 break;
             }
         }
-        change
     }
 
     /// One transition `now` asks for; whether one happened.
@@ -695,7 +696,7 @@ impl Client {
         source: [u8; 4],
         bytes: &[u8],
         serial: &mut u64,
-    ) -> Result<Option<Change>, DhcpDrop> {
+    ) -> Result<(), DhcpDrop> {
         let message = DhcpMessage::parse(bytes).map_err(DhcpDrop::Malformed)?;
         let fixed = message.fixed;
         if fixed.op != Op::Reply {
@@ -726,7 +727,7 @@ impl Client {
                     server,
                     offered: fixed.yiaddr,
                 };
-                Ok(None)
+                Ok(())
             }
             (
                 Phase::Requesting { taken, .. }
@@ -746,7 +747,7 @@ impl Client {
                     return Err(DhcpDrop::Lease(LeaseFault::Expired));
                 }
                 self.phase = Phase::Bound(lease);
-                Ok(Some(Change::Leased(lease.ipv4)))
+                Ok(())
             }
             (
                 Phase::Requesting { .. }
@@ -756,9 +757,8 @@ impl Client {
                 MessageType::Nak,
             ) => {
                 // RFC 2131, Figure 5 and 3.2 (3): back to INIT.
-                let held = self.phase.lease().is_some();
                 self.restart(now, serial);
-                Ok(held.then_some(Change::Lost))
+                Ok(())
             }
             _ => Err(DhcpDrop::Unexpected),
         }

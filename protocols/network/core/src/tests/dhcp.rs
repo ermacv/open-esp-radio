@@ -3,7 +3,7 @@
 //! points give.
 
 use super::*;
-use crate::{Configuration, DhcpDrop, DhcpState, Ipv4, LeaseFault};
+use crate::{AddressState, Configuration, DhcpDrop, DhcpState, Ipv4, LeaseFault};
 use oer_portable_wire::Writer;
 use oer_protocols_network_port::Class;
 use oer_protocols_network_wire::dhcp::{
@@ -411,8 +411,11 @@ fn a_link_up_discovers_at_once_and_an_ack_binds_the_lease() {
     leasing!(|stack| {
         // No link, no message; no address, no datagram.
         quiet(stack, at(0));
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Selecting));
-        assert_eq!(configuration(stack).ipv4, None);
+        assert_eq!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Selecting)
+        );
+        assert_eq!(configuration(stack).ipv4(), None);
         let socket = stack.open(7, best_effort()).unwrap();
         let block = filled(stack.pool(), b"early");
         let refused = stack.send(at(0), &socket, peer(), block).unwrap_err();
@@ -420,7 +423,10 @@ fn a_link_up_discovers_at_once_and_an_ack_binds_the_lease() {
         stack.pool().give(refused.block);
 
         let xid = requesting(stack, at(1));
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Requesting));
+        assert_eq!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Requesting)
+        );
         let version = stack.address_version();
         let changes = stack.configuration_changes();
         // The OFFER came unicast to the offered address, the ACK too.
@@ -430,11 +436,14 @@ fn a_link_up_discovers_at_once_and_an_ack_binds_the_lease() {
                 .is_empty()
         );
         let configured = configuration(stack);
-        assert_eq!(configured.ipv4, Some(leased_ipv4()));
-        assert_eq!(configured.dhcp, Some(DhcpState::Bound));
+        assert_eq!(configured.ipv4(), Some(leased_ipv4()));
+        assert!(matches!(
+            configured.address,
+            AddressState::Dhcp(DhcpState::Bound(_))
+        ));
         assert_ne!(configured.version, version);
         assert_ne!(stack.configuration_changes(), changes);
-        let lease = configured.lease.unwrap();
+        let lease = configured.lease().unwrap();
         assert_eq!(lease.dns.as_slice(), &[DNS]);
         assert_eq!(lease.server, SERVER_IP);
         // The lease counts from the REQUEST's acceptance, RFC 2131, 4.4.1.
@@ -512,7 +521,7 @@ fn an_unanswered_request_repeats_then_discovery_starts_over() {
         let sent = one(stack, due);
         let new = assert_discover(&sent);
         assert_ne!(new, xid);
-        assert_eq!(configuration(stack).ipv4, None);
+        assert_eq!(configuration(stack).ipv4(), None);
         // The new discovery works as the first.
         assert!(
             give(stack, due, &Reply::new(MessageType::Offer, new).frame())
@@ -530,7 +539,7 @@ fn an_ack_after_requests_repeated_still_binds() {
         let due = stack.poll_deadline().unwrap();
         one(stack, due);
         give(stack, due, &Reply::new(MessageType::Ack, xid).frame());
-        let lease = configuration(stack).lease.unwrap();
+        let lease = configuration(stack).lease().unwrap();
         // From the first REQUEST of the transaction.
         assert_eq!(lease.obtained, at(0));
     });
@@ -574,7 +583,10 @@ fn final_refusals_of_requests_spend_none_of_the_requesting_tries() {
         }
         // The port took none, so the client still asks for the OFFER's
         // address, not for a new one.
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Requesting));
+        assert_eq!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Requesting)
+        );
         assert_selecting_request(&one(stack, now), xid);
     });
 }
@@ -600,10 +612,10 @@ fn a_lease_counts_from_the_first_request_the_port_took_not_from_a_refused_one() 
         );
         // An ACK at once grants a lease of 1 s from that REQUEST.
         assert!(give(stack, now, &ack.frame()).0.is_empty());
-        let lease = configuration(stack).lease.unwrap();
+        let lease = configuration(stack).lease().unwrap();
         assert_eq!(lease.obtained, now);
         assert_eq!(lease.expires, now.saturating_add(Duration::from_secs(1)));
-        assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
+        assert_eq!(configuration(stack).ipv4(), Some(leased_ipv4()));
     });
 }
 
@@ -620,7 +632,10 @@ fn a_renewal_whose_server_never_answers_arp_starts_no_lease_clock() {
             now = stack.poll_deadline().unwrap();
             assert!(dhcp_turn(stack, now).is_empty());
         }
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Renewing));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Renewing(_))
+        ));
         // The next renewal comes at its time, the server answers its ARP and
         // takes its REQUEST: the extension counts from that one.
         let due = stack.poll_deadline().unwrap();
@@ -630,9 +645,12 @@ fn a_renewal_whose_server_never_answers_arp_starts_no_lease_clock() {
         server_answers_arp(stack, due);
         let xid = assert_extension(&one(stack, due), Extension::Renewal);
         give(stack, due, &Reply::new(MessageType::Ack, xid).frame());
-        let lease = configuration(stack).lease.unwrap();
+        let lease = configuration(stack).lease().unwrap();
         assert_eq!(lease.obtained, due);
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Bound));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Bound(_))
+        ));
     });
 }
 
@@ -657,7 +675,7 @@ fn a_refused_init_reboot_request_keeps_its_wait_and_starts_no_lease_clock() {
             now,
             &Reply::new(MessageType::Ack, first.xid()).frame(),
         );
-        assert_eq!(configuration(stack).lease.unwrap().obtained, now);
+        assert_eq!(configuration(stack).lease().unwrap().obtained, now);
     });
 }
 
@@ -672,8 +690,11 @@ fn a_nak_to_the_request_starts_discovery_over_at_once() {
         );
         let new = assert_discover(&one(stack, at(1)));
         assert_ne!(new, xid);
-        assert_eq!(configuration(stack).ipv4, None);
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Selecting));
+        assert_eq!(configuration(stack).ipv4(), None);
+        assert_eq!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Selecting)
+        );
     });
 }
 
@@ -687,7 +708,10 @@ fn renewal_at_t1_goes_to_the_server_and_an_ack_extends_from_its_request() {
         // goes to it.
         let frames = turn(stack, secs(500), &mut Dropped::default());
         assert_eq!(frames.len(), 1, "an ARP request");
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Renewing));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Renewing(_))
+        ));
         server_answers_arp(stack, secs(500));
         let sent = one(stack, secs(500));
         let xid = assert_extension(&sent, Extension::Renewal);
@@ -698,10 +722,13 @@ fn renewal_at_t1_goes_to_the_server_and_an_ack_extends_from_its_request() {
                 .is_empty()
         );
         assert_eq!(stack.address_version(), version);
-        let lease = configuration(stack).lease.unwrap();
+        let lease = configuration(stack).lease().unwrap();
         assert_eq!(lease.obtained, secs(500));
         assert_eq!(lease.renew, secs(1000));
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Bound));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Bound(_))
+        ));
     });
 }
 
@@ -730,7 +757,10 @@ fn renewals_then_rebinds_follow_rfc_2131_4_4_5_until_the_lease_expires() {
         quiet(stack, at(874_999));
         // T2: broadcast, to any server.
         assert_extension(&one(stack, secs(875)), Extension::Rebinding);
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Rebinding));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Rebinding(_))
+        ));
         // Half the time left: 875 + 62.5; then 60 s, past the end.
         quiet(stack, at(937_499));
         assert_extension(&one(stack, at(937_500)), Extension::Rebinding);
@@ -738,12 +768,12 @@ fn renewals_then_rebinds_follow_rfc_2131_4_4_5_until_the_lease_expires() {
         assert_extension(&one(stack, at(997_500)), Extension::Rebinding);
         // The lease ends at 1000 s, not a moment before.
         quiet(stack, at(999_999));
-        assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
+        assert_eq!(configuration(stack).ipv4(), Some(leased_ipv4()));
         let version = stack.address_version();
         let sent = one(stack, secs(1000));
         assert_discover(&sent);
-        assert_eq!(configuration(stack).ipv4, None);
-        assert_eq!(configuration(stack).lease, None);
+        assert_eq!(configuration(stack).ipv4(), None);
+        assert_eq!(configuration(stack).lease(), None);
         assert_ne!(stack.address_version(), version);
     });
 }
@@ -758,9 +788,12 @@ fn a_rebind_ack_just_before_the_end_renews_the_lease_from_its_request() {
                 .0
                 .is_empty()
         );
-        let lease = configuration(stack).lease.unwrap();
+        let lease = configuration(stack).lease().unwrap();
         assert_eq!(lease.obtained, secs(875));
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Bound));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Bound(_))
+        ));
     });
 }
 
@@ -770,7 +803,7 @@ fn a_nak_to_a_renewal_takes_the_address_away() {
         bound(stack, at(0));
         let xid = assert_extension(&one(stack, secs(875)), Extension::Rebinding);
         give(stack, secs(876), &Reply::new(MessageType::Nak, xid).frame());
-        assert_eq!(configuration(stack).ipv4, None);
+        assert_eq!(configuration(stack).ipv4(), None);
         assert_discover(&one(stack, secs(876)));
     });
 }
@@ -813,7 +846,7 @@ fn a_new_address_at_renewal_ends_old_work_and_new_work_goes_from_it() {
         give(stack, secs(876), &ack.frame());
         assert_ne!(stack.address_version(), version);
         assert_eq!(finished(stack.take_result(command)), Outcome::Readdressed);
-        assert_eq!(configuration(stack).ipv4.unwrap().address(), moved);
+        assert_eq!(configuration(stack).ipv4().unwrap().address(), moved);
         // The socket sends from the new address.
         let block = filled(stack.pool(), b"new");
         stack.send(secs(876), &socket, peer(), block).unwrap();
@@ -908,7 +941,7 @@ fn a_link_lost_and_back_mid_lease_runs_init_reboot_and_keeps_the_address() {
         bound(stack, at(0));
         link_down(stack);
         quiet(stack, secs(10));
-        assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
+        assert_eq!(configuration(stack).ipv4(), Some(leased_ipv4()));
         link_up(stack, 2);
         let sent = one(stack, secs(11));
         // RFC 2131, 3.2 (1) and Table 5: broadcast, 'ciaddr' zero, the
@@ -921,18 +954,24 @@ fn a_link_lost_and_back_mid_lease_runs_init_reboot_and_keeps_the_address() {
             Some(OFFERED.to_vec())
         );
         assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Rebooting));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Rebooting(_))
+        ));
         // The address stays in use meanwhile, RFC 2131, 3.7.
-        assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
+        assert_eq!(configuration(stack).ipv4(), Some(leased_ipv4()));
         let version = stack.address_version();
         give(
             stack,
             secs(11),
             &Reply::new(MessageType::Ack, sent.xid()).frame(),
         );
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Bound));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Bound(_))
+        ));
         assert_eq!(stack.address_version(), version);
-        assert_eq!(configuration(stack).lease.unwrap().obtained, secs(11));
+        assert_eq!(configuration(stack).lease().unwrap().obtained, secs(11));
     });
 }
 
@@ -950,8 +989,11 @@ fn the_configuration_names_the_link_the_core_last_saw_and_a_change_of_it_moves_t
         // The lease and its address stay; the link that carried them went.
         let down = configuration(stack);
         assert_eq!(down.link.state, LinkState::Down);
-        assert_eq!(down.ipv4, Some(leased_ipv4()));
-        assert_eq!(down.dhcp, Some(DhcpState::Bound));
+        assert_eq!(down.ipv4(), Some(leased_ipv4()));
+        assert!(matches!(
+            down.address,
+            AddressState::Dhcp(DhcpState::Bound(_))
+        ));
         assert_ne!(stack.configuration_changes(), changes);
         link_up(stack, 2);
         one(stack, secs(11));
@@ -973,7 +1015,7 @@ fn a_nak_to_init_reboot_starts_discovery_without_the_address() {
             secs(11),
             &Reply::new(MessageType::Nak, sent.xid()).frame(),
         );
-        assert_eq!(configuration(stack).ipv4, None);
+        assert_eq!(configuration(stack).ipv4(), None);
         assert_discover(&one(stack, secs(11)));
     });
 }
@@ -1010,9 +1052,12 @@ fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_en
             // use, RFC 2131, 3.7, never confirmed: still REBOOTING, and the
             // lease stays the one the first ACK granted.
             let configured = configuration(stack);
-            assert_eq!(configured.dhcp, Some(DhcpState::Rebooting));
-            assert_eq!(configured.ipv4, Some(leased_ipv4()));
-            assert_eq!(configured.lease.unwrap().expires, secs(1000));
+            assert!(matches!(
+                configured.address,
+                AddressState::Dhcp(DhcpState::Rebooting(_))
+            ));
+            assert_eq!(configured.ipv4(), Some(leased_ipv4()));
+            assert_eq!(configured.lease().unwrap().expires, secs(1000));
             last = due;
         }
         // Its repeats go on to the lease's end at 1000 s, where the address
@@ -1024,14 +1069,20 @@ fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_en
             let sent = one(stack, now);
             if now < secs(1000) {
                 assert_eq!(sent.kind(), MessageType::Request);
-                assert_eq!(configuration(stack).dhcp, Some(DhcpState::Rebooting));
+                assert!(matches!(
+                    configuration(stack).address,
+                    AddressState::Dhcp(DhcpState::Rebooting(_))
+                ));
             } else {
                 assert_discover(&sent);
             }
         }
         assert_eq!(now, secs(1000));
-        assert_eq!(configuration(stack).ipv4, None);
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Selecting));
+        assert_eq!(configuration(stack).ipv4(), None);
+        assert_eq!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Selecting)
+        );
         assert_ne!(stack.address_version(), version);
     });
 }
@@ -1055,12 +1106,18 @@ fn an_ack_to_a_late_init_reboot_repeat_confirms_the_lease() {
             &Reply::new(MessageType::Ack, first.xid()).frame(),
         );
         let configured = configuration(stack);
-        assert_eq!(configured.dhcp, Some(DhcpState::Bound));
-        assert_eq!(configured.ipv4, Some(leased_ipv4()));
+        assert!(matches!(
+            configured.address,
+            AddressState::Dhcp(DhcpState::Bound(_))
+        ));
+        assert_eq!(configured.ipv4(), Some(leased_ipv4()));
         assert_eq!(stack.address_version(), version);
         // It counts from the transaction's first REQUEST.
-        assert_eq!(configured.lease.unwrap().obtained, secs(11));
-        assert_eq!(stack.poll_deadline(), Some(configured.lease.unwrap().renew));
+        assert_eq!(configured.lease().unwrap().obtained, secs(11));
+        assert_eq!(
+            stack.poll_deadline(),
+            Some(configured.lease().unwrap().renew)
+        );
     });
 }
 
@@ -1099,7 +1156,7 @@ fn the_lease_expires_during_a_link_loss() {
         quiet(stack, secs(999));
         let version = stack.address_version();
         quiet(stack, secs(1000));
-        assert_eq!(configuration(stack).ipv4, None);
+        assert_eq!(configuration(stack).ipv4(), None);
         assert_ne!(stack.address_version(), version);
         link_up(stack, 2);
         assert_discover(&one(stack, secs(1001)));
@@ -1228,7 +1285,7 @@ fn times_of<B>(stack: &mut Stack<B>, t1: Option<u32>, t2: Option<u32>) -> (u64, 
         options.push((option::REBINDING_TIME, t2.to_be_bytes().to_vec()));
     }
     bound_with(stack, at(0), options);
-    let lease = configuration(stack).lease.unwrap();
+    let lease = configuration(stack).lease().unwrap();
     (
         lease.renew.as_micros() / 1_000_000,
         lease.rebind.as_micros() / 1_000_000,
@@ -1246,7 +1303,7 @@ macro_rules! times {
 
 fn micros_of<B>(stack: &mut Stack<B>, t1: Option<u32>, t2: Option<u32>) -> (u64, u64) {
     times_of(stack, t1, t2);
-    let lease = configuration(stack).lease.unwrap();
+    let lease = configuration(stack).lease().unwrap();
     (lease.renew.as_micros(), lease.rebind.as_micros())
 }
 
@@ -1281,7 +1338,7 @@ fn an_infinite_lease_is_kept_for_its_value() {
             at(0),
             with(ack_options(), option::LEASE_TIME, Some(vec![0xFF; 4])),
         );
-        let lease = configuration(stack).lease.unwrap();
+        let lease = configuration(stack).lease().unwrap();
         assert_eq!(lease.expires.as_micros(), u64::from(u32::MAX) * 1_000_000);
     });
 }
@@ -1299,7 +1356,7 @@ fn more_dns_servers_than_a_lease_holds_keep_the_first() {
                 Some(servers.concat()),
             ),
         );
-        let lease = configuration(stack).lease.unwrap();
+        let lease = configuration(stack).lease().unwrap();
         assert_eq!(lease.dns.as_slice(), &servers[..crate::DNS_SERVERS]);
     });
 }
@@ -1355,8 +1412,11 @@ fn data_leaves_a_neighbor_entry_for_the_renewal() {
 #[test]
 fn a_static_interface_has_no_client_and_its_port_68_is_a_socket() {
     world!(|stack| {
-        assert_eq!(stack.configuration().dhcp, None);
-        assert_eq!(stack.configuration().lease, None);
+        assert!(matches!(
+            stack.configuration().address,
+            AddressState::Given(_)
+        ));
+        assert_eq!(stack.configuration().lease(), None);
         let socket = stack.open(68, best_effort()).unwrap();
         let datagram = udp_frame(67, 68, b"to a socket");
         stack.input(at(0), &datagram, &mut ());
@@ -1392,7 +1452,7 @@ fn a_router_that_is_no_host_is_none_and_the_next_one_counts() {
             at(0),
             with(ack_options(), option::ROUTER, Some(vec![0, 0, 0, 0])),
         );
-        assert_eq!(configuration(stack).ipv4.unwrap().gateway(), None);
+        assert_eq!(configuration(stack).ipv4().unwrap().gateway(), None);
     });
     leasing!(|stack| {
         bound_with(
@@ -1405,7 +1465,7 @@ fn a_router_that_is_no_host_is_none_and_the_next_one_counts() {
             ),
         );
         assert_eq!(
-            configuration(stack).ipv4.unwrap().gateway(),
+            configuration(stack).ipv4().unwrap().gateway(),
             Some(SERVER_IP)
         );
     });
@@ -1623,7 +1683,10 @@ fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
             7,
         );
         stack.tick(secs(500), &mut ());
-        assert_eq!(stack.configuration().dhcp, Some(DhcpState::Renewing));
+        assert!(matches!(
+            stack.configuration().address,
+            AddressState::Dhcp(DhcpState::Renewing(_))
+        ));
         let ready: Vec<_> = stack.demands(secs(500), &()).collect();
         assert!(
             ready
@@ -1651,8 +1714,11 @@ fn an_ack_already_expired_from_its_request_enables_no_address() {
             give(stack, now, &ack.frame()).0,
             [NetEvent::Dhcp(DhcpDrop::Lease(LeaseFault::Expired))]
         );
-        assert!(stack.configuration().ipv4.is_none());
-        assert_eq!(stack.configuration().dhcp, Some(DhcpState::Requesting));
+        assert!(stack.configuration().ipv4().is_none());
+        assert_eq!(
+            stack.configuration().address,
+            AddressState::Dhcp(DhcpState::Requesting)
+        );
     });
 }
 
@@ -1697,10 +1763,10 @@ fn a_renewal_ack_already_past_its_end_keeps_the_lease_to_its_own_end() {
             give(stack, secs(990), &ack.frame()).0,
             [NetEvent::Dhcp(DhcpDrop::Lease(LeaseFault::Expired))]
         );
-        assert_eq!(configuration(stack).lease.unwrap().expires, secs(1000));
+        assert_eq!(configuration(stack).lease().unwrap().expires, secs(1000));
         // At the old lease's end the address goes, as without the ACK.
         one(stack, secs(1000));
-        assert_eq!(configuration(stack).ipv4, None);
+        assert_eq!(configuration(stack).ipv4(), None);
     });
 }
 
@@ -1731,10 +1797,13 @@ fn an_ack_with_only_an_early_t2_still_renews_before_it_rebinds() {
                 Some(300_u32.to_be_bytes().to_vec()),
             ),
         );
-        let lease = stack.configuration().lease.unwrap();
+        let lease = stack.configuration().lease().unwrap();
         assert!(lease.renew < lease.rebind, "{lease:?}");
         turn(stack, secs(150), &mut Dropped::default());
-        assert_eq!(configuration(stack).dhcp, Some(DhcpState::Renewing));
+        assert!(matches!(
+            configuration(stack).address,
+            AddressState::Dhcp(DhcpState::Renewing(_))
+        ));
     });
 }
 
@@ -1773,4 +1842,78 @@ fn the_outcome_of_another_message_leaves_the_owed_one() {
     client.refused(at(1), owed);
     assert_eq!(client.owed(), None);
     assert!(client.deadline().is_some(), "its repeat has its time");
+}
+
+/// The configuration's count moves with the client's state, and not with a
+/// tick that changes nothing.
+#[test]
+fn a_tick_moves_the_configuration_s_count_only_with_the_state() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let changes = stack.configuration_changes();
+        stack.tick(secs(100), &mut ());
+        assert_eq!(stack.configuration_changes(), changes, "nothing was due");
+        stack.tick(secs(500), &mut ());
+        assert_ne!(stack.configuration_changes(), changes, "T1");
+    });
+}
+
+/// While a renewal is owed, the life of the server's neighbor is the one
+/// waited for, not another's.
+#[test]
+fn an_owed_renewal_waits_for_its_server_s_neighbor_alone() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        stack.input(
+            secs(450),
+            &arp_frame(Operation::Reply, (PEER, PEER_IP), OFFERED),
+            &mut (),
+        );
+        stack.input(
+            secs(460),
+            &arp_frame(Operation::Reply, (SERVER, SERVER_IP), OFFERED),
+            &mut (),
+        );
+        stack.tick(secs(500), &mut ());
+        assert_eq!(stack.poll_deadline(), Some(secs(520)));
+    });
+}
+
+/// The refusal of a request for the server's neighbor is the renewal's: its
+/// next try comes at its time, half of what is left to T2.
+#[test]
+fn a_refused_request_for_the_server_refuses_the_renewal() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        stack.tick(secs(500), &mut ());
+        stack.port_mut().faults.inject(PortFault::Rejects);
+        let demand = stack.poll_demand(secs(500)).unwrap();
+        let refused = stack.transmit(secs(500), demand.grant(), unproduced, &());
+        assert!(matches!(refused, Err(Unsent::Rejected(_))));
+        assert!(stack.poll_demand(secs(500)).is_none());
+        let next = stack.poll_deadline().unwrap();
+        assert_eq!(next.as_micros(), 687_500_000);
+    });
+}
+
+/// The refusal of a request for another neighbor is not.
+#[test]
+fn a_refused_request_for_another_neighbor_leaves_the_renewal_owed() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let socket = stack.open(6000, best_effort()).unwrap();
+        // Asked before T1: the first request of the table.
+        let block = filled(stack.pool(), b"data");
+        let sent = stack.send(secs(499), &socket, peer(), block).unwrap();
+        stack.tick(secs(500), &mut ());
+        stack.port_mut().faults.inject(PortFault::Rejects);
+        let demand = stack.poll_demand(secs(500)).unwrap();
+        let refused = stack.transmit(secs(500), demand.grant(), unproduced, &());
+        assert!(matches!(refused, Err(Unsent::Rejected(_))));
+        assert_eq!(finished(stack.take_result(sent)), Outcome::Rejected);
+        assert!(
+            stack.poll_demand(secs(500)).is_some(),
+            "the server's request is still owed"
+        );
+    });
 }
