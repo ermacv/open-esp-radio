@@ -40,7 +40,7 @@ use oer_protocols_hil_protocol::base::{
     BootEvidence, ExceptionFault, Fault, GetBootStatus, PostMortemSummary,
 };
 use oer_tools_hil_harness::{
-    Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
+    Case, Cx, Failure, RouterFormat, RouterOperation, RouterWidth, Scenario, check,
 };
 
 const SCENARIO: Scenario = Scenario::new(
@@ -353,7 +353,8 @@ fn the_network(cx: &mut Cx<'_>) -> Result<(String, String), Failure> {
         passphrase: passphrase.clone(),
         channel,
         // The SDK's station joins at HT 20 MHz.
-        width: RouterChannelWidth::Ht20,
+        format: RouterFormat::Ht,
+        width: RouterWidth::Mhz20,
         forward_host: Some(host),
     })?;
     if let Ok(mut network) = NETWORK.lock() {

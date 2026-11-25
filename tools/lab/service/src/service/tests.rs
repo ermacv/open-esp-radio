@@ -313,12 +313,11 @@ fn a_client_of_another_protocol_is_refused_with_the_reason() {
 }
 
 #[test]
-fn a_client_of_protocol_4_is_refused_at_its_hello_before_any_operation() {
-    // A client built before the queue files' cut rows greets with protocol 4
-    // and sends
-    // its requests at once: the service refuses the hello and ends the
+fn a_client_of_protocol_5_is_refused_at_its_hello_before_any_operation() {
+    // A client built before the router profile's format and width greets
+    // with protocol 5 and sends its requests at once: the service refuses the hello and ends the
     // connection, so nothing after it is served.
-    assert_eq!(PROTOCOL, 5);
+    assert_eq!(PROTOCOL, 6);
     let directory = tempfile::tempdir().unwrap();
     let fake = Fake::new();
     let service = open(directory.path(), &fake);
@@ -328,7 +327,7 @@ fn a_client_of_protocol_4_is_refused_at_its_hello_before_any_operation() {
     let (mut stream, served) = std::os::unix::net::UnixStream::pair().unwrap();
     for request in [
         Request::Hello {
-            protocol: 4,
+            protocol: 5,
             client: "beacon-stamp".to_owned(),
         },
         Request::Start {
@@ -349,7 +348,7 @@ fn a_client_of_protocol_4_is_refused_at_its_hello_before_any_operation() {
         panic!("not refused");
     };
     assert!(
-        reason.contains("protocol 4") && reason.contains("service 5"),
+        reason.contains("protocol 5") && reason.contains("service 6"),
         "{reason}"
     );
     // The connection ends: its end, or a reset for the request the

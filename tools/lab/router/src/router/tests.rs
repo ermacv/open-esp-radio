@@ -99,6 +99,10 @@ const CHANNELS: &str = "\t\t\t* 2412.0 MHz [1] (20.0 dBm)\n\
                         \t\t\t* 2467.0 MHz [12] (20.0 dBm) (no IR)\n\
                         \t\t\t* 2472 MHz [13] (disabled)\n";
 
+/// The 2.4 GHz modes of the stand router's PHY, as OpenWrt 25.12.5 lists
+/// them in `/etc/board.json`.
+const MODES: &str = "NOHT\nHT20\nHE20\nHT40\nHE40\n";
+
 /// `iw dev <interface> info` in full.
 fn raw_iw(channel: u8, width: &str, ssid: &str) -> String {
     let frequency = 2407 + 5 * u32::from(channel);
@@ -175,6 +179,7 @@ impl Remote for Canned {
 const CHANGES_PREFIX: &str = "changes=";
 const SHOW_PREFIX: &str = "config=";
 const CHANNELS_PREFIX: &str = "phy=";
+const MODES_PREFIX: &str = "board_phy=";
 const REGULATORY_PREFIX: &str = "iw reg set";
 const SET_PREFIX: &str = "uci set";
 const IW_PREFIX: &str = "info=";
@@ -186,6 +191,7 @@ fn first_run() -> Canned {
         (SHOW_PREFIX, vec![Ok(show_before()), Ok(show_profiled())]),
         (REGULATORY_PREFIX, vec![Ok(String::new())]),
         (CHANNELS_PREFIX, vec![Ok(CHANNELS.to_owned())]),
+        (MODES_PREFIX, vec![Ok(MODES.to_owned())]),
         (SET_PREFIX, vec![Ok(String::new())]),
         (
             IW_PREFIX,
@@ -205,6 +211,7 @@ fn profiled_router() -> Canned {
         (SHOW_PREFIX, vec![Ok(show_profiled())]),
         (REGULATORY_PREFIX, vec![Ok(String::new())]),
         (CHANNELS_PREFIX, vec![Ok(CHANNELS.to_owned())]),
+        (MODES_PREFIX, vec![Ok(MODES.to_owned())]),
         (SET_PREFIX, vec![Ok(String::new())]),
         (IW_PREFIX, vec![Ok(iw(6, "20 MHz", SSID))]),
     ])
@@ -233,6 +240,7 @@ fn the_profile_is_applied_verified_and_settles() {
             show_script(),
             regulatory_script("DE").unwrap(),
             profile().channels_script().unwrap(),
+            profile().modes_script().unwrap(),
             APPLY.to_owned(),
             show_script(),
             iw.clone(),
@@ -248,7 +256,7 @@ fn the_profile_enables_the_radio_and_shows_the_ssid() {
     // and the committed configuration must show them set.
     let mut remote = first_run();
     apply(&mut remote, &profile()).unwrap();
-    let set = &remote.scripts[4];
+    let set = &remote.scripts[5];
     assert!(set.contains("'wireless.radio9.disabled=0'"), "{set}");
     assert!(set.contains("'wireless.lab_ap.hidden=0'"), "{set}");
     for (radio, ap, reason) in [
@@ -291,21 +299,21 @@ fn a_second_apply_changes_nothing_and_verifies_the_same() {
 #[test]
 fn the_plan_lists_placeholders_only() {
     let plan = plan().unwrap();
-    assert_eq!(plan.len(), 7);
+    assert_eq!(plan.len(), 8);
     assert_eq!(
         plan[2],
         "iw reg set <country> && attempt=0 && until iw reg get | grep -q '^country <country>:'; \
          do attempt=$((attempt + 1)) && test \"$attempt\" -lt 10 && sleep 1 || exit 1; done"
     );
     assert_eq!(
-        plan[4],
+        plan[5],
         "uci set 'wireless.<radio>.channel=<channel>' && uci set 'wireless.<radio>.htmode=HT20' \
          && uci set 'wireless.<radio>.beacon_int=100' && uci set 'wireless.<radio>.disabled=0' \
          && uci set 'wireless.<ap_section>.ssid=<ssid>' && uci set 'wireless.<ap_section>.disabled=0' \
          && uci set 'wireless.<ap_section>.hidden=0' && uci commit wireless && wifi reload"
     );
     assert_eq!(
-        plan[6],
+        plan[7],
         "info=$(iw dev '<wireless_interface>' info) && printf '%s\\n' \"$info\" | grep -E \
          '^[[:space:]]*(addr|ssid|type|channel) '"
     );
@@ -493,8 +501,12 @@ fn station_wpa2_refuses_incorrect_committed_security_width_and_rekey() {
 
 #[test]
 fn an_he20_station_profile_turns_he_on_and_verifies_it() {
-    assert_eq!(ChannelWidth::He20.htmode(6), "HE20");
-    let profile = station_wpa2_profile().width(ChannelWidth::He20);
+    const HE20: PhyMode = PhyMode {
+        format: Format::He,
+        width: ChannelWidth::Mhz20,
+    };
+    assert_eq!(HE20.htmode(6), "HE20");
+    let profile = station_wpa2_profile().mode(HE20);
     let script = profile.apply_script().unwrap();
     assert!(
         script.contains("'wireless.radio9.htmode=HE20'"),
@@ -535,9 +547,13 @@ fn an_he20_station_profile_turns_he_on_and_verifies_it() {
 #[test]
 fn an_he20_ap_is_20_mhz_wide() {
     let narrow = parse_iw_info(&iw(6, "20 MHz", SSID), SSID).unwrap();
-    assert_eq!(narrow.mismatch(6, ChannelWidth::He20), None);
+    let he20 = PhyMode {
+        format: Format::He,
+        width: ChannelWidth::Mhz20,
+    };
+    assert_eq!(narrow.mismatch(6, he20), None);
     let wide = parse_iw_info(&iw40(13, 2462), SSID).unwrap();
-    assert!(wide.mismatch(13, ChannelWidth::He20).is_some());
+    assert!(wide.mismatch(13, he20).is_some());
 }
 
 #[test]
@@ -837,7 +853,7 @@ fn iw_info_parses_and_refuses_garbage() {
     assert_eq!(info.bssid.octets(), [0x02, 0x5e, 0xc0, 0xde, 0xf6, 0xd0]);
     assert_eq!((info.channel, info.width, info.ap), (6, Width::Ht20, true));
     assert!(info.stand_ssid);
-    assert_eq!(info.mismatch(6, ChannelWidth::Ht20), None);
+    assert_eq!(info.mismatch(6, PhyMode::HT20), None);
     assert_eq!(
         parse_iw_info(&iw(6, "20 MHz (no HT)", SSID), SSID)
             .unwrap()
@@ -851,7 +867,7 @@ fn iw_info_parses_and_refuses_garbage() {
     assert!(!other.stand_ssid);
     assert!(
         other
-            .mismatch(6, ChannelWidth::Ht20)
+            .mismatch(6, PhyMode::HT20)
             .unwrap()
             .contains("channel 11")
     );
@@ -1006,11 +1022,15 @@ fn shell_quote_rejects_nul_and_preserves_other_words() {
 
 #[test]
 fn a_40_mhz_profile_takes_its_secondary_below_where_it_may() {
-    assert_eq!(ChannelWidth::Ht20.htmode(13), "HT20");
-    assert_eq!(ChannelWidth::Ht40.htmode(13), "HT40-");
-    assert_eq!(ChannelWidth::Ht40.htmode(5), "HT40-");
-    assert_eq!(ChannelWidth::Ht40.htmode(4), "HT40+");
-    let wide = profile().width(ChannelWidth::Ht40);
+    const HT40: PhyMode = PhyMode {
+        format: Format::Ht,
+        width: ChannelWidth::Mhz40,
+    };
+    assert_eq!(PhyMode::HT20.htmode(13), "HT20");
+    assert_eq!(HT40.htmode(13), "HT40-");
+    assert_eq!(HT40.htmode(5), "HT40-");
+    assert_eq!(HT40.htmode(4), "HT40+");
+    let wide = profile().mode(HT40);
     let set = wide.apply_script().unwrap();
     assert!(
         set.contains("'wireless.radio9.htmode=HT40-'"),
@@ -1034,18 +1054,143 @@ fn iw40(channel: u8, centre: u32) -> String {
 fn iw_names_a_40_mhz_channel_by_its_centre() {
     let info = parse_iw_info(&iw40(13, 2462), SSID).unwrap();
     assert_eq!(info.width, Width::Ht40 { centre_mhz: 2462 });
-    assert_eq!(info.mismatch(13, ChannelWidth::Ht40), None);
+    assert_eq!(
+        info.mismatch(
+            13,
+            PhyMode {
+                format: Format::Ht,
+                width: ChannelWidth::Mhz40
+            }
+        ),
+        None
+    );
     // The secondary above, or 20 MHz, is not the profile's HT40-.
     let above = parse_iw_info(&iw40(9, 2462), SSID).unwrap();
-    assert!(above.mismatch(9, ChannelWidth::Ht40).is_some());
+    assert!(
+        above
+            .mismatch(
+                9,
+                PhyMode {
+                    format: Format::Ht,
+                    width: ChannelWidth::Mhz40
+                }
+            )
+            .is_some()
+    );
     let narrow = parse_iw_info(&iw(13, "20 MHz", SSID), SSID).unwrap();
     assert!(
         narrow
-            .mismatch(13, ChannelWidth::Ht40)
+            .mismatch(
+                13,
+                PhyMode {
+                    format: Format::Ht,
+                    width: ChannelWidth::Mhz40
+                }
+            )
             .is_some_and(|reason| reason.contains("HT40-"))
     );
-    assert_eq!(narrow.mismatch(13, ChannelWidth::Ht20), None);
+    assert_eq!(narrow.mismatch(13, PhyMode::HT20), None);
     // A 40 MHz line without its centre is no width the profile names.
     let unnamed = parse_iw_info(&iw40(13, 2462).replace(", center1: 2462 MHz", ""), SSID).unwrap();
     assert_eq!(unnamed.width, Width::Other);
+}
+
+#[test]
+fn every_format_and_width_is_a_profile_and_he40_names_no_side() {
+    const HE40: PhyMode = PhyMode {
+        format: Format::He,
+        width: ChannelWidth::Mhz40,
+    };
+    for (mode, htmode, board, ax) in [
+        (PhyMode::HT20, "HT20", "HT20", "0"),
+        (
+            PhyMode {
+                format: Format::Ht,
+                width: ChannelWidth::Mhz40,
+            },
+            "HT40-",
+            "HT40",
+            "0",
+        ),
+        (
+            PhyMode {
+                format: Format::He,
+                width: ChannelWidth::Mhz20,
+            },
+            "HE20",
+            "HE20",
+            "1",
+        ),
+        (HE40, "HE40", "HE40", "1"),
+    ] {
+        assert_eq!(mode.htmode(13), htmode);
+        assert_eq!(mode.board_mode(), board);
+        assert_eq!(mode.ieee80211ax(), ax);
+        let script = station_wpa2_profile().mode(mode).apply_script().unwrap();
+        assert!(
+            script.contains(&format!("htmode={htmode}'")),
+            "{}",
+            script.as_str()
+        );
+        assert!(
+            script.contains(&format!("ieee80211ax={ax}'")),
+            "{}",
+            script.as_str()
+        );
+    }
+    // OpenWrt takes HE40's secondary above below channel 7, below from it.
+    assert_eq!(HE40.centre_mhz(6), 2437 + 10);
+    assert_eq!(HE40.centre_mhz(7), 2442 - 10);
+    assert_eq!(HE40.centre_mhz(13), 2472 - 10);
+    let above = parse_iw_info(&iw40(6, 2447), SSID).unwrap();
+    assert_eq!(above.mismatch(6, HE40), None);
+    // HT40 on channel 6 is below: the same AP is not its profile.
+    assert!(
+        above
+            .mismatch(
+                6,
+                PhyMode {
+                    format: Format::Ht,
+                    width: ChannelWidth::Mhz40
+                }
+            )
+            .is_some()
+    );
+    let below = parse_iw_info(&iw40(13, 2462), SSID).unwrap();
+    assert_eq!(below.mismatch(13, HE40), None);
+}
+
+#[test]
+fn a_mode_the_radio_does_not_run_is_refused_naming_its_modes() {
+    const HE40: PhyMode = PhyMode {
+        format: Format::He,
+        width: ChannelWidth::Mhz40,
+    };
+    assert!(check_mode(MODES, HE40).is_ok());
+    assert!(check_mode(MODES, PhyMode::HT20).is_ok());
+    let error = check_mode("NOHT\nHT20\nHE20\nHT40\n", HE40).unwrap_err();
+    assert_eq!(
+        error,
+        "the radio does not run HE40 at 2.4 GHz: its modes are NOHT, HT20, HE20, HT40"
+    );
+    assert!(check_mode("", PhyMode::HT20).is_err());
+    assert!(check_mode("HT20\nsecret ssid\n", PhyMode::HT20).is_err());
+    // Applied, the refusal comes before anything is set.
+    let mut remote = first_run();
+    remote.answer(MODES_PREFIX, vec![Ok("NOHT\nHT20\n".to_owned())]);
+    let error = apply(
+        &mut remote,
+        &profile().mode(PhyMode {
+            format: Format::Ht,
+            width: ChannelWidth::Mhz40,
+        }),
+    )
+    .unwrap_err();
+    assert!(error.contains("does not run HT40"), "{error}");
+    assert!(
+        !remote
+            .scripts
+            .iter()
+            .any(|script| script.starts_with(SET_PREFIX))
+    );
 }

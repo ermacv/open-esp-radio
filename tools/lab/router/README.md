@@ -158,9 +158,20 @@ and the host refuses any line outside the allowlist. In order:
    phy=$(ubus call iwinfo phyname '{"section":"<radio>"}' | jsonfilter -e '@.phyname') && test -n "$phy" && info=$(iw phy "$phy" info) && printf '%s\n' "$info" | grep -E '^[[:space:]]*\* [0-9]+(\.[0-9]+)? MHz \['
    ```
 
-4. The profile: the stand's channel at the profile's width (`HT20`, or for
-   40 MHz `HT40-`, the secondary channel below, on channels 5 to 13 and
-   `HT40+` on 1 to 4), a 100 TU beacon interval, the radio enabled; the stand's SSID on the AP section, enabled, not
+   Then the radio's 2.4 GHz modes as OpenWrt detected them from the PHY
+   (`/etc/board.json`, written by `wifi-detect.uc`): the profile's format and
+   width (`HT20`, `HT40`, `HE20` or `HE40`) must be among them, or the run is
+   refused before anything is set, naming the modes the radio has. Only
+   upper-case names and digits leave the router.
+
+   ```sh
+   board_phy=$(ubus call iwinfo phyname '{"section":"<radio>"}' | jsonfilter -e '@.phyname') && test -n "$board_phy" && jsonfilter -i /etc/board.json -e "@.wlan['$board_phy'].info.bands['2G'].modes[*]"
+   ```
+
+4. The profile: the stand's channel in the profile's format and width
+   (`HT20`; for HT 40 MHz `HT40-`, the secondary channel below, on channels 5
+   to 13 and `HT40+` on 1 to 4; `HE20`; `HE40`, whose secondary OpenWrt
+   chooses: above on channels 1 to 6, below from 7), a 100 TU beacon interval, the radio enabled; the stand's SSID on the AP section, enabled, not
    hidden. The lower-MAC profile leaves encryption unchanged. Keys are write-only: WPA2 station sets its generated
    passphrase through the script on stdin; no configuration read returns it.
 
@@ -216,7 +227,7 @@ wireless radio/BSS. These are the complete settings it owns:
 | `firewall.oer_station_ping` | Accept IPv4 echo requests from station only to `10.231.0.1` |
 | `firewall.oer_station_out`, `firewall.oer_station_in` | Reject all forwarding out of and into station, placed first among configured rules |
 | `firewall.oer_station_host_out`, `firewall.oer_station_host_in` | Only when the run names a host (`forward_host`): accept IPv4 UDP, TCP and ICMP from station to that host and back, placed before the rejections |
-| Selected radio | Stand channel at the run's width (HT20 or HT40 with HE disabled, or HE20 with `ieee80211ax=1`), beacon interval 100 TU, enabled |
+| Selected radio | Stand channel in the run's format and width (HT20 or HT40 with HE disabled, HE20 or HE40 with `ieee80211ax=1`), beacon interval 100 TU, enabled |
 | Selected BSS | Generated SSID, enabled, visible, WPA2-CCMP encryption, station network, client isolation enabled |
 
 There are no forwarding sections, NAT, LAN/WAN bridge ports or external DNS
@@ -242,15 +253,34 @@ serving DHCP, so it fails while the server is stopped.
 The DHCP instance uses OpenWrt's [per-instance DHCP
 configuration](https://openwrt.org/docs/guide-user/base-system/dhcp_configuration#multiple_dhcpdns_serverforwarder_instances).
 
+## The stand router's radio
+
+The stand's router runs OpenWrt 25.12.5 (`r33051-f5dae5ece4`,
+`mediatek/filogic`); its 2.4 GHz radio is `phy0`. Read on the router on
+2026-11-18:
+
+- `/etc/board.json`, `wlan.phy0.info.bands.2G`: `ht`, `he`, `max_width` 40,
+  `modes` `NOHT`, `HT20`, `HE20`, `HT40`, `HE40`;
+- `iw phy phy0 info`, band 1: `HT20/HT40` among the HT capabilities, and the
+  `AP` HE iftype's PHY capabilities carry `HE40/2.4GHz`.
+
+So it runs all four pairs of format and width. `wifi-detect.uc` lists `HT40`
+from the HT capability bit 1 and `HE40` from the HE PHY capability's 40 MHz
+in 2.4 GHz bit; that list is what step 3 checks. A stand file's `phys` is the
+owner's description and is not read by the driver.
+
 ## WPA2 station WPA2 station
 
 `router::Profile::station_wpa2` uses the isolated station network above and sets
 only the selected BSS to `encryption=psk2+ccmp`, `ieee80211r=0` and
 `ieee80211w=0`: WPA2-Personal with CCMP, no SAE/transition, FT or PMF. The
-radio runs the width the run asks for (`RouterOperation::ApplyStationProfile`'s
-`width`: HT20, or HT40 for the load scenario) with HE disabled, or the HE20
-station profile (`htmode=HE20`, `ieee80211ax=1`, both verified after the
-commit; the AP interface at 20 MHz). The lower-MAC profile leaves
+radio runs the format and width the run asks for
+(`RouterOperation::ApplyStationProfile`'s `format` and `width`): HT with HE
+disabled, or HE (`ieee80211ax=1`), at 20 or 40 MHz; `htmode` and
+`ieee80211ax` are verified after the commit, and the AP interface's width in
+step 6. Every pair is a profile; a pair the radio does not run is refused at
+step 3. Whether a station under test can use the pair is its scenario's
+matter. The lower-MAC profile leaves
 `ieee80211ax` as it is. A radio whose
 20/40 MHz coexistence scan finds an overlapping BSS may stay at 20 MHz; the
 interface check of step 6 refuses the run. It sets `wpa_group_rekey=30` seconds

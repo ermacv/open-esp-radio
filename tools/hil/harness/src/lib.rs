@@ -59,7 +59,7 @@ mod stand;
 
 pub use finish::Cleanup;
 pub use oer_tools_image_bundle::BuildChoice;
-pub use oer_tools_lab_client::protocol::{RouterChannelWidth, RouterOperation};
+pub use oer_tools_lab_client::protocol::{RouterFormat, RouterOperation, RouterWidth};
 pub use run::{Outcome, Verdict};
 
 /// One device under test of a scenario: its role, the image it runs
