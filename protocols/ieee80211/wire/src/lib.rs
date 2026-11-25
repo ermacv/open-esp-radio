@@ -49,6 +49,7 @@ extern crate std;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fuzz;
 
+pub mod action;
 pub mod address;
 pub mod ampdu;
 pub mod ap;

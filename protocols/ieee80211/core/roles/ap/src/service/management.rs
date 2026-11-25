@@ -7,6 +7,7 @@ use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier;
 use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 use oer_protocols_ieee80211_wire::management::ManagementHeader;
+use oer_protocols_ieee80211_wire::management_protection::SaQueryTransaction;
 use oer_protocols_ieee80211_wire::{
     ap::ApManagementSubtype, ccmp::CcmpPacketNumber, management_protection::SaQuery,
 };
@@ -67,7 +68,7 @@ pub enum ApManagementRejection {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApManagementAction {
     None,
-    SaQueryResponse { transaction: [u8; 2] },
+    SaQueryResponse { transaction: SaQueryTransaction },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -196,3 +196,16 @@ fn an_announcement_encodes_nothing_into_a_short_buffer() {
     );
     assert_eq!(extended.encode_elements(&mut [0; 5]), None);
 }
+
+/// Another action of either category announces nothing, whatever follows.
+#[test]
+fn another_action_of_the_category_is_no_announcement() {
+    let announcement = [37, 3, 0, 1, 2];
+    for (category, action) in [(0, 3), (0, 5), (4, 3), (4, 5), (1, 4)] {
+        let mut body = [0_u8; 7];
+        body[0] = category;
+        body[1] = action;
+        body[2..].copy_from_slice(&announcement);
+        assert_eq!(parse_channel_switch_action(&body), Ok(None));
+    }
+}

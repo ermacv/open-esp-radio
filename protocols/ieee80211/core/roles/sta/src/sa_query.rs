@@ -20,6 +20,7 @@
 //! `libnet80211.a[ieee80211.o]::ieee80211_recv_sa_query_resp`.
 
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_wire::management_protection::SaQueryTransaction;
 
 /// Period of the vendor's retry timer.
 const RETRY_INTERVAL: Duration = Duration::from_millis(200);
@@ -33,7 +34,7 @@ const TRANSACTION_MODULUS: u32 = 65_525;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ActiveSaQuery {
     /// Transaction identifier of the latest Request.
-    transaction: u16,
+    transaction: SaQueryTransaction,
     /// Requests sent in this procedure.
     requests: u16,
     /// No further retry is due before the already checked final timeout.
@@ -46,7 +47,7 @@ struct ActiveSaQuery {
 pub enum SaQueryStep {
     Idle,
     /// Send one SA Query Request with this transaction identifier.
-    Request([u8; 2]),
+    Request(SaQueryTransaction),
     /// The access point did not confirm the association.
     TimedOut,
 }
@@ -80,7 +81,7 @@ impl StationSaQuery {
         &mut self,
         now: Instant,
         random: u32,
-    ) -> Result<Option<[u8; 2]>, SaQueryDeadlineOverflow> {
+    ) -> Result<Option<SaQueryTransaction>, SaQueryDeadlineOverflow> {
         if self.active.is_some() {
             return Ok(None);
         }
@@ -88,24 +89,25 @@ impl StationSaQuery {
         let next_retry = now
             .checked_add(RETRY_INTERVAL)
             .ok_or(SaQueryDeadlineOverflow)?;
-        let transaction = (random % TRANSACTION_MODULUS) as u16;
+        let transaction = SaQueryTransaction::from_bytes([0; 2])
+            .with_identifier((random % TRANSACTION_MODULUS) as u16);
         self.active = Some(ActiveSaQuery {
             transaction,
             requests: 1,
             next_retry: Some(next_retry),
             timeout,
         });
-        Ok(Some(transaction.to_le_bytes()))
+        Ok(Some(transaction))
     }
 
     /// Match one protected SA Query Response. A Response to a Request of the
     /// running procedure ends it.
-    pub fn response(&mut self, transaction: [u8; 2]) -> bool {
+    pub fn response(&mut self, transaction: SaQueryTransaction) -> bool {
         let Some(active) = self.active else {
             return false;
         };
-        let received = i32::from(u16::from_le_bytes(transaction));
-        let latest = i32::from(active.transaction);
+        let received = i32::from(transaction.identifier());
+        let latest = i32::from(active.transaction.identifier());
         let first = latest.saturating_sub(i32::from(active.requests));
         if received <= first || received > latest {
             return false;
@@ -149,9 +151,11 @@ impl StationSaQuery {
         active.next_retry = next_retry
             .checked_add(RETRY_INTERVAL)
             .filter(|retry| *retry < active.timeout);
-        active.transaction = active.transaction.wrapping_add(1);
+        active.transaction = active
+            .transaction
+            .with_identifier(active.transaction.identifier().wrapping_add(1));
         active.requests = active.requests.saturating_add(1);
-        SaQueryStep::Request(active.transaction.to_le_bytes())
+        SaQueryStep::Request(active.transaction)
     }
 
     /// The instant the procedure next needs its owner.
