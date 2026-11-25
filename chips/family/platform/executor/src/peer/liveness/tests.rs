@@ -9,7 +9,7 @@ use core::{
 use std::{boxed::Box, sync::Arc, task::Wake, vec::Vec};
 
 use oer_chips_family_platform_interrupt_table::signal::host;
-use oer_portable_memory::{InPlace, RequestSlot};
+use oer_portable_memory::RequestSlot;
 use oer_portable_time::{Clock as _, Duration};
 use oer_portable_time_virtual::VirtualClock;
 
@@ -23,7 +23,7 @@ const PERIOD: Period = match Period::new(Duration::from_millis(50), Duration::fr
     Err(_) => panic!("a deadline within its period"),
 };
 
-fn slot() -> &'static RequestSlot<Beat, (), InPlace> {
+fn slot() -> &'static RequestSlot<Beat> {
     Box::leak(Box::new(RequestSlot::new_in_place()))
 }
 
@@ -247,7 +247,7 @@ fn an_echo_taken_after_the_deadline_is_overdue_and_stays_overdue() {
 #[derive(Debug, Eq, PartialEq)]
 struct Ask(u32);
 
-fn ask_slot() -> &'static RequestSlot<Ask, (), InPlace> {
+fn ask_slot() -> &'static RequestSlot<Ask> {
     Box::leak(Box::new(RequestSlot::new_in_place()))
 }
 

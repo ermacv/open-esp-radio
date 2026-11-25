@@ -9,7 +9,7 @@ use core::{
 use std::{boxed::Box, sync::Arc, task::Wake};
 
 use oer_chips_family_platform_interrupt_table::signal::host;
-use oer_portable_memory::{InPlace, RequestSlot};
+use oer_portable_memory::RequestSlot;
 use oer_portable_time::{Clock as _, Duration};
 use oer_portable_time_virtual::VirtualClock;
 
@@ -22,7 +22,7 @@ struct Square {
     answer: Option<u32>,
 }
 
-fn slot() -> &'static RequestSlot<Square, (), InPlace> {
+fn slot() -> &'static RequestSlot<Square> {
     Box::leak(Box::new(RequestSlot::new_in_place()))
 }
 

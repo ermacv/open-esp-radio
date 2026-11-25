@@ -72,9 +72,7 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
         ("hil/probes/esp32s31-case-c-sender/src/radio.rs", 6),
         ("portable/memory/src/exchange.rs", 13),
         ("portable/memory/src/lib.rs", 1),
-        ("portable/memory/src/slot_queue.rs", 9),
         ("portable/memory/src/waking_spsc.rs", 13),
-        ("portable/memory/src/waking_spsc/closing.rs", 8),
         ("portable/sync/src/lib.rs", 5),
         ("portable/waker/src/lib.rs", 8),
         ("portable/waker/src/model.rs", 3),
@@ -104,10 +102,6 @@ fn upward_notification_fields_use_the_shared_primitive() {
         (
             include_str!("../../../../protocols/radio/port/src/slot.rs"),
             &["p2: PriorityWaker,"][..],
-        ),
-        (
-            include_str!("../../../../portable/memory/src/request_slot.rs"),
-            &["waker: PriorityWaker,", "client: PriorityWaker,"][..],
         ),
     ] {
         for field in fields {

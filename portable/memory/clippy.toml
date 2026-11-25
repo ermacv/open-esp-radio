@@ -1,7 +1,6 @@
 # Removed by R3, which cleans the cores and the contracts (tasks/323): four
 # run-time `assert!`s (claim_cell.rs `hold`, init_in_place.rs 2, placed.rs
-# `init`) and a `clamp` (slot_queue.rs). The root's configuration without
-# them.
+# `init`). The root's configuration without them.
 disallowed-methods = [
     # Only the interrupt table's once gate constructs entry tokens. Binding
     # independently checks table membership and refuses claimed storage.
@@ -404,6 +403,7 @@ disallowed-methods = [
     "isize::strict_neg",
     "char::to_digit",
     "char::is_digit",
+    "core::cmp::Ord::clamp",
     "f32::clamp",
     "f64::clamp",
     "core::time::Duration::new",

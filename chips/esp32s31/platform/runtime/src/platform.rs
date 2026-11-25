@@ -130,10 +130,3 @@ pub fn trace_now() -> u64 {
     use oer_portable_time::Clock;
     oer_portable_embassy_time::EmbassyClock.now().as_micros()
 }
-/// The image chooses this terminal path for an unanswered owned request.
-pub fn reset_request<T>(error: oer_portable_memory::RequestError) -> T {
-    oer_chips_family_platform_runtime::panic::reset_request::<
-        oer_chips_esp32s31_hal::system::platform::Port,
-        T,
-    >(error)
-}

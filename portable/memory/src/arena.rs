@@ -16,35 +16,25 @@
 //!
 //! The CPU's bytes of a buffer are the [`Span`] its handle holds: the
 //! release's (where the hardware's unit begins and how long it is) or, for a
-//! fresh or returned handle, the whole buffer from the brand's floor. No span
+//! fresh handle, the whole buffer from the brand's floor. No span
 //! begins below the floor (`FLOOR`, 64 for receive: the metadata's fixed
 //! prefix and tail, which the hardware shares, never lie under a slice). What
 //! lies below the floor of a held buffer is copied out by volatile reads
 //! ([`Arena::floor`]), and the HAL reads its fields from the copy through its
 //! generated layouts.
 //!
-//! A held buffer lent on to another task returns through a [`Returning`]:
-//! its destructor sets the buffer's bit in the brand's [`ReturnedSet`] with
-//! one atomic OR and calls the placement's [`ReturnNotify`] statically; the
-//! arena's owner takes the set with [`Arena::returned`]. This crate names no
-//! executor and keeps no waker.
-//!
-//! A dropped [`Handle`] or [`Lent`], or a forgotten [`Returning`], leaves its
-//! buffer out of the arena for good: the owners keep theirs. Nothing here is
-//! a pool: which buffer goes where, spares and pressure are the owners'.
+//! A dropped [`Handle`] or [`Lent`] leaves its buffer out of the arena for
+//! good: the owners keep theirs. Nothing here is a pool: which buffer goes
+//! where, spares and pressure are the owners'.
 
-use core::{
-    cell::UnsafeCell,
-    marker::PhantomData,
-    sync::atomic::{AtomicU32, Ordering},
-};
+use core::{cell::UnsafeCell, marker::PhantomData};
 
 use crate::dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};
 
-/// The most buffers an arena has: the bits of its [`ReturnedSet`].
-pub const MAX_BUFFERS: usize = 32 * RETURNED_WORDS;
-
-const RETURNED_WORDS: usize = 4;
+/// The most buffers an arena has. With a buffer's at most 65 535 bytes, the
+/// place stays below 2^23 bytes ([`geometry_refusal`]) and a buffer's index
+/// fits `u16`.
+pub const MAX_BUFFERS: usize = 128;
 
 /// The brand of one arena: a type with one place, declared with it by
 /// [`arena!`](crate::arena!). A handle of one brand fits no other arena.
@@ -52,10 +42,9 @@ const RETURNED_WORDS: usize = 4;
 /// # Safety
 ///
 /// The constants are the geometry of the place [`Brand::place`] names,
-/// that place is a static no other brand names, and [`Brand::returned`] is
-/// a set no other brand names. Only [`arena!`](crate::arena!) implements
-/// this trait.
-#[allow(unsafe_code, reason = "a brand names its one place and its one set")]
+/// and that place is a static no other brand names. Only
+/// [`arena!`](crate::arena!) implements this trait.
+#[allow(unsafe_code, reason = "a brand names its one place")]
 pub unsafe trait Brand: Sized + 'static {
     /// The window the place lies in.
     type Window: DmaWindow;
@@ -67,8 +56,6 @@ pub unsafe trait Brand: Sized + 'static {
     const FLOOR: usize;
     /// The placed static that holds the brand's place.
     type Static: 'static;
-    /// The brand's returned set, in a static of its own.
-    fn returned() -> &'static ReturnedSet;
     /// The brand's one place, for its arena to claim.
     fn place() -> &'static Self::Static;
 }
@@ -218,16 +205,6 @@ impl<B: Brand, const BYTES: usize> Arena<B, BYTES> {
         }
     }
 
-    /// The buffers returned since the last take, as handles of their whole
-    /// buffer from the floor.
-    pub fn returned(&self) -> Returned<B> {
-        Returned {
-            word: 0,
-            bits: 0,
-            brand: PhantomData,
-        }
-    }
-
     /// The bytes below the floor of a held buffer, which the hardware shares
     /// (a receive unit's header, or a chain continuation's first bytes): a
     /// view whose one operation copies them out. A lent buffer has no
@@ -316,37 +293,11 @@ impl<B: Brand> Handle<B> {
         self.span
     }
 
-    /// The handle narrowed to `span`, which lies inside its present span: a
-    /// writer narrows a whole buffer to what it lends, a reader a unit to
-    /// what it reads. A span reaching outside the present one gives the
-    /// handle back unchanged: in a holder's hands a span never grows (it
-    /// grows only by a fresh or a returned handle).
-    pub fn narrow(self, span: Span<B>) -> Result<Self, NotInside<B>> {
-        if span.start >= self.span.start && span.end <= self.span.end {
-            Ok(Self { span, ..self })
-        } else {
-            Err(NotInside { handle: self })
-        }
-    }
-
     fn full(index: u16) -> Self {
         Self {
             index,
             span: Span::FULL,
         }
-    }
-}
-
-/// The refusal of [`Handle::narrow`]: the span reached outside the handle's
-/// own; the handle, unchanged.
-pub struct NotInside<B: Brand> {
-    handle: Handle<B>,
-}
-
-impl<B: Brand> NotInside<B> {
-    /// The handle, as it was.
-    pub fn into_handle(self) -> Handle<B> {
-        self.handle
     }
 }
 
@@ -519,108 +470,6 @@ impl<B: Brand> Iterator for Fresh<B> {
     }
 }
 
-/// The bits of the buffers returned through [`Returning`], one a buffer.
-pub struct ReturnedSet {
-    words: [AtomicU32; RETURNED_WORDS],
-}
-
-impl ReturnedSet {
-    /// The empty set, for the brand's static.
-    #[doc(hidden)]
-    pub const fn new() -> Self {
-        Self {
-            words: [const { AtomicU32::new(0) }; RETURNED_WORDS],
-        }
-    }
-
-    fn word(&self, word: usize) -> &AtomicU32 {
-        let [first, second, third, fourth] = &self.words;
-        match word {
-            0 => first,
-            1 => second,
-            2 => third,
-            _ => fourth,
-        }
-    }
-}
-
-impl Default for ReturnedSet {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// The handles returned, taken word by word.
-pub struct Returned<B: Brand> {
-    word: u8,
-    bits: u32,
-    brand: PhantomData<fn() -> B>,
-}
-
-impl<B: Brand> Iterator for Returned<B> {
-    type Item = Handle<B>;
-
-    fn next(&mut self) -> Option<Handle<B>> {
-        while self.bits == 0 {
-            if usize::from(self.word) * 32 >= B::COUNT {
-                return None;
-            }
-            self.bits = B::returned()
-                .word(usize::from(self.word))
-                .swap(0, Ordering::Acquire);
-            self.word = self.word.wrapping_add(1);
-        }
-        let bit = self.bits.trailing_zeros();
-        self.bits &= self.bits.wrapping_sub(1);
-        let index = (u32::from(self.word.wrapping_sub(1)) * 32).wrapping_add(bit);
-        Some(Handle::full(index as u16))
-    }
-}
-
-/// How the arena's owner learns of a return: a static call the placement
-/// gives (raising its executor's signal), never a waker of another hart.
-pub trait ReturnNotify {
-    /// A buffer was returned.
-    fn notify();
-}
-
-/// A held buffer lent to another task, which returns to its brand's
-/// [`ReturnedSet`] when dropped. Holds only the handle.
-pub struct Returning<B: Brand, N: ReturnNotify> {
-    handle: Handle<B>,
-    notify: PhantomData<fn() -> N>,
-}
-
-impl<B: Brand, N: ReturnNotify> Returning<B, N> {
-    /// The held `handle`, returning when dropped.
-    pub const fn new(handle: Handle<B>) -> Self {
-        Self {
-            handle,
-            notify: PhantomData,
-        }
-    }
-
-    /// The handle, for its bytes.
-    pub const fn handle(&self) -> &Handle<B> {
-        &self.handle
-    }
-
-    /// The handle, for its bytes to write.
-    pub fn handle_mut(&mut self) -> &mut Handle<B> {
-        &mut self.handle
-    }
-}
-
-impl<B: Brand, N: ReturnNotify> Drop for Returning<B, N> {
-    fn drop(&mut self) {
-        let index = usize::from(self.handle.index);
-        B::returned()
-            .word(index / 32)
-            .fetch_or(1 << (index % 32), Ordering::Release);
-        N::notify();
-    }
-}
-
 /// Declares an arena's brand together with its one place, placed by the
 /// HAL's placement macro, and the one way to take that place.
 ///
@@ -650,16 +499,14 @@ macro_rules! arena {
         $vis enum $name {}
 
         const _: () = {
-            static RETURNED: $crate::arena::ReturnedSet = $crate::arena::ReturnedSet::new();
-
             $($place)::+! {
                 static PLACE: $crate::arena::ArenaPlace<$name, { $count * $size }> =
                     zeroed in $section;
             }
 
             // SAFETY: the constants are those of `PLACE`'s type, and `PLACE`
-            // and `RETURNED` are statics of this anonymous constant, which
-            // nothing outside it names. The impl is this macro's, audited
+            // is a static of this anonymous constant, which nothing outside
+            // it names. The impl is this macro's, audited
             // here: it writes no `allow`, so it builds in a crate that
             // forbids `unsafe` (`tests/ui/arena_under_forbid.rs`).
             unsafe impl $crate::arena::Brand for $name {
@@ -670,10 +517,6 @@ macro_rules! arena {
 
                 type Static =
                     $($wrap)::+<$crate::arena::ArenaPlace<$name, { $count * $size }>>;
-
-                fn returned() -> &'static $crate::arena::ReturnedSet {
-                    &RETURNED
-                }
 
                 fn place() -> &'static Self::Static {
                     &PLACE

@@ -43,12 +43,6 @@ oer_portable_memory::arena! { // ui-error: E0080
         placed by place as Placed in ".dma.bss.ui_tx";
 }
 
-pub struct Quiet;
-
-impl ReturnNotify for Quiet {
-    fn notify() {}
-}
-
 pub type RxArena = Arena<Rx, 256>;
 pub type TxArena = Arena<Tx, 256>;
 

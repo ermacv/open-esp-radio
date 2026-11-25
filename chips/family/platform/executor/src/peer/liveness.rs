@@ -34,7 +34,7 @@ use oer_chips_family_platform_interrupt_table::signal::{
     self, ForeignContext, IrqSignal, SignalExecutor,
 };
 use oer_chips_family_platform_runtime::panic::FaultReason;
-use oer_portable_memory::{InPlace, RequestSlot};
+use oer_portable_memory::RequestSlot;
 use oer_portable_time::{Duration, Instant, TimeOverflow, Timer};
 
 use super::obligation::{Obligations, Scan, Watch};
@@ -209,7 +209,7 @@ pub struct Responder<S: SignalExecutor, C: SignalExecutor> {
 /// `period` and the obligation table of executor `C`'s watched channels;
 /// `None` when the slot or the table was claimed before.
 pub fn pair<S: SignalExecutor, C: SignalExecutor, const N: usize>(
-    slot: &'static RequestSlot<Beat, (), InPlace>,
+    slot: &'static RequestSlot<Beat>,
     request: &'static IrqSignal<S>,
     reply: &'static IrqSignal<C>,
     period: Period,

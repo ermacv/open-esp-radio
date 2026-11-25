@@ -144,7 +144,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/family/platform/runtime/src/panic.rs:crate::panic:retained-slot:retained_static:1" = { owner = "chips/family/platform/runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/family/platform/runtime/src/panic.rs:crate::panic::reset_fault:terminal-entry:reset_fault:1" = { owner = "chips/family/platform/runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/family/platform/runtime/src/panic.rs:crate::panic::reset_fault:terminal-reference:reset_recording:1" = { owner = "chips/family/platform/runtime", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
-"chips/family/platform/runtime/src/panic.rs:crate::panic::reset_request:terminal-reference:reset_fault:1" = { owner = "chips/family/platform/runtime", classes = ["cancellation"] }
 "chips/family/platform/runtime/src/panic.rs:crate::panic::INVALID_HART:retained-reason:INVALID_HART:1" = { owner = "chips/family/platform/runtime", classes = ["hardware-impossible"], proof = "invalid-hart" }
 "chips/family/platform/runtime/src/panic.rs:crate::panic::handle:terminal-entry:handle:1" = { owner = "chips/family/platform/runtime", classes = ["rust-panic"] }
 "chips/family/platform/runtime/src/panic.rs:crate::panic::handle:terminal-reference:reset:1" = { owner = "chips/family/platform/runtime", classes = ["rust-panic"] }
@@ -365,7 +364,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/esp32s31/platform/runtime/src/sampler.rs:crate::sampler::chip::impl Storage < I , O , T >::init:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/platform/runtime", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 
 "chips/esp32s31/platform/runtime/src/console.rs:crate::console::impl Binding::open:terminal-reference:reset_binding:1" = { owner = "chips/esp32s31/platform/runtime", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"chips/esp32s31/platform/runtime/src/platform.rs:crate::platform::reset_request:terminal-reference:reset_request:1" = { owner = "chips/esp32s31/platform/runtime", classes = ["software-invariant", "cancellation"] }
 
 # examples/wifi-station/src/entry.rs
 "examples/wifi-station/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "examples/wifi-station", classes = ["rust-panic", "cpu-exception"] }

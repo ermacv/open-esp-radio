@@ -1,7 +1,7 @@
 error[E0308]: mismatched types
-  --> tests/ui/arena_reclaim_requires_a_release.rs:48:27
+  --> tests/ui/arena_reclaim_requires_a_release.rs:42:27
    |
-48 |     let _ = arena.reclaim(lent); // ui-error: E0308
+42 |     let _ = arena.reclaim(lent); // ui-error: E0308
    |                   ------- ^^^^ expected `Released<Rx>`, found `Lent<Rx>`
    |                   |
    |                   arguments to this method are incorrect

@@ -1,5 +1,5 @@
 error[E0599]: no associated function or constant named `new` found for struct `oer_portable_memory::arena::Arena<B, BYTES>` in the current scope
-  --> tests/ui/arena_is_made_from_its_brand_place_only.rs:51:54
+  --> tests/ui/arena_is_made_from_its_brand_place_only.rs:45:54
    |
-51 |     let _ = OTHER.claim().map(|(place, at)| RxArena::new(place, at)); // ui-error: E0599
+45 |     let _ = OTHER.claim().map(|(place, at)| RxArena::new(place, at)); // ui-error: E0599
    |                                                      ^^^ associated function or constant not found in `oer_portable_memory::arena::Arena<Rx, 256>`
