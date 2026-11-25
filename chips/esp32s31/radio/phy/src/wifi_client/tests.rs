@@ -166,7 +166,7 @@ fn join_wifi_prepared(
         crate::concurrent::ConcurrentPhy,
     >,
     clocked: &WifiClocked,
-    clock: &impl oer_portable_time::Clock,
+    clock: &impl oer_portable_clock::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), ConcurrentPhyError> {
     let ready = match crate::concurrent::phy_ready(radio)?.client::<WifiPhyMembership>() {
         crate::concurrent::PhyClientAccess::Available(available) => available,
@@ -185,7 +185,7 @@ fn resume_wifi_prepared(
     >,
     clocks: &oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
     suspended: WifiPhySuspended,
-    clock: &impl oer_portable_time::Clock,
+    clock: &impl oer_portable_clock::Clock,
 ) -> Result<(WifiPhyMembership, ConcurrentAcquire), WifiPhySuspendedFailure> {
     let ready = match crate::concurrent::phy_ready(radio) {
         Ok(ready) => ready,

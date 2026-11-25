@@ -1,6 +1,6 @@
 use super::*;
 use crate::serial::PhyI2cError;
-use oer_portable_time::Timer;
+use oer_portable_clock::Timer;
 mod channel_gain;
 mod dc_iq;
 mod dcode;
@@ -27,7 +27,8 @@ use crate::{
     },
     calibration::cold::PhyColdI2cRequest,
 };
-use oer_portable_time::{Clock, Duration};
+use oer_portable_clock::Clock;
+use oer_portable_time::Duration;
 use std::{
     cell::Cell,
     rc::Rc,
@@ -372,7 +373,7 @@ impl Io {
 impl Registers for Io {
     fn advance<
         D: crate::executor::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         job: &mut Job<'_>,
@@ -383,7 +384,7 @@ impl Registers for Io {
     }
     fn advance_power<
         D: crate::executor::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
@@ -717,7 +718,7 @@ fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
             limit.micros()
         }
         fn sample(&self) -> u32 {
-            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+            crate::executor::test_clock::sample_at(oer_portable_clock::Clock::now(self))
         }
     }
     impl Clock for AsyncTimer {
@@ -840,7 +841,7 @@ fn runnable_yields_without_constructing_or_polling_a_timer() {
             limit.micros()
         }
         fn sample(&self) -> u32 {
-            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+            crate::executor::test_clock::sample_at(oer_portable_clock::Clock::now(self))
         }
     }
     impl Clock for Probe<'_> {
@@ -905,7 +906,7 @@ struct CommandCost<'a> {
 impl Registers for CommandCost<'_> {
     fn advance<
         D: crate::executor::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         job: &mut Job<'_>,
@@ -1360,7 +1361,7 @@ fn rfpll_busy_command_times_out_without_consuming_a_partial_helper() {
             limit.micros()
         }
         fn sample(&self) -> u32 {
-            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+            crate::executor::test_clock::sample_at(oer_portable_clock::Clock::now(self))
         }
     }
     impl Clock for Progress<'_> {
@@ -1523,7 +1524,7 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
             limit.micros()
         }
         fn sample(&self) -> u32 {
-            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+            crate::executor::test_clock::sample_at(oer_portable_clock::Clock::now(self))
         }
     }
     impl Clock for NoWait<'_> {

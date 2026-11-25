@@ -29,7 +29,7 @@ impl<const COUNT: usize> ScriptedClock<COUNT> {
     }
 }
 
-impl<const COUNT: usize> oer_portable_time::Clock for ScriptedClock<COUNT> {
+impl<const COUNT: usize> oer_portable_clock::Clock for ScriptedClock<COUNT> {
     fn now(&self) -> oer_portable_time::Instant {
         let next = self.next.get();
         self.next.set(next + 1);

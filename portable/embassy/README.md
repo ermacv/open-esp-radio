@@ -14,7 +14,7 @@ An adapter can retain state required by its external contract.
 executor wake-up and timer-queue ABI (`src/{executor,time_driver}.rs`);
 applications supply interrupt and timer capabilities. It has no radio policy
 or PHY initialization. Image time is [`time`](time/)'s `EmbassyClock`, which
-chip PHY and the runtimes take as an `oer_portable_time::Timer`; chip PHY remains
+chip PHY and the runtimes take as an `oer_portable_clock::Timer`; chip PHY remains
 executor-independent.
 
 Final memory profiles, static claims, IRQ binding and whole-radio lifecycles

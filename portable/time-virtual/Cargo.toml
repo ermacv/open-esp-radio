@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Deterministic per-instance virtual time for tests and simulations of the open ESP radio time contract"
 
 [dependencies]
+oer-portable-clock = { path = "../clock" }
 oer-portable-time = { path = "../time" }
 oer-portable-settle = { path = "../settle" }
 

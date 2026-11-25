@@ -38,10 +38,11 @@ use oer_chips_esp32s31_radio_phy::{
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_hil_services_radio_pair::{self as service, Refusal, SenderCommand, SenderRequest};
+use oer_portable_clock::{Clock, Timer};
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::arena::{Arena, Handle};
-use oer_portable_time::{Clock, Duration, Timer};
+use oer_portable_time::Duration;
 
 /// The sender's receive ring: eight descriptors, each buffer of 256
 /// octets with the 64-octet header below its floor. The MAC's start takes

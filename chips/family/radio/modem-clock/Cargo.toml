@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Chip-neutral shared modem clock reference-count planner ported from ESP-IDF modem_clock.c"
 
 [dev-dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-portable-time = { path = "../../../../portable/time" }
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 

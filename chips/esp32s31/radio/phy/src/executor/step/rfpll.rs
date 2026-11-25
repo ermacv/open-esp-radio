@@ -4,7 +4,8 @@ use crate::{
     calibration::cold::{PhyColdI2cAction, PhyColdI2cObservation, PhyColdI2cTransaction},
     tracking::rfpll::Correction,
 };
-use oer_portable_time::{Clock, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::Instant;
 
 /// Outline the platform clock conversion once without changing its identity,
 /// read count or time semantics in the direct observation loop.

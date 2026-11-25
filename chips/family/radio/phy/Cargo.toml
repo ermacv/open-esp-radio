@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Family PHY analog and PBus operations over owned register ports"
 
 [dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-chips-family-drivers-regi2c = { path = "../../drivers/regi2c" }
 oer-chips-family-registers-analog-i2c = { path = "../../registers/analog-i2c" }
 

@@ -61,3 +61,6 @@ hot = 1
 # handwritten panic sites. This diagnostic image is not a panic-free product.
 runtime = { hal = 15, chips = 310, portable = 1, firmware = 23, unnamed = 5, hardware = 1 }
 bootstrap = { unnamed = 2 }
+
+[dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }

@@ -9,6 +9,7 @@ publish = false
 description = "The Espressif system timer's verified counter read over a chip's typed latch, for every context and both harts"
 
 [dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-portable-time = { path = "../../../../portable/time" }
 
 [dev-dependencies]

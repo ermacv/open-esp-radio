@@ -12,6 +12,7 @@ description = "Ownership and async HAL boundaries for the ESP32-S31 radio"
 test-support = ["oer-chips-family-radio-power/test-support", "oer-portable-riscv/host-hart"]
 
 [dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }
 oer-chips-family-radio-phy = { path = "../../family/radio/phy" }
 oer-chips-family-radio-power = { path = "../../family/radio/power" }
 oer-chips-esp32s31-knowledge = { path = "../knowledge" }

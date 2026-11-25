@@ -197,14 +197,14 @@ impl PhyClientAccess {
 ///
 /// ```no_run
 /// use oer_chips_esp32s31_radio_phy::state::client::PhyClientAvailable;
-/// fn once(available: PhyClientAvailable, clock: &impl oer_portable_time::Clock) {
+/// fn once(available: PhyClientAvailable, clock: &impl oer_portable_clock::Clock) {
 ///     let _ = available.acquire(clock);
 /// }
 /// ```
 ///
 /// ```compile_fail,E0382
 /// use oer_chips_esp32s31_radio_phy::state::client::PhyClientAvailable;
-/// fn twice(available: PhyClientAvailable, clock: &impl oer_portable_time::Clock) {
+/// fn twice(available: PhyClientAvailable, clock: &impl oer_portable_clock::Clock) {
 ///     let _ = available.acquire(clock);
 ///     let _ = available.acquire(clock);
 /// }
@@ -226,7 +226,7 @@ impl PhyClientAvailable {
     }
     pub fn acquire(
         self,
-        clock: &impl oer_portable_time::Clock,
+        clock: &impl oer_portable_clock::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         let client = self.owner.selected_client;
         self.owner.acquire_available(client, clock)
@@ -292,7 +292,7 @@ pub struct PhyClientSuspended {
 impl PhyClientSuspended {
     pub fn resume(
         self,
-        clock: &impl oer_portable_time::Clock,
+        clock: &impl oer_portable_clock::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         let client = self.owner.selected_client;
         self.owner.acquire_available(client, clock)
@@ -475,7 +475,7 @@ impl PhyClientState {
     fn acquire_available(
         self,
         client: RadioClient,
-        clock: &impl oer_portable_time::Clock,
+        clock: &impl oer_portable_clock::Clock,
     ) -> Result<PhyClientAcquireOutcome, PhyClientAcquireFailure> {
         self.prepare_available(client, clock)
             .map(PreparedClientAcquire::commit)
@@ -484,7 +484,7 @@ impl PhyClientState {
     fn prepare_available(
         self,
         client: RadioClient,
-        clock: &impl oer_portable_time::Clock,
+        clock: &impl oer_portable_clock::Clock,
     ) -> Result<PreparedClientAcquire, PhyClientAcquireFailure> {
         let bit = client_bit(client);
         let prospective_bits = self.bits | bit;
@@ -537,7 +537,7 @@ impl PhyClientState {
     /// hardware work.
     pub fn evaluate_immediate_tracking(
         mut self,
-        clock: &impl oer_portable_time::Clock,
+        clock: &impl oer_portable_clock::Clock,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         let evaluation = match self.evaluate_for_bits(self.bits, clock) {
             Ok(evaluation) => evaluation,
@@ -559,7 +559,7 @@ impl PhyClientState {
     /// a request and refreshes its timestamp on every callback.
     pub fn evaluate_periodic_tracking(
         mut self,
-        clock: &impl oer_portable_time::Clock,
+        clock: &impl oer_portable_clock::Clock,
     ) -> Result<PhyTrackEvaluation, PhyTrackEvaluationFailure> {
         let wifi_active = self.bits & WIFI_BIT != 0;
         let bluetooth_ieee802154_active = self.bits & (BLUETOOTH_BIT | IEEE802154_BIT) != 0;
@@ -581,7 +581,7 @@ impl PhyClientState {
     fn evaluate_for_bits(
         &self,
         bits: u8,
-        clock: &impl oer_portable_time::Clock,
+        clock: &impl oer_portable_clock::Clock,
     ) -> Result<TrackEvaluation, PhyTrackTimeError> {
         let wifi_active = bits & WIFI_BIT != 0;
         let bluetooth_ieee802154_active = bits & (BLUETOOTH_BIT | IEEE802154_BIT) != 0;
@@ -616,7 +616,7 @@ impl PhyClientState {
         wifi_active: bool,
         bluetooth_ieee802154_active: bool,
         request_due: bool,
-        clock: &impl oer_portable_time::Clock,
+        clock: &impl oer_portable_clock::Clock,
     ) -> Result<TrackEvaluation, PhyTrackTimeError> {
         if !request_due {
             return Ok(TrackEvaluation {

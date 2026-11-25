@@ -1,5 +1,5 @@
 use super::*;
-use oer_portable_time::Clock as _;
+use oer_portable_clock::Clock as _;
 
 const OPEN: &str = r#"{"ssid_hex":"4c6162","security":"open","frequency_mhz":2437,"phy":"ht","ipv4":{"mode":"dhcp"}}"#;
 

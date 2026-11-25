@@ -1,5 +1,5 @@
 use super::*;
-use oer_portable_time::Clock;
+use oer_portable_clock::Clock;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_wire::block_ack::frame::{
     BlockAckAction, encode_addba_request, parse_block_ack_action,

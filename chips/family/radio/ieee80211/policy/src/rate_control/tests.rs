@@ -364,7 +364,8 @@ fn ampdu_owner_accepts_checked_counts_without_a_post_mutation_error() {
 
 #[test]
 fn the_vendor_word_wraps_from_the_clock_start() {
-    use oer_portable_time::{CLOCK_EPOCH_OFFSET, Duration};
+    use oer_portable_clock::CLOCK_EPOCH_OFFSET;
+    use oer_portable_time::Duration;
     // A clock starts at the epoch offset: the vendor word has bit 31 set
     // from the first read and wraps 2^31 us later.
     let start = Instant::EPOCH.checked_add(CLOCK_EPOCH_OFFSET).unwrap();

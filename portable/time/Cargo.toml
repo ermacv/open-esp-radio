@@ -8,7 +8,6 @@ repository.workspace = true
 description = "The values of a clock domain, the relation of two domains, and the monotonic clock and timer ports"
 
 [dev-dependencies]
-oer-portable-time-virtual = { path = "../time-virtual" }
 toml = "1.1"
 
 [lints]

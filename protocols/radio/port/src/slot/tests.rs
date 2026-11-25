@@ -813,7 +813,8 @@ fn a_lost_unregistration_completion_never_issues_joined() {
 
 #[test]
 fn a_late_p2_answer_cannot_upgrade_the_supervisors_expired_result() {
-    use oer_portable_time::{Instant, Timer};
+    use oer_portable_clock::Timer;
+    use oer_portable_time::Instant;
 
     let model = model(Answer::Stopped);
     let clock = oer_portable_time_virtual::VirtualClock::<4>::starting_at(Instant::EPOCH);

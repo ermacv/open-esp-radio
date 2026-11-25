@@ -38,7 +38,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
 use oer_chips_family_boot::wait::BootDeadline;
 use oer_chips_family_boot::wait::{BootWait, WaitFailure};
-use oer_portable_time::Clock;
+use oer_portable_clock::Clock;
 
 /// The entry reached the handshake: its interrupts are masked and its fault
 /// stub installed.

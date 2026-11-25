@@ -70,7 +70,7 @@ pub(super) async fn observe_temperature_with_hal<P, D: PhyShortDelay>(
 /// means the powered hardware epoch is ambiguous and must remain poisoned.
 pub(super) fn execute_rf_close_with_hal<
     D: PhyShortDelay,
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -168,7 +168,7 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset_wake_i2c_master<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
@@ -216,7 +216,7 @@ fn force_wake_txrx<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Si
 
 #[cfg(target_arch = "riscv32")]
 fn open_wake_i2c_power<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
@@ -269,7 +269,7 @@ fn open_wake_i2c_power<
 #[cfg(target_arch = "riscv32")]
 fn clear_wake_pbus<
     D: PhyShortDelay,
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyContext,
@@ -327,7 +327,7 @@ fn clear_wake_pbus<
 
 #[cfg(target_arch = "riscv32")]
 fn publish_wake_frequency_i2c<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+    C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,

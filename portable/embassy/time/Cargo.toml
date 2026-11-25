@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Embassy time driver binding of the open ESP radio time contract"
 
 [dependencies]
+oer-portable-clock = { path = "../../clock" }
 embassy-time = "0.5.1"
 oer-portable-time = { path = "../../time" }
 

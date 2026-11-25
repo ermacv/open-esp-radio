@@ -9,7 +9,7 @@
 //!
 //! ```compile_fail,E0382
 //! use oer_chips_family_drivers_watchdog::{MainWatchdogRegisters, deadline::DeadlineWatchdog, policy::DeadlineBudget};
-//! fn arm_twice<R: MainWatchdogRegisters, C: oer_portable_time::Clock>(
+//! fn arm_twice<R: MainWatchdogRegisters, C: oer_portable_clock::Clock>(
 //!     watchdog: DeadlineWatchdog<R, C>, budget: DeadlineBudget,
 //! ) {
 //!     let first = watchdog.arm(budget);
@@ -17,7 +17,7 @@
 //! }
 //! ```
 
-use oer_portable_time::Clock;
+use oer_portable_clock::Clock;
 
 use crate::policy::{Controller, DeadlineBudget, DeadlineError};
 use crate::{MainWatchdog, MainWatchdogRegisters, Microseconds};
@@ -69,7 +69,7 @@ impl<R: MainWatchdogRegisters, C: Clock> DeadlineWatchdog<R, C> {
 ///
 /// ```compile_fail,E0382
 /// use oer_chips_family_drivers_watchdog::{MainWatchdogRegisters, deadline::DeadlineLease};
-/// fn complete_twice<R: MainWatchdogRegisters, C: oer_portable_time::Clock>(lease: DeadlineLease<R, C>) {
+/// fn complete_twice<R: MainWatchdogRegisters, C: oer_portable_clock::Clock>(lease: DeadlineLease<R, C>) {
 ///     let first = lease.complete();
 ///     let second = lease.complete();
 /// }

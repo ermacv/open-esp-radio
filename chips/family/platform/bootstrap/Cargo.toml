@@ -8,6 +8,7 @@ publish = false
 description = "The Espressif family cold-start runner, staged entry, PSRAM relocation and handoff"
 
 [dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-portable-time = { path = "../../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }
 oer-portable-memory = { path = "../../../../portable/memory" }

@@ -349,7 +349,7 @@ succeeds at any time, even after a late wake-up; the deadline bounds only the
 not-ready case.
 Interrupts remain enabled and the physical owner remains held until terminal
 restoration. Longer registration, tracking and lifecycle operations wait on
-the caller's `oer_portable_time::Timer` through `executor::wait::delay` and its
+the caller's `oer_portable_clock::Timer` through `executor::wait::delay` and its
 `executor::wait::Kind`.
 
 Direct PBus, analog-I2C and TX-DC/PWDET status observations use a named

@@ -19,7 +19,7 @@
 
 //! Deterministic virtual time for tests and simulations.
 //!
-//! [`VirtualClock`] implements [`oer_portable_time::Clock`] and [`oer_portable_time::Timer`]
+//! [`VirtualClock`] implements [`oer_portable_clock::Clock`] and [`oer_portable_clock::Timer`]
 //! for one instance: time stands still until its owner advances it, so a
 //! test or a simulation decides exactly when every wait ends, and several
 //! clocks in one process keep independent times. Advancing wakes every
@@ -43,8 +43,9 @@ use core::{
     task::{Poll, Waker},
 };
 
+use oer_portable_clock::{CLOCK_EPOCH_OFFSET, Clock, TimeOverflow, Timer};
 use oer_portable_settle::{SettleCounter, SettleLimit};
-use oer_portable_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer};
+use oer_portable_time::{Duration, Instant};
 
 /// A settle's counter on the host: one cycle a microsecond, each sample
 /// advancing it by `step` cycles; [`Self::advance`] moves it as an

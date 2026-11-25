@@ -8,7 +8,7 @@ use oer_chips_family_drivers_regi2c::{
     AnalogRegisterBus, DriverError, FieldWrite, Step, ValueTooWide,
 };
 use oer_chips_family_registers_analog_i2c::AnalogField;
-use oer_portable_time::Clock;
+use oer_portable_clock::Clock;
 
 /// The chip's detector cycles, actions and analog threshold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

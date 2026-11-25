@@ -2,7 +2,8 @@ use super::*;
 
 #[test]
 fn poll_stamp_includes_the_completed_body_and_preserves_the_ready_endpoint() {
-    use oer_portable_time::{Clock, Duration};
+    use oer_portable_clock::Clock;
+    use oer_portable_time::Duration;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let started = clock.now();
     clock.advance(Duration::from_micros(10)).expect("time fits");
@@ -541,7 +542,7 @@ fn a_release_without_a_set_invalidates_the_report() {
 
 #[test]
 fn preparation_trace_reports_truncation_without_losing_the_failure() {
-    use oer_portable_time::Clock;
+    use oer_portable_clock::Clock;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let mut trace = ReadinessTrace::default();
     trace.command_started(clock.now());
@@ -562,7 +563,8 @@ fn preparation_trace_reports_truncation_without_losing_the_failure() {
 #[test]
 fn rfpll_command_maxima_keep_the_breakdown_of_the_same_poll() {
     use super::{RfpllCommand, RfpllCommandSample, RfpllEngineTrace};
-    use oer_portable_time::{Clock, Duration};
+    use oer_portable_clock::Clock;
+    use oer_portable_time::Duration;
     use oer_portable_time_virtual::VirtualClock;
     let clock = VirtualClock::<1>::new();
     let mut trace = RfpllEngineTrace::default();

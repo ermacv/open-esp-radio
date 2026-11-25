@@ -1,6 +1,7 @@
 //! Each test owns its virtual clock and synthetic peer readiness.
 use core::{cell::Cell, ops::Deref};
-use oer_portable_time::{Clock, Instant, Timer};
+use oer_portable_clock::{Clock, Timer};
+use oer_portable_time::Instant;
 
 pub(crate) struct VirtualClock<const N: usize = 8> {
     clock: oer_portable_time_virtual::VirtualClock<N>,

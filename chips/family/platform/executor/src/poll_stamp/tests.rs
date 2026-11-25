@@ -9,7 +9,8 @@ fn poll_stamp_preserves_core_and_guard_survives_counter_wrap() {
 }
 
 fn stamp_preserves_core_and_guard_survives_counter_wrap<const HARTS: usize>() {
-    use oer_portable_time::{Clock, Duration, Instant};
+    use oer_portable_clock::Clock;
+    use oer_portable_time::{Duration, Instant};
     let assigned_core = Stamp::<HARTS>::assigned_core;
     let poll_stamp = Stamp::<HARTS>::poll_stamp;
     let poll_elapsed = Stamp::<HARTS>::poll_elapsed;

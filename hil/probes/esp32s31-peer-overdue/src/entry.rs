@@ -22,7 +22,7 @@ use oer_chips_family_platform_interrupt_table::signal::{FromPeerHart, IrqSignal}
 use oer_chips_family_platform_runtime::panic::{self, FaultReason, PreviousFault};
 use oer_chips_family_platform_runtime::SecondaryHandoff;
 use oer_portable_memory::RequestSlot;
-use oer_portable_time::{Clock as _, Timer as _};
+use oer_portable_clock::{Clock as _, Timer as _};
 
 oer_chips_family_platform_runtime::interrupt_table! {
     contexts { app_wake: 1; hart1_executor: 2; }

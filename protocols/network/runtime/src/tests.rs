@@ -3127,7 +3127,7 @@ fn a_lease_ends_in_the_service_s_own_wait_and_the_watch_tells() {
                     .ipv4()
                     .is_none()
                 {
-                    break (obtained, oer_portable_time::Clock::now(clock));
+                    break (obtained, oer_portable_clock::Clock::now(clock));
                 }
             }
         });

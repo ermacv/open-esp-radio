@@ -19,7 +19,8 @@ use oer_chips_esp32s31_hal::{
     radio::domain::{PlatformClockProvider, RadioDomain},
     system::root::RadioHardware,
 };
-use oer_portable_time::{Clock, Duration, Timer};
+use oer_portable_clock::{Clock, Timer};
+use oer_portable_time::Duration;
 use std::{
     boxed::Box,
     panic::{AssertUnwindSafe, catch_unwind},

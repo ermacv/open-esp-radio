@@ -22,6 +22,7 @@ oer-portable-bounded = { path = "../../../../portable/bounded" }
 workspace = true
 
 [dev-dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-protocols-ieee80211-wire = { path = "../../wire", features = ["test-support"] }
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }

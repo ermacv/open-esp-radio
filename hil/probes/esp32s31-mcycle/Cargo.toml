@@ -40,3 +40,6 @@ task-stack = "proven"
 # report with a target of 0, never a build gate.
 runtime = {}
 bootstrap = {}
+
+[dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }

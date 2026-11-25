@@ -162,7 +162,7 @@ impl RfpllCommandSample {
             invalid: publication.is_none() || readiness.is_none(),
         }
     }
-    pub(crate) fn elapsed<C: oer_portable_time::Clock>(
+    pub(crate) fn elapsed<C: oer_portable_clock::Clock>(
         command: RfpllCommand,
         started: Option<oer_portable_time::Instant>,
         clock: &C,
@@ -239,7 +239,7 @@ impl EngineTiming {
     /// Update the bounded event counters before taking the final poll stamp.
     /// Only the final duration sum/max stores follow that stamp.
     #[inline(never)]
-    pub(crate) fn poll_finished<C: oer_portable_time::Clock>(
+    pub(crate) fn poll_finished<C: oer_portable_clock::Clock>(
         &mut self,
         clock: &C,
         started: oer_portable_time::Instant,

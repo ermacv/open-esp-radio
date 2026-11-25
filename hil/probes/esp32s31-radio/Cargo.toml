@@ -9,6 +9,7 @@ build = "build.rs"
 description = "Retained ESP32-S31 Rust entry points for compiled vendor verification, and the linked probe image"
 
 [dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }
 oer-chips-family-radio-phy = { path = "../../../chips/family/radio/phy" }
 oer-chips-family-boot = { path = "../../../chips/family/boot" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../../protocols/ieee80211/core/upper-mac" }

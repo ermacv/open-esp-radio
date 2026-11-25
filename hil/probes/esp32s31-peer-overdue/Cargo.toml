@@ -38,3 +38,6 @@ task-stack = "proven"
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each only shrinks, toward 0.
 runtime = { firmware = 4 }
 bootstrap = { unnamed = 0 }
+
+[dependencies]
+oer-portable-clock = { path = "../../../portable/clock" }

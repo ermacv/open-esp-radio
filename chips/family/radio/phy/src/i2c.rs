@@ -274,7 +274,8 @@ mod tests {
             future::Future,
             task::{Context, Poll, Waker},
         };
-        use oer_portable_time::{Clock, Duration, Timer};
+        use oer_portable_clock::{Clock, Timer};
+        use oer_portable_time::Duration;
         let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
         let mut access = FakeParallelI2c {
             busy_after_start_host: Some(Host::Host1),
@@ -318,7 +319,8 @@ mod tests {
             future::Future,
             task::{Context, Poll, Waker},
         };
-        use oer_portable_time::{Duration, Timer};
+        use oer_portable_clock::Timer;
+        use oer_portable_time::Duration;
         let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
         let mut access = FakeParallelI2c {
             busy_after_start_host: Some(Host::Host0),

@@ -7,7 +7,8 @@ use core::{
     pin::{Pin, pin},
     task::{Context, Poll, Waker},
 };
-use oer_portable_time::{Clock, DomainInstant, Duration, Instant, Timer};
+use oer_portable_clock::{Clock, Timer};
+use oer_portable_time::{DomainInstant, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use std::rc::Rc;
 

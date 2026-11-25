@@ -11,7 +11,8 @@
 //! attempt and the time check never fails a wait whose hardware completed
 //! meanwhile.
 
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_clock::Clock;
+use oer_portable_time::{Duration, Instant};
 
 /// One named boot wait: what it waits for and the longest it may take.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

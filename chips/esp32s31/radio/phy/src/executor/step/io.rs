@@ -9,7 +9,7 @@ use oer_portable_time::Instant;
 pub(crate) trait Registers {
     fn advance<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         job: &mut Job<'_>,
@@ -18,7 +18,7 @@ pub(crate) trait Registers {
     ) -> Step;
     fn advance_power<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         _child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
@@ -32,7 +32,7 @@ pub(crate) trait Registers {
     #[cfg(target_arch = "riscv32")]
     fn rfpll_atom<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         clock: &C,
@@ -50,7 +50,7 @@ pub(super) enum Io<'a> {
 impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardware {
     fn advance<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         job: &mut Job<'_>,
@@ -61,7 +61,7 @@ impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardwa
     }
     fn advance_power<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
@@ -75,7 +75,7 @@ impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardwa
     }
     fn rfpll_atom<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         clock: &C,
@@ -93,7 +93,7 @@ impl Io<'_> {
     #[inline(never)]
     pub(super) fn channel<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         clock: &C,
@@ -117,7 +117,7 @@ impl Io<'_> {
     #[inline(never)]
     fn channel_direct<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         clock: &C,
@@ -128,7 +128,7 @@ impl Io<'_> {
         #[cfg(target_arch = "riscv32")]
         fn apply<
             D: super::super::wait::PhyShortDelay,
-            C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+            C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
         >(
             clock: &C,
             registers: &mut (impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess + Registers),
@@ -160,7 +160,7 @@ impl Io<'_> {
     }
     pub(super) fn frequency<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         clock: &C,
@@ -251,7 +251,7 @@ impl Io<'_> {
     #[inline(always)]
     fn rfpll_frequency<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + ?Sized + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         clock: &C,
@@ -299,7 +299,7 @@ impl Io<'_> {
     #[inline(never)]
     pub(super) fn advance_rfpll<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
+        C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         clock: &C,

@@ -17,6 +17,7 @@ wifi-fault = []
 radio-fault = []
 
 [dependencies]
+oer-portable-clock = { path = "../../../../portable/clock" }
 oer-portable-diagnostics = { path = "../../../../portable/diagnostics" }
 oer-chips-esp32s31-drivers-aes = { path = "../../drivers/aes" }
 oer-portable-embassy-time = { path = "../../../../portable/embassy/time" }

@@ -1071,7 +1071,8 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
             to,
             Role::Protocol(Wire) | Role::SharedVocabulary | Role::Portable
         ),
-        // A binding is a dictionary without a clock: no time crate.
+        // A binding is a dictionary without a clock: the values of time, not
+        // its ports.
         Role::HilBinding => {
             matches!(
                 to,
@@ -1082,7 +1083,7 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
                     | Role::SharedVocabulary
                     | Role::Protocol(Wire | Port | Runtime)
             ) || (to == Role::Portable
-                && !["portable/time", "portable/time-virtual"].contains(&to_path))
+                && !["portable/clock", "portable/time-virtual"].contains(&to_path))
         }
         // A HIL image is an application of the entry: besides it, only the
         // HIL agent on the entry, the HIL protocol and agent and its
@@ -1436,10 +1437,11 @@ model = { package = "oer-protocols-ieee80211-core-upper-mac", version = "1" }
     );
 }
 
-/// What the IEEE 802.11 wire formats may not reach: time, which belongs to
-/// the cores and runtimes, and every IEEE 802.11 crate above the formats.
+/// What the IEEE 802.11 wire formats may not reach: the ports of time, which
+/// belong to the runtimes, and every IEEE 802.11 crate above the formats.
+/// The values of time are a codec's.
 fn above_ieee80211_wire(name: &str) -> bool {
-    name == "oer-portable-time"
+    name == "oer-portable-clock"
         || (name.starts_with("oer-protocols-ieee80211-") && name != "oer-protocols-ieee80211-wire")
 }
 
@@ -1537,34 +1539,114 @@ pause = { package = "oer-portable-settle", version = "1", optional = true }
     }
 }
 
-/// The wire crate holds only formats and standard constants: no normal
-/// dependency of it, optional, target-specific or transitive, reaches time
-/// or an IEEE 802.11 crate above it.
+/// What a package that must not wait may not depend on: the ports of time
+/// and the settle. A core takes time as a value and never reads a clock,
+/// waits on a timer or holds the CPU.
+fn waits_by_its_dependencies(name: &str) -> bool {
+    matches!(name, "oer-portable-clock" | "oer-portable-settle")
+}
+
+/// The packages that must not wait whose normal or build dependencies name
+/// the ports of time or the settle, each with what it names.
+fn waiting_dependencies(
+    packages: &BTreeMap<String, toml::Value>,
+    workspace: &toml::Value,
+) -> BTreeSet<Edge> {
+    packages
+        .iter()
+        .filter(|(path, _)| must_not_wait(path))
+        .flat_map(|(path, manifest)| {
+            ["dependencies", "build-dependencies"]
+                .iter()
+                .flat_map(|table| scoped_dependencies(manifest, workspace, table))
+                .filter(|name| waits_by_its_dependencies(name))
+                .map(|name| (path.clone(), name))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// No package that must not wait depends on the ports of time or on the
+/// settle.
 #[test]
-fn the_ieee80211_wire_reaches_neither_time_nor_a_crate_above_it() {
+fn a_package_that_must_not_wait_takes_neither_the_clock_nor_the_settle() {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let packages = packages(&root);
+    for path in ["portable/clock", "portable/settle"] {
+        assert!(packages.contains_key(path), "{path}");
+    }
+    let violations = waiting_dependencies(&packages, &workspace["workspace"]);
+    assert!(violations.is_empty(), "{violations:?}");
+}
+
+#[test]
+fn the_waiting_dependency_rule_refuses_optional_and_build_edges_and_spares_tests_and_runtimes() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+values = { package = "oer-portable-time", version = "1" }
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+clock = { package = "oer-portable-clock", version = "1", optional = true }
+[build-dependencies]
+pause = { package = "oer-portable-settle", version = "1" }
+[dev-dependencies]
+test-clock = { package = "oer-portable-clock", version = "1" }
+"#,
+    )
+    .expect("manifest");
+    let tests_only: toml::Value =
+        toml::from_str("[dev-dependencies]\noer-portable-clock = '1'").expect("dev manifest");
+    let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
+    let packages = BTreeMap::from([
+        (
+            "protocols/ieee80211/core/upper-mac".to_owned(),
+            manifest.clone(),
+        ),
+        ("protocols/network/core".to_owned(), tests_only),
+        ("protocols/network/runtime".to_owned(), manifest.clone()),
+        ("chips/family/drivers/watchdog".to_owned(), manifest),
+    ]);
+    let core = |name: &str| {
+        (
+            "protocols/ieee80211/core/upper-mac".to_owned(),
+            name.to_owned(),
+        )
+    };
+    assert_eq!(
+        waiting_dependencies(&packages, &workspace),
+        BTreeSet::from([core("oer-portable-clock"), core("oer-portable-settle")])
+    );
+}
+
+/// The wire crate holds only formats, standard constants and the values of
+/// time: no normal dependency of it, optional, target-specific or
+/// transitive, reaches the ports of time or an IEEE 802.11 crate above it.
+#[test]
+fn the_ieee80211_wire_reaches_neither_the_clock_nor_a_crate_above_it() {
     let graph = workspace_dependency_graph();
     for name in [
         "oer-protocols-ieee80211-wire",
         "oer-protocols-ieee80211-contracts-port",
-        "oer-portable-time",
+        "oer-portable-clock",
     ] {
         assert!(graph.contains_key(name), "{name} is a workspace package");
     }
     let violations = forbidden_paths(&graph, "oer-protocols-ieee80211-wire", above_ieee80211_wire);
     assert!(
         violations.is_empty(),
-        "wire reaches time or a crate above it: {violations:?}"
+        "wire reaches the clock or a crate above it: {violations:?}"
     );
 }
 
 #[test]
-fn the_ieee80211_wire_rule_rejects_direct_and_transitive_time_and_upper_paths() {
+fn the_ieee80211_wire_rule_rejects_direct_and_transitive_clock_and_upper_paths() {
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
 format = { package = "oer-portable-wire", version = "1" }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-clock = { package = "oer-portable-time", version = "1", optional = true }
+clock = { package = "oer-portable-clock", version = "1", optional = true }
 [dev-dependencies]
 model = { package = "oer-protocols-ieee80211-testing-model", version = "1" }
 "#,
@@ -1588,13 +1670,14 @@ model = { package = "oer-protocols-ieee80211-testing-model", version = "1" }
     assert_eq!(
         forbidden_paths(&graph, "oer-protocols-ieee80211-wire", above_ieee80211_wire),
         [
-            "oer-protocols-ieee80211-wire -> oer-portable-time",
+            "oer-protocols-ieee80211-wire -> oer-portable-clock",
             "oer-protocols-ieee80211-wire -> oer-portable-wire -> helper -> oer-protocols-ieee80211-contracts-port",
         ]
     );
     let clean = BTreeMap::from([(
         "oer-protocols-ieee80211-wire".into(),
         BTreeSet::from([
+            "oer-portable-time".into(),
             "oer-portable-wire".into(),
             "oer-protocols-radio-regulatory".into(),
         ]),
@@ -2497,16 +2580,27 @@ fn ieee80211_foreign_edges(members: &[Member]) -> BTreeSet<Edge> {
 
 /// The strict codecs, each with its every normal and build dependency: the
 /// IEEE 802 wire stands on `oer-portable-wire`, the two wires that carry its
-/// addresses on both.
+/// addresses on both; each may take the values of time, never its ports.
 const STRICT_CODECS: [(&str, &[&str]); 3] = [
-    ("protocols/ieee802/wire", &["oer-portable-wire"]),
+    (
+        "protocols/ieee802/wire",
+        &["oer-portable-time", "oer-portable-wire"],
+    ),
     (
         "protocols/ieee80211/wire",
-        &["oer-portable-wire", "oer-protocols-ieee802-wire"],
+        &[
+            "oer-portable-time",
+            "oer-portable-wire",
+            "oer-protocols-ieee802-wire",
+        ],
     ),
     (
         "protocols/network/wire",
-        &["oer-portable-wire", "oer-protocols-ieee802-wire"],
+        &[
+            "oer-portable-time",
+            "oer-portable-wire",
+            "oer-protocols-ieee802-wire",
+        ],
     ),
 ];
 
@@ -2548,6 +2642,8 @@ fn a_strict_codec_refuses_optional_target_and_build_dependencies() {
 [dependencies]
 oer-portable-wire = { path = "../../../portable/wire" }
 oer-protocols-ieee802-wire = { path = "../../ieee802/wire" }
+oer-portable-time = { path = "../../../portable/time" }
+clock = { package = "oer-portable-clock", path = "../../../portable/clock", optional = true }
 regulatory = { package = "oer-protocols-radio-regulatory", path = "../../radio/regulatory", optional = true }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 zeroize = "1"
@@ -2577,9 +2673,14 @@ tempfile = "3"
     );
     assert_eq!(
         strict_codec_edges(&[codec, other]),
-        ["cc", "oer-protocols-radio-regulatory", "zeroize"]
-            .map(|dependency| ("protocols/ieee80211/wire".to_owned(), dependency.to_owned()))
-            .into()
+        [
+            "cc",
+            "oer-portable-clock",
+            "oer-protocols-radio-regulatory",
+            "zeroize",
+        ]
+        .map(|dependency| ("protocols/ieee80211/wire".to_owned(), dependency.to_owned()))
+        .into()
     );
     // The addresses' crate stands below both wires and takes neither.
     let addresses = member(
@@ -3585,7 +3686,8 @@ fn hil_roles_keep_radio_out_of_the_framework_and_images_behind_the_facade() {
             (Role::Facade, "chips/esp32s31/radio/ieee80211/station", true),
             (PROTOCOL_RUNTIME, "protocols/ieee80211/runtime", true),
             (Role::Portable, "portable/memory", true),
-            (Role::Portable, "portable/time", false),
+            (Role::Portable, "portable/time", true),
+            (Role::Portable, "portable/clock", false),
             (Role::EmbassyAdapter, "portable/embassy/time", false),
             (Role::Hal, "chips/esp32s31/hal", false),
             (
@@ -5307,6 +5409,7 @@ const NETWORK_LAYERS: [(&str, &[&str]); 5] = [
     (
         "protocols/network/runtime",
         &[
+            "oer-portable-clock",
             "oer-portable-events",
             "oer-portable-memory",
             "oer-portable-time",
@@ -5318,6 +5421,7 @@ const NETWORK_LAYERS: [(&str, &[&str]); 5] = [
     (
         "protocols/network/testing/model",
         &[
+            "oer-portable-clock",
             "oer-portable-time",
             "oer-protocols-ieee80211-core-upper-mac",
             "oer-protocols-ieee80211-runtime",

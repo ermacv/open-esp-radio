@@ -230,7 +230,7 @@ fn enter_client(
         crate::concurrent::ConcurrentPhy,
     >,
     client: oer_chips_esp32s31_hal::radio::domain::RadioClient,
-    clock: &impl oer_portable_time::Clock,
+    clock: &impl oer_portable_clock::Clock,
 ) -> Result<crate::concurrent::ConcurrentAcquire, crate::concurrent::ConcurrentPhyError> {
     crate::concurrent::acquire_client(radio, client, clock)
 }
@@ -292,7 +292,7 @@ fn cancelling_the_transport_after_a_write_leaves_the_phy_poisoned() {
         future::Future,
         task::{Context, Waker},
     };
-    use oer_portable_time::Clock;
+    use oer_portable_clock::Clock;
     let clock = VirtualClock::<1>::new();
     let mut radio = registered_domain();
     assert_eq!(

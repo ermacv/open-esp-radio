@@ -15,10 +15,11 @@ use oer_chips_family_platform_interrupt_table::{
     Bound, Entry,
     signal::{IrqSignal, SignalExecutor},
 };
+use oer_portable_clock::Clock;
 use oer_portable_memory::{
     AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, CompactSpscCursor,
 };
-use oer_portable_time::{Clock, Duration};
+use oer_portable_time::Duration;
 
 type Queue<T> = AffineSpscQueue<T, 1, CompactSpscCursor>;
 type Sender<T> = AffineSpscSender<'static, T, 1, CompactSpscCursor>;

@@ -208,7 +208,7 @@ fn an_exhausted_count_refuses_without_a_write() {
 
 #[test]
 fn refused_edges_do_not_advance_the_port_clock() {
-    use oer_portable_time::Clock;
+    use oer_portable_clock::Clock;
     let mut counts = adopted();
     let at = counts.gates.1.now();
     assert_eq!(

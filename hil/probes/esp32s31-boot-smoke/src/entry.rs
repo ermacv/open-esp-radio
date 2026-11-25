@@ -26,7 +26,7 @@ use oer_chips_family_platform_runtime::diagnostics::{
 };
 use oer_chips_family_platform_runtime::{SecondaryHandoff, panic};
 use oer_portable_memory::RequestSlot;
-use oer_portable_time::{Clock as _, Timer as _};
+use oer_portable_clock::{Clock as _, Timer as _};
 
 oer_chips_family_platform_runtime::interrupt_table! {
     contexts { app_wake: 1; hart1_executor: 2; hart1_alarm: 3; }

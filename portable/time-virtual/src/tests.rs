@@ -9,9 +9,10 @@ use core::{
 use std::{sync::Arc, task::Wake};
 
 use embassy_futures::select::{Either, select};
-use oer_portable_time::{Clock, Duration, Instant, TimeOverflow, Timer};
+use oer_portable_clock::{Clock, TimeOverflow, Timer};
+use oer_portable_time::{Duration, Instant};
 
-use oer_portable_time::CLOCK_EPOCH_OFFSET;
+use oer_portable_clock::CLOCK_EPOCH_OFFSET;
 
 use super::{START, SkipClock, VirtualClock};
 
