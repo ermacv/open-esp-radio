@@ -47,9 +47,6 @@ pub mod image {
         const SIZE: usize = 64;
         const FLOOR: usize = 8;
         type Static = ();
-        fn returned() -> &'static ReturnedSet {
-            Rx::returned()
-        }
         fn place() -> &'static () {
             &()
         }

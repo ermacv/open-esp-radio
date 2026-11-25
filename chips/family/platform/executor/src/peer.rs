@@ -1,6 +1,6 @@
 //! A request from a task of one executor to a task of an executor on another
 //! hart, and its answer: one in-place request slot
-//! ([`oer_portable_memory::RequestSlot`] in [`InPlace`] mode, which stores no waker)
+//! ([`oer_portable_memory::RequestSlot`], which stores no waker)
 //! and the two executors' signals, which carry only readiness.
 //!
 //! The client posts a request with its deadline into the idle slot
@@ -42,7 +42,7 @@ use core::{
 use oer_chips_family_platform_interrupt_table::signal::{
     self, ForeignContext, IrqSignal, SignalExecutor,
 };
-use oer_portable_memory::{InPlace, InPlaceClient, InPlaceServer, RequestSlot};
+use oer_portable_memory::{InPlaceClient, InPlaceServer, RequestSlot};
 use oer_portable_time::{Instant, Timer};
 
 /// The fact a raise of the server's signal carries: a request was posted.
@@ -127,7 +127,7 @@ pub struct PeerServer<Req: 'static, S: SignalExecutor, C: SignalExecutor> {
 /// issued ([`liveness::Supervisor::watch`]). `None` when the slot was
 /// claimed before.
 pub fn pair<Req, S: SignalExecutor, C: SignalExecutor>(
-    slot: &'static RequestSlot<Req, (), InPlace>,
+    slot: &'static RequestSlot<Req>,
     request: &'static IrqSignal<S>,
     reply: &'static IrqSignal<C>,
     watch: Watch<C>,
@@ -136,7 +136,7 @@ pub fn pair<Req, S: SignalExecutor, C: SignalExecutor>(
 }
 
 fn claim<Req, S: SignalExecutor, C: SignalExecutor>(
-    slot: &'static RequestSlot<Req, (), InPlace>,
+    slot: &'static RequestSlot<Req>,
     request: &'static IrqSignal<S>,
     reply: &'static IrqSignal<C>,
     watch: Option<Watch<C>>,

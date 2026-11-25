@@ -222,7 +222,6 @@ fn terminal_api(name: &str) -> bool {
         "boot_failure",
         "reset_recording_with",
         "reset_fault",
-        "reset_request",
         "reset_binding",
         "fatal_halt",
         "software_reset",
@@ -981,7 +980,7 @@ fn scanner_finds_macros_callbacks_and_reasons_but_skips_tests_and_const_blocks()
         #[cfg(test)] mod tests { fn test() { panic!("test"); } }
         fn run() -> ! {
             const { panic!("compile time"); }
-            let callback = runtime::reset_request::<Port, ()>;
+            let callback = runtime::reset_fault::<Port>;
             runtime::reset_recording::<Port>(|_| ());
             panic!("runtime");
         }

@@ -287,14 +287,6 @@ pub fn reset_fault<P: oer_chips_family_platform_port::Platform>(
     })
 }
 
-#[cfg(all(target_arch = "riscv32", chip_vectors))]
-pub fn reset_request<P: oer_chips_family_platform_port::Platform, T>(
-    error: impl Into<oer_portable_memory::RequestError>,
-) -> T {
-    let error = error.into();
-    reset_fault::<P>(FaultReason::RequestUnanswered, error.observations())
-}
-
 fn write_named_fault<E>(
     name: &str,
     observations: [u32; 4],

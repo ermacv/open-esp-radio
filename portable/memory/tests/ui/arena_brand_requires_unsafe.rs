@@ -34,12 +34,6 @@ oer_portable_memory::arena! {
         placed by place as Placed in ".dma.bss.ui_tx";
 }
 
-pub struct Quiet;
-
-impl ReturnNotify for Quiet {
-    fn notify() {}
-}
-
 pub type RxArena = Arena<Rx, 256>;
 pub type TxArena = Arena<Tx, 256>;
 
@@ -53,9 +47,6 @@ impl Brand for Mine { // ui-error: E0200
     const SIZE: usize = 64;
     const FLOOR: usize = 8;
     type Static = ();
-    fn returned() -> &'static ReturnedSet {
-        Rx::returned()
-    }
     fn place() -> &'static () {
         &()
     }

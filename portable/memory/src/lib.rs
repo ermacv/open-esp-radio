@@ -16,8 +16,7 @@
 //!
 //! This crate deliberately does not know about a chip, executor, network
 //! stack, descriptor layout or allocator. [`StableDmaBacking`] proves that a
-//! retained TX allocation cannot move, while [`RxHandoffPool`] transfers one
-//! final receive buffer through finite state-specific leases.
+//! retained TX allocation cannot move.
 //! [`StableDmaRange`] carries an unforgeable address/lifetime proof from those
 //! audited storage leaves into otherwise safe register APIs. [`DmaRef`] and
 //! [`DmaWindowAddress`] name placed DMA objects and buffers; [`VolatileCell`]
@@ -33,7 +32,7 @@
 //! [`signal`] owns the coalesced fact word, task cell and intrusive list;
 //! scheduling and interrupt policy stay with its callers.
 //! [`RequestSlot`] carries one request at a time from a client to a server
-//! and its answer back, without a lock. [`retained`] holds records in memory
+//! and its answer back, in one place and without a lock. [`retained`] holds records in memory
 //! that survives a reset, one holder at a time.
 //! [`init_in_place!`] initializes a complete struct directly in borrowed
 //! storage, cleaning up its initialized fields if construction stops early.
@@ -62,7 +61,6 @@ mod exchange;
 mod execution_context;
 mod frame_len;
 mod handler_cell;
-mod indexed_custody;
 mod init_in_place;
 mod link;
 mod occupied;
@@ -70,11 +68,7 @@ mod once_value;
 mod pinned_tx;
 mod request_slot;
 pub mod retained;
-mod return_bank;
-mod rx_external_handoff;
-mod rx_handoff;
 pub mod signal;
-mod slot_queue;
 mod static_place;
 mod static_ref;
 mod volatile;
@@ -82,16 +76,12 @@ mod volatile_cell;
 mod waking_spsc;
 pub mod zeroed;
 
-pub use request_slot::{
-    Awaiting, ByValue, Doorbell, InPlace, InPlaceClient, InPlaceServer, Poster, RequestError,
-    RequestQuarantine, RequestSlot, Responder,
-};
+pub use request_slot::{InPlaceClient, InPlaceServer, RequestSlot};
 
 pub use affine_spsc::{
-    AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, AffineSpscQueue,
-    AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender, AffineSpscTryReceiveError,
-    AffineSpscTrySendError, BatchedSpscReceiver, BatchedSpscSender, CachedSpscCursor,
-    CompactSpscCursor, LocalSpscReceiver, LocalSpscSender, SpscCursor, UniqueQueueIndex,
+    AffineSpscQueue, AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender,
+    AffineSpscTryReceiveError, AffineSpscTrySendError, CachedSpscCursor, CompactSpscCursor,
+    LocalSpscReceiver, LocalSpscSender, SpscCursor,
 };
 pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use context_cell::{ContextCell, ContextProof};
@@ -101,9 +91,8 @@ pub use exchange::{Answered, Answering, Asking, Exchange, Reply};
 #[cfg(any(test, feature = "host-context"))]
 pub use execution_context::HostContext;
 pub use execution_context::{Entered, ExecutionContext, Never};
-pub use frame_len::{FrameLen, FrameLenError, FrameRangeError, PoolError};
+pub use frame_len::{FrameLen, FrameLenError, PoolError};
 pub use handler_cell::{HandlerCell, Installed};
-pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, RetainedName};
 #[doc(hidden)]
 pub use init_in_place::__InitField;
 pub use link::{LinkSlot, NamePart, SlotKind, SlotName, TraceClockSlot};
@@ -116,21 +105,12 @@ pub use pinned_tx::{
     PinnedDmaTxPool, PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
     TaggedStableDmaBacking,
 };
-pub use return_bank::{ReturnBank, ReturnToken};
-pub use rx_external_handoff::{
-    ExternalRxAdoption, ExternalRxBuffer, ExternalRxDetachError, ExternalRxHandoffPool,
-    ExternalRxNetworkLease, ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
-};
-pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
-pub use slot_queue::{SlotReceiveError, SlotReceiver, SlotSendError, SlotSender, WakingSlotQueue};
 pub use static_place::{PlacedFuture, StaticPlace};
 pub use static_ref::StaticRef;
 pub use volatile::{read_volatile, write_volatile};
 pub use volatile_cell::VolatileCell;
 pub use waking_spsc::{
-    ClosingSpscClosed, ClosingSpscQueue, ClosingSpscReceiver, ClosingSpscReceptionClosed,
-    ClosingSpscSendError, ClosingSpscSendPermit, ClosingSpscSender, QueueNotify, WakingSpscQueue,
-    WakingSpscReceiver, WakingSpscSendPermit, WakingSpscSender,
+    QueueNotify, WakingSpscQueue, WakingSpscReceiver, WakingSpscSendPermit, WakingSpscSender,
 };
 
 /// Authority to prepare registers for one retained, software-owned TX chain.

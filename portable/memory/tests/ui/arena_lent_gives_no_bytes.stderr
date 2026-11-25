@@ -1,7 +1,7 @@
 error[E0308]: mismatched types
-  --> tests/ui/arena_lent_gives_no_bytes.rs:48:25
+  --> tests/ui/arena_lent_gives_no_bytes.rs:42:25
    |
-48 |     let _ = arena.bytes(lent); // ui-error: E0308
+42 |     let _ = arena.bytes(lent); // ui-error: E0308
    |                   ----- ^^^^ expected `&Handle<Rx>`, found `&Lent<Rx>`
    |                   |
    |                   arguments to this method are incorrect

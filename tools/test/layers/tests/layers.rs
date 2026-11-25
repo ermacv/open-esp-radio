@@ -5986,7 +5986,6 @@ const STEP_BY_PLACE: &[(&str, &str)] = &[
     ),
     ("protocols/network/core/src/owner.rs", BY_PUMP),
     ("portable/memory/src/waking_spsc", CORRECT),
-    ("portable/memory/src/rx_external_handoff", BY_RECEIVE),
     ("portable/memory/src/pinned_tx", BY_TRANSMIT),
     ("portable/time/src/deadline.rs", BY_UNOWNED_ROWS),
     ("portable/time/src/connected_tasks.rs", BY_PUMP),
@@ -6297,7 +6296,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         BY_PHY_OWNER,
     ),
     ("chips/family/radio/power/src/modem.rs", 1, BY_PHY_OWNER),
-    ("portable/memory/src/waking_spsc/closing.rs", 1, CORRECT),
     ("portable/time/src/connected_tasks.rs", 1, BY_PUMP),
     ("portable/time/src/deadline.rs", 1, BY_UNOWNED_ROWS),
     (
@@ -6427,7 +6425,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         1,
         BY_PUMP,
     ),
-    ("portable/memory/src/rx_external_handoff.rs", 1, BY_RECEIVE),
     (
         "protocols/ieee80211/core/roles/sta/src/ftm.rs",
         1,
@@ -6722,12 +6719,6 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
         "correct: a macro's own name, read further on in it",
     ),
     (
-        "portable/memory/src/slot_queue.rs::_installed",
-        1,
-        BY_TRANSMIT,
-    ),
-    ("portable/memory/src/slot_queue.rs::_queued", 2, BY_TRANSMIT),
-    (
         "portable/riscv/src/instructions.rs::_restore",
         1,
         "correct: a guard held to the end of its scope: it restores the interrupt enable",
@@ -6919,15 +6910,8 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         BY_PHY_OWNER,
     ),
     ("chips/family/radio/power/src/modem.rs", 8, BY_PHY_OWNER),
-    (
-        "portable/memory/src/indexed_custody.rs",
-        7,
-        "two doors in their home and five `Quarantine` names: the names go with the PHY under one owner (`design/name-keyed-lists-2026-11-23.md`)",
-    ),
     ("portable/memory/src/init_in_place.rs", 1, IN_ITS_HOME),
-    ("portable/memory/src/lib.rs", 1, BY_PHY_OWNER),
     ("portable/memory/src/placed.rs", 2, IN_ITS_HOME),
-    ("portable/memory/src/request_slot.rs", 4, IN_ITS_HOME),
     ("portable/time/src/connected_tasks.rs", 3, BY_PUMP),
     ("portable/waker/src/lib.rs", 4, IN_ITS_HOME),
     (
@@ -10218,18 +10202,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "bounded SPSC cursor ownership serializes every value slot / queue drop releases every still-published affine value / the audited placement macro initializes every queue field / the single consumer owns this published SPSC slot / the sole producer's permit retains its proven vacant cell",
     ),
     (
-        "portable/memory/src/affine_spsc/batched.rs",
-        "unsafe_code",
-        2,
-        "the sole consumer reads a published cell past its released cursor / the sole producer writes a vacant cell past its published cursor",
-    ),
-    (
-        "portable/memory/src/affine_spsc/indexed.rs",
-        "unsafe_code",
-        4,
-        "implementors prove unique affine cell ownership / one published index owns one initialized value / the affine index owns this vacant cell / unique indexed cells use the audited SPSC publication ring",
-    ),
-    (
         "portable/memory/src/arena.rs",
         "clippy::mut_from_ref",
         1,
@@ -10239,7 +10211,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "portable/memory/src/arena.rs",
         "unsafe_code",
         8,
-        "a brand names its one place and its one set / a held buffer's CPU bytes / a held buffer's floor, copied out / a release proof is a claim about the hardware / the borrowed release proof's one constructor / the place's bytes are reached only by custody / the placement proves the address of its static",
+        "a brand names its one place / a held buffer's CPU bytes / a held buffer's floor, copied out / a release proof is a claim about the hardware / the borrowed release proof's one constructor / the place's bytes are reached only by custody / the placement proves the address of its static",
     ),
     (
         "portable/memory/src/claim_cell.rs",
@@ -10276,12 +10248,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unsafe_code",
         3,
         "the cell carries a reference to its value / the cell lends its value to one call at a time / the winning exchange lends the only reference",
-    ),
-    (
-        "portable/memory/src/indexed_custody.rs",
-        "unsafe_code",
-        10,
-        "affine names serialize each retained cell / consume the sole initialized-cell name / each initialized cell is moved out once / exclusive destruction quarantines retained values / move the cells out of a store whose destructor never runs / retention preserves the same affine index / the affine initialized name owns this cell / the binding proves the private name domain / the domain owns this vacant bounded cell / the quarantine destructor relies on the implementation",
     ),
     (
         "portable/memory/src/init_in_place.rs",
@@ -10346,8 +10312,8 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "portable/memory/src/request_slot.rs",
         "unsafe_code",
-        7,
-        "ANSWERED grants the unique client the completed exchange / WORKING grants the server exclusive in-place access / the IDLE slot's token holder owns the request place / the WORKING slot's server owns the answer place / the slot's client owns the answer place after ANSWERED / the slot's state protocol gives each payload place one accessor at a time / the state protocol grants exclusive access to the initialized request",
+        5,
+        "ANSWERED grants the unique client the completed exchange / WORKING grants the server exclusive in-place access / the IDLE slot's token holder owns the request place / the slot's state protocol gives each payload place one accessor at a time / the state protocol grants exclusive access to the initialized request",
     ),
     (
         "portable/memory/src/retained.rs",
@@ -10360,24 +10326,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unsafe_code",
         1,
         "reading retained memory as a value needs the any-bits promise",
-    ),
-    (
-        "portable/memory/src/return_bank.rs",
-        "unsafe_code",
-        4,
-        "exclusive destruction owns the still-available value / the available cell or its affine return token owns each value / the successful CAS transfers the initialized value / the unique token owns this unavailable cell",
-    ),
-    (
-        "portable/memory/src/rx_external_handoff.rs",
-        "unsafe_code",
-        15,
-        "a non-free slot holds its binding / affine external buffer may cross executor cores / affine external buffer owns this range / affine lease uniquely owns external bytes / an adopter returns the slot it took out of its affine lease / chip DMA storage establishes the stable detached-buffer proof / free slot exclusively owns binding removal / live lease retains external slot ownership / non-free slot retains its external binding / slot owner exclusively mutates range metadata / slot state exclusively owns binding mutation / slot state machine is the external pool Sync boundary",
-    ),
-    (
-        "portable/memory/src/rx_handoff.rs",
-        "unsafe_code",
-        4,
-        "RX handoff state machine is its Sync boundary / network lease uniquely owns its RX slot / network lease uniquely retains its RX slot / radio lease uniquely owns its RX slot",
     ),
     (
         "portable/memory/src/static_place.rs",

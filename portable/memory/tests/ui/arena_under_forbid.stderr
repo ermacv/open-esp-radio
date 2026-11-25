@@ -6,7 +6,7 @@ error: implementation of an `unsafe` trait
 46 | |         const COUNT: usize = 4;
 47 | |         const SIZE: usize = 64;
 ...  |
-56 | |     }
+53 | |     }
    | |_____^
    |
 note: the lint level is defined here

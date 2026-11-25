@@ -286,7 +286,7 @@ and retention contracts.
   written or moved; the `Lent` stays). The HAL atom that makes one is the
   receive ring's chain copy, citing `HW_RX_CHAIN_LAPS_20261117`;
 - `unsafe trait Brand`. Its one `unsafe impl` is the one that `arena!` writes:
-  the brand names its own place and returned set; that expansion is counted as
+  the brand names its own place; that expansion is counted as
   `portable/memory`'s and builds in a crate that forbids `unsafe`, where a
   hand-written `unsafe impl Brand` does not (`tests/ui/arena_under_forbid.rs`);
 The HAL's receive ring (`radio::ieee80211::dma::receive`) makes three
@@ -563,7 +563,7 @@ mutation. Unconfirmed stop and reset failure retain the whole graph with its
 register partitions in absorbing quarantine; Drop never returns a placement.
 The P2 engine holds only the task endpoint of `scheduler::interrupt`'s static
 request/reply channel. Its unique P3 endpoint stays beside the IRQ register
-owner. The channel uses `oer-portable-memory::RequestSlot` in `InPlace` mode, with no
+owner. The channel uses `oer-portable-memory::RequestSlot`, with no
 stored wakers. Release/Acquire state transitions transfer exclusive access:
 P2 posts the exchange, P3 borrows it in place and writes its reply, then P2
 validates and consumes the exchange exactly once. A rejected reply stays in
@@ -813,49 +813,16 @@ The original endpoint remains exclusively borrowed. A local producer loan can
 be copied within its one context, supports only synchronous publication and
 has no reservation; both local endpoints are neither Send nor Sync. The
 underlying Release/Acquire transfer still moves each complete owner once.
-Its sole endpoints convert into batched endpoints for `Copy` values. Each
-keeps its own cursor and its batch as plain local indices. It reads the
-other end's cursor once with Acquire for the prefix it may use, then reads
-it again only after that prefix is used up. It stores its own cursor once
-with Release at the batch's boundary. The Acquire look proves each staged
-cell vacant and each taken cell initialized for this endpoint alone, as the
-single-value permit does. The ordinary endpoints keep their own operations
-unchanged. A batched endpoint that ends inside a batch leaves no owner
-behind. Staged values were never published. Taken values that were not
-released are received again by the next consumer. `SlotSender::ready` and
-`SlotReceiver::ready_at_least` end their bursts before they wait.
 Its sealed cursor layouts retain the default cache-line-separated counters
 for existing queues and permit compact atomic counters for the same-core
 P1/P2 handoff. Layout selection changes no endpoint or publication authority.
-`AffineIndexedSpscQueue` lets an affine permission's place select its value
-cell while the audited SPSC ring stores only indices; available ring space
-follows from N distinct indices, without an occupancy check, a backend
-free-credit pool or another await. An implementation of the unsafe
-`UniqueQueueIndex` trait proves index bounds and uniqueness. Producer Release
-publishes cells; consumer Acquire moves them completely before permission
-return orders the next use.
-
-`IndexedCustody` retains an owner while its affine name travels through an
-executor. Its unsafe `CustodyDomain` binds one private store to its affine
-place names; this is stronger than an index bound, and two same-typed
-installations must not exchange names. Insert returns an initialized-cell
-name; only returning that exact name permits take. A name contains only an
-index, never a pointer or a borrow into the retained owner. `finish` borrows
-the binding's `Stopped` proof that hardware use has ended. Destroying a
-non-empty custody store is the quarantine path only: `Quarantine` is an
-unsafe trait whose method erases key material in place and releases, moves
-and awaits nothing, so DMA leases stay reserved until reset.
 
 `RequestSlot` carries one request at a time from a client to a server and
-its answer back. Its state (`IDLE`, `POSTED`, `WORKING`, `ANSWERED`) admits
-exactly one accessor to each payload place. In `ByValue` mode a Release store
-hands the place over and the other side's Acquire CAS takes it; the client
-posts only with the slot's one `Poster`, which the answer returns. The
-radio-system client (sources outside the build) uses this mode and has no
-unsafe code of its own.
-`InPlace` mode holds the whole exchange in its request place and stores no wakers. Its
-unique server endpoint lends `&mut Req` only in `WORKING` and publishes
-`ANSWERED` after that borrow ends. Its unique client observes `ANSWERED`
+its answer back, in one place. Its state (`IDLE`, `POSTED`, `WORKING`,
+`ANSWERED`) admits exactly one accessor to the exchange, and the slot stores
+no wakers. Its unique server endpoint takes a posted request by an Acquire
+CAS, lends `&mut Req` only in `WORKING` and publishes `ANSWERED` after that
+borrow ends. Its unique client observes `ANSWERED`
 with Acquire and validates the reply by shared borrow before consuming the
 exchange and publishing `IDLE`; a refused validation leaves the payload
 untouched. A dropped endpoint retains the
@@ -870,12 +837,6 @@ it. Other owners stay opaque until exclusive reset/destruction. A preempted
 writer is already observable as a request, but readers never wait for it.
 Reset requires exclusive access after the old endpoints ended. The S31 port
 uses it for the first fault cause and durable retention of failed messages.
-
-`ReturnBank` pairs each taken value with one affine return token. An Acquire
-CAS transfers the initialized value out of its cell; only the consumed token
-can write a replacement and publish it with Release. A dropped token leaves
-the cell unavailable. The S31 port's free DMA buffers carry these tokens
-through both execution contexts, so return-on-drop shares no producer or lock.
 
 `retained` holds records in memory selected for best-effort reset retention;
 the reset source determines whether bytes survive. `NOLOAD` only excludes

@@ -25,7 +25,7 @@ use oer_chips_family_platform_runtime::diagnostics::{
     self, BootSmokePassed, Console, HartAes, HartExchange, HartLiveness, SecondaryReady,
 };
 use oer_chips_family_platform_runtime::{SecondaryHandoff, panic};
-use oer_portable_memory::{InPlace, RequestSlot};
+use oer_portable_memory::RequestSlot;
 use oer_portable_time::{Clock as _, Timer as _};
 
 oer_chips_family_platform_runtime::interrupt_table! {
@@ -151,19 +151,19 @@ oer_chips_family_platform_runtime::placed_static! {
     /// The request was answered: raised by hart 1's task.
     static ANSWERED: IrqSignal<Hart0Executor> = IrqSignal::new::<FromPeerHart<Hart1Executor, Hart1Token>, WakeToken>(), in critical_data "hart_exchange";
     /// The one exchange between the two harts.
-    static SLOT: RequestSlot<Exchange, (), InPlace> = RequestSlot::new_in_place(), in critical_data "hart_exchange";
+    static SLOT: RequestSlot<Exchange> = RequestSlot::new_in_place(), in critical_data "hart_exchange";
     /// A key unwrap exchange was posted for hart 1's AES task.
     static AES_POSTED: IrqSignal<Hart1Executor> = IrqSignal::new::<FromPeerHart<Hart0Executor, WakeToken>, Hart1Token>(), in critical_data "hart_exchange";
     /// Hart 1's AES task answered.
     static AES_ANSWERED: IrqSignal<Hart0Executor> = IrqSignal::new::<FromPeerHart<Hart1Executor, Hart1Token>, WakeToken>(), in critical_data "hart_exchange";
     /// The key unwrap exchanges.
-    static AES_SLOT: RequestSlot<AesExchange, (), InPlace> = RequestSlot::new_in_place(), in critical_data "hart_exchange";
+    static AES_SLOT: RequestSlot<AesExchange> = RequestSlot::new_in_place(), in critical_data "hart_exchange";
     /// A liveness beat was posted for hart 1.
     static BEAT_POSTED: IrqSignal<Hart1Executor> = IrqSignal::new::<FromPeerHart<Hart0Executor, WakeToken>, Hart1Token>(), in critical_data "hart_exchange";
     /// Hart 1 echoed the beat.
     static BEAT_ANSWERED: IrqSignal<Hart0Executor> = IrqSignal::new::<FromPeerHart<Hart1Executor, Hart1Token>, WakeToken>(), in critical_data "hart_exchange";
     /// The liveness supervision's durable seat, claimed once.
-    static BEAT_SEAT: RequestSlot<Beat, (), InPlace> = RequestSlot::new_in_place(), in critical_data "hart_exchange";
+    static BEAT_SEAT: RequestSlot<Beat> = RequestSlot::new_in_place(), in critical_data "hart_exchange";
 }
 
 /// The boot hart's watched channels: the exchange and the key unwrap.
