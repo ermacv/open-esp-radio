@@ -8338,31 +8338,11 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         "correct: a beacon's HE TXOP RTS threshold, absent when it names none (tasks/402)",
     ),
     (
-        "protocols/network/core/src/dhcp.rs::Client.lease",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/dhcp.rs::Client.link",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/dhcp.rs::Client.owed",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/dhcp.rs::Client.sent",
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/network/core/src/machine.rs::Configuration.dhcp",
         BY_FINAL_CRATES,
     ),
     (
         "protocols/network/core/src/machine.rs::Configuration.ipv4",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/machine.rs::Configuration.lease",
         BY_FINAL_CRATES,
     ),
     (

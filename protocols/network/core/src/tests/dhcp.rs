@@ -1758,3 +1758,19 @@ fn t1_and_t2_stay_in_order_at_their_bounds() {
         (500_000_000, 875_000_000)
     );
 }
+
+/// An outcome of a message that is not the one owed changes nothing.
+#[test]
+fn the_outcome_of_another_message_leaves_the_owed_one() {
+    let mut client = crate::dhcp::Client::new(LOCAL, 1500, 1);
+    let mut serial = 0;
+    client.link_up(at(0), 1, &mut serial);
+    let owed = client.owed().unwrap();
+    client.sent(at(1), owed + 1);
+    assert_eq!(client.owed(), Some(owed));
+    client.refused(at(1), owed + 1);
+    assert_eq!(client.owed(), Some(owed));
+    client.refused(at(1), owed);
+    assert_eq!(client.owed(), None);
+    assert!(client.deadline().is_some(), "its repeat has its time");
+}

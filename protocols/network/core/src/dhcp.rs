@@ -277,30 +277,96 @@ impl Random {
     }
 }
 
+/// What a phase that sends waits for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Turn {
+    /// Its message is owed; a grant names it by this serial.
+    Owed(u64),
+    /// Its message is owed again at this time.
+    At(Instant),
+}
+
+/// Whether the port took a REQUEST of this transaction.
+#[derive(Clone, Copy, Debug)]
+enum Taken {
+    NotYet,
+    /// The first one then: the lease of its ACK counts from here.
+    Since(Instant),
+}
+
+impl Taken {
+    /// The port took a REQUEST at `now`.
+    const fn note(&mut self, now: Instant) {
+        if let Self::NotYet = *self {
+            *self = Self::Since(now);
+        }
+    }
+}
+
+/// Where the client stands, RFC 2131, Figure 5, with what exists there.
 #[derive(Clone, Copy, Debug)]
 enum Phase {
+    /// No link was up yet.
+    Init,
     Selecting {
-        /// When the DISCOVER is repeated; `None` while one is owed.
-        next: Option<Instant>,
+        turn: Turn,
         wait: Duration,
     },
     Requesting {
-        next: Option<Instant>,
+        turn: Turn,
+        taken: Taken,
         tries: u8,
         server: [u8; 4],
         offered: [u8; 4],
     },
-    Bound,
+    Bound(Lease),
     Renewing {
-        next: Option<Instant>,
+        turn: Turn,
+        taken: Taken,
+        lease: Lease,
     },
     Rebinding {
-        next: Option<Instant>,
+        turn: Turn,
+        taken: Taken,
+        lease: Lease,
     },
     Rebooting {
-        next: Option<Instant>,
+        turn: Turn,
+        taken: Taken,
         wait: Duration,
+        lease: Lease,
     },
+}
+
+impl Phase {
+    const fn lease(&self) -> Option<&Lease> {
+        match self {
+            Self::Bound(lease)
+            | Self::Renewing { lease, .. }
+            | Self::Rebinding { lease, .. }
+            | Self::Rebooting { lease, .. } => Some(lease),
+            Self::Init | Self::Selecting { .. } | Self::Requesting { .. } => None,
+        }
+    }
+
+    const fn turn(&self) -> Option<Turn> {
+        match self {
+            Self::Selecting { turn, .. }
+            | Self::Requesting { turn, .. }
+            | Self::Renewing { turn, .. }
+            | Self::Rebinding { turn, .. }
+            | Self::Rebooting { turn, .. } => Some(*turn),
+            Self::Init | Self::Bound(_) => None,
+        }
+    }
+}
+
+/// The link, as the client last heard.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Link {
+    Down,
+    /// Up, at this epoch.
+    Up(u64),
 }
 
 /// The client.
@@ -310,16 +376,25 @@ pub(crate) struct Client {
     largest: u16,
     random: Random,
     phase: Phase,
-    lease: Option<Lease>,
     xid: u32,
-    /// The serial of the message owed, which a grant names.
-    owed: Option<u64>,
-    /// When the port first took this transaction's REQUEST.
-    sent: Option<Instant>,
     /// When this acquisition or renewal began, for 'secs'.
     began: Instant,
-    /// The epoch of the link that is up.
-    link: Option<u64>,
+    link: Link,
+}
+
+/// `wait` doubled, to [`DISCOVER_MOST`].
+fn doubled(wait: Duration) -> Duration {
+    Duration::from_micros(
+        wait.as_micros()
+            .saturating_mul(2)
+            .min(DISCOVER_MOST.as_micros()),
+    )
+}
+
+/// The next message's serial.
+const fn owe(serial: &mut u64) -> Turn {
+    *serial = serial.wrapping_add(1);
+    Turn::Owed(*serial)
 }
 
 impl Client {
@@ -332,52 +407,36 @@ impl Client {
             // with the largest headers, and no less than 576.
             largest: mtu.saturating_sub(HEADERS_MOST).max(576),
             random,
-            phase: Phase::Selecting {
-                next: None,
-                wait: DISCOVER_FIRST,
-            },
-            lease: None,
+            phase: Phase::Init,
             xid,
-            owed: None,
-            sent: None,
             began: Instant::from_micros(0),
-            link: None,
+            link: Link::Down,
         }
     }
 
     pub(crate) const fn lease(&self) -> Option<&Lease> {
-        self.lease.as_ref()
+        self.phase.lease()
     }
 
     /// Whether the lease the address stands on is over at `now`, though no
     /// tick has taken it away yet.
     pub(crate) fn expired(&self, now: Instant) -> bool {
-        self.lease.is_some_and(|lease| now >= lease.expires)
+        self.lease().is_some_and(|lease| now >= lease.expires)
     }
 
     pub(crate) const fn state(&self) -> DhcpState {
         match self.phase {
-            Phase::Selecting { .. } => DhcpState::Selecting,
+            Phase::Init | Phase::Selecting { .. } => DhcpState::Selecting,
             Phase::Requesting { .. } => DhcpState::Requesting,
-            Phase::Bound => DhcpState::Bound,
+            Phase::Bound(_) => DhcpState::Bound,
             Phase::Renewing { .. } => DhcpState::Renewing,
             Phase::Rebinding { .. } => DhcpState::Rebinding,
             Phase::Rebooting { .. } => DhcpState::Rebooting,
         }
     }
 
-    const fn up(&self) -> bool {
-        self.link.is_some()
-    }
-
-    fn owe(&mut self, serial: &mut u64) {
-        *serial = serial.wrapping_add(1);
-        self.owed = Some(*serial);
-    }
-
     fn new_transaction(&mut self, now: Instant) {
         self.xid = xid(&mut self.random);
-        self.sent = None;
         self.began = now;
     }
 
@@ -385,10 +444,9 @@ impl Client {
     fn restart(&mut self, now: Instant, serial: &mut u64) {
         self.new_transaction(now);
         self.phase = Phase::Selecting {
-            next: None,
+            turn: owe(serial),
             wait: DISCOVER_FIRST,
         };
-        self.owe(serial);
     }
 
     /// The link is up, at `epoch`. A new link is a new network as far as
@@ -397,17 +455,18 @@ impl Client {
     /// even mid-backoff: a message spent on the old link never reached this
     /// one.
     pub(crate) fn link_up(&mut self, now: Instant, epoch: u64, serial: &mut u64) {
-        if self.link == Some(epoch) {
+        if self.link == Link::Up(epoch) {
             return;
         }
-        self.link = Some(epoch);
-        if self.lease.is_some() {
+        self.link = Link::Up(epoch);
+        if let Some(lease) = self.phase.lease().copied() {
             self.new_transaction(now);
             self.phase = Phase::Rebooting {
-                next: None,
+                turn: owe(serial),
+                taken: Taken::NotYet,
                 wait: DISCOVER_FIRST,
+                lease,
             };
-            self.owe(serial);
         } else {
             self.restart(now, serial);
         }
@@ -416,7 +475,7 @@ impl Client {
     /// The link is down: nothing is sent until it is up; the lease's times
     /// go on.
     pub(crate) const fn link_down(&mut self) {
-        self.link = None;
+        self.link = Link::Down;
     }
 
     /// Advance to `now`: expire the lease, enter RENEWING or REBINDING, and
@@ -426,11 +485,8 @@ impl Client {
         // Each pass moves the phase forward or stops: Rebooting → Bound →
         // Renewing → Rebinding at most.
         for _ in 0..4 {
-            if let Some(lease) = self.lease
-                && now >= lease.expires
-            {
+            if self.expired(now) {
                 // RFC 2131, 4.4.5: the client MUST stop using the address.
-                self.lease = None;
                 self.restart(now, serial);
                 change = Some(Change::Lost);
             }
@@ -443,109 +499,78 @@ impl Client {
 
     /// One transition `now` asks for; whether one happened.
     fn step(&mut self, now: Instant, serial: &mut u64) -> bool {
-        let due = |next: Option<Instant>| next.is_some_and(|next| now >= next);
-        match self.phase {
-            Phase::Selecting { next, .. } if due(next) => {
-                // A repeat keeps its transaction: a slow OFFER answers it as
-                // well as the last DISCOVER.
-                self.owe(serial);
-                self.set_next(None);
-                true
-            }
-            Phase::Requesting { next, tries, .. } if due(next) => {
-                if tries >= REQUEST_TRIES {
+        let due = |turn: Turn| matches!(turn, Turn::At(at) if now >= at);
+        match &mut self.phase {
+            // A repeat keeps its transaction: a slow OFFER answers it as
+            // well as the last DISCOVER.
+            Phase::Selecting { turn, .. } if due(*turn) => *turn = owe(serial),
+            Phase::Requesting { turn, tries, .. } if due(*turn) => {
+                if *tries >= REQUEST_TRIES {
                     self.restart(now, serial);
                 } else {
-                    self.owe(serial);
-                    self.set_next(None);
+                    *turn = owe(serial);
                 }
-                true
             }
             // Repeated until an answer, or the lease's end, which the tick
             // takes before this.
-            Phase::Rebooting { next, .. } if due(next) => {
-                self.owe(serial);
-                self.set_next(None);
-                true
-            }
-            Phase::Bound | Phase::Renewing { .. } => {
-                let Some(lease) = self.lease else {
-                    return false;
+            Phase::Rebooting { turn, .. } if due(*turn) => *turn = owe(serial),
+            Phase::Bound(lease) | Phase::Renewing { lease, .. } if now >= lease.rebind => {
+                let lease = *lease;
+                self.new_transaction(now);
+                self.phase = Phase::Rebinding {
+                    turn: owe(serial),
+                    taken: Taken::NotYet,
+                    lease,
                 };
-                if now >= lease.rebind {
-                    self.new_transaction(now);
-                    self.phase = Phase::Rebinding { next: None };
-                    self.owe(serial);
-                    true
-                } else if matches!(self.phase, Phase::Bound) && now >= lease.renew {
-                    self.new_transaction(now);
-                    self.phase = Phase::Renewing { next: None };
-                    self.owe(serial);
-                    true
-                } else if let Phase::Renewing { next } = self.phase
-                    && due(next)
-                {
-                    self.sent = None;
-                    self.xid = xid(&mut self.random);
-                    self.owe(serial);
-                    self.set_next(None);
-                    true
-                } else {
-                    false
-                }
             }
-            Phase::Rebinding { next } if due(next) => {
-                self.sent = None;
+            Phase::Bound(lease) if now >= lease.renew => {
+                let lease = *lease;
+                self.new_transaction(now);
+                self.phase = Phase::Renewing {
+                    turn: owe(serial),
+                    taken: Taken::NotYet,
+                    lease,
+                };
+            }
+            Phase::Renewing { turn, taken, .. } | Phase::Rebinding { turn, taken, .. }
+                if due(*turn) =>
+            {
+                *taken = Taken::NotYet;
+                *turn = owe(serial);
                 self.xid = xid(&mut self.random);
-                self.owe(serial);
-                self.set_next(None);
-                true
             }
-            _ => false,
+            _ => return false,
         }
-    }
-
-    const fn set_next(&mut self, at: Option<Instant>) {
-        match &mut self.phase {
-            Phase::Selecting { next, .. }
-            | Phase::Requesting { next, .. }
-            | Phase::Renewing { next }
-            | Phase::Rebinding { next }
-            | Phase::Rebooting { next, .. } => *next = at,
-            Phase::Bound => {}
-        }
+        true
     }
 
     /// When [`Self::tick`] has work.
     pub(crate) fn deadline(&self) -> Option<Instant> {
-        let next = match self.phase {
-            Phase::Selecting { next, .. }
-            | Phase::Requesting { next, .. }
-            | Phase::Renewing { next }
-            | Phase::Rebinding { next }
-            | Phase::Rebooting { next, .. } => next,
-            Phase::Bound => None,
+        let next = match self.phase.turn() {
+            Some(Turn::At(at)) => Some(at),
+            Some(Turn::Owed(_)) | None => None,
         };
-        let lease = self.lease.map(|lease| {
-            let step = match self.phase {
-                Phase::Bound => Some(lease.renew),
-                Phase::Renewing { .. } => Some(lease.rebind),
-                _ => None,
-            };
-            step.map_or(lease.expires, |step| step.min(lease.expires))
-        });
+        let lease = match &self.phase {
+            Phase::Bound(lease) => Some(lease.renew.min(lease.expires)),
+            Phase::Renewing { lease, .. } => Some(lease.rebind.min(lease.expires)),
+            Phase::Rebinding { lease, .. } | Phase::Rebooting { lease, .. } => Some(lease.expires),
+            Phase::Init | Phase::Selecting { .. } | Phase::Requesting { .. } => None,
+        };
         [next, lease].into_iter().flatten().min()
     }
 
     /// The serial of the message owed, while the link is up to carry it.
-    pub(crate) fn owed(&self) -> Option<u64> {
-        self.owed.filter(|_| self.up())
+    pub(crate) const fn owed(&self) -> Option<u64> {
+        match (self.link, self.phase.turn()) {
+            (Link::Up(_), Some(Turn::Owed(serial))) => Some(serial),
+            _ => None,
+        }
     }
 
     /// Where the owed message goes.
-    pub(crate) fn destination(&self) -> Destination {
-        match (self.phase, self.lease) {
-            (Phase::Renewing { .. }, Some(lease)) => Destination::Server(lease.server),
+    pub(crate) const fn destination(&self) -> Destination {
+        match self.phase {
+            Phase::Renewing { lease, .. } => Destination::Server(lease.server),
             _ => Destination::Broadcast,
         }
     }
@@ -555,18 +580,19 @@ impl Client {
         if self.owed() != Some(serial) {
             return None;
         }
-        let address = self.lease.map(|lease| lease.ipv4.address());
-        let (kind, ciaddr, requested, server) = match self.phase {
+        let (kind, ciaddr, requested, server) = match &self.phase {
             Phase::Selecting { .. } => (MessageType::Discover, None, None, None),
             Phase::Requesting {
                 server, offered, ..
-            } => (MessageType::Request, None, Some(offered), Some(server)),
-            Phase::Renewing { .. } | Phase::Rebinding { .. } => {
-                (MessageType::Request, address, None, None)
+            } => (MessageType::Request, None, Some(*offered), Some(*server)),
+            Phase::Renewing { lease, .. } | Phase::Rebinding { lease, .. } => {
+                (MessageType::Request, Some(lease.ipv4.address()), None, None)
             }
             // RFC 2131, 3.2 (1): 'ciaddr' MUST NOT be filled in.
-            Phase::Rebooting { .. } => (MessageType::Request, None, address, None),
-            Phase::Bound => return None,
+            Phase::Rebooting { lease, .. } => {
+                (MessageType::Request, None, Some(lease.ipv4.address()), None)
+            }
+            Phase::Init | Phase::Bound(_) => return None,
         };
         let secs = u16::try_from(now.saturating_duration_since(self.began).as_micros() / 1_000_000)
             .unwrap_or(u16::MAX);
@@ -594,23 +620,22 @@ impl Client {
     /// now, the attempt counts toward its phase's backoff and tries, and a
     /// REQUEST's lease counts from the first one the port took.
     pub(crate) fn sent(&mut self, now: Instant, serial: u64) {
-        if !self.end_attempt(now, serial) {
+        if !self.owes(serial) {
             return;
         }
+        self.end_attempt(now);
         match &mut self.phase {
-            Phase::Selecting { wait, .. } | Phase::Rebooting { wait, .. } => {
-                *wait = Duration::from_micros(
-                    wait.as_micros()
-                        .saturating_mul(2)
-                        .min(DISCOVER_MOST.as_micros()),
-                );
+            Phase::Selecting { wait, .. } => *wait = doubled(*wait),
+            Phase::Rebooting { wait, taken, .. } => {
+                *wait = doubled(*wait);
+                taken.note(now);
             }
-            Phase::Requesting { tries, .. } => *tries = tries.saturating_add(1),
-            Phase::Bound | Phase::Renewing { .. } | Phase::Rebinding { .. } => {}
-        }
-        if !matches!(self.phase, Phase::Selecting { .. } | Phase::Bound) {
-            // The lease of an ACK counts from the first REQUEST taken.
-            self.sent.get_or_insert(now);
+            Phase::Requesting { tries, taken, .. } => {
+                *tries = tries.saturating_add(1);
+                taken.note(now);
+            }
+            Phase::Renewing { taken, .. } | Phase::Rebinding { taken, .. } => taken.note(now),
+            Phase::Init | Phase::Bound(_) => {}
         }
     }
 
@@ -618,49 +643,46 @@ impl Client {
     /// neighbor that never answered: nothing went, so neither a try nor the
     /// lease's start counts, and the backoff stays where it is. The next
     /// attempt still waits for its phase's time, so a refusal neither spins
-    /// nor loses the client's wake.
+    /// nor loses the client's wake. A `serial` no longer owed changes nothing.
     pub(crate) fn refused(&mut self, now: Instant, serial: u64) {
-        let _ended = self.end_attempt(now, serial);
+        if self.owes(serial) {
+            self.end_attempt(now);
+        }
     }
 
-    /// End the attempt of `serial`, while it is owed: the next one comes at
-    /// the phase's present wait. Whether it was owed.
-    fn end_attempt(&mut self, now: Instant, serial: u64) -> bool {
-        if self.owed != Some(serial) {
-            return false;
-        }
-        self.owed = None;
+    /// Whether the message of `serial` is owed, the link up or not.
+    fn owes(&self, serial: u64) -> bool {
+        self.phase.turn() == Some(Turn::Owed(serial))
+    }
+
+    /// End the present attempt: the next one comes at the phase's present
+    /// wait.
+    fn end_attempt(&mut self, now: Instant) {
         let random = &mut self.random;
-        let lease = self.lease;
-        match &mut self.phase {
-            Phase::Selecting { next, wait } | Phase::Rebooting { next, wait } => {
-                *next = Some(now.saturating_add(random.jitter(*wait)));
+        let (turn, wait) = match &mut self.phase {
+            Phase::Init | Phase::Bound(_) => return,
+            Phase::Selecting { turn, wait } | Phase::Rebooting { turn, wait, .. } => {
+                (turn, random.jitter(*wait))
             }
-            Phase::Requesting { next, tries, .. } => {
+            Phase::Requesting { turn, tries, .. } => {
                 let doubled = REQUEST_FIRST
                     .as_micros()
                     .checked_shl(u32::from(*tries / 2))
                     .unwrap_or(u64::MAX);
-                *next = Some(now.saturating_add(random.jitter(Duration::from_micros(doubled))));
+                (turn, random.jitter(Duration::from_micros(doubled)))
             }
             // RFC 2131, 4.4.5: half the time left to T2, or to the end, no
             // less than 60 s; a renewal never waits past T2.
-            Phase::Renewing { next } => {
-                let left = lease.map_or(Duration::from_micros(0), |lease| {
-                    lease.rebind.saturating_duration_since(now)
-                });
-                let wait = half(left).max(RENEW_LEAST).min(left);
-                *next = Some(now.saturating_add(wait));
+            Phase::Renewing { turn, lease, .. } => {
+                let left = lease.rebind.saturating_duration_since(now);
+                (turn, half(left).max(RENEW_LEAST).min(left))
             }
-            Phase::Rebinding { next } => {
-                let left = lease.map_or(Duration::from_micros(0), |lease| {
-                    lease.expires.saturating_duration_since(now)
-                });
-                *next = Some(now.saturating_add(half(left).max(RENEW_LEAST)));
+            Phase::Rebinding { turn, lease, .. } => {
+                let left = lease.expires.saturating_duration_since(now);
+                (turn, half(left).max(RENEW_LEAST))
             }
-            Phase::Bound => {}
-        }
-        true
+        };
+        *turn = Turn::At(now.saturating_add(wait));
     }
 
     /// A server's message from IPv4 `source`, RFC 2131, 4.4.
@@ -692,37 +714,38 @@ impl Client {
         let server =
             address_of(message.option(option::SERVER_IDENTIFIER)).ok_or(DhcpDrop::NoServer)?;
         match (self.phase, kind) {
-            (Phase::Selecting { .. }, MessageType::Offer) => {
+            (Phase::Init | Phase::Selecting { .. }, MessageType::Offer) => {
                 // The first OFFER is taken, RFC 2131, 4.4.1.
                 if !is_unicast(fixed.yiaddr) || !is_unicast(source) {
                     return Err(DhcpDrop::Offer);
                 }
                 self.phase = Phase::Requesting {
-                    next: None,
+                    turn: owe(serial),
+                    taken: Taken::NotYet,
                     tries: 0,
                     server,
                     offered: fixed.yiaddr,
                 };
-                self.owe(serial);
                 Ok(None)
             }
             (
-                Phase::Requesting { .. }
-                | Phase::Renewing { .. }
-                | Phase::Rebinding { .. }
-                | Phase::Rebooting { .. },
+                Phase::Requesting { taken, .. }
+                | Phase::Renewing { taken, .. }
+                | Phase::Rebinding { taken, .. }
+                | Phase::Rebooting { taken, .. },
                 MessageType::Ack,
             ) => {
-                let obtained = self.sent.unwrap_or(now);
+                let obtained = match taken {
+                    Taken::Since(first) => first,
+                    Taken::NotYet => now,
+                };
                 let lease = lease(&message, server, obtained).map_err(DhcpDrop::Lease)?;
                 // RFC 2131, 4.4.5: a lease counts from its REQUEST, and one
                 // already over grants no use; the client goes on as it was.
                 if now >= lease.expires {
                     return Err(DhcpDrop::Lease(LeaseFault::Expired));
                 }
-                self.lease = Some(lease);
-                self.phase = Phase::Bound;
-                self.owed = None;
+                self.phase = Phase::Bound(lease);
                 Ok(Some(Change::Leased(lease.ipv4)))
             }
             (
@@ -733,7 +756,7 @@ impl Client {
                 MessageType::Nak,
             ) => {
                 // RFC 2131, Figure 5 and 3.2 (3): back to INIT.
-                let held = self.lease.take().is_some();
+                let held = self.phase.lease().is_some();
                 self.restart(now, serial);
                 Ok(held.then_some(Change::Lost))
             }
