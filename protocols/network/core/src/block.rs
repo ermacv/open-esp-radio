@@ -5,6 +5,8 @@ use crate::loans::Loans;
 use core::marker::PhantomData;
 use core::mem::replace;
 
+use oer_portable_wire::{PrefixLength, Writer};
+
 /// Who a value belongs to: a brand no other network shares. Invariant, so no
 /// subtyping between two brands carries a value from one to the other.
 pub(crate) type Tag<B> = PhantomData<fn(B) -> B>;
@@ -64,7 +66,7 @@ pub struct BlockPlace<'m, const SIZE: usize> {
     link: Link<'m, SIZE>,
     /// How many octets the block holds, and the group it counts toward: set
     /// when it is taken, and read by the block that was.
-    length: usize,
+    length: PrefixLength<SIZE>,
     group: u8,
     bytes: [u8; SIZE],
 }
@@ -75,7 +77,7 @@ impl<const SIZE: usize> BlockPlace<'_, SIZE> {
     pub const fn new() -> Self {
         Self {
             link: Link::Off,
-            length: 0,
+            length: PrefixLength::ZERO,
             group: 0,
             bytes: [0; SIZE],
         }
@@ -149,19 +151,13 @@ impl<B, const SIZE: usize> Block<'_, B, SIZE> {
     /// # Errors
     /// `length` passes the block; what it held stays.
     pub fn set_length(&mut self, length: usize) -> Result<(), BlockTooShort> {
-        if length > SIZE {
-            return Err(BlockTooShort);
-        }
-        self.place.length = length;
+        self.place.length = PrefixLength::new(length).ok_or(BlockTooShort)?;
         Ok(())
     }
 
     /// The octets the block holds.
     pub fn octets(&self) -> &[u8] {
-        self.place
-            .bytes
-            .get(..self.place.length)
-            .unwrap_or_default()
+        self.place.length.borrow(&self.place.bytes)
     }
 
     /// Fill the block from `octets`.
@@ -169,10 +165,11 @@ impl<B, const SIZE: usize> Block<'_, B, SIZE> {
     /// # Errors
     /// `octets` do not fit; the block stays as it was.
     pub fn fill(&mut self, octets: &[u8]) -> Result<(), BlockTooShort> {
-        oer_portable_wire::Writer::new(self.place.bytes.as_mut_slice())
+        let length = PrefixLength::new(octets.len()).ok_or(BlockTooShort)?;
+        Writer::new(self.place.bytes.as_mut_slice())
             .write(octets)
             .map_err(|_| BlockTooShort)?;
-        self.place.length = octets.len();
+        self.place.length = length;
         Ok(())
     }
 }
@@ -300,7 +297,7 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
             return None;
         }
         let place = self.free.pop()?;
-        place.length = 0;
+        place.length = PrefixLength::ZERO;
         place.group = group.index;
         if let Some(account) = self.groups.get_mut(usize::from(group.index)) {
             account.held = account.held.saturating_add(1);

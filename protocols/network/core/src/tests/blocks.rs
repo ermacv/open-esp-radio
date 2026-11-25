@@ -117,7 +117,7 @@ fn a_retired_core_s_blocks_count_for_the_next_over_the_same_pool() {
         let queued = filled(stack.pool(), b"queued");
         let _command = stack.send(at(0), &socket, peer(), queued).unwrap();
         let kept = filled(stack.pool(), b"kept");
-        let lost = filled(stack.pool(), b"lost");
+        let _lost = filled(stack.pool(), b"lost");
         let retired = stack.retire();
         assert_eq!(
             retired.pool.outstanding(),
@@ -136,7 +136,6 @@ fn a_retired_core_s_blocks_count_for_the_next_over_the_same_pool() {
         );
         assert_eq!(kept.octets(), b"kept");
         next.pool().give(kept);
-        drop(lost);
         assert_eq!(
             (next.pool().free(), next.pool().outstanding()),
             (BLOCKS - 1, 1)

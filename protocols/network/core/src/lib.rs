@@ -1,7 +1,7 @@
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
 #![cfg_attr(
     test,
     expect(
+        clippy::cast_possible_truncation,
         clippy::let_underscore_must_use,
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
@@ -133,7 +133,7 @@ pub use block::{
 pub use brand::{Brand, LocalNetwork, NetworkClaim, with_local_network};
 pub use dhcp::{DNS_SERVERS, DhcpDrop, DhcpState, Lease, LeaseFault, Servers};
 pub use diagnostics::Count;
-pub use echo::{ECHOES, IcmpDrop, RATE as ECHO_RATE};
+pub use echo::{ECHO_RATE, ECHOES, IcmpDrop};
 pub use interface::{Interface, InterfaceError, Ipv4};
 pub use loans::{Loan, Loans, LoansRefused, NotLent};
 pub use machine::{
