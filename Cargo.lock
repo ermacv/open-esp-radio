@@ -1780,7 +1780,6 @@ version = "0.1.0"
 name = "oer-hil-agent"
 version = "0.1.0"
 dependencies = [
- "embassy-futures",
  "embedded-io-async",
  "oer-chips-esp32s31-platform-runtime",
  "oer-chips-family-platform-runtime",
@@ -2266,7 +2265,6 @@ dependencies = [
  "embedded-io-async",
  "oer-portable-diagnostics",
  "oer-protocols-hil-protocol",
- "postcard",
  "postcard-schema",
  "serde",
 ]

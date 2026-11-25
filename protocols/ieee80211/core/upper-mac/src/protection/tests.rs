@@ -96,7 +96,7 @@ fn erp_protection_sends_cts_to_self_at_a_dsss_rate_for_every_receiver() {
         basic(DSSS_BASIC),
     );
     for receiver in [TxReceiver::Individual, TxReceiver::Group] {
-        let decision = policy.select(mpdu(OFDM24, receiver, 100), &ProtectEveryHeTxop);
+        let decision = policy.select(mpdu(OFDM24, receiver, 100), &Budget(0));
         assert_eq!(
             decision.protection,
             Protection::CtsToSelf { rate: CCK11_SHORT }
@@ -110,7 +110,7 @@ fn erp_protection_sends_cts_to_self_at_a_dsss_rate_for_every_receiver() {
     let dsss = PhyRate::Legacy(CCK11_SHORT);
     assert_eq!(
         policy
-            .select(mpdu(dsss, TxReceiver::Individual, 100), &ProtectEveryHeTxop)
+            .select(mpdu(dsss, TxReceiver::Individual, 100), &Budget(0))
             .protection,
         Protection::None
     );
@@ -127,7 +127,7 @@ fn barker_preamble_mode_keeps_dsss_control_frames_long() {
         barker
             .select(
                 mpdu(PhyRate::Legacy(LegacyRate::Ofdm54M), TxReceiver::Group, 100),
-                &ProtectEveryHeTxop
+                &Budget(0)
             )
             .protection,
         Protection::CtsToSelf {
@@ -144,7 +144,7 @@ fn ht_protection_uses_rts_for_individual_and_cts_to_self_for_group_receivers() {
         basic(OFDM_BASIC),
     );
     let rate = ht(7, PpduBandwidth::Mhz40);
-    let unicast = policy.select(mpdu(rate, TxReceiver::Individual, 100), &ProtectEveryHeTxop);
+    let unicast = policy.select(mpdu(rate, TxReceiver::Individual, 100), &Budget(0));
     assert_eq!(
         unicast.protection,
         Protection::RtsCts {
@@ -159,7 +159,7 @@ fn ht_protection_uses_rts_for_individual_and_cts_to_self_for_group_receivers() {
     );
     assert_eq!(
         policy
-            .select(mpdu(rate, TxReceiver::Group, 100), &ProtectEveryHeTxop)
+            .select(mpdu(rate, TxReceiver::Group, 100), &Budget(0))
             .protection,
         Protection::CtsToSelf {
             rate: LegacyRate::Ofdm24M
@@ -175,7 +175,7 @@ fn ht_protection_uses_rts_for_individual_and_cts_to_self_for_group_receivers() {
         twenty
             .select(
                 mpdu(ht(7, PpduBandwidth::Mhz20), TxReceiver::Individual, 100),
-                &ProtectEveryHeTxop
+                &Budget(0)
             )
             .protection,
         Protection::None
@@ -279,7 +279,7 @@ fn every_basic_set_selects_the_required_control_rate() {
 fn the_length_threshold_protects_only_long_individual_mpdus() {
     let policy = ProtectionPolicy::new(RtsThreshold::At(RtsLengthThreshold::new(2346)));
     let rate = PhyRate::Legacy(LegacyRate::Ofdm54M);
-    let select = |ppdu| policy.select(ppdu, &ProtectEveryHeTxop);
+    let select = |ppdu| policy.select(ppdu, &Budget(0));
     assert_eq!(
         select(mpdu(rate, TxReceiver::Individual, 2346)).protection,
         Protection::None
@@ -334,7 +334,7 @@ fn the_he_txop_budget_protects_individual_he_ppdus_above_it() {
     // Without an estimate every individual HE PPDU is protected.
     assert!(matches!(
         policy
-            .select(mpdu(rate, TxReceiver::Individual, 1), &ProtectEveryHeTxop)
+            .select(mpdu(rate, TxReceiver::Individual, 1), &Budget(0))
             .protection,
         Protection::RtsCts { .. }
     ));
@@ -389,7 +389,7 @@ fn every_he_txop_is_protected_while_the_bss_advertises_a_threshold() {
         policy
             .select(
                 ampdu(PhyRate::He(he(7)), TxReceiver::Individual, 1),
-                &ProtectEveryHeTxop
+                &Budget(0)
             )
             .protection,
         protection

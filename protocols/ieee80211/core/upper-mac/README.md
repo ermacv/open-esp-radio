@@ -54,8 +54,7 @@ vendor:
   unanswered aggregate and of failed protection exchanges, and whether one
   missing subframe stays aggregated.
 - `HeTxopRtsBudget`: how many HE SU APEP octets fit below a TXOP duration
-  threshold; `ProtectEveryHeTxop` protects every individual HE PPDU while a
-  threshold is advertised.
+  threshold.
 
 [`oer-chips-family-radio-ieee80211-policy`](../../../../chips/family/radio/ieee80211/policy/README.md)
 supplies the Espressif values recovered from the vendor stack.
@@ -86,8 +85,7 @@ CCMP user: one strictly increasing `CcmpReplayFrontier` per lane, key or
 peer, borrowed by an admission candidate until commit, for the station's
 data, and the access point's and the RSN receiver's protected management
 frames; key material, headers and PN values are wire vocabulary.
-`sequence` owns the transmit sequence spaces (`SequenceCounter`,
-`TxSequenceCounters`) of the station and the access point. `duplicate` owns
+`sequence` owns the transmit sequence spaces (`SequenceCounter`) of the station and the access point. `duplicate` owns
 receive duplicate history, `fragmentation` bounded MSDU reassembly and its
 reassembly refusals (`OpenDataReassemblyError`, over the wire's frame
 refusals), and `receive` the replay commit boundary. `ccmp`'s

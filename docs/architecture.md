@@ -1024,11 +1024,10 @@ The current mechanisms have narrower guarantees than the policy:
   Commit publishes its completion marker last. A fresh boot may overwrite
   stale, unconsumed bytes with its first terminal record.
 - Peek does not clear. Each reporter clears only after its complete output
-  succeeds. Ordinary panic renderers acknowledge the exact snapshot; HIL's
-  platform panic and postmortem remain until the complete boot-evidence frame
-  and CRLF reach the transport. A refused output retains the record.
+  succeeds. Ordinary panic renderers acknowledge the exact snapshot. The HIL
+  console serves what the boot read before that. A refused output retains the record.
 - Payloads preserve panic text, Wi-Fi RAW, IEEE 802.15.4 entry observations and completed service prefix, HIL
-  failure records and postmortem data, the S31 exception observations, and RX-chain observations.
+  failure records, the S31 exception observations, and RX-chain observations.
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
   Every S31 image on the staged runtime, the SDK's included, binds one
