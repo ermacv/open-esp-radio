@@ -155,27 +155,17 @@ pub struct Pool<'m, B, const SIZE: usize, const BLOCKS: usize> {
 
 impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
     fn new(storage: &'m mut [[u8; SIZE]; BLOCKS]) -> Self {
-        let mut free = heapless::Vec::new();
-        for bytes in storage {
-            // BLOCKS blocks fit a capacity of BLOCKS.
-            let _fits = free.push(Block {
-                bytes,
-                length: 0,
-                group: 0,
-                brand: PhantomData,
-            });
-        }
-        let mut groups = heapless::Vec::new();
-        // One entry fits a capacity of GROUPS, which a const check holds above 0.
-        let _fits = groups.push(Account {
+        let free = heapless::Vec::from_array(storage.each_mut().map(|bytes| Block {
+            bytes,
+            length: 0,
+            group: 0,
+            brand: PhantomData,
+        }));
+        // The shared group.
+        let groups = heapless::Vec::from_array([Account {
             limit: usize::MAX,
             held: 0,
-        });
-        const {
-            if GROUPS == 0 {
-                panic!("a pool has its shared group");
-            }
-        };
+        }]);
         Self {
             free,
             groups,

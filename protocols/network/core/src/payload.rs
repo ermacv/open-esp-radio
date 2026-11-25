@@ -16,9 +16,16 @@ pub struct Payload<'a> {
     /// The run of one octet the region holds from its buffer's last frame,
     /// in the region's places.
     kept: Option<Held>,
-    /// The run the last [`Self::repeat`] left, which the region holds once
-    /// written.
-    left: Option<Held>,
+    ends: Ends,
+}
+
+/// What the data written so far ends with.
+#[derive(Clone, Copy, Debug)]
+enum Ends {
+    /// Octets, or nothing yet.
+    Octets,
+    /// The run of the last [`Payload::repeat`].
+    Run(Held),
 }
 
 /// What a write asked for does not fit behind what is written: nothing of
@@ -35,7 +42,7 @@ impl<'a> Payload<'a> {
             written: 0,
             sum,
             kept,
-            left: None,
+            ends: Ends::Octets,
         }
     }
 
@@ -52,6 +59,9 @@ impl<'a> Payload<'a> {
     pub fn put(&mut self, octets: &[u8]) -> Result<(), PayloadFull> {
         let rest = self.region.get_mut(self.written..).ok_or(PayloadFull)?;
         self.sum = self.sum.copied(octets, rest).map_err(|_| PayloadFull)?;
+        if !octets.is_empty() {
+            self.ends = Ends::Octets;
+        }
         self.written = self.written.saturating_add(octets.len());
         Ok(())
     }
@@ -74,7 +84,7 @@ impl<'a> Payload<'a> {
             region.fill(byte);
         }
         self.sum = self.sum.repeated(byte, count);
-        self.left = Some(Held {
+        self.ends = Ends::Run(Held {
             at: self.written,
             length: count,
             octet: byte,
@@ -89,11 +99,11 @@ impl<'a> Payload<'a> {
     /// payload down to a shorter header in place moves octets of such a run
     /// onto octets of it, and leaves the run's own octets behind it.
     pub(crate) fn finish(self) -> Option<(Checksum, Option<Held>)> {
-        let end = self.region.len();
-        let left = self
-            .left
-            .filter(|run| run.at.checked_add(run.length) == Some(end));
-        (self.written == end).then_some((self.sum, left))
+        let run = match self.ends {
+            Ends::Octets => None,
+            Ends::Run(run) => Some(run),
+        };
+        (self.written == self.region.len()).then_some((self.sum, run))
     }
 }
 
