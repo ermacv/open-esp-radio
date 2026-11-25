@@ -64,16 +64,13 @@ pub enum ResetReason {
 pub struct BootEvidence {
     pub reset_reason: ResetReason,
     /// The chip's reset reason code; 0 when the target did not report one.
-    #[serde(default)]
     pub raw_reset_reason: u8,
     /// The record the previous boot kept in reset-retained memory; `None`
     /// when no valid record survived, as after a power-on.
-    #[serde(default)]
     pub post_mortem: Option<PostMortemSummary>,
     /// The record the platform's panic entry left for the boot after a
     /// panic, read once by this boot; `None` when the previous boot did not
     /// panic through it.
-    #[serde(default)]
     pub platform_panic: Option<PlatformPanic>,
 }
 

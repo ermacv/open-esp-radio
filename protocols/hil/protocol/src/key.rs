@@ -14,6 +14,15 @@
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
+oer_portable_wire::bitfield! {
+    /// The number a key's octets encode.
+    /// SOURCE: postcard-schema 0.2.5, `key::hash::fnv1a64` (the hash's octets,
+    /// least significant first).
+    struct KeyNumber[8] (little) {
+        value, with_value: {u64} = 0..64;
+    }
+}
+
 /// A message's wire identity: FNV-1a 64 over its path and its schema.
 /// Keys order as the number they encode.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Schema)]
@@ -38,7 +47,7 @@ impl Key {
     }
 
     pub const fn to_u64(self) -> u64 {
-        u64::from_le_bytes(self.0)
+        KeyNumber::from_bytes(self.0).value()
     }
 }
 
@@ -111,12 +120,37 @@ macro_rules! __message {
         $(#[$meta])*
         #[derive(
             Clone, Copy, Debug, Eq, PartialEq,
-            ::serde::Serialize, ::serde::Deserialize, $crate::__SchemaDerive,
+            ::serde::Serialize, ::serde::Deserialize, $crate::postcard_schema::Schema,
         )]
-        #[postcard(crate = $crate::__postcard_schema)]
+        #[postcard(crate = $crate::postcard_schema)]
         pub struct $name;
         impl $crate::Message for $name {
             const PATH: &'static str = $path;
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Key, Message};
+
+    crate::messages! {
+        /// A property, declared through the crate's own paths.
+        property Declared = "test/declared";
+    }
+
+    #[test]
+    fn a_property_is_a_message_of_its_path() {
+        assert_eq!(KEYS, [Declared::KEY]);
+        assert_eq!(Declared::KEY, Key::of::<Declared>("test/declared"));
+        assert_ne!(Declared::KEY, Key::of::<Declared>("test/other"));
+    }
+
+    #[test]
+    fn a_key_s_number_takes_its_octets_least_significant_first() {
+        assert_eq!(
+            Key([1, 2, 0, 0, 0, 0, 0, 3]).to_u64(),
+            0x0300_0000_0000_0201
+        );
+    }
 }
