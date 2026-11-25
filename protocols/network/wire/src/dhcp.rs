@@ -7,6 +7,7 @@
 //! from the 'options' field only: options overloaded into 'sname' and 'file'
 //! (RFC 2131, 4.1) are not interpreted.
 
+use crate::code::octet_code;
 use oer_portable_wire::{Error, Reader, Writer};
 
 use crate::address::Ipv4Address;
@@ -77,36 +78,50 @@ oer_portable_wire::bitfield! {
     }
 }
 
-/// Option codes this codec names.
-pub mod option {
-    /// SOURCE: RFC 2132, 3.1 (Pad Option).
-    pub const PAD: u8 = 0;
-    /// SOURCE: RFC 2132, 3.2 (End Option).
-    pub const END: u8 = 255;
-    /// SOURCE: RFC 2132, 3.3 (Subnet Mask).
-    pub const SUBNET_MASK: u8 = 1;
-    /// SOURCE: RFC 2132, 3.5 (Router Option).
-    pub const ROUTER: u8 = 3;
-    /// SOURCE: RFC 2132, 3.8 (Domain Name Server Option).
-    pub const DOMAIN_NAME_SERVER: u8 = 6;
-    /// SOURCE: RFC 2132, 9.1 (Requested IP Address).
-    pub const REQUESTED_ADDRESS: u8 = 50;
-    /// SOURCE: RFC 2132, 9.2 (IP Address Lease Time).
-    pub const LEASE_TIME: u8 = 51;
-    /// SOURCE: RFC 2132, 9.6 (DHCP Message Type).
-    pub const MESSAGE_TYPE: u8 = 53;
-    /// SOURCE: RFC 2132, 9.7 (Server Identifier).
-    pub const SERVER_IDENTIFIER: u8 = 54;
-    /// SOURCE: RFC 2132, 9.8 (Parameter Request List).
-    pub const PARAMETER_REQUEST_LIST: u8 = 55;
-    /// SOURCE: RFC 2132, 9.10 (Maximum DHCP Message Size).
-    pub const MAXIMUM_MESSAGE_SIZE: u8 = 57;
-    /// SOURCE: RFC 2132, 9.11 (Renewal (T1) Time Value).
-    pub const RENEWAL_TIME: u8 = 58;
-    /// SOURCE: RFC 2132, 9.12 (Rebinding (T2) Time Value).
-    pub const REBINDING_TIME: u8 = 59;
-    /// SOURCE: RFC 2132, 9.14 (Client-identifier).
-    pub const CLIENT_IDENTIFIER: u8 = 61;
+octet_code! { dhcp;
+    /// The code of an option: any octet, some of them named.
+    OptionCode {
+        /// SOURCE: RFC 2132, 3.1 (Pad Option).
+        PAD = 0,
+        /// SOURCE: RFC 2132, 3.2 (End Option).
+        END = 255,
+        /// SOURCE: RFC 2132, 3.3 (Subnet Mask).
+        SUBNET_MASK = 1,
+        /// SOURCE: RFC 2132, 3.5 (Router Option).
+        ROUTER = 3,
+        /// SOURCE: RFC 2132, 3.8 (Domain Name Server Option).
+        DOMAIN_NAME_SERVER = 6,
+        /// SOURCE: RFC 2132, 9.1 (Requested IP Address).
+        REQUESTED_ADDRESS = 50,
+        /// SOURCE: RFC 2132, 9.2 (IP Address Lease Time).
+        LEASE_TIME = 51,
+        /// SOURCE: RFC 2132, 9.6 (DHCP Message Type).
+        MESSAGE_TYPE = 53,
+        /// SOURCE: RFC 2132, 9.7 (Server Identifier).
+        SERVER_IDENTIFIER = 54,
+        /// SOURCE: RFC 2132, 9.8 (Parameter Request List).
+        PARAMETER_REQUEST_LIST = 55,
+        /// SOURCE: RFC 2132, 9.10 (Maximum DHCP Message Size).
+        MAXIMUM_MESSAGE_SIZE = 57,
+        /// SOURCE: RFC 2132, 9.11 (Renewal (T1) Time Value).
+        RENEWAL_TIME = 58,
+        /// SOURCE: RFC 2132, 9.12 (Rebinding (T2) Time Value).
+        REBINDING_TIME = 59,
+        /// SOURCE: RFC 2132, 9.14 (Client-identifier).
+        CLIENT_IDENTIFIER = 61,
+    }
+}
+
+octet_code! { dhcp;
+    /// A hardware type of one octet: DHCP's 'htype', and the value of ARP's
+    /// wider field.
+    ///
+    /// SOURCE: IANA Address Resolution Protocol Parameters (Hardware Types);
+    /// RFC 2131, 2 ('htype').
+    HardwareType {
+        /// Ethernet.
+        ETHERNET = 1,
+    }
 }
 
 oer_portable_wire::bitfield! {
@@ -144,7 +159,7 @@ pub struct Fixed {
     /// 'op'.
     pub op: Op,
     /// 'htype': the ARP hardware type, 1 for Ethernet.
-    pub htype: u8,
+    pub htype: HardwareType,
     /// 'hlen'.
     pub hlen: u8,
     /// 'hops'.
@@ -181,7 +196,7 @@ impl Fixed {
         }
         let opening = Opening::from_bytes([0; 10])
             .with_op(self.op.encoding())
-            .with_htype(self.htype)
+            .with_htype(self.htype.value())
             .with_hlen(self.hlen)
             .with_hops(self.hops)
             .with_xid(self.xid)
@@ -232,7 +247,7 @@ impl<'a> DhcpMessage<'a> {
         let message = Self {
             fixed: Fixed {
                 op: Op::from_encoding(opening.op()),
-                htype: opening.htype(),
+                htype: HardwareType::new(opening.htype()),
                 hlen: opening.hlen(),
                 hops: opening.hops(),
                 xid: opening.xid(),
@@ -263,7 +278,7 @@ impl<'a> DhcpMessage<'a> {
 
     /// The data of the first option `code`; RFC 2131, 4.1: an option may
     /// appear once unless its own document says otherwise.
-    pub fn option(&self, code: u8) -> Option<&'a [u8]> {
+    pub fn option(&self, code: OptionCode) -> Option<&'a [u8]> {
         self.options()
             .filter_map(Result::ok)
             .find(|(found, _)| *found == code)
@@ -273,7 +288,7 @@ impl<'a> DhcpMessage<'a> {
     /// The DHCP Message Type, RFC 2132, 9.6: `None` without a one-octet
     /// option.
     pub fn message_type(&self) -> Option<MessageType> {
-        match self.option(option::MESSAGE_TYPE)? {
+        match self.option(OptionCode::MESSAGE_TYPE)? {
             [kind] => Some(MessageType::from_encoding(*kind)),
             _ => None,
         }
@@ -288,7 +303,7 @@ pub struct Options<'a> {
 }
 
 impl<'a> Iterator for Options<'a> {
-    type Item = Result<(u8, &'a [u8]), DhcpError>;
+    type Item = Result<(OptionCode, &'a [u8]), DhcpError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.done {
@@ -296,9 +311,9 @@ impl<'a> Iterator for Options<'a> {
                 self.done = true;
                 return None;
             };
-            match code {
-                option::PAD => {}
-                option::END => self.done = true,
+            match OptionCode::new(code) {
+                OptionCode::PAD => {}
+                OptionCode::END => self.done = true,
                 code => {
                     let data = self
                         .reader
@@ -323,7 +338,7 @@ impl<'a> Iterator for Options<'a> {
 /// # Errors
 /// [`Error::ValueOutOfRange`] for data longer than 255 octets, or a
 /// truncation; nothing is written then.
-pub fn write_option(writer: &mut Writer<'_>, code: u8, data: &[u8]) -> Result<(), Error> {
+pub fn write_option(writer: &mut Writer<'_>, code: OptionCode, data: &[u8]) -> Result<(), Error> {
     let length = u8::try_from(data.len()).map_err(|_| Error::ValueOutOfRange)?;
     let total = data.len().saturating_add(2);
     if writer.remaining() < total {
@@ -332,7 +347,7 @@ pub fn write_option(writer: &mut Writer<'_>, code: u8, data: &[u8]) -> Result<()
             remaining: writer.remaining(),
         });
     }
-    writer.write(&[code, length])?;
+    writer.write(&[code.value(), length])?;
     writer.write(data)
 }
 
@@ -341,7 +356,7 @@ pub fn write_option(writer: &mut Writer<'_>, code: u8, data: &[u8]) -> Result<()
 /// # Errors
 /// [`Error`] when no octet is left.
 pub fn write_end(writer: &mut Writer<'_>) -> Result<(), Error> {
-    writer.u8(option::END)
+    writer.u8(OptionCode::END.value())
 }
 
 #[cfg(test)]

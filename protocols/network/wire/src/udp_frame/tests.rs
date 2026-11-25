@@ -1,6 +1,7 @@
 extern crate std;
 
 use crate::address::Ipv4Address;
+use crate::ip::IpProtocol;
 use oer_protocols_ieee802_wire::Eui48;
 use std::vec;
 
@@ -22,7 +23,7 @@ fn a_template_s_headers_are_the_ones_its_fields_make() {
         total_length: 0,
         identification: 0,
         time_to_live: 64,
-        protocol: PROTOCOL_UDP,
+        protocol: IpProtocol::UDP,
         source: Ipv4Address::new([192, 0, 2, 1]),
         destination: Ipv4Address::new([198, 51, 100, 7]),
     };
@@ -47,8 +48,12 @@ fn a_template_s_headers_are_the_ones_its_fields_make() {
             }
             .to_bytes(),
         );
-        let pseudo =
-            ipv4_pseudo_header(fields.source, fields.destination, PROTOCOL_UDP, udp_length);
+        let pseudo = ipv4_pseudo_header(
+            fields.source,
+            fields.destination,
+            IpProtocol::UDP,
+            udp_length,
+        );
         let udp = UdpHeader {
             ports,
             length: udp_length,

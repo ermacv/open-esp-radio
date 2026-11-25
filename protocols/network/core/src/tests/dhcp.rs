@@ -9,8 +9,9 @@ use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_port::Class;
 use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::dhcp::{
-    self as wire, DhcpMessage, Fixed, Flags, MessageType, Op, option,
+    self as wire, DhcpMessage, Fixed, Flags, HardwareType, MessageType, Op, OptionCode,
 };
+use oer_protocols_network_wire::ip::IpProtocol;
 
 const SERVER: [u8; 6] = [2, 0, 0, 0, 0, 0x99];
 const SERVER_IP: [u8; 4] = [192, 0, 2, 254];
@@ -51,7 +52,7 @@ impl Sent {
         let ip = Ipv4Header::parse(payload).unwrap();
         assert!(Checksum::new().with(&payload[..20]).verifies());
         let (source, destination) = (ip.source().octets(), ip.destination().octets());
-        assert_eq!(ip.protocol(), PROTOCOL_UDP);
+        assert_eq!(ip.protocol(), IpProtocol::UDP);
         let (udp, data) = UdpHeader::parse(ip.payload()).unwrap();
         assert_eq!(udp.ports.source, wire::CLIENT_PORT);
         assert_eq!(udp.ports.destination, wire::SERVER_PORT);
@@ -60,7 +61,7 @@ impl Sent {
                 .with(&ipv4_pseudo_header(
                     Ipv4Address::new(source),
                     Ipv4Address::new(destination),
-                    PROTOCOL_UDP,
+                    IpProtocol::UDP,
                     udp.length
                 ))
                 .with(ip.payload())
@@ -86,7 +87,7 @@ impl Sent {
         self.message().fixed.xid
     }
 
-    fn option(&self, code: u8) -> Option<Vec<u8>> {
+    fn option(&self, code: OptionCode) -> Option<Vec<u8>> {
         self.message().option(code).map(<[u8]>::to_vec)
     }
 }
@@ -136,17 +137,21 @@ fn link_down<B>(stack: &mut Stack<B>) {
     stack.port_mut().up = None;
 }
 
-fn ack_options() -> Vec<(u8, Vec<u8>)> {
+fn ack_options() -> Vec<(OptionCode, Vec<u8>)> {
     vec![
-        (option::SUBNET_MASK, vec![255, 255, 255, 0]),
-        (option::ROUTER, SERVER_IP.to_vec()),
+        (OptionCode::SUBNET_MASK, vec![255, 255, 255, 0]),
+        (OptionCode::ROUTER, SERVER_IP.to_vec()),
         // A 0.0.0.0 server is dropped, as some servers send one.
-        (option::DOMAIN_NAME_SERVER, vec![1, 1, 1, 1, 0, 0, 0, 0]),
-        (option::LEASE_TIME, 1000_u32.to_be_bytes().to_vec()),
+        (OptionCode::DOMAIN_NAME_SERVER, vec![1, 1, 1, 1, 0, 0, 0, 0]),
+        (OptionCode::LEASE_TIME, 1000_u32.to_be_bytes().to_vec()),
     ]
 }
 
-fn with(options: Vec<(u8, Vec<u8>)>, code: u8, data: Option<Vec<u8>>) -> Vec<(u8, Vec<u8>)> {
+fn with(
+    options: Vec<(OptionCode, Vec<u8>)>,
+    code: OptionCode,
+    data: Option<Vec<u8>>,
+) -> Vec<(OptionCode, Vec<u8>)> {
     let mut options: Vec<_> = options.into_iter().filter(|(c, _)| *c != code).collect();
     if let Some(data) = data {
         options.push((code, data));
@@ -165,7 +170,7 @@ struct Reply {
     op: Op,
     chaddr: [u8; 6],
     server: Option<[u8; 4]>,
-    options: Vec<(u8, Vec<u8>)>,
+    options: Vec<(OptionCode, Vec<u8>)>,
 }
 
 impl Reply {
@@ -202,7 +207,7 @@ impl Reply {
             let [c0, c1, c2, c3, c4, c5] = self.chaddr;
             Fixed {
                 op: self.op,
-                htype: 1,
+                htype: HardwareType::ETHERNET,
                 hlen: 6,
                 hops: 0,
                 xid: self.xid,
@@ -216,9 +221,14 @@ impl Reply {
             }
             .write(&mut writer)
             .unwrap();
-            wire::write_option(&mut writer, option::MESSAGE_TYPE, &[self.kind.encoding()]).unwrap();
+            wire::write_option(
+                &mut writer,
+                OptionCode::MESSAGE_TYPE,
+                &[self.kind.encoding()],
+            )
+            .unwrap();
             if let Some(server) = self.server {
-                wire::write_option(&mut writer, option::SERVER_IDENTIFIER, &server).unwrap();
+                wire::write_option(&mut writer, OptionCode::SERVER_IDENTIFIER, &server).unwrap();
             }
             for (code, data) in &self.options {
                 wire::write_option(&mut writer, *code, data).unwrap();
@@ -253,7 +263,7 @@ fn udp_from(
             .with(&ipv4_pseudo_header(
                 Ipv4Address::new(from),
                 Ipv4Address::new(to),
-                PROTOCOL_UDP,
+                IpProtocol::UDP,
                 length,
             ))
             .with(&unfilled.to_bytes())
@@ -273,7 +283,7 @@ fn udp_from(
             total_length: length + 20,
             identification: 1,
             time_to_live: 64,
-            protocol: PROTOCOL_UDP,
+            protocol: IpProtocol::UDP,
             source: Ipv4Address::new(from),
             destination: Ipv4Address::new(to),
         }
@@ -306,19 +316,19 @@ fn assert_discover(sent: &Sent) -> u32 {
     assert_eq!(message.fixed.ciaddr, Ipv4Address::new([0; 4]));
     assert!(!message.fixed.flags.broadcast());
     assert_eq!(&message.fixed.chaddr[..6], &LOCAL);
-    assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
-    assert_eq!(sent.option(option::REQUESTED_ADDRESS), None);
+    assert_eq!(sent.option(OptionCode::SERVER_IDENTIFIER), None);
+    assert_eq!(sent.option(OptionCode::REQUESTED_ADDRESS), None);
     assert_eq!(
-        sent.option(option::CLIENT_IDENTIFIER),
+        sent.option(OptionCode::CLIENT_IDENTIFIER),
         Some(vec![1, 2, 0, 0, 0, 0, 1])
     );
     assert_eq!(
-        sent.option(option::PARAMETER_REQUEST_LIST),
+        sent.option(OptionCode::PARAMETER_REQUEST_LIST),
         Some(vec![1, 3, 6])
     );
     // RFC 2132, 9.10: the MTU less the largest IPv4 and UDP headers.
     assert_eq!(
-        sent.option(option::MAXIMUM_MESSAGE_SIZE),
+        sent.option(OptionCode::MAXIMUM_MESSAGE_SIZE),
         Some(1432_u16.to_be_bytes().to_vec())
     );
     sent.xid()
@@ -332,15 +342,15 @@ fn assert_selecting_request(sent: &Sent, xid: u32) {
     assert_eq!(sent.hardware, [0xFF; 6]);
     assert_eq!(sent.message().fixed.ciaddr, Ipv4Address::new([0; 4]));
     assert_eq!(
-        sent.option(option::REQUESTED_ADDRESS),
+        sent.option(OptionCode::REQUESTED_ADDRESS),
         Some(OFFERED.to_vec())
     );
     assert_eq!(
-        sent.option(option::SERVER_IDENTIFIER),
+        sent.option(OptionCode::SERVER_IDENTIFIER),
         Some(SERVER_IP.to_vec())
     );
     assert_eq!(
-        sent.option(option::PARAMETER_REQUEST_LIST),
+        sent.option(OptionCode::PARAMETER_REQUEST_LIST),
         Some(vec![1, 3, 6])
     );
 }
@@ -367,8 +377,8 @@ fn assert_extension(sent: &Sent, extension: Extension) -> u32 {
             assert_eq!((sent.destination, sent.hardware), (SERVER_IP, SERVER));
         }
     }
-    assert_eq!(sent.option(option::REQUESTED_ADDRESS), None);
-    assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
+    assert_eq!(sent.option(OptionCode::REQUESTED_ADDRESS), None);
+    assert_eq!(sent.option(OptionCode::SERVER_IDENTIFIER), None);
     sent.xid()
 }
 
@@ -399,7 +409,7 @@ fn requesting<B>(stack: &mut Stack<B>, now: Instant) -> u32 {
 }
 
 /// Bound at `now` with `options`.
-fn bound_with<B>(stack: &mut Stack<B>, now: Instant, options: Vec<(u8, Vec<u8>)>) -> u32 {
+fn bound_with<B>(stack: &mut Stack<B>, now: Instant, options: Vec<(OptionCode, Vec<u8>)>) -> u32 {
     let xid = requesting(stack, now);
     let mut ack = Reply::new(MessageType::Ack, xid);
     ack.options = options;
@@ -620,7 +630,7 @@ fn a_lease_counts_from_the_first_request_the_port_took_not_from_a_refused_one() 
         let mut ack = Reply::new(MessageType::Ack, xid);
         ack.options = with(
             ack_options(),
-            option::LEASE_TIME,
+            OptionCode::LEASE_TIME,
             Some(1_u32.to_be_bytes().to_vec()),
         );
         // An ACK at once grants a lease of 1 s from that REQUEST.
@@ -966,10 +976,10 @@ fn a_link_lost_and_back_mid_lease_runs_init_reboot_and_keeps_the_address() {
         assert_eq!((sent.source, sent.destination), ([0; 4], [255; 4]));
         assert_eq!(sent.message().fixed.ciaddr, Ipv4Address::new([0; 4]));
         assert_eq!(
-            sent.option(option::REQUESTED_ADDRESS),
+            sent.option(OptionCode::REQUESTED_ADDRESS),
             Some(OFFERED.to_vec())
         );
-        assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
+        assert_eq!(sent.option(OptionCode::SERVER_IDENTIFIER), None);
         assert!(matches!(
             configuration(stack).address,
             AddressState::Dhcp(DhcpState::Rebooting(_))
@@ -1060,10 +1070,10 @@ fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_en
             assert_eq!(sent.kind(), MessageType::Request);
             assert_eq!(sent.message().fixed.ciaddr, Ipv4Address::new([0; 4]));
             assert_eq!(
-                sent.option(option::REQUESTED_ADDRESS),
+                sent.option(OptionCode::REQUESTED_ADDRESS),
                 Some(OFFERED.to_vec())
             );
-            assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
+            assert_eq!(sent.option(OptionCode::SERVER_IDENTIFIER), None);
             // Unanswered, the client keeps asking, and its address stays in
             // use, RFC 2131, 3.7, never confirmed: still REBOOTING, and the
             // lease stays the one the first ACK granted.
@@ -1195,23 +1205,23 @@ fn foreign_and_malformed_messages_are_counted_and_change_nothing() {
         let mut no_server = Reply::new(MessageType::Ack, xid);
         no_server.server = None;
         let mut no_mask = Reply::new(MessageType::Ack, xid);
-        no_mask.options = with(ack_options(), option::SUBNET_MASK, None);
+        no_mask.options = with(ack_options(), OptionCode::SUBNET_MASK, None);
         let mut gapped_mask = Reply::new(MessageType::Ack, xid);
         gapped_mask.options = with(
             ack_options(),
-            option::SUBNET_MASK,
+            OptionCode::SUBNET_MASK,
             Some(vec![255, 0, 255, 0]),
         );
         let mut no_time = Reply::new(MessageType::Ack, xid);
-        no_time.options = with(ack_options(), option::LEASE_TIME, None);
+        no_time.options = with(ack_options(), OptionCode::LEASE_TIME, None);
         let mut zero_time = Reply::new(MessageType::Ack, xid);
-        zero_time.options = with(ack_options(), option::LEASE_TIME, Some(vec![0; 4]));
+        zero_time.options = with(ack_options(), OptionCode::LEASE_TIME, Some(vec![0; 4]));
         let mut far_router = Reply::new(MessageType::Ack, xid);
-        far_router.options = with(ack_options(), option::ROUTER, Some(vec![10, 0, 0, 1]));
+        far_router.options = with(ack_options(), OptionCode::ROUTER, Some(vec![10, 0, 0, 1]));
         let mut ragged_dns = Reply::new(MessageType::Ack, xid);
         ragged_dns.options = with(
             ack_options(),
-            option::DOMAIN_NAME_SERVER,
+            OptionCode::DOMAIN_NAME_SERVER,
             Some(vec![1, 1, 1]),
         );
         let mut broadcast_address = Reply::new(MessageType::Ack, xid);
@@ -1297,10 +1307,10 @@ fn a_duplicate_ack_in_bound_is_unexpected() {
 fn times_of<B>(stack: &mut Stack<B>, t1: Option<u32>, t2: Option<u32>) -> (u64, u64) {
     let mut options = ack_options();
     if let Some(t1) = t1 {
-        options.push((option::RENEWAL_TIME, t1.to_be_bytes().to_vec()));
+        options.push((OptionCode::RENEWAL_TIME, t1.to_be_bytes().to_vec()));
     }
     if let Some(t2) = t2 {
-        options.push((option::REBINDING_TIME, t2.to_be_bytes().to_vec()));
+        options.push((OptionCode::REBINDING_TIME, t2.to_be_bytes().to_vec()));
     }
     bound_with(stack, at(0), options);
     let lease = configuration(stack).lease().unwrap();
@@ -1354,7 +1364,7 @@ fn an_infinite_lease_is_kept_for_its_value() {
         bound_with(
             stack,
             at(0),
-            with(ack_options(), option::LEASE_TIME, Some(vec![0xFF; 4])),
+            with(ack_options(), OptionCode::LEASE_TIME, Some(vec![0xFF; 4])),
         );
         let lease = configuration(stack).lease().unwrap();
         assert_eq!(lease.expires.as_micros(), u64::from(u32::MAX) * 1_000_000);
@@ -1370,7 +1380,7 @@ fn more_dns_servers_than_a_lease_holds_keep_the_first() {
             at(0),
             with(
                 ack_options(),
-                option::DOMAIN_NAME_SERVER,
+                OptionCode::DOMAIN_NAME_SERVER,
                 Some(servers.concat()),
             ),
         );
@@ -1477,7 +1487,7 @@ fn a_router_that_is_no_host_is_none_and_the_next_one_counts() {
         bound_with(
             stack,
             at(0),
-            with(ack_options(), option::ROUTER, Some(vec![0, 0, 0, 0])),
+            with(ack_options(), OptionCode::ROUTER, Some(vec![0, 0, 0, 0])),
         );
         assert_eq!(configuration(stack).ipv4().unwrap().gateway(), None);
     });
@@ -1487,7 +1497,7 @@ fn a_router_that_is_no_host_is_none_and_the_next_one_counts() {
             at(0),
             with(
                 ack_options(),
-                option::ROUTER,
+                OptionCode::ROUTER,
                 Some([[0, 0, 0, 0], SERVER_IP].concat()),
             ),
         );
@@ -1736,7 +1746,7 @@ fn an_ack_already_expired_from_its_request_enables_no_address() {
         let mut ack = Reply::new(MessageType::Ack, xid);
         ack.options = with(
             ack_options(),
-            option::LEASE_TIME,
+            OptionCode::LEASE_TIME,
             Some(1_u32.to_be_bytes().to_vec()),
         );
         assert_eq!(
@@ -1760,7 +1770,7 @@ fn a_late_expired_ack_publishes_no_user_data_before_the_next_tick() {
         let mut ack = Reply::new(MessageType::Ack, xid);
         ack.options = with(
             ack_options(),
-            option::LEASE_TIME,
+            OptionCode::LEASE_TIME,
             Some(1_u32.to_be_bytes().to_vec()),
         );
         give(stack, now, &ack.frame());
@@ -1785,7 +1795,7 @@ fn a_renewal_ack_already_past_its_end_keeps_the_lease_to_its_own_end() {
         let mut ack = Reply::new(MessageType::Ack, xid);
         ack.options = with(
             ack_options(),
-            option::LEASE_TIME,
+            OptionCode::LEASE_TIME,
             Some(100_u32.to_be_bytes().to_vec()),
         );
         assert_eq!(
@@ -1822,7 +1832,7 @@ fn an_ack_with_only_an_early_t2_still_renews_before_it_rebinds() {
             at(0),
             with(
                 ack_options(),
-                option::REBINDING_TIME,
+                OptionCode::REBINDING_TIME,
                 Some(300_u32.to_be_bytes().to_vec()),
             ),
         );

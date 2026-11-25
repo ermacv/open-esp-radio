@@ -8,11 +8,12 @@ use oer_portable_wire::{Error, Reader, Writer};
 use oer_protocols_ieee802_wire::{EtherType, Eui48};
 
 use crate::address::Ipv4Address;
+use crate::dhcp::HardwareType;
 
 /// Length of an ARP packet for IPv4 over Ethernet.
 pub const PACKET_LEN: usize = 28;
 /// ar$hrd: Ethernet.
-const HARDWARE_ETHERNET: u16 = 1;
+const HARDWARE_ETHERNET: u16 = HardwareType::ETHERNET.value() as u16;
 /// ar$hln: a MAC address.
 const HARDWARE_LEN: u8 = 6;
 /// ar$pln: an IPv4 address.

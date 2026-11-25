@@ -1,5 +1,6 @@
 extern crate std;
 
+use oer_protocols_network_wire::ip::IpProtocol;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -30,10 +31,12 @@ use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::EthernetHeader;
 use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
-use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
+use oer_protocols_network_wire::transport::{Ports, UdpHeader};
 
 use oer_portable_wire::Writer;
-use oer_protocols_network_wire::dhcp::{self, DhcpMessage, Fixed, Flags, MessageType, Op, option};
+use oer_protocols_network_wire::dhcp::{
+    self, DhcpMessage, Fixed, Flags, HardwareType, MessageType, Op, OptionCode,
+};
 
 use crate::{
     ConfigurationWatch, EndCause, Ended, MemoryPolicy, Observer, RESERVE_AHEAD, Refusal,
@@ -385,7 +388,7 @@ fn udp_frame(destination_port: u16, data: &[u8]) -> Vec<u8> {
     let pseudo = ipv4_pseudo_header(
         Ipv4Address::new(PEER_IP),
         Ipv4Address::new(OUR_IP),
-        PROTOCOL_UDP,
+        IpProtocol::UDP,
         length,
     );
     let checksum = udp_field(
@@ -408,7 +411,7 @@ fn udp_frame(destination_port: u16, data: &[u8]) -> Vec<u8> {
             total_length: length + 20,
             identification: 1,
             time_to_live: 64,
-            protocol: PROTOCOL_UDP,
+            protocol: IpProtocol::UDP,
             source: Ipv4Address::new(PEER_IP),
             destination: Ipv4Address::new(OUR_IP),
         }
@@ -455,7 +458,7 @@ fn dhcp_reply(kind: MessageType, xid: u32, lease: u32) -> Vec<u8> {
         let [c0, c1, c2, c3, c4, c5] = LOCAL;
         Fixed {
             op: Op::Reply,
-            htype: 1,
+            htype: HardwareType::ETHERNET,
             hlen: 6,
             hops: 0,
             xid,
@@ -469,11 +472,11 @@ fn dhcp_reply(kind: MessageType, xid: u32, lease: u32) -> Vec<u8> {
         }
         .write(&mut writer)
         .unwrap();
-        let options: [(u8, &[u8]); 4] = [
-            (option::MESSAGE_TYPE, &[kind.encoding()]),
-            (option::SERVER_IDENTIFIER, &PEER_IP),
-            (option::SUBNET_MASK, &[255, 255, 255, 0]),
-            (option::LEASE_TIME, &lease.to_be_bytes()),
+        let options: [(OptionCode, &[u8]); 4] = [
+            (OptionCode::MESSAGE_TYPE, &[kind.encoding()]),
+            (OptionCode::SERVER_IDENTIFIER, &PEER_IP),
+            (OptionCode::SUBNET_MASK, &[255, 255, 255, 0]),
+            (OptionCode::LEASE_TIME, &lease.to_be_bytes()),
         ];
         for (code, data) in options {
             dhcp::write_option(&mut writer, code, data).unwrap();
@@ -491,7 +494,7 @@ fn dhcp_reply(kind: MessageType, xid: u32, lease: u32) -> Vec<u8> {
         .with(&ipv4_pseudo_header(
             Ipv4Address::new(PEER_IP),
             Ipv4Address::new(OUR_IP),
-            PROTOCOL_UDP,
+            IpProtocol::UDP,
             udp_length,
         ))
         .with(&frame[34..])

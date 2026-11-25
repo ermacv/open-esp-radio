@@ -6,6 +6,7 @@
 use core::marker::PhantomData;
 use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_network_wire::address::Ipv4Address;
+use oer_protocols_network_wire::ip::IpProtocol;
 
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
@@ -17,11 +18,11 @@ use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header};
 use oer_protocols_network_wire::dhcp;
 use oer_protocols_network_wire::ethernet::{self, EthernetHeader};
-use oer_protocols_network_wire::icmp::{self, Echo, PROTOCOL_ICMP};
+use oer_protocols_network_wire::icmp::{self, Echo};
 use oer_protocols_network_wire::ip::{
     Dscp, IPV4_HEADER_LEN, Ipv4Fields, Ipv4Header, Ipv4VersionIhl,
 };
-use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN, UdpHeader};
+use oer_protocols_network_wire::transport::{Ports, UDP_HEADER_LEN, UdpHeader};
 use oer_protocols_network_wire::udp_frame::UdpFrameTemplate;
 
 use crate::block::{Block, CoreBrand, Group, Pool, Tag};
@@ -1438,7 +1439,7 @@ impl<
             total_length: 0,
             identification: 0,
             time_to_live: TIME_TO_LIVE,
-            protocol: PROTOCOL_UDP,
+            protocol: IpProtocol::UDP,
             source,
             destination: remote.address,
         };
@@ -1833,7 +1834,7 @@ impl<
         // RFC 2131, 2 and 4.1: before its address, a client takes what a
         // server unicasts to the address it offers; the client's own checks
         // decide.
-        let leasing = self.address.client().is_some() && packet.protocol() == PROTOCOL_UDP;
+        let leasing = self.address.client().is_some() && packet.protocol() == IpProtocol::UDP;
         if !ours && !leasing {
             return None;
         }
@@ -1851,14 +1852,14 @@ impl<
             return None;
         }
         let protocol = packet.protocol();
-        if protocol != PROTOCOL_UDP && protocol != PROTOCOL_ICMP {
+        if protocol != IpProtocol::UDP && protocol != IpProtocol::ICMP {
             return None;
         }
         if packet.is_fragment() {
             report(events, || NetEvent::Fragment);
             return None;
         }
-        if protocol == PROTOCOL_ICMP {
+        if protocol == IpProtocol::ICMP {
             self.input_icmp(now, source, destination, packet.payload(), pool, events);
             return None;
         }
@@ -1875,7 +1876,7 @@ impl<
                     .with(&ipv4_pseudo_header(
                         source,
                         destination,
-                        PROTOCOL_UDP,
+                        IpProtocol::UDP,
                         header.length,
                     ))
                     .with(whole)
@@ -2024,7 +2025,7 @@ impl<
         if echo.kind != icmp::MessageType::Echo {
             return Err(IcmpDrop::Other);
         }
-        if echo.code != 0 {
+        if echo.code != icmp::IcmpCode::ECHO {
             return Err(IcmpDrop::Malformed);
         }
         let ipv4 = self
@@ -2401,7 +2402,7 @@ impl<
         peer: Eui48,
         source: Ipv4Address,
         destination: Ipv4Address,
-        protocol: u8,
+        protocol: IpProtocol,
         length: usize,
         writer: &mut Writer<'_>,
     ) -> Option<()> {
@@ -2447,7 +2448,7 @@ impl<
                 total_length: 0,
                 identification: self.identification,
                 time_to_live: TIME_TO_LIVE,
-                protocol: PROTOCOL_UDP,
+                protocol: IpProtocol::UDP,
                 source: message.source,
                 destination: message.destination,
             },
@@ -2479,7 +2480,7 @@ impl<
             peer,
             self.usable(now)?.address(),
             owed.to,
-            PROTOCOL_ICMP,
+            IpProtocol::ICMP,
             owed.block.octets().len(),
             &mut Writer::new(&mut headers),
         )?;
@@ -2621,7 +2622,7 @@ impl<
                 total_length: 0,
                 identification: self.identification,
                 time_to_live: TIME_TO_LIVE,
-                protocol: PROTOCOL_UDP,
+                protocol: IpProtocol::UDP,
                 source,
                 destination: remote.address,
             },

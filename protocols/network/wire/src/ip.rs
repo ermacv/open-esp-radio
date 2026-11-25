@@ -4,6 +4,7 @@
 //! Format); RFC 2474, 3 (Differentiated Services Field). Options and
 //! extension headers are not interpreted; checksums are not checked.
 
+use crate::code::octet_code;
 use oer_portable_wire::Reader;
 
 use crate::address::{Ipv4Address, Ipv6Address};
@@ -27,6 +28,21 @@ pub enum IpError {
     Length,
 }
 
+octet_code! { ip;
+    /// What an IP packet carries: IPv4's Protocol and IPv6's Next Header, any
+    /// octet, some of them named.
+    ///
+    /// SOURCE: IANA Assigned Internet Protocol Numbers.
+    IpProtocol {
+        /// Internet Control Message Protocol.
+        ICMP = 1,
+        /// Transmission Control Protocol.
+        TCP = 6,
+        /// User Datagram Protocol.
+        UDP = 17,
+    }
+}
+
 /// The fields of an IPv4 header with no options, Don't Fragment set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ipv4Fields {
@@ -34,7 +50,7 @@ pub struct Ipv4Fields {
     pub total_length: u16,
     pub identification: u16,
     pub time_to_live: u8,
-    pub protocol: u8,
+    pub protocol: IpProtocol,
     pub source: Ipv4Address,
     pub destination: Ipv4Address,
 }
@@ -68,7 +84,7 @@ impl Ipv4Fields {
         let [time_to_live, protocol, checksum_high, checksum_low] =
             Ipv4Carriage::from_bytes([0; 4])
                 .with_time_to_live(self.time_to_live)
-                .with_protocol(self.protocol)
+                .with_protocol(self.protocol.value())
                 .with_checksum(checksum)
                 .to_bytes();
         let [source0, source1, source2, source3] = self.source.octets();
@@ -209,7 +225,7 @@ oer_portable_wire::bitfield! {
 pub struct Ipv4Header<'a> {
     services: DsField,
     fragment: Ipv4Fragment,
-    protocol: u8,
+    protocol: IpProtocol,
     source: Ipv4Address,
     destination: Ipv4Address,
     payload: &'a [u8],
@@ -269,7 +285,7 @@ impl<'a> Ipv4Header<'a> {
         Ok(Self {
             services: DsField::from_bytes([services]),
             fragment: Ipv4Fragment::from_bytes([fragment_high, fragment_low]),
-            protocol: carriage.protocol(),
+            protocol: IpProtocol::new(carriage.protocol()),
             source,
             destination,
             payload,
@@ -284,7 +300,7 @@ impl<'a> Ipv4Header<'a> {
         Dscp::from_field(self.services.dscp())
     }
 
-    pub const fn protocol(&self) -> u8 {
+    pub const fn protocol(&self) -> IpProtocol {
         self.protocol
     }
 
@@ -314,7 +330,7 @@ impl<'a> Ipv4Header<'a> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ipv6Header<'a> {
     prefix: Ipv6HeaderPrefix,
-    next_header: u8,
+    next_header: IpProtocol,
     source: Ipv6Address,
     destination: Ipv6Address,
     payload: &'a [u8],
@@ -352,7 +368,7 @@ impl<'a> Ipv6Header<'a> {
         let payload = reader.take(payload_len).map_err(|_| IpError::Length)?;
         Ok(Self {
             prefix,
-            next_header: carriage.next_header(),
+            next_header: IpProtocol::new(carriage.next_header()),
             source,
             destination,
             payload,
@@ -368,7 +384,7 @@ impl<'a> Ipv6Header<'a> {
     }
 
     /// The Next Header field; extension headers are not followed.
-    pub const fn next_header(&self) -> u8 {
+    pub const fn next_header(&self) -> IpProtocol {
         self.next_header
     }
 

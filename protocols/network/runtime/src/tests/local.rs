@@ -6,6 +6,7 @@
 extern crate std;
 
 use crate::tests::Room;
+use oer_protocols_network_wire::ip::IpProtocol;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -34,7 +35,7 @@ use oer_protocols_network_wire::arp::Operation;
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header};
 use oer_protocols_network_wire::ethernet::EthernetHeader;
 use oer_protocols_network_wire::ip::{Dscp, Ipv4Header};
-use oer_protocols_network_wire::transport::{PROTOCOL_UDP, UdpHeader};
+use oer_protocols_network_wire::transport::UdpHeader;
 
 use super::{
     BLOCKS, Count, DEPTH, LOCAL, OUR_IP, PEER, PEER_IP, RECEIVED, SIZE, counter, dhcp_messages,
@@ -679,7 +680,7 @@ fn a_refused_offer_does_not_hold_back_the_next_in_the_first_poll() {
                 .with(&ipv4_pseudo_header(
                     Ipv4Address::new(OUR_IP),
                     Ipv4Address::new([192, 0, 2, 255]),
-                    PROTOCOL_UDP,
+                    IpProtocol::UDP,
                     udp.length
                 ))
                 .with(ip.payload())
@@ -1742,11 +1743,11 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
 
 /// The peer's echo request to us.
 fn peer_pings() -> Vec<u8> {
-    use oer_protocols_network_wire::icmp::{Echo, MessageType as Icmp, PROTOCOL_ICMP};
+    use oer_protocols_network_wire::icmp::{Echo, MessageType as Icmp};
     use oer_protocols_network_wire::ip::{DsField, Ipv4Fields};
     let request = Echo {
         kind: Icmp::Echo,
-        code: 0,
+        code: oer_protocols_network_wire::icmp::IcmpCode::ECHO,
         checksum: 0,
         identifier: 1,
         sequence: 1,
@@ -1767,7 +1768,7 @@ fn peer_pings() -> Vec<u8> {
             total_length: u16::try_from(20 + message.len()).unwrap(),
             identification: 1,
             time_to_live: 64,
-            protocol: PROTOCOL_ICMP,
+            protocol: IpProtocol::ICMP,
             source: Ipv4Address::new(PEER_IP),
             destination: Ipv4Address::new(OUR_IP),
         }

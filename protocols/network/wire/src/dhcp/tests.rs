@@ -10,7 +10,7 @@ const CHADDR: [u8; 16] = [2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 fn offer() -> Fixed {
     Fixed {
         op: Op::Reply,
-        htype: 1,
+        htype: HardwareType::ETHERNET,
         hlen: 6,
         hops: 0,
         xid: 0x1234_5678,
@@ -29,9 +29,9 @@ fn written() -> Vec<u8> {
     let mut bytes = vec![0; 300];
     let mut writer = Writer::new(&mut bytes);
     offer().write(&mut writer).unwrap();
-    write_option(&mut writer, option::MESSAGE_TYPE, &[2]).unwrap();
-    writer.u8(option::PAD).unwrap();
-    write_option(&mut writer, option::SERVER_IDENTIFIER, &[192, 0, 2, 1]).unwrap();
+    write_option(&mut writer, OptionCode::MESSAGE_TYPE, &[2]).unwrap();
+    writer.u8(OptionCode::PAD.value()).unwrap();
+    write_option(&mut writer, OptionCode::SERVER_IDENTIFIER, &[192, 0, 2, 1]).unwrap();
     write_end(&mut writer).unwrap();
     let length = writer.written();
     bytes.truncate(length);
@@ -53,20 +53,23 @@ fn a_written_message_reads_back_field_by_field() {
     assert!(message.fixed.flags.broadcast());
     assert_eq!(message.message_type(), Some(MessageType::Offer));
     assert_eq!(
-        message.option(option::SERVER_IDENTIFIER),
+        message.option(OptionCode::SERVER_IDENTIFIER),
         Some(&[192, 0, 2, 1][..])
     );
-    assert_eq!(message.option(option::ROUTER), None);
-    let codes: Vec<u8> = message.options().map(|option| option.unwrap().0).collect();
-    assert_eq!(codes, [option::MESSAGE_TYPE, option::SERVER_IDENTIFIER]);
+    assert_eq!(message.option(OptionCode::ROUTER), None);
+    let codes: Vec<OptionCode> = message.options().map(|option| option.unwrap().0).collect();
+    assert_eq!(
+        codes,
+        [OptionCode::MESSAGE_TYPE, OptionCode::SERVER_IDENTIFIER]
+    );
 }
 
 #[test]
 fn nothing_after_the_end_option_is_an_option() {
     let mut bytes = written();
-    bytes.extend_from_slice(&[option::ROUTER, 4, 1, 2, 3, 4]);
+    bytes.extend_from_slice(&[OptionCode::ROUTER.value(), 4, 1, 2, 3, 4]);
     let message = DhcpMessage::parse(&bytes).unwrap();
-    assert_eq!(message.option(option::ROUTER), None);
+    assert_eq!(message.option(OptionCode::ROUTER), None);
 }
 
 #[test]
@@ -81,7 +84,7 @@ fn an_options_field_without_an_end_ends_with_its_octets() {
 fn an_option_past_the_field_is_malformed_never_a_panic() {
     let mut bytes = written();
     bytes.pop();
-    bytes.extend_from_slice(&[option::ROUTER, 4, 1, 2]);
+    bytes.extend_from_slice(&[OptionCode::ROUTER.value(), 4, 1, 2]);
     assert_eq!(DhcpMessage::parse(&bytes), Err(DhcpError::Option));
     bytes.truncate(bytes.len() - 3);
     assert_eq!(DhcpMessage::parse(&bytes), Err(DhcpError::Option));
@@ -110,13 +113,13 @@ fn a_message_type_of_another_length_is_none_and_an_unknown_one_survives() {
     let mut bytes = vec![0; 260];
     let mut writer = Writer::new(&mut bytes);
     offer().write(&mut writer).unwrap();
-    write_option(&mut writer, option::MESSAGE_TYPE, &[2, 2]).unwrap();
+    write_option(&mut writer, OptionCode::MESSAGE_TYPE, &[2, 2]).unwrap();
     write_end(&mut writer).unwrap();
     assert_eq!(DhcpMessage::parse(&bytes).unwrap().message_type(), None);
     let mut bytes = vec![0; 260];
     let mut writer = Writer::new(&mut bytes);
     offer().write(&mut writer).unwrap();
-    write_option(&mut writer, option::MESSAGE_TYPE, &[42]).unwrap();
+    write_option(&mut writer, OptionCode::MESSAGE_TYPE, &[42]).unwrap();
     assert_eq!(
         DhcpMessage::parse(&bytes).unwrap().message_type(),
         Some(MessageType::Reserved(42))
@@ -130,10 +133,10 @@ fn a_write_that_does_not_fit_writes_nothing() {
     assert_eq!(bytes, [0xAA; HEADER_LEN - 1]);
     let mut bytes = [0xAA; 5];
     let mut writer = Writer::new(&mut bytes);
-    assert!(write_option(&mut writer, option::ROUTER, &[1, 2, 3, 4]).is_err());
+    assert!(write_option(&mut writer, OptionCode::ROUTER, &[1, 2, 3, 4]).is_err());
     assert_eq!(writer.written(), 0);
     assert_eq!(
-        write_option(&mut writer, option::ROUTER, &[0; 256]),
+        write_option(&mut writer, OptionCode::ROUTER, &[0; 256]),
         Err(Error::ValueOutOfRange)
     );
 }

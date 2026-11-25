@@ -5,6 +5,7 @@
 use super::*;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_wire::address::Ipv4Address;
+use oer_protocols_network_wire::ip::IpProtocol;
 
 /// The data of a test datagram of `length` octets, none alike in a row.
 fn octets(length: usize) -> Vec<u8> {
@@ -22,7 +23,7 @@ fn segment(frame: &[u8]) -> (UdpHeader, Vec<u8>, u16) {
     let pseudo = ipv4_pseudo_header(
         Ipv4Address::new(OUR_IP),
         Ipv4Address::new(PEER_IP),
-        PROTOCOL_UDP,
+        IpProtocol::UDP,
         udp.length,
     );
     let unfilled = UdpHeader { checksum: 0, ..udp };

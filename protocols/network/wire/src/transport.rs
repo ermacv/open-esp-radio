@@ -1,15 +1,11 @@
 //! TCP and UDP header bounds and ports.
 //!
-//! SOURCE: RFC 9293, 3.1 (Header Format); RFC 768 (User Datagram Protocol);
-//! protocol numbers from the IANA Assigned Internet Protocol Numbers
-//! registry. Checksums are not checked.
+//! SOURCE: RFC 9293, 3.1 (Header Format); RFC 768 (User Datagram Protocol).
+//! Checksums are not checked.
 
 use oer_portable_wire::Reader;
 
-/// Transmission Control Protocol.
-pub const PROTOCOL_TCP: u8 = 6;
-/// User Datagram Protocol.
-pub const PROTOCOL_UDP: u8 = 17;
+use crate::ip::IpProtocol;
 
 /// A TCP or UDP header that cannot be one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132,10 +128,10 @@ impl Ports {
 
     /// The ports of the TCP or UDP header at the front of `payload`;
     /// `Ok(None)` for another protocol.
-    pub fn parse(protocol: u8, payload: &[u8]) -> Result<Option<Self>, TransportError> {
+    pub fn parse(protocol: IpProtocol, payload: &[u8]) -> Result<Option<Self>, TransportError> {
         let mut reader = Reader::new(payload);
         match protocol {
-            PROTOCOL_TCP => {
+            IpProtocol::TCP => {
                 let [
                     p0,
                     p1,
@@ -166,7 +162,7 @@ impl Ports {
                 }
                 Ok(Some(Self::from_bytes([p0, p1, p2, p3])))
             }
-            PROTOCOL_UDP => {
+            IpProtocol::UDP => {
                 let ports = reader.read().map_err(|_| TransportError::Truncated)?;
                 let numbers =
                     UdpNumbers::from_bytes(reader.read().map_err(|_| TransportError::Truncated)?);
