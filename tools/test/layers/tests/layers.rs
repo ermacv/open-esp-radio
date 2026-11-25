@@ -5988,7 +5988,6 @@ const STEP_BY_PLACE: &[(&str, &str)] = &[
     ("portable/memory/src/waking_spsc", CORRECT),
     ("portable/memory/src/pinned_tx", BY_TRANSMIT),
     ("portable/time/src/deadline.rs", BY_UNOWNED_ROWS),
-    ("portable/time/src/connected_tasks.rs", BY_PUMP),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/receive",
         BY_RECEIVE,
@@ -6296,7 +6295,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         BY_PHY_OWNER,
     ),
     ("chips/family/radio/power/src/modem.rs", 1, BY_PHY_OWNER),
-    ("portable/time/src/connected_tasks.rs", 1, BY_PUMP),
     ("portable/time/src/deadline.rs", 1, BY_UNOWNED_ROWS),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs",
@@ -6724,11 +6722,6 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
         "correct: a guard held to the end of its scope: it restores the interrupt enable",
     ),
     (
-        "portable/time/src/connected_tasks.rs::_publication",
-        1,
-        BY_PUMP,
-    ),
-    (
         "protocols/ieee80211/core/datapath/src/engine.rs::_begun",
         1,
         BY_CONTROLLER,
@@ -6912,7 +6905,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ("chips/family/radio/power/src/modem.rs", 8, BY_PHY_OWNER),
     ("portable/memory/src/init_in_place.rs", 1, IN_ITS_HOME),
     ("portable/memory/src/placed.rs", 2, IN_ITS_HOME),
-    ("portable/time/src/connected_tasks.rs", 3, BY_PUMP),
     ("portable/waker/src/lib.rs", 4, IN_ITS_HOME),
     (
         "protocols/ieee80211/contracts/port/src/lib.rs",
@@ -10404,12 +10396,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unsafe_code",
         4,
         "an ordering instruction / architectural CSR and wait instructions",
-    ),
-    (
-        "portable/time/src/connected_tasks.rs",
-        "async_fn_in_trait",
-        1,
-        "unknown, to read",
     ),
     (
         "portable/time/src/lib.rs",

@@ -47,20 +47,6 @@
 //! [`WindowError`]. The monotonic axis also exposes explicit saturation via
 //! [`Instant::saturating_add`] for deadlines and
 //! [`Instant::saturating_duration_since`]; radio arithmetic never saturates.
-//!
-//! # Features
-//!
-//! The crate has no default feature. Its optional features are:
-//!
-//! - `serde`: [`Duration`] serializes transparently as its `u64`
-//!   microseconds, and deserializes from them;
-//! - `schema`: its `postcard_schema::Schema` is that of `u64`, for a host
-//!   protocol's message lock; it enables `serde`.
-//! - `connected-tasks`: finite task-group shutdown with owned notification
-//!   storage, without a mutex or critical section; adds memory, sync and futures.
-
-#[cfg(feature = "connected-tasks")]
-pub mod connected_tasks;
 
 pub mod deadline;
 pub mod settle;
@@ -130,8 +116,7 @@ impl Instant {
     }
 }
 
-/// A non-negative span of monotonic time, in microseconds. With the
-/// `serde` feature it is written as that `u64`.
+/// A non-negative span of monotonic time, in microseconds.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Duration(u64);
@@ -147,14 +132,14 @@ impl Duration {
 
     /// Construct a duration from milliseconds; every `u32` fits.
     pub const fn from_millis(millis: u32) -> Self {
-        // Every u32 millisecond count fits in u64 microseconds.
-        Self(core::time::Duration::from_millis(millis as u64).as_micros() as u64)
+        // A `u32` of milliseconds is below 2^42 microseconds.
+        Self((millis as u64).saturating_mul(1_000))
     }
 
     /// Construct a duration from seconds; every `u32` fits.
     pub const fn from_secs(secs: u32) -> Self {
-        // Every u32 second count fits in u64 microseconds.
-        Self(core::time::Duration::from_secs(secs as u64).as_micros() as u64)
+        // A `u32` of seconds is below 2^52 microseconds.
+        Self((secs as u64).saturating_mul(1_000_000))
     }
 
     /// Microseconds.
@@ -242,9 +227,6 @@ impl<T: Timer + ?Sized> Timer for &T {
         (**self).wait_until(deadline)
     }
 }
-
-#[cfg(feature = "serde")]
-mod wire;
 
 #[cfg(test)]
 mod tests;

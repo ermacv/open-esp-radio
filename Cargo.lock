@@ -181,7 +181,7 @@ dependencies = [
  "bt-hci-transport",
  "btuuid",
  "embassy-sync",
- "embedded-io 0.7.1",
+ "embedded-io",
  "embedded-io-async",
  "futures-intrusive",
  "heapless 0.9.3",
@@ -193,7 +193,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ffb9819c69cf88877f5eebc8c5ade0ab50f2bf9475bbb3eb714d66c55b0cb64"
 dependencies = [
- "embedded-io 0.7.1",
+ "embedded-io",
  "embedded-io-async",
 ]
 
@@ -756,18 +756,6 @@ dependencies = [
 
 [[package]]
 name = "embedded-io"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef1a6892d9eef45c8fa6b9e0086428a2cca8491aca8f787c534a3d6d0bcb3ced"
-
-[[package]]
-name = "embedded-io"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
-
-[[package]]
-name = "embedded-io"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9eb1aa714776b75c7e67e1da744b81a129b3ff919c8712b5e1b32252c1f07cc7"
@@ -778,7 +766,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2564b9f813c544241430e147d8bc454815ef9ac998878d30cc3055449f7fd4c0"
 dependencies = [
- "embedded-io 0.7.1",
+ "embedded-io",
 ]
 
 [[package]]
@@ -2202,13 +2190,7 @@ dependencies = [
 name = "oer-portable-time"
 version = "0.1.0"
 dependencies = [
- "embassy-futures",
- "oer-portable-memory",
- "oer-portable-sync",
  "oer-portable-time-virtual",
- "postcard",
- "postcard-schema",
- "serde",
  "toml",
 ]
 
@@ -3054,7 +3036,7 @@ dependencies = [
  "bt-hci",
  "bt-hci-transport",
  "clap",
- "embedded-io 0.7.1",
+ "embedded-io",
  "embedded-io-async",
  "libc",
  "oer-protocols-bluetooth-hci",
@@ -3487,8 +3469,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6764c3b5dd454e283a30e6dfe78e9b31096d9e32036b5d1eaac7a6119ccb9a24"
 dependencies = [
  "cobs",
- "embedded-io 0.4.0",
- "embedded-io 0.6.1",
  "heapless 0.7.17",
  "serde",
 ]

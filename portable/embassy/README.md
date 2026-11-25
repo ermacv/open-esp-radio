@@ -18,9 +18,7 @@ chip PHY and the runtimes take as an `oer_portable_time::Timer`; chip PHY remain
 executor-independent.
 
 Final memory profiles, static claims, IRQ binding and whole-radio lifecycles
-belong to the integrating image (`examples/`, `hil/images/`). Finite
-task-group shutdown is [`oer-portable-cooperate`](../cooperate/)'s
-`connected_tasks`; monitor handoffs are runtime code in
-[`ieee80211/runtime`](../../protocols/ieee80211/runtime/). None of them is an
-executor binding. An executor-free service never depends on an adapter. The
+belong to the integrating image (`examples/`, `hil/images/`). Monitor handoffs
+are runtime code in [`ieee80211/runtime`](../../protocols/ieee80211/runtime/).
+None of them is an executor binding. An executor-free service never depends on an adapter. The
 [architecture](../../docs/architecture.md) defines the ownership direction.
