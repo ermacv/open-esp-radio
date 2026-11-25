@@ -7103,21 +7103,10 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ),
     ("protocols/network/core/src/dhcp.rs", 3, BY_TYPES),
     ("protocols/network/core/src/interface.rs", 4, BY_TYPES),
-    ("protocols/network/wire/src/arp.rs", 3, BY_FINAL_CRATES),
-    ("protocols/network/wire/src/checksum.rs", 3, BY_FINAL_CRATES),
-    ("protocols/network/wire/src/dhcp.rs", 3, BY_FINAL_CRATES),
-    ("protocols/network/wire/src/ethernet.rs", 2, BY_FINAL_CRATES),
-    ("protocols/network/wire/src/icmp.rs", 6, BY_FINAL_CRATES),
-    ("protocols/network/wire/src/ip.rs", 5, BY_FINAL_CRATES),
     (
-        "protocols/network/wire/src/transport.rs",
-        13,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/wire/src/udp_frame.rs",
-        5,
-        BY_FINAL_CRATES,
+        "protocols/network/wire/src/checksum.rs",
+        2,
+        "correct: the sum's words are numbers made of two octets, not a format (RFC 1071, 1)",
     ),
 ];
 
@@ -8816,10 +8805,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     (
         "protocols/network/runtime/src/socket.rs::Socket.inbound",
         BY_PUMP,
-    ),
-    (
-        "protocols/network/wire/src/checksum.rs::Checksum.odd",
-        BY_FINAL_CRATES,
     ),
     (
         "protocols/radio/port/src/pool/fifo.rs::Place.ticket",
@@ -10767,12 +10752,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::type_complexity",
         1,
         "the service's end hands on each owner it held",
-    ),
-    (
-        "protocols/network/wire/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
     ),
     (
         "protocols/radio/port/src/conformance.rs",

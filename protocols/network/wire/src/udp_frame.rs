@@ -9,20 +9,23 @@
 //! Checksum at 10); RFC 768 (Length at octet 4, Checksum at 6, the pseudo
 //! header); RFC 1071 (the sum).
 
-use crate::checksum::{Checksum, ipv4_pseudo_header, udp_field};
+use oer_portable_wire::PrefixLength;
+
+use crate::checksum::{Checksum, ChecksumField, ipv4_pseudo_header, udp_field};
 use crate::ethernet::{self, EthernetHeader};
-use crate::ip::{IPV4_HEADER_LEN, Ipv4Fields};
-use crate::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN, UdpHeader};
+use crate::ip::{IPV4_HEADER_LEN, Ipv4Fields, Ipv4Numbers};
+use crate::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN, UdpHeader, UdpNumbers};
 
 /// The octets of the three headers.
 pub const UDP_FRAME_HEADERS: usize = ethernet::HEADER_LEN + IPV4_HEADER_LEN + UDP_HEADER_LEN;
 
 const IP_AT: usize = ethernet::HEADER_LEN;
-const TOTAL_LENGTH_AT: usize = IP_AT + 2;
-const IDENTIFICATION_AT: usize = IP_AT + 4;
+/// The total length and the identification.
+const IP_NUMBERS_AT: usize = IP_AT + 2;
 const IP_CHECKSUM_AT: usize = IP_AT + 10;
 const UDP_AT: usize = IP_AT + IPV4_HEADER_LEN;
-const UDP_LENGTH_AT: usize = UDP_AT + 4;
+/// The length and the checksum.
+const UDP_NUMBERS_AT: usize = UDP_AT + 4;
 const UDP_CHECKSUM_AT: usize = UDP_AT + 6;
 
 /// A datagram's data does not fit the lengths' fields.
@@ -91,17 +94,26 @@ impl UdpFrameTemplate {
         let udp_length =
             u16::try_from(UDP_HEADER_LEN.saturating_add(length)).map_err(|_| TooLong)?;
         let total_length = udp_length
-            .checked_add(IPV4_HEADER_LEN as u16)
+            .checked_add(
+                const { PrefixLength::<IPV4_HEADER_LEN>::constant::<IPV4_HEADER_LEN>().to_u16() },
+            )
             .ok_or(TooLong)?;
         *head = self.octets;
-        let total = total_length.to_be_bytes();
-        let id = identification.to_be_bytes();
-        let udp = udp_length.to_be_bytes();
-        let checksum = self.ip.with(&total).with(&id).finish().to_be_bytes();
-        put(head, TOTAL_LENGTH_AT, total);
-        put(head, IDENTIFICATION_AT, id);
-        put(head, IP_CHECKSUM_AT, checksum);
-        put(head, UDP_LENGTH_AT, udp);
+        let ip = Ipv4Numbers::from_bytes([0; 4])
+            .with_total_length(total_length)
+            .with_identification(identification)
+            .to_bytes();
+        // Its checksum is zero until `close`, and adds nothing to the sum.
+        let udp = UdpNumbers::from_bytes([0; 4])
+            .with_length(udp_length)
+            .to_bytes();
+        put(head, IP_NUMBERS_AT, ip);
+        put(
+            head,
+            IP_CHECKSUM_AT,
+            checksum_octets(self.ip.with(&ip).finish()),
+        );
+        put(head, UDP_NUMBERS_AT, udp);
         // The length is in the pseudo header and the header both.
         Ok(self.udp.with(&udp).with(&udp))
     }
@@ -109,8 +121,19 @@ impl UdpFrameTemplate {
     /// Write the UDP checksum `sum` finishes into `head`, once the data it
     /// covers is summed.
     pub fn close(head: &mut [u8; UDP_FRAME_HEADERS], sum: Checksum) {
-        put(head, UDP_CHECKSUM_AT, udp_field(sum.finish()).to_be_bytes());
+        put(
+            head,
+            UDP_CHECKSUM_AT,
+            checksum_octets(udp_field(sum.finish())),
+        );
     }
+}
+
+/// A checksum field's octets.
+const fn checksum_octets(checksum: u16) -> [u8; 2] {
+    ChecksumField::from_bytes([0; 2])
+        .with_value(checksum)
+        .to_bytes()
 }
 
 /// `octets` at `at`, a constant offset whose field lies inside the

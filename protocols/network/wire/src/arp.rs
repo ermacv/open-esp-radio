@@ -23,32 +23,31 @@ pub enum ArpError {
     Truncated,
 }
 
-/// ar$op: what the packet does.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Operation {
-    /// ares_op$REQUEST.
-    Request,
-    /// ares_op$REPLY.
-    Reply,
-    /// Another registered operation, which this codec does not interpret.
-    Other(u16),
+oer_portable_wire::bitfield! {
+    /// ar$op: what the packet does.
+    /// SOURCE: RFC 826 (Definitions).
+    pub enum Operation: u16 {
+        /// ares_op$REQUEST.
+        Request = 1,
+        /// ares_op$REPLY.
+        Reply = 2,
+    }
 }
 
-impl Operation {
-    const fn from_number(number: u16) -> Self {
-        match number {
-            1 => Self::Request,
-            2 => Self::Reply,
-            other => Self::Other(other),
-        }
-    }
-
-    const fn number(self) -> u16 {
-        match self {
-            Self::Request => 1,
-            Self::Reply => 2,
-            Self::Other(other) => other,
-        }
+oer_portable_wire::bitfield! {
+    /// The fixed fields, before the addresses.
+    /// SOURCE: RFC 826 (Packet format).
+    struct Fixed[8] (big) {
+        /// ar$hrd.
+        hardware, with_hardware: {u16} = 48..64;
+        /// ar$pro.
+        protocol, with_protocol: {u16} = 32..48;
+        /// ar$hln.
+        hardware_length, with_hardware_length: {u8} = 24..32;
+        /// ar$pln.
+        protocol_length, with_protocol_length: {u8} = 16..24;
+        /// ar$op.
+        operation, with_operation: {u16} = 0..16;
     }
 }
 
@@ -75,21 +74,11 @@ impl Arp {
     /// they announce, do not fit.
     pub fn parse(payload: &[u8]) -> Result<Option<Self>, ArpError> {
         let mut reader = Reader::new(payload);
-        let fixed = reader.array::<8>().map_err(|_| ArpError::Truncated)?;
-        let [
-            hardware_high,
-            hardware_low,
-            protocol_high,
-            protocol_low,
-            hardware_len,
-            protocol_len,
-            operation_high,
-            operation_low,
-        ] = *fixed;
-        if u16::from_be_bytes([hardware_high, hardware_low]) != HARDWARE_ETHERNET
-            || EtherType::new(u16::from_be_bytes([protocol_high, protocol_low])) != EtherType::IPV4
-            || hardware_len != HARDWARE_LEN
-            || protocol_len != PROTOCOL_LEN
+        let fixed = Fixed::from_bytes(reader.read().map_err(|_| ArpError::Truncated)?);
+        if fixed.hardware() != HARDWARE_ETHERNET
+            || EtherType::new(fixed.protocol()) != EtherType::IPV4
+            || fixed.hardware_length() != HARDWARE_LEN
+            || fixed.protocol_length() != PROTOCOL_LEN
         {
             return Ok(None);
         }
@@ -101,7 +90,7 @@ impl Arp {
         let (sender_hardware, sender_protocol) = read(&mut reader)?;
         let (target_hardware, target_protocol) = read(&mut reader)?;
         Ok(Some(Self {
-            operation: Operation::from_number(u16::from_be_bytes([operation_high, operation_low])),
+            operation: Operation::from_encoding(fixed.operation()),
             sender_hardware,
             sender_protocol,
             target_hardware,
@@ -115,10 +104,13 @@ impl Arp {
     /// [`Error`] when `buffer` is shorter than [`PACKET_LEN`].
     pub fn write(&self, buffer: &mut [u8]) -> Result<(), Error> {
         let mut writer = Writer::new(buffer);
-        writer.u16_be(HARDWARE_ETHERNET)?;
-        writer.u16_be(EtherType::IPV4.value())?;
-        writer.write(&[HARDWARE_LEN, PROTOCOL_LEN])?;
-        writer.u16_be(self.operation.number())?;
+        let fixed = Fixed::from_bytes([0; 8])
+            .with_hardware(HARDWARE_ETHERNET)
+            .with_protocol(EtherType::IPV4.value())
+            .with_hardware_length(HARDWARE_LEN)
+            .with_protocol_length(PROTOCOL_LEN)
+            .with_operation(self.operation.encoding());
+        writer.write(&fixed.to_bytes())?;
         writer.write(&self.sender_hardware)?;
         writer.write(&self.sender_protocol)?;
         writer.write(&self.target_hardware)?;
@@ -153,7 +145,7 @@ mod tests {
         let mut bytes = REQUEST;
         bytes[7] = 9;
         let packet = Arp::parse(&bytes).unwrap().unwrap();
-        assert_eq!(packet.operation, Operation::Other(9));
+        assert_eq!(packet.operation, Operation::Reserved(9));
         let mut written = [0; PACKET_LEN];
         packet.write(&mut written).unwrap();
         assert_eq!(written, bytes);

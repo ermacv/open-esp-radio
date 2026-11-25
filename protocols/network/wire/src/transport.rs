@@ -30,6 +30,24 @@ oer_portable_wire::bitfield! {
     }
 }
 
+oer_portable_wire::bitfield! {
+    /// The ports, which begin a TCP and a UDP header alike.
+    /// SOURCE: RFC 9293, 3.1 (Header Format); RFC 768 (Format).
+    struct PortFields[4] (big) {
+        source, with_source: {u16} = 16..32;
+        destination, with_destination: {u16} = 0..16;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// UDP's Length and Checksum.
+    /// SOURCE: RFC 768 (Format).
+    pub(crate) struct UdpNumbers[4] (big) {
+        pub(crate) length, with_length: {u16} = 16..32;
+        pub(crate) checksum, with_checksum: {u16} = 0..16;
+    }
+}
+
 /// Length of the UDP header.
 pub const UDP_HEADER_LEN: usize = 8;
 
@@ -50,32 +68,18 @@ impl UdpHeader {
     /// or past the octets given.
     pub fn parse(datagram: &[u8]) -> Result<(Self, &[u8]), TransportError> {
         let mut reader = Reader::new(datagram);
-        let header = reader
-            .array::<UDP_HEADER_LEN>()
-            .map_err(|_| TransportError::Truncated)?;
-        let [
-            source_high,
-            source_low,
-            destination_high,
-            destination_low,
-            length_high,
-            length_low,
-            checksum_high,
-            checksum_low,
-        ] = *header;
-        let length = u16::from_be_bytes([length_high, length_low]);
+        let ports = reader.read().map_err(|_| TransportError::Truncated)?;
+        let numbers = UdpNumbers::from_bytes(reader.read().map_err(|_| TransportError::Truncated)?);
+        let length = numbers.length();
         let data = usize::from(length)
             .checked_sub(UDP_HEADER_LEN)
             .and_then(|data| reader.remaining().get(..data))
             .ok_or(TransportError::Length)?;
         Ok((
             Self {
-                ports: Ports {
-                    source: u16::from_be_bytes([source_high, source_low]),
-                    destination: u16::from_be_bytes([destination_high, destination_low]),
-                },
+                ports: Ports::from_bytes(ports),
                 length,
-                checksum: u16::from_be_bytes([checksum_high, checksum_low]),
+                checksum: numbers.checksum(),
             },
             data,
         ))
@@ -84,8 +88,10 @@ impl UdpHeader {
     /// The header's octets.
     pub const fn to_bytes(&self) -> [u8; UDP_HEADER_LEN] {
         let [source_high, source_low, destination_high, destination_low] = self.ports.to_bytes();
-        let [length_high, length_low] = self.length.to_be_bytes();
-        let [checksum_high, checksum_low] = self.checksum.to_be_bytes();
+        let [length_high, length_low, checksum_high, checksum_low] = UdpNumbers::from_bytes([0; 4])
+            .with_length(self.length)
+            .with_checksum(self.checksum)
+            .to_bytes();
         [
             source_high,
             source_low,
@@ -109,9 +115,19 @@ pub struct Ports {
 impl Ports {
     /// The four octets of both ports, as they lie in the header.
     pub const fn to_bytes(self) -> [u8; 4] {
-        let [source_high, source_low] = self.source.to_be_bytes();
-        let [destination_high, destination_low] = self.destination.to_be_bytes();
-        [source_high, source_low, destination_high, destination_low]
+        PortFields::from_bytes([0; 4])
+            .with_source(self.source)
+            .with_destination(self.destination)
+            .to_bytes()
+    }
+
+    /// The ports these four octets encode.
+    const fn from_bytes(octets: [u8; 4]) -> Self {
+        let fields = PortFields::from_bytes(octets);
+        Self {
+            source: fields.source(),
+            destination: fields.destination(),
+        }
     }
 
     /// The ports of the TCP or UDP header at the front of `payload`;
@@ -120,12 +136,11 @@ impl Ports {
         let mut reader = Reader::new(payload);
         match protocol {
             PROTOCOL_TCP => {
-                let header = reader.read::<20>().map_err(|_| TransportError::Truncated)?;
                 let [
-                    source_high,
-                    source_low,
-                    destination_high,
-                    destination_low,
+                    p0,
+                    p1,
+                    p2,
+                    p3,
                     _,
                     _,
                     _,
@@ -142,38 +157,24 @@ impl Ports {
                     _,
                     _,
                     _,
-                ] = header;
+                ] = reader.read::<20>().map_err(|_| TransportError::Truncated)?;
                 let header_len = usize::from(TcpDataOffset::from_bytes([offset]).words())
                     .checked_mul(4)
                     .ok_or(TransportError::Length)?;
                 if header_len < 20 || header_len > payload.len() {
                     return Err(TransportError::Length);
                 }
-                Ok(Some(Self {
-                    source: u16::from_be_bytes([source_high, source_low]),
-                    destination: u16::from_be_bytes([destination_high, destination_low]),
-                }))
+                Ok(Some(Self::from_bytes([p0, p1, p2, p3])))
             }
             PROTOCOL_UDP => {
-                let header = reader.read::<8>().map_err(|_| TransportError::Truncated)?;
-                let [
-                    source_high,
-                    source_low,
-                    destination_high,
-                    destination_low,
-                    length_high,
-                    length_low,
-                    _,
-                    _,
-                ] = header;
-                let length = usize::from(u16::from_be_bytes([length_high, length_low]));
+                let ports = reader.read().map_err(|_| TransportError::Truncated)?;
+                let numbers =
+                    UdpNumbers::from_bytes(reader.read().map_err(|_| TransportError::Truncated)?);
+                let length = usize::from(numbers.length());
                 if length < 8 || length > payload.len() {
                     return Err(TransportError::Length);
                 }
-                Ok(Some(Self {
-                    source: u16::from_be_bytes([source_high, source_low]),
-                    destination: u16::from_be_bytes([destination_high, destination_low]),
-                }))
+                Ok(Some(Self::from_bytes(ports)))
             }
             _ => Ok(None),
         }
