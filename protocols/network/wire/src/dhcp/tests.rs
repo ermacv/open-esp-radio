@@ -16,10 +16,10 @@ fn offer() -> Fixed {
         xid: 0x1234_5678,
         secs: 3,
         flags: Flags::from_bytes([0; 2]).with_broadcast(true),
-        ciaddr: [0; 4],
-        yiaddr: [192, 0, 2, 50],
-        siaddr: [192, 0, 2, 1],
-        giaddr: [0; 4],
+        ciaddr: Ipv4Address::new([0; 4]),
+        yiaddr: Ipv4Address::new([192, 0, 2, 50]),
+        siaddr: Ipv4Address::new([192, 0, 2, 1]),
+        giaddr: Ipv4Address::new([0; 4]),
         chaddr: CHADDR,
     }
 }

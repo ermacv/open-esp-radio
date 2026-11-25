@@ -1,6 +1,7 @@
-use super::{EtherType, EthernetHeader, HEADER_LEN};
+use super::{EthernetHeader, HEADER_LEN};
 use crate::vlan::{TAG_LEN, VlanTag};
 use oer_portable_wire::{Error, Writer};
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 
 const FRAME: [u8; 18] = [
     0x02, 0x11, 0x22, 0x33, 0x44, 0x55, // destination
@@ -12,8 +13,14 @@ const FRAME: [u8; 18] = [
 #[test]
 fn a_header_reads_its_addresses_and_type_and_lends_the_payload() {
     let (header, payload) = EthernetHeader::parse(&FRAME).unwrap();
-    assert_eq!(header.destination, [0x02, 0x11, 0x22, 0x33, 0x44, 0x55]);
-    assert_eq!(header.source, [0x02, 0x66, 0x77, 0x88, 0x99, 0xaa]);
+    assert_eq!(
+        header.destination,
+        Eui48::new([0x02, 0x11, 0x22, 0x33, 0x44, 0x55])
+    );
+    assert_eq!(
+        header.source,
+        Eui48::new([0x02, 0x66, 0x77, 0x88, 0x99, 0xaa])
+    );
     assert_eq!(header.ether_type, EtherType::IPV4);
     assert_eq!(payload, &[0x45, 0x00, 0x00, 0x14]);
     assert_eq!(header.to_bytes(), FRAME[..HEADER_LEN]);
@@ -42,17 +49,6 @@ fn a_header_writes_its_octets_or_nothing() {
     let mut writer = Writer::new(&mut short);
     assert!(header.write(&mut writer).is_err());
     assert_eq!(short, [0xee; 13], "a refused write leaves the buffer");
-}
-
-#[test]
-fn ether_types_tell_types_from_lengths_and_name_vlan_tags() {
-    assert!(EtherType::new(0x0600).is_type());
-    assert!(!EtherType::new(0x05dc).is_type());
-    assert!(EtherType::VLAN.is_vlan_tag());
-    assert!(EtherType::PROVIDER_VLAN.is_vlan_tag());
-    assert!(!EtherType::IPV6.is_vlan_tag());
-    assert_eq!(EtherType::IPV6.value(), 0x86dd);
-    assert_eq!(EtherType::ARP.value(), 0x0806);
 }
 
 #[test]

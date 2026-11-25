@@ -1,5 +1,7 @@
 extern crate std;
 
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
+use oer_protocols_network_wire::address::Ipv4Address;
 use std::vec;
 use std::vec::Vec;
 
@@ -7,7 +9,7 @@ use oer_portable_events::EventSink;
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
-use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
+use oer_protocols_network_wire::ethernet::EthernetHeader;
 use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
@@ -112,7 +114,7 @@ impl oer_protocols_network_port::EthernetFrame for Held {
         Ok(oer_protocols_network_port::EthernetFrameView {
             destination: header.destination,
             source: header.source,
-            ether_type: header.ether_type.value(),
+            ether_type: header.ether_type,
             payload,
         })
     }
@@ -226,9 +228,8 @@ impl FramePort for Port {
         let frame = slot.get(..length).expect("the frame fits its room");
         let (ethernet, rest) = oer_protocols_network_wire::ethernet::EthernetHeader::parse(frame)
             .expect("a written frame starts with its Ethernet header");
-        let written = (ethernet.ether_type
-            == oer_protocols_network_wire::ethernet::EtherType::IPV4)
-            .then(|| {
+        let written =
+            (ethernet.ether_type == oer_protocols_ieee802_wire::EtherType::IPV4).then(|| {
                 oer_protocols_network_wire::ip::Ipv4Header::parse(rest)
                     .expect("an IPv4 frame's header parses")
                     .dscp()
@@ -247,7 +248,14 @@ fn at(millis: u32) -> Instant {
 }
 
 fn interface(address: [u8; 4], prefix: u8, gateway: Option<[u8; 4]>) -> Interface {
-    Interface::new(LOCAL, address, prefix, gateway, 1500).unwrap()
+    Interface::new(
+        Eui48::new(LOCAL),
+        Ipv4Address::new(address),
+        prefix,
+        gateway.map(Ipv4Address::new),
+        1500,
+    )
+    .unwrap()
 }
 
 fn best_effort() -> Dscp {
@@ -332,7 +340,7 @@ impl Passes {
 
 fn peer() -> Remote {
     Remote {
-        address: PEER_IP,
+        address: Ipv4Address::new(PEER_IP),
         port: 7,
     }
 }
@@ -340,11 +348,11 @@ fn peer() -> Remote {
 fn arp_frame(operation: Operation, sender: ([u8; 6], [u8; 4]), target: [u8; 4]) -> Vec<u8> {
     let mut frame = EthernetHeader {
         destination: if operation == Operation::Request {
-            [0xFF; 6]
+            Eui48::new([0xFF; 6])
         } else {
-            LOCAL
+            Eui48::new(LOCAL)
         },
-        source: sender.0,
+        source: Eui48::new(sender.0),
         ether_type: EtherType::ARP,
     }
     .to_bytes()
@@ -352,10 +360,10 @@ fn arp_frame(operation: Operation, sender: ([u8; 6], [u8; 4]), target: [u8; 4]) 
     let mut packet = [0; arp::PACKET_LEN];
     Arp {
         operation,
-        sender_hardware: sender.0,
-        sender_protocol: sender.1,
-        target_hardware: LOCAL,
-        target_protocol: target,
+        sender_hardware: Eui48::new(sender.0),
+        sender_protocol: Ipv4Address::new(sender.1),
+        target_hardware: Eui48::new(LOCAL),
+        target_protocol: Ipv4Address::new(target),
     }
     .write(&mut packet)
     .unwrap();
@@ -373,7 +381,12 @@ fn udp_frame(source_port: u16, destination_port: u16, data: &[u8]) -> Vec<u8> {
         length,
         checksum: 0,
     };
-    let pseudo = ipv4_pseudo_header(PEER_IP, OUR_IP, PROTOCOL_UDP, length);
+    let pseudo = ipv4_pseudo_header(
+        Ipv4Address::new(PEER_IP),
+        Ipv4Address::new(OUR_IP),
+        PROTOCOL_UDP,
+        length,
+    );
     let checksum = udp_field(
         Checksum::new()
             .with(&pseudo)
@@ -382,8 +395,8 @@ fn udp_frame(source_port: u16, destination_port: u16, data: &[u8]) -> Vec<u8> {
             .finish(),
     );
     let mut frame = EthernetHeader {
-        destination: LOCAL,
-        source: PEER,
+        destination: Eui48::new(LOCAL),
+        source: Eui48::new(PEER),
         ether_type: EtherType::IPV4,
     }
     .to_bytes()
@@ -395,8 +408,8 @@ fn udp_frame(source_port: u16, destination_port: u16, data: &[u8]) -> Vec<u8> {
             identification: 1,
             time_to_live: 64,
             protocol: PROTOCOL_UDP,
-            source: PEER_IP,
-            destination: OUR_IP,
+            source: Ipv4Address::new(PEER_IP),
+            destination: Ipv4Address::new(OUR_IP),
         }
         .to_bytes(),
     );
@@ -461,15 +474,21 @@ fn running<B: core::fmt::Debug>(state: CommandState<B>) -> crate::CommandId<B> {
 #[test]
 fn an_interface_refuses_what_cannot_be() {
     assert_eq!(
-        Interface::new(LOCAL, OUR_IP, 33, None, 1500),
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 33, None, 1500),
         Err(InterfaceError::Prefix(33))
     );
     assert_eq!(
-        Interface::new(LOCAL, OUR_IP, 24, None, 67),
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 67),
         Err(InterfaceError::Mtu(67))
     );
     assert_eq!(
-        Interface::new(LOCAL, OUR_IP, 24, Some([198, 51, 100, 1]), 1500),
+        Interface::new(
+            Eui48::new(LOCAL),
+            Ipv4Address::new(OUR_IP),
+            24,
+            Some(Ipv4Address::new([198, 51, 100, 1])),
+            1500
+        ),
         Err(InterfaceError::Gateway)
     );
 }
@@ -487,10 +506,10 @@ fn a_datagram_to_an_unknown_neighbor_holds_a_block_and_no_port_room() {
             .transmit(at(0), demand.grant(), unproduced, &())
             .unwrap();
         let (header, payload) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
-        assert_eq!(header.destination, [0xFF; 6]);
+        assert_eq!(header.destination, Eui48::new([0xFF; 6]));
         let asked = Arp::parse(payload).unwrap().unwrap();
         assert_eq!(asked.operation, Operation::Request);
-        assert_eq!(asked.target_protocol, PEER_IP);
+        assert_eq!(asked.target_protocol, Ipv4Address::new(PEER_IP));
         assert!(stack.poll_demand(at(0)).is_none(), "nothing to send yet");
     });
 }
@@ -507,7 +526,7 @@ fn a_reply_releases_the_datagram_and_its_frame_is_whole() {
         stack.input(at(1), &reply, &mut ());
         let demand = stack.poll_demand(at(1)).unwrap();
         assert_eq!(demand.ready().class, Class::Data);
-        assert_eq!(demand.ready().peer, PEER);
+        assert_eq!(demand.ready().peer, Eui48::new(PEER));
         assert_eq!(demand.ready().flow, Some(0));
         assert_eq!(demand.ready().dscp, dscp);
         stack
@@ -515,15 +534,23 @@ fn a_reply_releases_the_datagram_and_its_frame_is_whole() {
             .unwrap();
         let frame = &stack.port_mut().sent[1];
         let (ethernet, payload) = EthernetHeader::parse(frame).unwrap();
-        assert_eq!((ethernet.destination, ethernet.source), (PEER, LOCAL));
+        assert_eq!(
+            (ethernet.destination, ethernet.source),
+            (Eui48::new(PEER), Eui48::new(LOCAL))
+        );
         let packet = Ipv4Header::parse(payload).unwrap();
         assert!(Checksum::new().with(&payload[..20]).verifies());
-        assert_eq!(packet.addresses()[4..], PEER_IP);
+        assert_eq!(packet.destination().octets(), PEER_IP);
         assert_eq!(packet.dscp(), dscp);
         let (udp, data) = UdpHeader::parse(packet.payload()).unwrap();
         assert_eq!(data, b"hello");
         assert_eq!((udp.ports.source, udp.ports.destination), (5000, 7));
-        let pseudo = ipv4_pseudo_header(OUR_IP, PEER_IP, PROTOCOL_UDP, udp.length);
+        let pseudo = ipv4_pseudo_header(
+            Ipv4Address::new(OUR_IP),
+            Ipv4Address::new(PEER_IP),
+            PROTOCOL_UDP,
+            udp.length,
+        );
         assert!(
             Checksum::new()
                 .with(&pseudo)
@@ -541,7 +568,7 @@ fn a_datagram_beyond_the_network_goes_through_the_gateway() {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"far");
         let far = Remote {
-            address: [198, 51, 100, 1],
+            address: Ipv4Address::new([198, 51, 100, 1]),
             port: 7,
         };
         let _command = stack.send(at(0), &socket, far, block).unwrap();
@@ -549,7 +576,7 @@ fn a_datagram_beyond_the_network_goes_through_the_gateway() {
         let (_, payload) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
         assert_eq!(
             Arp::parse(payload).unwrap().unwrap().target_protocol,
-            GATEWAY
+            Ipv4Address::new(GATEWAY)
         );
     });
 }
@@ -560,7 +587,7 @@ fn no_route_refuses_and_returns_the_block() {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"far");
         let far = Remote {
-            address: [198, 51, 100, 1],
+            address: Ipv4Address::new([198, 51, 100, 1]),
             port: 7,
         };
         let refused = stack.send(at(0), &socket, far, block).unwrap_err();
@@ -793,12 +820,12 @@ fn a_changed_neighbor_reaches_a_datagram_that_waits() {
         let moved = arp_frame(Operation::Reply, (MOVED, PEER_IP), OUR_IP);
         stack.input(at(2), &moved, &mut ());
         let demand = stack.poll_demand(at(2)).unwrap();
-        assert_eq!(demand.ready().peer, MOVED);
+        assert_eq!(demand.ready().peer, Eui48::new(MOVED));
         stack
             .transmit(at(2), demand.grant(), unproduced, &())
             .unwrap();
         let (header, _) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
-        assert_eq!(header.destination, MOVED);
+        assert_eq!(header.destination, Eui48::new(MOVED));
     });
 }
 
@@ -870,7 +897,13 @@ fn every_ready_piece_of_work_is_listed_with_who_it_is_for() {
                 )
             })
             .collect();
-        assert_eq!(listed, [(Some(0), PEER, 46), (Some(1), PEER, 0)]);
+        assert_eq!(
+            listed,
+            [
+                (Some(0), Eui48::new(PEER), 46),
+                (Some(1), Eui48::new(PEER), 0)
+            ]
+        );
     });
 }
 
@@ -950,9 +983,13 @@ fn a_datagram_never_asks_anothers_neighbor_away() {
         let second = stack.open(5001, best_effort()).unwrap();
         let remote = |address| Remote { address, port: 7 };
         let block = filled(stack.pool(), b"one");
-        let one = stack.send(at(0), &first, remote(hops[0]), block).unwrap();
+        let one = stack
+            .send(at(0), &first, remote(Ipv4Address::new(hops[0])), block)
+            .unwrap();
         let block = filled(stack.pool(), b"two");
-        let two = stack.send(at(0), &second, remote(hops[1]), block).unwrap();
+        let two = stack
+            .send(at(0), &second, remote(Ipv4Address::new(hops[1])), block)
+            .unwrap();
         for hop in &hops[..2] {
             send_next(stack, at(0)).unwrap();
             let reply = arp_frame(Operation::Reply, (PEER, *hop), OUR_IP);
@@ -961,7 +998,7 @@ fn a_datagram_never_asks_anothers_neighbor_away() {
         // Both neighbors are known and needed: neither is evicted for a third.
         let block = filled(stack.pool(), b"three");
         let refused = stack
-            .send(at(2), &second, remote(hops[2]), block)
+            .send(at(2), &second, remote(Ipv4Address::new(hops[2])), block)
             .unwrap_err();
         assert_eq!(refused.reason, SendRefusal::NeighborsFull);
         stack.tick(at(2), &mut ());
@@ -970,7 +1007,12 @@ fn a_datagram_never_asks_anothers_neighbor_away() {
         assert_eq!(finished(stack.take_result(one)), Outcome::Accepted);
         assert_eq!(finished(stack.take_result(two)), Outcome::Accepted);
         let three = stack
-            .send(at(3), &second, remote(hops[2]), refused.block)
+            .send(
+                at(3),
+                &second,
+                remote(Ipv4Address::new(hops[2])),
+                refused.block,
+            )
             .unwrap();
         send_next(stack, at(3)).unwrap();
         let reply = arp_frame(Operation::Reply, (PEER, hops[2]), OUR_IP);
@@ -1024,7 +1066,10 @@ fn a_grant_chosen_for_one_address_does_not_go_to_another() {
             Err(Unsent::Stale)
         );
         assert!(stack.port_mut().sent.is_empty());
-        assert_eq!(stack.poll_demand(at(2)).unwrap().ready().peer, MOVED);
+        assert_eq!(
+            stack.poll_demand(at(2)).unwrap().ready().peer,
+            Eui48::new(MOVED)
+        );
     });
 }
 
@@ -1054,14 +1099,14 @@ fn every_reply_owed_is_listed_and_any_can_be_chosen() {
         stack.input(at(0), &first, &mut ());
         stack.input(at(0), &second, &mut ());
         let chosen = stack.demands(at(0), &()).nth(1).unwrap();
-        assert_eq!(chosen.ready().peer, MOVED);
+        assert_eq!(chosen.ready().peer, Eui48::new(MOVED));
         stack
             .transmit(at(0), chosen.grant(), unproduced, &())
             .unwrap();
         let left: Vec<_> = finite(stack.demands(at(0), &()))
             .map(|demand| demand.ready().peer)
             .collect();
-        assert_eq!(left, [PEER]);
+        assert_eq!(left, [Eui48::new(PEER)]);
     });
 }
 
@@ -1184,7 +1229,7 @@ fn a_closed_socket_leaves_no_neighbor_asked_for() {
         for last in [3, 4] {
             let block = filled(stack.pool(), b"y");
             let remote = Remote {
-                address: [192, 0, 2, last],
+                address: Ipv4Address::new([192, 0, 2, last]),
                 port: 7,
             };
             assert!(stack.send(at(0), &socket, remote, block).is_ok());
@@ -1273,11 +1318,11 @@ fn an_arp_request_for_us_is_answered_and_control_goes_before_data() {
             .transmit(at(1), demand.grant(), unproduced, &())
             .unwrap();
         let (header, payload) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
-        assert_eq!(header.destination, PEER);
+        assert_eq!(header.destination, Eui48::new(PEER));
         let reply = Arp::parse(payload).unwrap().unwrap();
         assert_eq!(reply.operation, Operation::Reply);
-        assert_eq!(reply.sender_protocol, OUR_IP);
-        assert_eq!(reply.target_protocol, PEER_IP);
+        assert_eq!(reply.sender_protocol, Ipv4Address::new(OUR_IP));
+        assert_eq!(reply.target_protocol, Ipv4Address::new(PEER_IP));
         assert_eq!(stack.poll_demand(at(1)).unwrap().ready().class, Class::Data);
     });
 }
@@ -1427,7 +1472,7 @@ fn a_host_prefix_has_no_broadcast_of_its_own() {
         let socket = stack.open(5000, best_effort()).unwrap();
         let block = filled(stack.pool(), b"x");
         let other = Remote {
-            address: [192, 0, 2, 3],
+            address: Ipv4Address::new([192, 0, 2, 3]),
             port: 7,
         };
         let _command = stack.send(at(0), &socket, other, block).unwrap();
@@ -1952,7 +1997,7 @@ fn a_rejected_arp_request_leaves_another_neighbor_waiting() {
         let near = filled(stack.pool(), b"near");
         let far = filled(stack.pool(), b"far");
         let other = Remote {
-            address: [192, 0, 2, 77],
+            address: Ipv4Address::new([192, 0, 2, 77]),
             ..peer()
         };
         let first = stack.send(at(0), &socket, peer(), near).unwrap();

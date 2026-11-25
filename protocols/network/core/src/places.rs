@@ -12,6 +12,7 @@
 //! its own right, a [`CommandId`](crate::CommandId).
 
 use oer_portable_time::Instant;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use crate::block::{Block, Pool};
 use crate::machine::{Outcome, Remote};
@@ -23,7 +24,7 @@ pub(crate) struct Sending<'m, B, const SIZE: usize> {
     pub(crate) since: Instant,
     /// The neighbor it goes through; broadcast has none. Its station address
     /// is read when the frame is built, so a change reaches a waiting datagram.
-    pub(crate) hop: Option<[u8; 4]>,
+    pub(crate) hop: Option<Ipv4Address>,
 }
 
 /// A producer's work: a place and no block, its data the producer's until
@@ -33,7 +34,7 @@ pub(crate) struct Declared<T> {
     pub(crate) remote: Remote,
     pub(crate) length: usize,
     /// As [`Sending::hop`].
-    pub(crate) hop: Option<[u8; 4]>,
+    pub(crate) hop: Option<Ipv4Address>,
     /// Its producer's tag, from its declaration until its result is given:
     /// the producer keeps no record of its own.
     pub(crate) tag: T,
@@ -55,7 +56,7 @@ pub(crate) enum Run<'m, B, const SIZE: usize, T> {
 
 impl<B, const SIZE: usize, T> Run<'_, B, SIZE, T> {
     /// The neighbor running work goes through, which it protects.
-    pub(crate) const fn hop(&self) -> Option<[u8; 4]> {
+    pub(crate) const fn hop(&self) -> Option<Ipv4Address> {
         match self {
             Self::Sending(Sending { hop, .. }) | Self::Declared(Declared { hop, .. }) => *hop,
             Self::Free | Self::Finished(_) | Self::Ended { .. } => None,
@@ -555,7 +556,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// Every running command whose neighbor is `address` ends `outcome`.
     pub(crate) fn end_through<const BLOCKS: usize>(
         &mut self,
-        address: Option<[u8; 4]>,
+        address: Option<Ipv4Address>,
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) {

@@ -5,7 +5,9 @@
 use crate::tests::Room;
 use core::cell::Cell;
 use core::future::poll_fn;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_core::BlockPlace;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use super::*;
 use crate::PublishEnd;
@@ -73,7 +75,8 @@ fn plan_bench_diagnosed<'n, B: Brand + 'n, D: crate::Diagnostics>(
     right: NetworkClaim<B>,
     diagnostics: D,
 ) -> PlanBench<'n, B, D> {
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let interface =
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
     plan_bench_on(right, interface, diagnostics)
 }
 

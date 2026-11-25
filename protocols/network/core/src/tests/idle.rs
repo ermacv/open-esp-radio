@@ -4,6 +4,8 @@
 
 use super::echo::{echo, icmp_frame};
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 /// The kinds of work the list holds now.
 fn listed<B>(stack: &Stack<B>, now: Instant) -> Vec<Class> {
@@ -47,16 +49,19 @@ fn an_owed_echo_reply_alone_keeps_the_core_from_idle() {
 
 #[test]
 fn an_owed_dhcp_message_alone_keeps_the_core_from_idle() {
-    world_on!(Interface::dhcp(LOCAL, 1500, 0x5EED).unwrap(), |stack| {
-        assert!(stack.idle(), "no link, no client yet");
-        stack.port_mut().up = Some(1);
-        stack.observe_link(at(0));
-        stack.tick(at(0), &mut ());
-        assert_eq!(listed(stack, at(0)), [Class::Control]);
-        assert!(!stack.idle(), "a discover is owed");
-        send_next(stack, at(0)).unwrap();
-        assert!(stack.idle(), "until its time comes again");
-    });
+    world_on!(
+        Interface::dhcp(Eui48::new(LOCAL), 1500, 0x5EED).unwrap(),
+        |stack| {
+            assert!(stack.idle(), "no link, no client yet");
+            stack.port_mut().up = Some(1);
+            stack.observe_link(at(0));
+            stack.tick(at(0), &mut ());
+            assert_eq!(listed(stack, at(0)), [Class::Control]);
+            assert!(!stack.idle(), "a discover is owed");
+            send_next(stack, at(0)).unwrap();
+            assert!(stack.idle(), "until its time comes again");
+        }
+    );
 }
 
 #[test]
@@ -78,7 +83,7 @@ fn a_declared_work_alone_keeps_the_core_from_idle() {
     world!(|stack| {
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let broadcast = Remote {
-            address: [192, 0, 2, 255],
+            address: Ipv4Address::new([192, 0, 2, 255]),
             port: 7,
         };
         let _work = stack.declare(at(0), &socket, broadcast, 10, 1).unwrap();

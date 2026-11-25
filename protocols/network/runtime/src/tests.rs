@@ -16,6 +16,7 @@ use core::task::{Context, Poll, Waker};
 use embassy_futures::yield_now;
 use oer_portable_memory::WakingSpscSender;
 use oer_portable_time_virtual::VirtualClock;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_network_core::{
     Block, BlockPlace, Brand, Eviction, Group, Interface, NetworkClaim, NetworkOwner, OpenRefused,
     Outcome, Remote, SendRefusal, claim, with_local_network,
@@ -24,9 +25,10 @@ use oer_protocols_network_port::{
     CopyReason, EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource,
     Holding, Keep, LinkSnapshot, LinkState, Taken, Unpublished,
 };
+use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
-use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
+use oer_protocols_network_wire::ethernet::EthernetHeader;
 use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
@@ -176,7 +178,7 @@ impl EthernetFrame for WireHeld {
         Ok(EthernetFrameView {
             destination: header.destination,
             source: header.source,
-            ether_type: header.ether_type.value(),
+            ether_type: header.ether_type,
             payload,
         })
     }
@@ -349,8 +351,8 @@ fn answer_of(frame: &[u8]) -> Option<Vec<u8>> {
     let request = Arp::parse(payload).ok()??;
     (request.operation == Operation::Request).then(|| {
         let mut reply = EthernetHeader {
-            destination: LOCAL,
-            source: PEER,
+            destination: Eui48::new(LOCAL),
+            source: Eui48::new(PEER),
             ether_type: EtherType::ARP,
         }
         .to_bytes()
@@ -358,10 +360,10 @@ fn answer_of(frame: &[u8]) -> Option<Vec<u8>> {
         let mut packet = [0; arp::PACKET_LEN];
         Arp {
             operation: Operation::Reply,
-            sender_hardware: PEER,
-            sender_protocol: PEER_IP,
-            target_hardware: LOCAL,
-            target_protocol: OUR_IP,
+            sender_hardware: Eui48::new(PEER),
+            sender_protocol: Ipv4Address::new(PEER_IP),
+            target_hardware: Eui48::new(LOCAL),
+            target_protocol: Ipv4Address::new(OUR_IP),
         }
         .write(&mut packet)
         .unwrap();
@@ -380,7 +382,12 @@ fn udp_frame(destination_port: u16, data: &[u8]) -> Vec<u8> {
         length,
         checksum: 0,
     };
-    let pseudo = ipv4_pseudo_header(PEER_IP, OUR_IP, PROTOCOL_UDP, length);
+    let pseudo = ipv4_pseudo_header(
+        Ipv4Address::new(PEER_IP),
+        Ipv4Address::new(OUR_IP),
+        PROTOCOL_UDP,
+        length,
+    );
     let checksum = udp_field(
         Checksum::new()
             .with(&pseudo)
@@ -389,8 +396,8 @@ fn udp_frame(destination_port: u16, data: &[u8]) -> Vec<u8> {
             .finish(),
     );
     let mut frame = EthernetHeader {
-        destination: LOCAL,
-        source: PEER,
+        destination: Eui48::new(LOCAL),
+        source: Eui48::new(PEER),
         ether_type: EtherType::IPV4,
     }
     .to_bytes()
@@ -402,8 +409,8 @@ fn udp_frame(destination_port: u16, data: &[u8]) -> Vec<u8> {
             identification: 1,
             time_to_live: 64,
             protocol: PROTOCOL_UDP,
-            source: PEER_IP,
-            destination: OUR_IP,
+            source: Ipv4Address::new(PEER_IP),
+            destination: Ipv4Address::new(OUR_IP),
         }
         .to_bytes(),
     );
@@ -420,7 +427,7 @@ fn udp_frame(destination_port: u16, data: &[u8]) -> Vec<u8> {
 
 fn peer() -> Remote {
     Remote {
-        address: PEER_IP,
+        address: Ipv4Address::new(PEER_IP),
         port: 7,
     }
 }
@@ -454,10 +461,10 @@ fn dhcp_reply(kind: MessageType, xid: u32, lease: u32) -> Vec<u8> {
             xid,
             secs: 0,
             flags: Flags::from_bytes([0; 2]),
-            ciaddr: [0; 4],
-            yiaddr: OUR_IP,
-            siaddr: PEER_IP,
-            giaddr: [0; 4],
+            ciaddr: Ipv4Address::new([0; 4]),
+            yiaddr: Ipv4Address::new(OUR_IP),
+            siaddr: Ipv4Address::new(PEER_IP),
+            giaddr: Ipv4Address::new([0; 4]),
             chaddr: [c0, c1, c2, c3, c4, c5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         }
         .write(&mut writer)
@@ -482,8 +489,8 @@ fn dhcp_reply(kind: MessageType, xid: u32, lease: u32) -> Vec<u8> {
     frame[40..42].copy_from_slice(&[0, 0]);
     let sum = Checksum::new()
         .with(&ipv4_pseudo_header(
-            PEER_IP,
-            OUR_IP,
+            Ipv4Address::new(PEER_IP),
+            Ipv4Address::new(OUR_IP),
             PROTOCOL_UDP,
             udp_length,
         ))
@@ -528,7 +535,8 @@ fn bench<'n, B: Brand + 'n>(right: NetworkClaim<B>) -> Bench<'n, B> {
     let (pool, brand) = claim(right, memory);
     let wire = WirePort::default();
     wire.0.borrow_mut().switches.on(WireSwitch::Answers);
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let interface =
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     bench_on(owner, wire)
 }
@@ -964,7 +972,7 @@ fn a_datagram_the_core_refuses_ends_with_that_reason() {
         let (ended, _, sent) = run(bench(right), async |socket, _| {
             let block = socket.reserve().await.unwrap();
             let far = Remote {
-                address: [198, 51, 100, 1],
+                address: Ipv4Address::new([198, 51, 100, 1]),
                 port: 7,
             };
             result_of(socket.send(far, block).ok().unwrap()).await
@@ -1300,7 +1308,8 @@ fn a_refused_bind_changes_nothing_and_the_storage_serves_again() {
     with_local_network(|right| {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
         let (pool, brand) = claim(right, memory);
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let wire = WirePort::default();
         wire.0.borrow_mut().switches.on(WireSwitch::Answers);
         let owner: NetworkOwner<'_, _, SIZE, 2, CREDITS, RECEIVED, 2, BLOCKS, WirePort> =
@@ -1469,7 +1478,7 @@ fn a_cancelled_run_leaves_every_owner_with_its_service() {
         let retired = ended.retired;
         let owner = NetworkOwner::new(
             retired.brand,
-            Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap(),
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap(),
             retired.pool,
             retired.port,
         );
@@ -1589,7 +1598,8 @@ fn sockets_waiting_for_blocks_take_turns() {
     with_local_network(|right| {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 1]));
         let (pool, brand) = claim(right, memory);
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner: NetworkOwner<'_, _, SIZE, 2, CREDITS, RECEIVED, 2, 1, WirePort> =
             NetworkOwner::new(brand, interface, pool, WirePort::default());
         let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -1631,7 +1641,8 @@ fn three_sockets_waiting_for_two_blocks_all_take_turns() {
     with_local_network(|right| {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 2]));
         let (pool, brand) = claim(right, memory);
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner: NetworkOwner<'_, _, SIZE, 3, CREDITS, RECEIVED, 2, 2, WirePort> =
             NetworkOwner::new(brand, interface, pool, WirePort::default());
         let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -1696,7 +1707,8 @@ fn pair<'n, B: Brand + 'n>(
 ) {
     let storage_of_blocks = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 2]));
     let (pool, brand) = claim(right, storage_of_blocks);
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let interface =
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
     let wire = WirePort::default();
     wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
@@ -1879,7 +1891,8 @@ fn pressure_spares_a_group_that_holds_less_however_old_its_work() {
     with_local_network(|right| {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 3]));
         let (pool, brand) = claim(right, memory);
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let wire = WirePort::default();
         wire.0.borrow_mut().switches.on(WireSwitch::Full);
         let owner: NetworkOwner<'_, _, SIZE, 3, CREDITS, RECEIVED, 2, 3, WirePort> =
@@ -2004,7 +2017,8 @@ fn a_dropped_socket_leaves_its_blocks_charged_until_they_return() {
     with_local_network(|right| {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 2]));
         let (pool, brand) = claim(right, memory);
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let wire = WirePort::default();
         let owner: NetworkOwner<'_, _, SIZE, 2, CREDITS, RECEIVED, 2, 2, WirePort> =
             NetworkOwner::new(brand, interface, pool, wire);
@@ -2062,7 +2076,8 @@ fn a_group_has_one_limit_however_many_sockets_it_has() {
     with_local_network(|right| {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 2]));
         let (pool, brand) = claim(right, memory);
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner: NetworkOwner<'_, _, SIZE, 2, CREDITS, RECEIVED, 2, 2, WirePort> =
             NetworkOwner::new(brand, interface, pool, WirePort::default());
         let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -2104,7 +2119,8 @@ fn before_the_service<'n, B: Brand + 'n>(
     let (mut pool, brand) = claim(right, memory);
     let absent = pool.group(usize::MAX).unwrap();
     let blocks = (0..held).map(|_| pool.take_as(absent).unwrap()).collect();
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let interface =
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
     let wire = WirePort::default();
     wire.0.borrow_mut().switches.on(WireSwitch::Full);
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
@@ -2285,7 +2301,8 @@ fn a_block_outlives_its_service_and_reaches_the_next() {
         let (_, held) = run_tasks(clock, service.run(clock, &mut events), drive);
         let ended = service.retire();
         let retired = ended.retired;
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
         let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let mut next: TestPair<'_, _, 2> = Service::new(owner, MemoryPolicy::KEEP, stopping);
@@ -2330,7 +2347,8 @@ fn an_adopted_socket_brings_its_blocks_to_the_running_service() {
         let late = ended.sockets.each_mut().map(|late| late.take().unwrap());
         assert_eq!(ended.retired.pool.outstanding(), 2);
         let retired = ended.retired;
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
         let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let mut next: TestPair<'_, _, 2> = Service::new(owner, MemoryPolicy::KEEP, stopping);
@@ -2386,7 +2404,8 @@ fn adopted_sockets_not_yet_dropped_go_on_to_the_next_service() {
         let mut ended = service.retire();
         let [one, two] = ended.sockets.each_mut().map(|late| late.take().unwrap());
         let retired = ended.retired;
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
         let (_, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let mut next: TestPair<'_, _, 2> = Service::new(owner, MemoryPolicy::KEEP, stopping);
@@ -2458,7 +2477,8 @@ fn an_adopted_socket_goes_on_through_a_second_service() {
         let mut ended = service.retire();
         let late = ended.sockets[0].take().unwrap();
         let retired = ended.retired;
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
         let (_, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let mut middle: TestPair<'_, _, 2> = Service::new(owner, MemoryPolicy::KEEP, stopping);
@@ -2467,7 +2487,8 @@ fn an_adopted_socket_goes_on_through_a_second_service() {
         assert_eq!(ended.retired.pool.outstanding(), 1, "not dropped yet");
         let late = ended.adopted[0].take().unwrap();
         let retired = ended.retired;
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
         let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let mut last: TestPair<'_, _, 2> = Service::new(owner, MemoryPolicy::KEEP, stopping);
@@ -2582,7 +2603,8 @@ fn a_receive_loan_stays_owed_across_a_retired_service() {
         pool.loans().grant(0, 1).unwrap();
         let held = pool.loans().lend(0).unwrap();
         let wire = WirePort::default();
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
         let (mut ended, _, ()) = run(bench_on(owner, wire), async |_, _| {});
         let loans = ended.retired.pool.loans();
@@ -2618,7 +2640,8 @@ fn a_final_refusal_passes_the_turn_to_the_next_socket() {
     with_local_network(|right| {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 4]));
         let (pool, brand) = claim(right, memory);
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let wire = WirePort::default();
         wire.0.borrow_mut().switches.on(WireSwitch::Answers);
         let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
@@ -2844,7 +2867,7 @@ fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
         let wire = retired.port.clone();
         let owner = NetworkOwner::new(
             retired.brand,
-            Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap(),
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap(),
             retired.pool,
             retired.port,
         );
@@ -3057,7 +3080,7 @@ fn a_lease_ends_in_the_service_s_own_wait_and_the_watch_tells() {
         let (pool, brand) = claim(right, memory);
         let wire = WirePort::default();
         wire.0.borrow_mut().switches.on(WireSwitch::Answers);
-        let interface = Interface::dhcp(LOCAL, 1500, 3).unwrap();
+        let interface = Interface::dhcp(Eui48::new(LOCAL), 1500, 3).unwrap();
         let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
         let mut bench = bench_on(owner, wire);
         let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));

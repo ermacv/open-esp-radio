@@ -7,8 +7,8 @@
 //! takes precedence over an encapsulated DSCP. The classifier never invents
 //! priority from transport ports or payload bytes.
 
+use oer_protocols_ieee802_wire::EtherType;
 use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
-use oer_protocols_network_wire::ethernet::EtherType;
 use oer_protocols_network_wire::ip::{Dscp, Ipv4Header, Ipv6Header};
 use oer_protocols_network_wire::vlan::VlanTag;
 
@@ -79,15 +79,13 @@ impl WmmTrafficClass {
     }
 }
 
-/// Classify an Ethernet frame, given as its EtherType (the number an MSDU
-/// carries) and the payload after its header, from an outer 802.1D PCP or an
+/// Classify an Ethernet frame, given as its EtherType and the payload after its header, from an outer 802.1D PCP or an
 /// IP DSCP.
 ///
 /// A valid frame of another type is `Unmarked`, one the codec refuses is
 /// `Malformed`; both request best effort.
-pub fn classify_wmm(ether_type: u16, payload: &[u8]) -> WmmTrafficClass {
+pub fn classify_wmm(ether_type: EtherType, payload: &[u8]) -> WmmTrafficClass {
     use WmmClassificationSource::{Malformed, Unmarked};
-    let ether_type = EtherType::new(ether_type);
     if ether_type.is_vlan_tag() {
         let Ok((tag, _)) = VlanTag::parse(payload) else {
             return WmmTrafficClass::best_effort(Malformed);

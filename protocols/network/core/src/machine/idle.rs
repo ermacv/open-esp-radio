@@ -3,6 +3,8 @@
 //! needs it, so the table is set here directly.
 
 use oer_portable_time::Instant;
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use super::Core;
 use crate::{BlockPlace, Interface, claim, with_local_network};
@@ -12,11 +14,20 @@ fn an_owed_neighbor_request_alone_keeps_the_core_from_idle() {
     let mut storage = [const { BlockPlace::<64>::new() }; 2];
     with_local_network(|right| {
         let (_pool, brand) = claim(right, &mut storage);
-        let interface = Interface::new([2, 0, 0, 0, 0, 1], [192, 0, 2, 1], 24, None, 1500).unwrap();
+        let interface = Interface::new(
+            Eui48::new([2, 0, 0, 0, 0, 1]),
+            Ipv4Address::new([192, 0, 2, 1]),
+            24,
+            None,
+            1500,
+        )
+        .unwrap();
         let mut core = Core::<'_, _, 64, 1, 1, 1, 2>::new(brand, interface);
         let now = Instant::from_micros(0);
         assert!(core.idle());
-        let _asking = core.neighbors.resolve(now, [192, 0, 2, 2], 1, |_| true);
+        let _asking = core
+            .neighbors
+            .resolve(now, Ipv4Address::new([192, 0, 2, 2]), 1, |_| true);
         assert_eq!(core.neighbors.owed_requests().count(), 1);
         assert!(!core.idle(), "a request is owed");
         core.neighbors.request_accepted(0, now);

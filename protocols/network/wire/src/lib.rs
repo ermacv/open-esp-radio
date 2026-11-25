@@ -10,7 +10,7 @@
     )
 )]
 
-//! Ethernet, VLAN, ARP, IP, ICMP echo and transport header fields, DHCP
+//! Ethernet, VLAN, ARP, IP addresses and headers, ICMP echo and transport header fields, DHCP
 //! messages, and the Internet checksum.
 //!
 //! The codec owns byte order, bit fields, lengths and the structural
@@ -19,6 +19,7 @@
 //! tells a malformed header from a valid one it does not interpret; it never
 //! decides what a packet means for a radio.
 
+pub mod address;
 pub mod arp;
 pub mod checksum;
 pub mod dhcp;

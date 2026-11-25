@@ -4,6 +4,8 @@
 //! frames, commands and notices.
 
 use oer_portable_time::{Duration, Timer};
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::dhcp::MessageType;
 
 use super::super::probe::Probe;
@@ -27,8 +29,8 @@ const ONE_FRAME: &[Step] = &[Step::Accepted, Step::Published(PublishEnd::Chose)]
 /// The peer asks for us: the service owes it a reply.
 fn peer_asks() -> Vec<u8> {
     let mut frame = EthernetHeader {
-        destination: [0xFF; 6],
-        source: PEER,
+        destination: Eui48::new([0xFF; 6]),
+        source: Eui48::new(PEER),
         ether_type: EtherType::ARP,
     }
     .to_bytes()
@@ -36,10 +38,10 @@ fn peer_asks() -> Vec<u8> {
     let mut packet = [0; arp::PACKET_LEN];
     Arp {
         operation: Operation::Request,
-        sender_hardware: PEER,
-        sender_protocol: PEER_IP,
-        target_hardware: [0; 6],
-        target_protocol: OUR_IP,
+        sender_hardware: Eui48::new(PEER),
+        sender_protocol: Ipv4Address::new(PEER_IP),
+        target_hardware: Eui48::new([0; 6]),
+        target_protocol: Ipv4Address::new(OUR_IP),
     }
     .write(&mut packet)
     .unwrap();
@@ -166,7 +168,7 @@ fn control_work_after_a_received_frame_goes_in_its_turn() {
 #[test]
 fn control_work_its_time_makes_goes_when_the_time_comes() {
     with_local_network(|right| {
-        let interface = Interface::dhcp(LOCAL, 1500, 3).unwrap();
+        let interface = Interface::dhcp(Eui48::new(LOCAL), 1500, 3).unwrap();
         let PlanBench {
             service,
             mut sockets,

@@ -5,7 +5,9 @@
 use super::*;
 use crate::{AddressState, Configuration, DhcpDrop, DhcpState, Ipv4, LeaseFault};
 use oer_portable_wire::Writer;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_port::Class;
+use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::dhcp::{
     self as wire, DhcpMessage, Fixed, Flags, MessageType, Op, option,
 };
@@ -17,7 +19,7 @@ const DNS: [u8; 4] = [1, 1, 1, 1];
 const SEED: u64 = 0x5EED;
 
 fn dhcp_interface() -> Interface {
-    Interface::dhcp(LOCAL, 1500, SEED).unwrap()
+    Interface::dhcp(Eui48::new(LOCAL), 1500, SEED).unwrap()
 }
 
 macro_rules! leasing {
@@ -42,14 +44,13 @@ struct Sent {
 impl Sent {
     fn parse(frame: &[u8]) -> Option<Self> {
         let (ethernet, payload) = EthernetHeader::parse(frame).ok()?;
-        assert_eq!(ethernet.source, LOCAL);
+        assert_eq!(ethernet.source, Eui48::new(LOCAL));
         if ethernet.ether_type != EtherType::IPV4 {
             return None;
         }
         let ip = Ipv4Header::parse(payload).unwrap();
         assert!(Checksum::new().with(&payload[..20]).verifies());
-        let [s0, s1, s2, s3, d0, d1, d2, d3] = ip.addresses();
-        let (source, destination) = ([s0, s1, s2, s3], [d0, d1, d2, d3]);
+        let (source, destination) = (ip.source().octets(), ip.destination().octets());
         assert_eq!(ip.protocol(), PROTOCOL_UDP);
         let (udp, data) = UdpHeader::parse(ip.payload()).unwrap();
         assert_eq!(udp.ports.source, wire::CLIENT_PORT);
@@ -57,8 +58,8 @@ impl Sent {
         assert!(
             Checksum::new()
                 .with(&ipv4_pseudo_header(
-                    source,
-                    destination,
+                    Ipv4Address::new(source),
+                    Ipv4Address::new(destination),
                     PROTOCOL_UDP,
                     udp.length
                 ))
@@ -66,7 +67,7 @@ impl Sent {
                 .verifies()
         );
         Some(Self {
-            hardware: ethernet.destination,
+            hardware: ethernet.destination.octets(),
             source,
             destination,
             message: data.to_vec(),
@@ -207,10 +208,10 @@ impl Reply {
                 xid: self.xid,
                 secs: 0,
                 flags: Flags::from_bytes([0; 2]),
-                ciaddr: [0; 4],
-                yiaddr: self.yiaddr,
-                siaddr: SERVER_IP,
-                giaddr: [0; 4],
+                ciaddr: Ipv4Address::new([0; 4]),
+                yiaddr: Ipv4Address::new(self.yiaddr),
+                siaddr: Ipv4Address::new(SERVER_IP),
+                giaddr: Ipv4Address::new([0; 4]),
                 chaddr: [c0, c1, c2, c3, c4, c5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             }
             .write(&mut writer)
@@ -249,14 +250,19 @@ fn udp_from(
     };
     let checksum = udp_field(
         Checksum::new()
-            .with(&ipv4_pseudo_header(from, to, PROTOCOL_UDP, length))
+            .with(&ipv4_pseudo_header(
+                Ipv4Address::new(from),
+                Ipv4Address::new(to),
+                PROTOCOL_UDP,
+                length,
+            ))
             .with(&unfilled.to_bytes())
             .with(data)
             .finish(),
     );
     let mut frame = EthernetHeader {
-        destination: LOCAL,
-        source: hardware,
+        destination: Eui48::new(LOCAL),
+        source: Eui48::new(hardware),
         ether_type: EtherType::IPV4,
     }
     .to_bytes()
@@ -268,8 +274,8 @@ fn udp_from(
             identification: 1,
             time_to_live: 64,
             protocol: PROTOCOL_UDP,
-            source: from,
-            destination: to,
+            source: Ipv4Address::new(from),
+            destination: Ipv4Address::new(to),
         }
         .to_bytes(),
     );
@@ -297,7 +303,7 @@ fn assert_discover(sent: &Sent) -> u32 {
     assert_eq!(sent.destination, [255; 4]);
     let message = sent.message();
     assert_eq!(message.fixed.op, Op::Request);
-    assert_eq!(message.fixed.ciaddr, [0; 4]);
+    assert_eq!(message.fixed.ciaddr, Ipv4Address::new([0; 4]));
     assert!(!message.fixed.flags.broadcast());
     assert_eq!(&message.fixed.chaddr[..6], &LOCAL);
     assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
@@ -324,7 +330,7 @@ fn assert_selecting_request(sent: &Sent, xid: u32) {
     assert_eq!(sent.xid(), xid);
     assert_eq!((sent.source, sent.destination), ([0; 4], [255; 4]));
     assert_eq!(sent.hardware, [0xFF; 6]);
-    assert_eq!(sent.message().fixed.ciaddr, [0; 4]);
+    assert_eq!(sent.message().fixed.ciaddr, Ipv4Address::new([0; 4]));
     assert_eq!(
         sent.option(option::REQUESTED_ADDRESS),
         Some(OFFERED.to_vec())
@@ -352,7 +358,7 @@ enum Extension {
 fn assert_extension(sent: &Sent, extension: Extension) -> u32 {
     assert_eq!(sent.kind(), MessageType::Request);
     assert_eq!(sent.source, OFFERED);
-    assert_eq!(sent.message().fixed.ciaddr, OFFERED);
+    assert_eq!(sent.message().fixed.ciaddr, Ipv4Address::new(OFFERED));
     match extension {
         Extension::Rebinding => {
             assert_eq!((sent.destination, sent.hardware), ([255; 4], [0xFF; 6]));
@@ -371,7 +377,12 @@ fn configuration<B>(stack: &Stack<B>) -> Configuration {
 }
 
 fn leased_ipv4() -> Ipv4 {
-    Ipv4::new(OFFERED, 24, Some(SERVER_IP)).unwrap()
+    Ipv4::new(
+        Ipv4Address::new(OFFERED),
+        24,
+        Some(Ipv4Address::new(SERVER_IP)),
+    )
+    .unwrap()
 }
 
 /// DISCOVER, OFFER, REQUEST: all at `now`. The exchange's xid.
@@ -444,8 +455,8 @@ fn a_link_up_discovers_at_once_and_an_ack_binds_the_lease() {
         assert_ne!(configured.version, version);
         assert_ne!(stack.configuration_changes(), changes);
         let lease = configured.lease().unwrap();
-        assert_eq!(lease.dns.as_slice(), &[DNS]);
-        assert_eq!(lease.server, SERVER_IP);
+        assert_eq!(lease.dns.as_slice(), &[Ipv4Address::new(DNS)]);
+        assert_eq!(lease.server, Ipv4Address::new(SERVER_IP));
         // The lease counts from the REQUEST's acceptance, RFC 2131, 4.4.1.
         assert_eq!(lease.obtained, at(1));
         assert_eq!(lease.renew, at(1).saturating_add(Duration::from_secs(500)));
@@ -848,7 +859,10 @@ fn a_new_address_at_renewal_ends_old_work_and_new_work_goes_from_it() {
         give(stack, secs(876), &ack.frame());
         assert_ne!(stack.address_version(), version);
         assert_eq!(finished(stack.take_result(command)), Outcome::Readdressed);
-        assert_eq!(configuration(stack).ipv4().unwrap().address(), moved);
+        assert_eq!(
+            configuration(stack).ipv4().unwrap().address(),
+            Ipv4Address::new(moved)
+        );
         // The socket sends from the new address.
         let block = filled(stack.pool(), b"new");
         stack.send(secs(876), &socket, peer(), block).unwrap();
@@ -909,7 +923,7 @@ fn a_new_address_takes_the_next_broadcast_past_what_the_old_one_prepared() {
         bound(stack, at(0));
         let socket = stack.open(7, best_effort()).unwrap();
         let everyone = Remote {
-            address: [255, 255, 255, 255],
+            address: Ipv4Address::new([255, 255, 255, 255]),
             port: 9,
         };
         let block = filled(stack.pool(), b"old");
@@ -950,7 +964,7 @@ fn a_link_lost_and_back_mid_lease_runs_init_reboot_and_keeps_the_address() {
         // address requested, no server identifier.
         assert_eq!(sent.kind(), MessageType::Request);
         assert_eq!((sent.source, sent.destination), ([0; 4], [255; 4]));
-        assert_eq!(sent.message().fixed.ciaddr, [0; 4]);
+        assert_eq!(sent.message().fixed.ciaddr, Ipv4Address::new([0; 4]));
         assert_eq!(
             sent.option(option::REQUESTED_ADDRESS),
             Some(OFFERED.to_vec())
@@ -1044,7 +1058,7 @@ fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_en
             let sent = one(stack, due);
             assert_eq!(sent.xid(), first.xid());
             assert_eq!(sent.kind(), MessageType::Request);
-            assert_eq!(sent.message().fixed.ciaddr, [0; 4]);
+            assert_eq!(sent.message().fixed.ciaddr, Ipv4Address::new([0; 4]));
             assert_eq!(
                 sent.option(option::REQUESTED_ADDRESS),
                 Some(OFFERED.to_vec())
@@ -1361,7 +1375,14 @@ fn more_dns_servers_than_a_lease_holds_keep_the_first() {
             ),
         );
         let lease = configuration(stack).lease().unwrap();
-        assert_eq!(lease.dns.as_slice(), &servers[..crate::DNS_SERVERS]);
+        assert_eq!(
+            lease.dns.as_slice(),
+            servers[..crate::DNS_SERVERS]
+                .iter()
+                .copied()
+                .map(Ipv4Address::new)
+                .collect::<Vec<_>>()
+        );
     });
 }
 
@@ -1394,7 +1415,7 @@ fn data_leaves_a_neighbor_entry_for_the_renewal() {
         let block = filled(stack.pool(), b"one");
         stack.send(secs(400), &socket, peer(), block).unwrap();
         let other = Remote {
-            address: [192, 0, 2, 3],
+            address: Ipv4Address::new([192, 0, 2, 3]),
             port: 7,
         };
         let block = filled(stack.pool(), b"two");
@@ -1472,7 +1493,7 @@ fn a_router_that_is_no_host_is_none_and_the_next_one_counts() {
         );
         assert_eq!(
             configuration(stack).ipv4().unwrap().gateway(),
-            Some(SERVER_IP)
+            Some(Ipv4Address::new(SERVER_IP))
         );
     });
 }
@@ -1506,7 +1527,7 @@ fn an_echo_s_end_releases_the_neighbors_wait_counter() {
         stack.input(now, &request, &mut ());
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let next = Remote {
-            address: [192, 0, 2, 3],
+            address: Ipv4Address::new([192, 0, 2, 3]),
             port: 7,
         };
         assert_eq!(
@@ -1569,7 +1590,7 @@ fn a_cached_neighbor_data_does_not_hold_takes_the_reserve_like_any_other() {
             now,
             &socket,
             Remote {
-                address: other_ip,
+                address: Ipv4Address::new(other_ip),
                 port: 7,
             },
             16,
@@ -1590,10 +1611,10 @@ fn a_prepared_neighbor_no_work_needs_takes_the_reserve_like_any_other() {
         bound(stack, at(0));
         let now = secs(10);
         let other = Remote {
-            address: [192, 0, 2, 3],
+            address: Ipv4Address::new([192, 0, 2, 3]),
             port: 7,
         };
-        for (hardware, ip) in [(PEER, PEER_IP), (MOVED, other.address)] {
+        for (hardware, ip) in [(PEER, PEER_IP), (MOVED, other.address.octets())] {
             stack.input(
                 now,
                 &arp_frame(Operation::Reply, (hardware, ip), OFFERED),
@@ -1684,7 +1705,7 @@ fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
             now,
             &socket,
             Remote {
-                address: other_ip,
+                address: Ipv4Address::new(other_ip),
                 port: 7,
             },
             16,
@@ -1746,7 +1767,7 @@ fn a_late_expired_ack_publishes_no_user_data_before_the_next_tick() {
         let socket = stack.open(7, best_effort()).unwrap();
         let block = filled(stack.pool(), b"expired");
         let to = Remote {
-            address: [255; 4],
+            address: Ipv4Address::new([255; 4]),
             port: 7,
         };
         let refused = stack.send(now, &socket, to, block).unwrap_err();
@@ -1839,7 +1860,7 @@ fn t1_and_t2_stay_in_order_at_their_bounds() {
 /// An outcome of a message that is not the one owed changes nothing.
 #[test]
 fn the_outcome_of_another_message_leaves_the_owed_one() {
-    let mut client = crate::dhcp::Client::new(LOCAL, 1500, 1);
+    let mut client = crate::dhcp::Client::new(Eui48::new(LOCAL), 1500, 1);
     let mut serial = 0;
     client.link_up(at(0), 1, &mut serial);
     let owed = client.owed().unwrap();

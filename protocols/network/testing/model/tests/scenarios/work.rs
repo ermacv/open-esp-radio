@@ -9,6 +9,8 @@
 //! instruction counter weighs them (see the crate's README).
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use oer_protocols_network_core::{BlockPlace, Declined, Payload, SendRefusal};
 use oer_protocols_network_runtime::TurnEnd;
@@ -228,7 +230,12 @@ fn load(micros_per_frame: u32) -> Account {
 fn load_on<B: Brand>(right: NetworkClaim<B>, micros_per_frame: u32) -> Account {
     let mut spec = peer(1, 0);
     spec.overhead_micros = micros_per_frame;
-    let medium = Medium::new(LOCAL, OUR_IP, AT_THE_PORT, &[spec]);
+    let medium = Medium::new(
+        Eui48::new(LOCAL),
+        Ipv4Address::new(OUR_IP),
+        AT_THE_PORT,
+        &[spec],
+    );
     medium.batch(AGGREGATE);
     let clock = clock();
     let memory = Box::leak(Box::new(

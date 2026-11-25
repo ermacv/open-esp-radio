@@ -7,8 +7,10 @@
 
 use oer_portable_events::EventSink;
 use oer_portable_time::{Clock, Duration, Timer};
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_core::BlockPlace;
 use oer_protocols_network_core::NetEvent;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use super::*;
 use crate::{RequestKind, ServiceEvent, TurnEnd};
@@ -87,7 +89,8 @@ fn paced<'n, B: Brand + 'n>(
     let (pool, brand) = claim(right, memory);
     let wire = WirePort::default();
     wire.0.borrow_mut().switches.on(WireSwitch::Answers);
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let interface =
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let mut service: PacedService<'n, B> = Service::new(owner, MemoryPolicy::KEEP, stopping);

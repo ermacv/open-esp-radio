@@ -4,7 +4,9 @@
 //! reservations were batched.
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_core::BlockPlace;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 const POOL: usize = 8;
 
@@ -26,7 +28,8 @@ fn sockets_of_one_group_share_a_turn_s_blocks_whatever_each_asks() {
     with_local_network(|right| {
         let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; POOL]));
         let (pool, brand) = claim(right, memory);
-        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let interface =
+            Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
         let owner = NetworkOwner::new(brand, interface, pool, WirePort::default());
         let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let mut service: Pair<'_, _> = Service::new(owner, MemoryPolicy::KEEP, stopping);

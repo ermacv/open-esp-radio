@@ -9,6 +9,7 @@ description = "Ethernet II to IEEE 802.11 MSDU bridging and WMM classification o
 readme = "README.md"
 
 [dependencies]
+oer-protocols-ieee802-wire = { path = "../../ieee802/wire" }
 oer-protocols-ieee80211-wire = { path = "../../ieee80211/wire" }
 oer-protocols-network-wire = { path = "../../network/wire" }
 

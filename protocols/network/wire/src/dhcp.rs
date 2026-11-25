@@ -9,6 +9,8 @@
 
 use oer_portable_wire::{Error, Reader, Writer};
 
+use crate::address::Ipv4Address;
+
 /// RFC 2131, 4.1: messages from a client go to the 'DHCP server' port.
 pub const SERVER_PORT: u16 = 67;
 /// RFC 2131, 4.1: messages from a server go to the 'DHCP client' port.
@@ -107,6 +109,23 @@ pub mod option {
     pub const CLIENT_IDENTIFIER: u8 = 61;
 }
 
+oer_portable_wire::bitfield! {
+    /// The value of an option that counts seconds.
+    /// SOURCE: RFC 2132, 9.2 (IP Address Lease Time), 9.11 (Renewal (T1) Time
+    /// Value) and 9.12 (Rebinding (T2) Time Value).
+    pub struct Seconds[4] (big) {
+        pub value, with_value: {u32} = 0..32;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// The value of the Maximum DHCP Message Size option.
+    /// SOURCE: RFC 2132, 9.10 (Maximum DHCP Message Size).
+    pub struct MessageSize[2] (big) {
+        pub octets, with_octets: {u16} = 0..16;
+    }
+}
+
 /// A message that cannot be DHCP.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DhcpError {
@@ -137,13 +156,13 @@ pub struct Fixed {
     /// 'flags'.
     pub flags: Flags,
     /// 'ciaddr': the client's address, in BOUND, RENEW and REBINDING.
-    pub ciaddr: [u8; 4],
+    pub ciaddr: Ipv4Address,
     /// 'yiaddr': the address offered or leased.
-    pub yiaddr: [u8; 4],
+    pub yiaddr: Ipv4Address,
     /// 'siaddr'.
-    pub siaddr: [u8; 4],
+    pub siaddr: Ipv4Address,
     /// 'giaddr': a relay agent's address.
-    pub giaddr: [u8; 4],
+    pub giaddr: Ipv4Address,
     /// 'chaddr'.
     pub chaddr: [u8; CHADDR_LEN],
 }
@@ -169,10 +188,10 @@ impl Fixed {
             .with_secs(self.secs);
         writer.write(&opening.to_bytes())?;
         writer.write(&self.flags.to_bytes())?;
-        writer.write(&self.ciaddr)?;
-        writer.write(&self.yiaddr)?;
-        writer.write(&self.siaddr)?;
-        writer.write(&self.giaddr)?;
+        writer.write(self.ciaddr.as_octets())?;
+        writer.write(self.yiaddr.as_octets())?;
+        writer.write(self.siaddr.as_octets())?;
+        writer.write(self.giaddr.as_octets())?;
         writer.write(&self.chaddr)?;
         writer.write(&[0; SNAME_LEN])?;
         writer.write(&[0; FILE_LEN])?;
@@ -207,7 +226,7 @@ impl<'a> DhcpMessage<'a> {
         let mut fields = Reader::new(&fixed);
         let opening = Opening::from_bytes(fields.read().map_err(|_| DhcpError::Truncated)?);
         let flags = Flags::from_bytes(fields.read().map_err(|_| DhcpError::Truncated)?);
-        let mut address = || fields.read::<4>().map_err(|_| DhcpError::Truncated);
+        let mut address = || Ipv4Address::read(&mut fields).map_err(|_| DhcpError::Truncated);
         let (ciaddr, yiaddr, siaddr, giaddr) = (address()?, address()?, address()?, address()?);
         let chaddr = fields.read().map_err(|_| DhcpError::Truncated)?;
         let message = Self {

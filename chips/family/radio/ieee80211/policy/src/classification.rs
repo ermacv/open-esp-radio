@@ -3,11 +3,9 @@
 //! Raw ESF, descriptor, and node layouts remain in the target adapter. This
 //! module contains only finite decisions which can be verified on the host.
 
+use oer_protocols_ieee802_wire::EtherType;
 use oer_protocols_ieee80211_wire::ethertype;
-use oer_protocols_network_wire::{
-    ethernet::EtherType,
-    ip::{DsField, Ipv6HeaderPrefix},
-};
+use oer_protocols_network_wire::ip::{DsField, Ipv6HeaderPrefix};
 
 /// The classifier's protocol word: the EtherType octets as they lie in the
 /// frame, read as a little-endian `u16`.

@@ -5370,19 +5370,23 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
 
 /// Every network package and the workspace packages it may take, normal or
 /// build: the codec stands on `oer-portable-wire` and the IEEE 802 wire alone
-/// and the contract on the codec.
+/// and the contract on the two.
 const NETWORK_LAYERS: [(&str, &[&str]); 5] = [
     (
         "protocols/network/wire",
         &["oer-portable-wire", "oer-protocols-ieee802-wire"],
     ),
-    ("protocols/network/port", &["oer-protocols-network-wire"]),
+    (
+        "protocols/network/port",
+        &["oer-protocols-ieee802-wire", "oer-protocols-network-wire"],
+    ),
     (
         "protocols/network/core",
         &[
             "oer-portable-events",
             "oer-portable-time",
             "oer-portable-wire",
+            "oer-protocols-ieee802-wire",
             "oer-protocols-network-port",
             "oer-protocols-network-wire",
         ],
@@ -5404,6 +5408,7 @@ const NETWORK_LAYERS: [(&str, &[&str]); 5] = [
             "oer-portable-time",
             "oer-protocols-ieee80211-core-upper-mac",
             "oer-protocols-ieee80211-runtime",
+            "oer-protocols-ieee802-wire",
             "oer-protocols-network-port",
             "oer-protocols-network-wire",
         ],
@@ -7145,8 +7150,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         4,
         "a door in its home: the octet string of a number and back, RFC 8017 4.1 (I2OSP) and 4.2 (OS2IP) (tasks/403)",
     ),
-    ("protocols/network/core/src/dhcp.rs", 3, BY_TYPES),
-    ("protocols/network/core/src/interface.rs", 4, BY_TYPES),
     (
         "protocols/network/wire/src/checksum.rs",
         2,

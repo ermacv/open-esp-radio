@@ -1,6 +1,6 @@
 //! Owned frames at the network queue boundary, held as MSDU fields.
 
-use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_ieee80211_wire::data::{MsduHeader, MsduParts};
 
 /// Maximum Ethernet-II payload stored by one network queue slot.
@@ -23,7 +23,7 @@ pub struct FrameTooLong {
 /// A network adapter constructs a frame from its checked Ethernet parts:
 ///
 /// ```
-/// use oer_protocols_ieee802_wire::Eui48;
+/// use oer_protocols_ieee802_wire::{EtherType, Eui48};
 /// use oer_protocols_ieee80211_wire::data::MsduParts;
 /// use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 /// let parts = MsduParts {
@@ -123,9 +123,9 @@ impl oer_protocols_network_port::EthernetFrame for EthernetFrame {
     > {
         let parts = self.parts();
         Ok(oer_protocols_network_port::EthernetFrameView {
-            destination: parts.destination.octets(),
-            source: parts.source.octets(),
-            ether_type: parts.ether_type,
+            destination: parts.destination,
+            source: parts.source,
+            ether_type: EtherType::new(parts.ether_type),
             payload: parts.payload,
         })
     }

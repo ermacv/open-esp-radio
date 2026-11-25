@@ -3,6 +3,7 @@
 //! after every publication moves the sockets' turn.
 
 use super::*;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 /// The walk and the reference over the same state.
 fn same_demands<B: core::fmt::Debug>(stack: &Stack<B>, now: Instant) -> usize {
@@ -19,7 +20,7 @@ fn the_walk_of_ready_work_lists_what_the_chain_listed() {
         let first = stack.open(5000, best_effort()).unwrap();
         let second = stack.open(5001, best_effort()).unwrap();
         let unknown = Remote {
-            address: [192, 0, 2, 9],
+            address: Ipv4Address::new([192, 0, 2, 9]),
             port: 7,
         };
         for (socket, remote, data) in [

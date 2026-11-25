@@ -4,8 +4,10 @@
 //! the sockets and the pool's holder see.
 
 use oer_portable_events::EventSink;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_core::BlockPlace;
 use oer_protocols_network_core::NetEvent;
+use oer_protocols_network_wire::address::Ipv4Address;
 
 use super::*;
 use crate::{RequestKind, ServiceEvent};
@@ -49,7 +51,8 @@ struct Three<'n, B: 'n> {
 fn three<'n, B: Brand + 'n>(right: NetworkClaim<B>, limits: [usize; 2]) -> Three<'n, B> {
     let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; POOL]));
     let (pool, brand) = claim(right, memory);
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let interface =
+        Interface::new(Eui48::new(LOCAL), Ipv4Address::new(OUR_IP), 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, WirePort::default());
     let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let mut service = Service::new(owner, MemoryPolicy::KEEP, stopping);
