@@ -5900,6 +5900,7 @@ fn by_file(hits: &[(String, String)]) -> BTreeMap<String, usize> {
 /// What removes a list's entry: the step of the plan that writes its code
 /// last (`design/plan-2026-11-24.md`, section 4), or why it stays.
 const BY_FINAL_CRATES: &str = "the final crates cleaned";
+const BY_TYPES: &str = "addresses, time and the Wi-Fi dictionaries as types";
 const BY_PHY_OWNER: &str = "the PHY under one owner: its state, its operations, clocks and power";
 const BY_LEVEL_TASK: &str = "a level's task";
 const BY_RECEIVE: &str = "the port in the radio's task; receive";
@@ -6031,6 +6032,7 @@ fn remover(file: &str) -> &'static str {
 fn remover_name(file: &str) -> &'static str {
     [
         ("BY_FINAL_CRATES", BY_FINAL_CRATES),
+        ("BY_TYPES", BY_TYPES),
         ("BY_PHY_OWNER", BY_PHY_OWNER),
         ("BY_LEVEL_TASK", BY_LEVEL_TASK),
         ("BY_RECEIVE", BY_RECEIVE),
@@ -6423,8 +6425,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         2,
         BY_CONTROLLER,
     ),
-    ("protocols/network/core/src/block.rs", 1, BY_FINAL_CRATES),
-    ("protocols/network/core/src/dhcp.rs", 1, BY_FINAL_CRATES),
     ("protocols/network/runtime/src/service.rs", 1, BY_PUMP),
 ];
 /// S5: values bound to a name that says they are unused (`let _name = …;`),
@@ -6709,7 +6709,7 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
     (
         "protocols/ieee80211/runtime/src/installation.rs::_released",
         1,
-        "correct: what the port released stays the port\'s, and the binding reaches it there",
+        BY_RADIO_LIFE,
     ),
     ("protocols/network/runtime/src/device.rs::_room", 1, BY_PUMP),
     (
@@ -6952,7 +6952,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
         1,
         BY_CONTROLLER,
     ),
-    ("protocols/network/core/src/lib.rs", 1, BY_FINAL_CRATES),
 ];
 /// S8a: the PAC's raw conversions outside the PAC, in
 /// the HAL, the radio crates and the platform, by file with their count:
@@ -7111,12 +7110,8 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         4,
         "a door in its home: the octet string of a number and back, RFC 8017 4.1 (I2OSP) and 4.2 (OS2IP) (tasks/403)",
     ),
-    ("protocols/network/core/src/dhcp.rs", 3, BY_FINAL_CRATES),
-    (
-        "protocols/network/core/src/interface.rs",
-        4,
-        BY_FINAL_CRATES,
-    ),
+    ("protocols/network/core/src/dhcp.rs", 3, BY_TYPES),
+    ("protocols/network/core/src/interface.rs", 4, BY_TYPES),
     ("protocols/network/wire/src/arp.rs", 3, BY_FINAL_CRATES),
     ("protocols/network/wire/src/checksum.rs", 3, BY_FINAL_CRATES),
     ("protocols/network/wire/src/dhcp.rs", 3, BY_FINAL_CRATES),
@@ -10777,12 +10772,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "protocols/ieee80211/wire/src/lib.rs",
         "clippy::cast_sign_loss",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/lib.rs",
-        "clippy::cast_possible_truncation",
         1,
         BY_FINAL_CRATES,
     ),

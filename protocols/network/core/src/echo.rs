@@ -5,7 +5,7 @@
 //! and returns all its data; a request to a broadcast or multicast address
 //! may be discarded, and is. Bounds are this core's: at most [`ECHOES`]
 //! replies owed at once, each holding one block, never the pool's last free
-//! one, and at most [`RATE`] replies a second.
+//! one, and at most [`ECHO_RATE`] replies a second.
 
 use oer_portable_time::{Duration, Instant};
 
@@ -14,7 +14,7 @@ use crate::block::Block;
 /// Replies owed at once.
 pub const ECHOES: usize = 4;
 /// Replies accepted in one [`WINDOW`].
-pub const RATE: u8 = 16;
+pub const ECHO_RATE: u8 = 16;
 const WINDOW: Duration = Duration::from_secs(1);
 
 /// Why an ICMP message got no reply. Counted, never answered.
@@ -33,7 +33,7 @@ pub enum IcmpDrop {
     TooLong,
     /// [`ECHOES`] replies are owed already.
     Busy,
-    /// [`RATE`] replies were accepted in this second.
+    /// [`ECHO_RATE`] replies were accepted in this second.
     Limited,
     /// No block, or only the pool's last one, is free.
     NoBlock,
@@ -84,7 +84,7 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
             self.window = now;
             self.accepted = 0;
         }
-        if self.accepted >= RATE {
+        if self.accepted >= ECHO_RATE {
             return Err(IcmpDrop::Limited);
         }
         Ok(())

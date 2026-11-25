@@ -19,7 +19,7 @@
 //! probe (RFC 2131, 2.2 and 4.4.1; RFC 5227), and no DECLINE is ever sent.
 
 use oer_portable_time::{Duration, Instant};
-use oer_portable_wire::{Error, Writer};
+use oer_portable_wire::{Error, PrefixLength, Writer};
 use oer_protocols_network_wire::dhcp::{
     self, DhcpMessage, Fixed, Flags, HEADER_LEN, MessageType, Op, option,
 };
@@ -95,23 +95,33 @@ impl DhcpState {
 }
 
 /// The domain name servers of a lease, in the server's order.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Servers {
     addresses: [[u8; 4]; DNS_SERVERS],
-    count: u8,
+    count: PrefixLength<DNS_SERVERS>,
+}
+
+impl Default for Servers {
+    fn default() -> Self {
+        Self {
+            addresses: [[0; 4]; DNS_SERVERS],
+            count: PrefixLength::ZERO,
+        }
+    }
 }
 
 impl Servers {
     pub fn as_slice(&self) -> &[[u8; 4]] {
-        self.addresses
-            .get(..usize::from(self.count))
-            .unwrap_or_default()
+        self.count.borrow(&self.addresses)
     }
 
     fn push(&mut self, address: [u8; 4]) {
-        if let Some(slot) = self.addresses.get_mut(usize::from(self.count)) {
+        let at = self.count.get();
+        if let Some(count) = PrefixLength::new(at.saturating_add(1))
+            && let Some(slot) = self.addresses.get_mut(at)
+        {
             *slot = address;
-            self.count = self.count.saturating_add(1);
+            self.count = count;
         }
     }
 }

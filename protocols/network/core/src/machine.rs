@@ -7,7 +7,7 @@ use core::marker::PhantomData;
 
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
-use oer_portable_wire::Writer;
+use oer_portable_wire::{PrefixLength, Writer};
 use oer_protocols_network_port::{
     Class, CopyReason, EthernetFrameView, FrameMeta, Holding, LinkSnapshot, LinkState, Ready,
 };
@@ -431,7 +431,9 @@ impl<'a> UdpHeaders<'a> {
 /// lengths both fit.
 fn fits(length: usize) -> Option<u16> {
     let length = u16::try_from(length).ok()?;
-    length.checked_add((IPV4_HEADER_LEN + UDP_HEADER_LEN) as u16)?;
+    const HEADERS_LEN: usize = IPV4_HEADER_LEN + UDP_HEADER_LEN;
+    length
+        .checked_add(const { PrefixLength::<HEADERS_LEN>::constant::<HEADERS_LEN>().to_u16() })?;
     Some(length)
 }
 
