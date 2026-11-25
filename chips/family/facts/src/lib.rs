@@ -913,7 +913,7 @@ pub(crate) mod tests {
                 .range
                 .iter()
                 .filter(|rule| rule.range[1].contains("irq_stack"))
-                .inspect(|rule| assert!(rule.region == "sram"))
+                .inspect(|rule| assert!(rule.region == "sram" && rule.bytes.is_none()))
                 .map(|rule| rule.range[1].clone())
                 .collect()
         };

@@ -165,6 +165,14 @@ pub fn audit(contract: &Contract<'_>, elf: &Path, binary: Option<&Path>) -> Resu
                 rule.region
             ));
         }
+        if let Some(bytes) = rule.bytes
+            && bounds.capacity != bytes
+        {
+            violations.push(format!(
+                "`{start_name}`..`{end_name}` holds {} bytes, not {bytes}",
+                bounds.capacity
+            ));
+        }
         report.push_str(&format!(
             "{start_name}..{end_name}={start:#010x}..{end:#010x}\n"
         ));

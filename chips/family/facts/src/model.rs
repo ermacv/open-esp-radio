@@ -821,6 +821,11 @@ pub struct Entry {
 pub struct RangeRule {
     pub range: [String; 2],
     pub region: String,
+    /// The range's exact size, where the chip's stack policy or the image
+    /// gives one: no facts file states it. A range sized at link time has
+    /// none, and its region limits it.
+    #[serde(skip_deserializing)]
+    pub bytes: Option<u64>,
 }
 
 /// Symbols whose `bytes` from their address lie in `region`.
