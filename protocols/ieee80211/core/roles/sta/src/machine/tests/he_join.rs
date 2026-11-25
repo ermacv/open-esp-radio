@@ -541,7 +541,7 @@ fn an_he_join_sets_its_bss_before_authentication_and_its_association_before_its_
         // The response's AID (0xc02a less its two top bits), the access
         // point's minimum MPDU start spacing (none) and its HE Operation:
         // default PE 4, ER-SU disabled, no co-hosted BSS.
-        assert_eq!(association.association_id(), 0x2a);
+        assert_eq!(association.association_id().value(), 0x2a);
         assert_eq!(association.minimum_mpdu_start_spacing(), 0);
         assert_eq!(association.default_packet_extension(), 4);
         assert_eq!(association.max_co_hosted_bssid_indicator(), None);

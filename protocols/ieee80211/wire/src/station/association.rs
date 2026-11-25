@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::address::OwnAddress;
+use crate::management::AidField;
 use oer_portable_wire::PrefixLength;
 use oer_protocols_ieee802_wire::Eui48;
 
@@ -315,7 +316,7 @@ pub enum AssociationRequestError {
 pub struct AssociationResponse {
     pub capability_info: crate::management::CapabilityInformation,
     pub status_code: u16,
-    pub association_id: u16,
+    pub association_id: AidField,
     /// An HT Capabilities element of its 26 octets.
     pub ht_capability: crate::scan::ElementPresence,
     /// The response's HE Capabilities and HE Operation elements.
@@ -439,7 +440,7 @@ pub fn parse_association_response(
         split_received_management(frame)?;
     let capability_info = crate::management::CapabilityInformation::from_bytes([c0, c1]);
     let status_code = crate::management::StatusCodeField::from_bytes([s0, s1]).code();
-    let association_id = crate::management::AssociationId::from_bytes([a0, a1]);
+    let association_id = AidField::from_bytes([a0, a1]);
     if header.frame_control.type_and_subtype()
         != ASSOCIATION_RESPONSE_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
@@ -490,7 +491,7 @@ pub fn parse_association_response(
     Some(AssociationResponse {
         capability_info,
         status_code,
-        association_id: association_id.aid(),
+        association_id,
         ht_capability,
         he,
         wmm_element,

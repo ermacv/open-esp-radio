@@ -7,6 +7,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::frame::FrameControlFields;
+use crate::management::AidField;
 use oer_protocols_ieee802_wire::Eui48;
 
 const BEACON_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0x80, 0x00]);
@@ -101,7 +102,7 @@ pub struct StaBeaconFrame<'a> {
 pub fn parse_sta_beacon(
     mpdu: &[u8],
     expected_bssid: Eui48,
-    association_id: u16,
+    association_id: AidField,
 ) -> Result<StaBeaconFrame<'_>, StaBeaconError> {
     let mut reader = oer_portable_wire::Reader::new(mpdu);
     let header = reader
@@ -192,15 +193,15 @@ pub fn parse_sta_beacon(
             }
             // The station's association ID, as the Association Response's
             // AID field gave it ([`crate::station::AssociationResponse`]).
-            let aid = usize::from(association_id);
-            let aid_byte = aid / 8;
+            let aid = association_id.aid().get();
+            let aid_byte = usize::from(aid / 8);
             // Bitmap Offset is encoded in units of two octets in bits 7:1;
             // the decoded offset is doubled to obtain N1 in octets.
             let bitmap_offset =
                 usize::from(crate::beacon::TimBitmapControl::from_bytes([bitmap_control]).offset())
                     * 2;
             // The AID's bit within its octet is below eight.
-            let aid_bit = 1_u8.wrapping_shl(u32::from(association_id & 7));
+            let aid_bit = 1_u8.wrapping_shl(u32::from(aid & 7));
             let unicast_buffered = aid_byte
                 .checked_sub(bitmap_offset)
                 .and_then(|index| bitmap.get(index))

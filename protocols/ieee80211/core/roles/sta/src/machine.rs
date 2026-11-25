@@ -72,6 +72,7 @@ use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 /// Why an EAPOL-Key packet is not one, as [`StaDisconnectReason::InvalidEapol`]
 /// carries it.
 pub use oer_protocols_ieee80211_wire::eapol::EapolParseError;
+use oer_protocols_ieee80211_wire::management::AidField;
 use oer_protocols_ieee80211_wire::status::reason_code;
 
 use crate::events::{ConnectStep, RsnDrop, ScanOutcome, StaEvent};
@@ -1422,7 +1423,7 @@ enum Change<T: StaTypes, K> {
 struct NewConnection<T: StaTypes, K> {
     bssid: Bssid,
     channel: SupportedChannel<K>,
-    association_id: u16,
+    association_id: AidField,
     qos: bool,
     peer: Peer<T::RxMeta>,
     qos_sequences: [SequenceCounter; 8],
@@ -1676,24 +1677,24 @@ enum JoinStep<M> {
     Associate(StaAssociationRuntime, AssociationKey),
     /// The association's EDCA parameters to set, after its notice.
     SetEdca {
-        association_id: u16,
+        association_id: AidField,
         peer: Peer<M>,
         key: AssociationKey,
     },
     /// An HE20 association to install in the port, after its EDCA
     /// parameters and before the link's data.
     SetHe {
-        association_id: u16,
+        association_id: AidField,
         peer: Peer<M>,
         key: AssociationKey,
     },
     NotifyAssociated {
-        association_id: u16,
+        association_id: AidField,
         peer: Peer<M>,
         key: AssociationKey,
     },
     StartLink {
-        association_id: u16,
+        association_id: AidField,
         peer: Peer<M>,
         key: AssociationKey,
     },
@@ -1740,7 +1741,7 @@ enum AuthStage {
 struct NewHandshake<T: StaTypes, K> {
     bssid: Bssid,
     channel: SupportedChannel<K>,
-    association_id: u16,
+    association_id: AidField,
     qos: bool,
     peer: Peer<T::RxMeta>,
     supplicant: Option<RsnStaHandshake>,
@@ -1755,7 +1756,7 @@ struct NewHandshake<T: StaTypes, K> {
 struct Handshake<T: StaTypes, K> {
     bssid: Bssid,
     channel: SupportedChannel<K>,
-    association_id: u16,
+    association_id: AidField,
     qos: bool,
     peer: Peer<T::RxMeta>,
     supplicant: Option<RsnStaHandshake>,
@@ -1808,7 +1809,7 @@ struct Connected<T: StaTypes, K> {
     confirmation: Option<RsnStaResponseDeadline>,
     bssid: Bssid,
     channel: SupportedChannel<K>,
-    association_id: u16,
+    association_id: AidField,
     /// The access point's BSS is a QoS BSS (it advertised WMM).
     qos: bool,
     /// The access point as the association made it.
@@ -6770,7 +6771,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     fn joined(
         &mut self,
         join: &mut Join<T, K>,
-        association_id: u16,
+        association_id: AidField,
         peer: Peer<T::RxMeta>,
         key: AssociationKey,
         now: Instant,

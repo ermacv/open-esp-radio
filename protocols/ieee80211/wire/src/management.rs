@@ -187,6 +187,50 @@ impl ManagementHeader {
     }
 }
 
+/// The identifier an access point gives an association, 1 to 2007.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.1.8 (AID field).
+///
+/// A number is no identifier until it is checked:
+///
+/// ```compile_fail,E0308
+/// use oer_protocols_ieee80211_wire::management::AssociationId;
+/// let association_id: AssociationId = 1;
+/// ```
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub struct AssociationId(oer_portable_wire::U16<14>);
+
+impl AssociationId {
+    /// The largest identifier.
+    pub const MAX: u16 = 2007;
+
+    /// `value`, when it is an identifier.
+    pub const fn new(value: u16) -> Option<Self> {
+        match oer_portable_wire::U16::new(value) {
+            Some(aid) if value != 0 && value <= Self::MAX => Some(Self(aid)),
+            _ => None,
+        }
+    }
+
+    /// The identifier `field` carries, whatever its marker bits.
+    pub const fn from_field(field: AidField) -> Option<Self> {
+        Self::new(field.aid().get())
+    }
+
+    /// The identifier.
+    pub const fn value(self) -> u16 {
+        self.0.get()
+    }
+
+    /// The AID field that carries it: both marker bits set.
+    pub const fn field(self) -> AidField {
+        AidField::from_bytes([0; 2])
+            .with_aid(self.0)
+            .with_marker(oer_portable_wire::U8::constant::<3>())
+    }
+}
+
 /// A Dialog Token, which matches an action's request with its responses: any
 /// octet. What zero means, and how a sequence of tokens goes, is the
 /// action's.
@@ -249,8 +293,8 @@ oer_portable_wire::bitfield! {
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.8 (AID field).
-    pub struct AssociationId[2] (little) {
-        pub aid, with_aid: u16 = 0..14;
+    pub struct AidField[2] (little) {
+        pub aid, with_aid: (u16) = 0..14;
         pub marker, with_marker: (u8) = 14..16;
     }
 }

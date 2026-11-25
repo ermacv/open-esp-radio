@@ -5,6 +5,7 @@
 //! the clock relation; this codec does not read a backend or executor clock.
 
 use crate::frame::FrameControlFields;
+use crate::management::AssociationId;
 use oer_protocols_ieee802_wire::Eui48;
 
 use crate::{
@@ -18,7 +19,6 @@ use crate::{
 };
 
 pub const AP_BEACON_CAPACITY: usize = 256;
-pub const TIM_MAX_ASSOCIATION_ID: u16 = 2_007;
 pub const TIM_MAX_VIRTUAL_BITMAP_OCTETS: usize = 251;
 
 const MANAGEMENT_HEADER_LEN: usize = 24;
@@ -40,32 +40,10 @@ pub enum TimBitmapError {
     InvalidCapacity {
         bitmap_octets: usize,
     },
-    InvalidAssociationId(u16),
     AssociationIdOutsideCapacity {
-        association_id: u16,
+        association_id: AssociationId,
         bitmap_octets: usize,
     },
-}
-
-/// Valid unicast association identifier for an IEEE 802.11 TIM bitmap.
-///
-/// AID zero is represented by the multicast indication in Bitmap Control and
-/// is therefore intentionally not constructible through this type.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-#[repr(transparent)]
-pub struct TimAssociationId(u16);
-
-impl TimAssociationId {
-    pub const fn new(value: u16) -> Result<Self, TimBitmapError> {
-        if value == 0 || value > TIM_MAX_ASSOCIATION_ID {
-            return Err(TimBitmapError::InvalidAssociationId(value));
-        }
-        Ok(Self(value))
-    }
-
-    pub const fn get(self) -> u16 {
-        self.0
-    }
 }
 
 /// Fixed-capacity owner for the complete virtual bitmap in one AP profile.
@@ -91,18 +69,18 @@ impl<const OCTETS: usize> TimVirtualBitmap<OCTETS> {
 
     pub fn set(
         &mut self,
-        association_id: TimAssociationId,
+        association_id: AssociationId,
         traffic: crate::station_beacon::BufferedTraffic,
     ) -> Result<(), TimBitmapError> {
-        let association_id = association_id.get();
-        let octet = usize::from(association_id / 8);
+        let aid = association_id.value();
+        let octet = usize::from(aid / 8);
         let Some(value) = self.octets.get_mut(octet) else {
             return Err(TimBitmapError::AssociationIdOutsideCapacity {
                 association_id,
                 bitmap_octets: OCTETS,
             });
         };
-        let mask = 1_u8 << (association_id % 8);
+        let mask = 1_u8 << (aid % 8);
         if traffic == crate::station_beacon::BufferedTraffic::Buffered {
             *value |= mask;
         } else {

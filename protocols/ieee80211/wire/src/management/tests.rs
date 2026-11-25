@@ -132,3 +132,20 @@ fn a_dialog_token_is_any_octet_and_a_nonzero_sequence_skips_zero() {
     assert_eq!(DialogToken::new(254).next_nonzero(), DialogToken::new(255));
     assert_eq!(DialogToken::new(255).next_nonzero(), DialogToken::new(1));
 }
+
+#[test]
+fn an_association_id_is_1_to_2007_and_its_field_has_both_markers() {
+    for value in 0..=u16::MAX {
+        let id = AssociationId::new(value);
+        assert_eq!(id.is_some(), (1..=2007).contains(&value), "{value}");
+        if let Some(id) = id {
+            assert_eq!(id.value(), value);
+            assert_eq!(id.field().to_bytes(), (value | 0xc000).to_le_bytes());
+            assert_eq!(AssociationId::from_field(id.field()), Some(id));
+        }
+    }
+    assert_eq!(
+        AssociationId::from_field(AidField::from_bytes([1, 0])),
+        AssociationId::new(1)
+    );
+}

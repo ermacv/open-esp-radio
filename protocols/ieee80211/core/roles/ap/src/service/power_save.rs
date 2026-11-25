@@ -141,7 +141,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                     {
                         return Err(ApServiceError::WrongPeerPhase);
                     }
-                    if existing.association_id != association_id {
+                    if existing.association_id.value() != association_id.aid().get() {
                         return Err(ApServiceError::AssociationIdMismatch);
                     }
                     existing.last_activity = now;
@@ -254,9 +254,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         for peer in self.storage().peers.iter().flatten().filter(|peer| {
             peer.power_state == ApPeerPowerState::Sleeping && peer.buffered_unicast_frames != 0
         }) {
-            let association_id = TimAssociationId::new(peer.association_id)?;
             bitmap.set(
-                association_id,
+                peer.association_id,
                 oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered,
             )?;
         }

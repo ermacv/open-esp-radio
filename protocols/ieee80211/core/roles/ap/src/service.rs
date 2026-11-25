@@ -5,6 +5,7 @@ use oer_portable_crypto::rfc3394::KeyWrapError;
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_wire::channel::ChannelWidth;
 use oer_protocols_ieee80211_wire::data::PeerQos;
+use oer_protocols_ieee80211_wire::management::AssociationId;
 use oer_protocols_ieee80211_wire::phy::DsssPreamble;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
@@ -48,7 +49,7 @@ use oer_protocols_ieee80211_core_security_rsn::{
     retry::{RsnRetry, RsnRetryAction, RsnRetryAlarm, RsnRetryConfig, RsnRetryError},
     state::RsnStateError,
 };
-use oer_protocols_ieee80211_wire::beacon::{TimAssociationId, TimBitmapError, TimVirtualBitmap};
+use oer_protocols_ieee80211_wire::beacon::{TimBitmapError, TimVirtualBitmap};
 use oer_protocols_ieee80211_wire::ht::HtPeerCapabilities;
 use oer_protocols_ieee80211_wire::protection::{
     ApBssProtection, ErpProtection, HtOperationProtection, HtProtectionMode,
@@ -181,19 +182,18 @@ pub enum ApDownlinkDisposition {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApAssociationIdentity {
     address: [u8; 6],
-    association_id: u16,
+    association_id: AssociationId,
     association_epoch: u32,
 }
 
 impl ApAssociationIdentity {
     pub const fn new(
         address: [u8; 6],
-        association_id: u16,
+        association_id: AssociationId,
         association_epoch: u32,
     ) -> Option<Self> {
         if address[0] & 1 != 0
-            || association_id == 0
-            || association_id as usize > AP_MAX_CLIENTS
+            || association_id.value() as usize > AP_MAX_CLIENTS
             || association_epoch == 0
         {
             return None;
@@ -209,7 +209,7 @@ impl ApAssociationIdentity {
         self.address
     }
 
-    pub const fn association_id(self) -> u16 {
+    pub const fn association_id(self) -> AssociationId {
         self.association_id
     }
 
@@ -267,7 +267,7 @@ impl ApBufferedUnicastRelease {
         self.identity.address()
     }
 
-    pub const fn association_id(&self) -> u16 {
+    pub const fn association_id(&self) -> AssociationId {
         self.identity.association_id()
     }
 
@@ -352,7 +352,7 @@ pub enum ApMlmeAction {
     AssociationResponse {
         peer: [u8; 6],
         status: u16,
-        association_id: Option<u16>,
+        association_id: Option<AssociationId>,
     },
     BeginWpa2 {
         peer: [u8; 6],
@@ -496,7 +496,7 @@ enum ApHandshake {
 
 struct ApPeer {
     address: [u8; 6],
-    association_id: u16,
+    association_id: AssociationId,
     association_epoch: u32,
     phase: ApPeerPhase,
     /// The four-way handshake of an RSN association.
@@ -650,7 +650,7 @@ impl ApPeer {
 
     fn authenticated(
         address: [u8; 6],
-        association_id: u16,
+        association_id: AssociationId,
         association_epoch: u32,
         now: oer_portable_time::Instant,
     ) -> Result<Self, ApServiceError> {
@@ -754,7 +754,7 @@ const fn new_ap_wpa2_retry() -> RsnRetry {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApPeerStatus {
     pub address: [u8; 6],
-    pub association_id: u16,
+    pub association_id: AssociationId,
     /// Non-reusable identity of this AID assignment. Reauthentication keeps
     /// the bounded AID slot but advances this epoch so receive-side duplicate
     /// history cannot cross association ownership.
@@ -1178,7 +1178,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     }
 
     fn bound_association(&self, identity: ApAssociationIdentity) -> Option<&ApPeer> {
-        let index = usize::from(identity.association_id.checked_sub(1)?);
+        let index = usize::from(identity.association_id.value().checked_sub(1)?);
         self.storage().peers.get(index)?.as_ref().filter(|peer| {
             peer.address == identity.address
                 && peer.association_id == identity.association_id
@@ -1187,7 +1187,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     }
 
     fn bound_association_mut(&mut self, identity: ApAssociationIdentity) -> Option<&mut ApPeer> {
-        let index = usize::from(identity.association_id.checked_sub(1)?);
+        let index = usize::from(identity.association_id.value().checked_sub(1)?);
         self.storage_mut()
             .peers
             .get_mut(index)?

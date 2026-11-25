@@ -8,6 +8,7 @@
 //! `ieee80211_parse_hecap`, `ieee80211_parse_heopr` and `ic_set_sta`).
 
 use oer_protocols_ieee80211_wire::he::{HeOperation, HePeerState};
+use oer_protocols_ieee80211_wire::management::{AidField, AssociationId};
 
 use crate::BssColor;
 
@@ -102,7 +103,7 @@ impl HeBssColor {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeAssociation {
     color: HeBssColor,
-    association_id: u16,
+    association_id: AssociationId,
     minimum_mpdu_start_spacing: u8,
     packet_padding_eight_us: u8,
     default_packet_extension: u8,
@@ -114,7 +115,7 @@ pub struct HeAssociation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HeAssociationError {
     /// The AID is outside 1 to 2007 (IEEE Std 802.11-2020, 9.4.1.8).
-    AssociationId(u16),
+    AssociationId(AidField),
     /// The minimum MPDU start spacing code is above 7 (IEEE Std
     /// 802.11-2020, 9.4.2.55.3).
     MinimumMpduStartSpacing(u8),
@@ -133,8 +134,6 @@ pub enum HeAssociationError {
 }
 
 impl HeAssociation {
-    /// The largest AID (IEEE Std 802.11-2020, 9.4.1.8).
-    pub const MAX_ASSOCIATION_ID: u16 = 2007;
     /// The largest minimum MPDU start spacing code.
     pub const MAX_MINIMUM_MPDU_START_SPACING: u8 = 7;
     /// The largest nominal packet padding, in 8 us units.
@@ -148,12 +147,12 @@ impl HeAssociation {
     /// point's minimum MPDU start spacing code.
     pub const fn new(
         peer: &HePeerState,
-        association_id: u16,
+        association_id: AidField,
         minimum_mpdu_start_spacing: u8,
     ) -> Result<Self, HeAssociationError> {
-        if association_id == 0 || association_id > Self::MAX_ASSOCIATION_ID {
+        let Some(association_id) = AssociationId::from_field(association_id) else {
             return Err(HeAssociationError::AssociationId(association_id));
-        }
+        };
         if minimum_mpdu_start_spacing > Self::MAX_MINIMUM_MPDU_START_SPACING {
             return Err(HeAssociationError::MinimumMpduStartSpacing(
                 minimum_mpdu_start_spacing,
@@ -205,8 +204,8 @@ impl HeAssociation {
         self.color
     }
 
-    /// The station's AID, 1 to 2007.
-    pub const fn association_id(&self) -> u16 {
+    /// The station's AID.
+    pub const fn association_id(&self) -> AssociationId {
         self.association_id
     }
 

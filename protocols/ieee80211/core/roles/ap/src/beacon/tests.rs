@@ -1,4 +1,5 @@
-use oer_protocols_ieee80211_wire::beacon::{TimAssociationId, TimVirtualBitmap};
+use oer_protocols_ieee80211_wire::beacon::TimVirtualBitmap;
+use oer_protocols_ieee80211_wire::management::AssociationId;
 
 use oer_protocols_ieee80211_wire::{
     ap::profile::{LegacyRates, WmmParameters},
@@ -170,7 +171,7 @@ fn static_storage_owns_beacon_dtim_and_next_deadline() {
     let mut bitmap = TimVirtualBitmap::<2>::try_new().unwrap();
     bitmap
         .set(
-            TimAssociationId::new(1).unwrap(),
+            AssociationId::new(1).unwrap(),
             oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered,
         )
         .unwrap();
@@ -362,7 +363,7 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
         // A wider TIM moves the announcement with the elements after it.
         let mut wide = TimVirtualBitmap::<2>::try_new().unwrap();
         wide.set(
-            TimAssociationId::new(9).unwrap(),
+            AssociationId::new(9).unwrap(),
             if tbtt == 2 {
                 oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered
             } else {
