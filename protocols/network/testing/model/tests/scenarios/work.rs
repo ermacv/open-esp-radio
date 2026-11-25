@@ -38,9 +38,9 @@ const LOAD_PORT: u16 = 5001;
 /// How long the load runs.
 const RUN: u64 = SECOND / 10;
 
-type LoadOwner = NetworkOwner<
-    'static,
-    LoadNet,
+type LoadOwner<'n, B> = NetworkOwner<
+    'n,
+    B,
     LOAD_SIZE,
     LOAD_SOCKETS,
     LOAD_CREDITS,
@@ -51,8 +51,6 @@ type LoadOwner = NetworkOwner<
     // The load producer's tag, kept in each declared work's place.
     u64,
 >;
-
-struct LoadNet;
 
 /// What the producer was asked.
 #[derive(Clone, Copy, Debug, Default)]
@@ -224,14 +222,18 @@ impl Account {
 /// Run the load for [`RUN`] on a medium where a frame costs
 /// `micros_per_frame` of air, and count its work.
 fn load(micros_per_frame: u32) -> Account {
+    with_local_network(|right| load_on(right, micros_per_frame))
+}
+
+fn load_on<B: Brand>(right: NetworkClaim<B>, micros_per_frame: u32) -> Account {
     let mut spec = peer(1, 0);
     spec.overhead_micros = micros_per_frame;
     let medium = Medium::new(LOCAL, OUR_IP, AT_THE_PORT, &[spec]);
     medium.batch(AGGREGATE);
     let clock = clock();
     let memory = Box::leak(Box::new([[0; LOAD_SIZE]; LOAD_BLOCKS]));
-    let (pool, brand) = claim::<LoadNet, LOAD_SIZE, LOAD_BLOCKS>(memory).unwrap();
-    let owner: LoadOwner = NetworkOwner::new(brand, interface(), pool, medium.clone());
+    let (pool, brand) = claim(right, memory);
+    let owner: LoadOwner<'_, B> = NetworkOwner::new(brand, interface(), pool, medium.clone());
     let (stop, stopping): (Stopper, _) = Box::leak(Box::new(StopLane::new())).split();
     let asked = Rc::new(RefCell::new(Asked::default()));
     let producer = Load {
@@ -245,9 +247,9 @@ fn load(micros_per_frame: u32) -> Account {
     let end: &'static LocalEnd = Box::leak(Box::new(LocalEnd::new()));
     let counted = Counted::default();
     let mut service: Service<
-        'static,
-        'static,
-        LoadNet,
+        '_,
+        '_,
+        B,
         LOAD_SIZE,
         LOAD_SOCKETS,
         LOAD_CREDITS,

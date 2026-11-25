@@ -22,8 +22,8 @@ use oer_portable_memory::WakingSpscSender;
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, Declined, Group, Interface, NetEvent, NetworkOwner, Outcome, Payload, Remote,
-    SendRefusal, WorkId, claim,
+    Block, Brand, Declined, Group, Interface, NetEvent, NetworkClaim, NetworkOwner, Outcome,
+    Payload, Remote, SendRefusal, WorkId, claim, with_local_network,
 };
 use oer_protocols_network_port::{
     EthernetFrameView, FramePort, FrameSource, LinkSnapshot, LinkState, Unpublished,
@@ -472,10 +472,10 @@ impl FrameSource for LocalPort {
     }
 }
 
-type Channel<B, const C: usize> = Socket<'static, 'static, B, SIZE, DEPTH, RECEIVED, C>;
-type Served<B, const C: usize> = Service<
-    'static,
-    'static,
+type Channel<'n, B, const C: usize> = Socket<'n, 'n, B, SIZE, DEPTH, RECEIVED, C>;
+type Served<'n, B, const C: usize> = Service<
+    'n,
+    'n,
     B,
     SIZE,
     2,
@@ -486,28 +486,34 @@ type Served<B, const C: usize> = Service<
     DEPTH,
     RECEIVED,
     LocalPort,
-    Producer<'static, B, Script, C>,
+    Producer<'n, B, Script, C>,
 >;
 
 /// A service with a producer on [`LOCAL_PORT`] and a channel socket on
 /// [`CHANNEL_PORT`], and the test's handles.
-struct Bench<B: 'static, const C: usize = 2> {
-    service: Served<B, C>,
-    socket: Channel<B, C>,
+struct Bench<'n, B: 'n, const C: usize = 2> {
+    service: Served<'n, B, C>,
+    socket: Channel<'n, B, C>,
     line: LocalPort,
     script: Script,
     end: &'static LocalEnd,
-    stop: WakingSpscSender<'static, (), 1>,
+    stop: WakingSpscSender<'n, (), 1>,
     clock: &'static VirtualClock,
 }
 
-fn bench<B: 'static, const C: usize>() -> Bench<B, C> {
-    bench_on(Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap())
+fn bench<'n, B: Brand + 'n, const C: usize>(right: NetworkClaim<B>) -> Bench<'n, B, C> {
+    bench_on(
+        right,
+        Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap(),
+    )
 }
 
-fn bench_on<B: 'static, const C: usize>(interface: Interface) -> Bench<B, C> {
+fn bench_on<'n, B: Brand + 'n, const C: usize>(
+    right: NetworkClaim<B>,
+    interface: Interface,
+) -> Bench<'n, B, C> {
     let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
-    let (pool, brand) = claim::<B, SIZE, BLOCKS>(memory).unwrap();
+    let (pool, brand) = claim(right, memory);
     let line = LocalPort::default();
     let owner = NetworkOwner::new(brand, interface, pool, line.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -517,7 +523,7 @@ fn bench_on<B: 'static, const C: usize>(interface: Interface) -> Bench<B, C> {
     let mut service =
         Service::with_producer(owner, MemoryPolicy::KEEP, stopping, script.clone(), end);
     service.bind_local(LOCAL_PORT, Dscp::default()).unwrap();
-    let lanes: &'static mut SocketLanes<'static, 'static, B, SIZE, DEPTH, RECEIVED, C> =
+    let lanes: &mut SocketLanes<'n, 'n, B, SIZE, DEPTH, RECEIVED, C> =
         Box::leak(Box::new(SocketLanes::new()));
     let socket = service
         .bind(CHANNEL_PORT, Dscp::default(), Group::shared(), lanes)
@@ -534,8 +540,8 @@ fn bench_on<B: 'static, const C: usize>(interface: Interface) -> Bench<B, C> {
     }
 }
 
-fn direct<B: 'static>() -> Bench<B> {
-    bench()
+fn direct<'n, B: Brand + 'n>(right: NetworkClaim<B>) -> Bench<'n, B> {
+    bench(right)
 }
 
 fn broadcast() -> Remote {
@@ -602,11 +608,11 @@ fn settle<F: Future>(run: &mut Pin<&mut F>, count: &Count, waker: &Waker) {
 }
 
 /// Blocks for the channel socket, `run` turning for them.
-fn blocks<B: 'static, F: Future, const C: usize>(
-    socket: &mut Channel<B, C>,
+fn blocks<'n, B: 'n, F: Future, const C: usize>(
+    socket: &mut Channel<'n, B, C>,
     run: &mut Pin<&mut F>,
     count: usize,
-) -> Vec<Block<'static, B, SIZE>> {
+) -> Vec<Block<'n, B, SIZE>> {
     let cx = &mut Context::from_waker(Waker::noop());
     let mut blocks = Vec::new();
     for _ in 0..count {
@@ -622,12 +628,12 @@ fn blocks<B: 'static, F: Future, const C: usize>(
 }
 
 /// A channel datagram to `remote`, sent by hand.
-fn channel_send<B: 'static, F: Future, const C: usize>(
-    socket: &mut Channel<B, C>,
+fn channel_send<'n, B: 'n, F: Future, const C: usize>(
+    socket: &mut Channel<'n, B, C>,
     run: &mut Pin<&mut F>,
     remote: Remote,
     data: &[u8],
-) -> Observer<'static> {
+) -> Observer<'n> {
     let mut block = blocks(socket, run, 1).pop().unwrap();
     block.fill(data).unwrap();
     socket.send(remote, block).ok().unwrap()
@@ -635,94 +641,96 @@ fn channel_send<B: 'static, F: Future, const C: usize>(
 
 #[test]
 fn a_refused_offer_does_not_hold_back_the_next_in_the_first_poll() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    script.push(tag(0, 0), broadcast(), 2000);
-    script.push(tag(0, 1), broadcast(), 40);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    // A waker nothing registers before this poll, and the producer never
-    // wakes: the second offer must come in this very turn.
-    let cx = &mut Context::from_waker(Waker::noop());
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(
-        script.calls(),
-        [
-            Call::Offered(tag(0, 0)),
-            Call::Refused(tag(0, 0), SendRefusal::TooLong),
-            Call::Offered(tag(0, 1)),
-            Call::Filled(tag(0, 1)),
-            Call::Ended(tag(0, 1), Outcome::Accepted),
-        ]
-    );
-    let frame = line.0.borrow().sent[0].clone();
-    let (_, packet) = EthernetHeader::parse(&frame).unwrap();
-    let ip = Ipv4Header::parse(packet).unwrap();
-    let (udp, data) = UdpHeader::parse(ip.payload()).unwrap();
-    assert_eq!(data, data_of(tag(0, 1), 40));
-    assert!(
-        Checksum::new()
-            .with(&ipv4_pseudo_header(
-                OUR_IP,
-                [192, 0, 2, 255],
-                PROTOCOL_UDP,
-                udp.length
-            ))
-            .with(ip.payload())
-            .verifies()
-    );
-    for _ in 0..4 {
-        let _pending = poll(&mut run, cx);
-    }
-    assert_eq!(script.calls().len(), 5, "the refused offer never came back");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        script.push(tag(0, 0), broadcast(), 2000);
+        script.push(tag(0, 1), broadcast(), 40);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        // A waker nothing registers before this poll, and the producer never
+        // wakes: the second offer must come in this very turn.
+        let cx = &mut Context::from_waker(Waker::noop());
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(
+            script.calls(),
+            [
+                Call::Offered(tag(0, 0)),
+                Call::Refused(tag(0, 0), SendRefusal::TooLong),
+                Call::Offered(tag(0, 1)),
+                Call::Filled(tag(0, 1)),
+                Call::Ended(tag(0, 1), Outcome::Accepted),
+            ]
+        );
+        let frame = line.0.borrow().sent[0].clone();
+        let (_, packet) = EthernetHeader::parse(&frame).unwrap();
+        let ip = Ipv4Header::parse(packet).unwrap();
+        let (udp, data) = UdpHeader::parse(ip.payload()).unwrap();
+        assert_eq!(data, data_of(tag(0, 1), 40));
+        assert!(
+            Checksum::new()
+                .with(&ipv4_pseudo_header(
+                    OUR_IP,
+                    [192, 0, 2, 255],
+                    PROTOCOL_UDP,
+                    udp.length
+                ))
+                .with(ip.payload())
+                .verifies()
+        );
+        for _ in 0..4 {
+            let _pending = poll(&mut run, cx);
+        }
+        assert_eq!(script.calls().len(), 5, "the refused offer never came back");
+    });
 }
 
 #[test]
 fn eight_final_refusals_spend_the_turn_and_the_next_turn_goes_on() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    for index in 0..8 {
-        script.push(tag(0, index), broadcast(), 2000);
-    }
-    script.push(tag(0, 8), broadcast(), 40);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    let cx = &mut Context::from_waker(&waker);
-    assert!(poll(&mut run, cx).is_pending());
-    let first: Vec<Call> = (0..8)
-        .flat_map(|index| {
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        for index in 0..8 {
+            script.push(tag(0, index), broadcast(), 2000);
+        }
+        script.push(tag(0, 8), broadcast(), 40);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        let cx = &mut Context::from_waker(&waker);
+        assert!(poll(&mut run, cx).is_pending());
+        let first: Vec<Call> = (0..8)
+            .flat_map(|index| {
+                [
+                    Call::Offered(tag(0, index)),
+                    Call::Refused(tag(0, index), SendRefusal::TooLong),
+                ]
+            })
+            .collect();
+        assert_eq!(script.calls(), first, "eight offers, the turn's budget");
+        assert!(
+            count.0.load(core::sync::atomic::Ordering::SeqCst) > 0,
+            "the spent budget is progress: the service yields"
+        );
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(
+            script.calls_from(16),
             [
-                Call::Offered(tag(0, index)),
-                Call::Refused(tag(0, index), SendRefusal::TooLong),
+                Call::Offered(tag(0, 8)),
+                Call::Filled(tag(0, 8)),
+                Call::Ended(tag(0, 8), Outcome::Accepted),
             ]
-        })
-        .collect();
-    assert_eq!(script.calls(), first, "eight offers, the turn's budget");
-    assert!(
-        count.0.load(core::sync::atomic::Ordering::SeqCst) > 0,
-        "the spent budget is progress: the service yields"
-    );
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(
-        script.calls_from(16),
-        [
-            Call::Offered(tag(0, 8)),
-            Call::Filled(tag(0, 8)),
-            Call::Ended(tag(0, 8), Outcome::Accepted),
-        ]
-    );
+        );
+    });
 }
 
 /// `NoPlace` holds the producer's offers until one of its places frees, and
@@ -730,63 +738,64 @@ fn eight_final_refusals_spend_the_turn_and_the_next_turn_goes_on() {
 /// held offer is accepted.
 #[test]
 fn no_place_asks_nothing_until_a_place_frees() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    line.open(Room::Full);
-    for index in 0..3 {
-        script.push(tag(0, index), broadcast(), 16);
-    }
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        script.calls(),
-        [
-            Call::Offered(tag(0, 0)),
-            Call::Offered(tag(0, 1)),
-            Call::Offered(tag(0, 2)),
-            Call::Refused(tag(0, 2), SendRefusal::NoPlace),
-        ]
-    );
-    assert_eq!(
-        script.interest(),
-        Some(Interest::Changes),
-        "a held producer waits for changes only"
-    );
-    // A wake with nothing changed asks nothing.
-    script.wake();
-    settle(&mut run, &count, &waker);
-    assert_eq!(script.calls().len(), 4, "no ask before a place frees");
-    line.open(Room::Free);
-    let cx = &mut Context::from_waker(&waker);
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(
-        script.calls_from(4),
-        [
-            Call::Filled(tag(0, 0)),
-            Call::Ended(tag(0, 0), Outcome::Accepted),
-            Call::Filled(tag(0, 1)),
-            Call::Ended(tag(0, 1), Outcome::Accepted),
-        ],
-        "each place frees as its port takes its frame"
-    );
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(
-        script.calls_from(8),
-        [
-            Call::Offered(tag(0, 2)),
-            Call::Filled(tag(0, 2)),
-            Call::Ended(tag(0, 2), Outcome::Accepted),
-        ],
-        "the held offer comes in the next turn"
-    );
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        line.open(Room::Full);
+        for index in 0..3 {
+            script.push(tag(0, index), broadcast(), 16);
+        }
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.calls(),
+            [
+                Call::Offered(tag(0, 0)),
+                Call::Offered(tag(0, 1)),
+                Call::Offered(tag(0, 2)),
+                Call::Refused(tag(0, 2), SendRefusal::NoPlace),
+            ]
+        );
+        assert_eq!(
+            script.interest(),
+            Some(Interest::Changes),
+            "a held producer waits for changes only"
+        );
+        // A wake with nothing changed asks nothing.
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(script.calls().len(), 4, "no ask before a place frees");
+        line.open(Room::Free);
+        let cx = &mut Context::from_waker(&waker);
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(
+            script.calls_from(4),
+            [
+                Call::Filled(tag(0, 0)),
+                Call::Ended(tag(0, 0), Outcome::Accepted),
+                Call::Filled(tag(0, 1)),
+                Call::Ended(tag(0, 1), Outcome::Accepted),
+            ],
+            "each place frees as its port takes its frame"
+        );
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(
+            script.calls_from(8),
+            [
+                Call::Offered(tag(0, 2)),
+                Call::Filled(tag(0, 2)),
+                Call::Ended(tag(0, 2), Outcome::Accepted),
+            ],
+            "the held offer comes in the next turn"
+        );
+    });
 }
 
 /// How a test makes the held offer stale.
@@ -813,14 +822,17 @@ fn make_stale(script: &Script, how: Stale, held: Tag, next: Tag, remote: Remote)
 /// datagrams hold every neighbor entry. The application then offers B to
 /// broadcast, the neighbor table unchanged: the next turn drops the stale
 /// hold and declares B, and A hears no `ended`.
-fn a_stale_neighbors_full_hold_gives_way<Net: 'static>(how: Stale) {
+fn a_stale_neighbors_full_hold_gives_way<'n, Net: Brand + 'n>(
+    right: NetworkClaim<Net>,
+    how: Stale,
+) {
     let Bench {
         mut service,
         mut socket,
         script,
         clock,
         ..
-    } = direct::<Net>();
+    } = direct(right);
     let mut events = ();
     let mut run = pin!(service.run(clock, &mut events));
     let (count, waker) = counter();
@@ -857,28 +869,30 @@ fn a_stale_neighbors_full_hold_gives_way<Net: 'static>(how: Stale) {
 
 #[test]
 fn a_new_generation_drops_a_stale_neighbors_full_hold() {
-    brand!(Net);
-    a_stale_neighbors_full_hold_gives_way::<Net>(Stale::Generation);
+    with_local_network(|right| {
+        a_stale_neighbors_full_hold_gives_way(right, Stale::Generation);
+    });
 }
 
 #[test]
 fn an_offer_no_longer_the_producer_s_drops_its_neighbors_full_hold() {
-    brand!(Net);
-    a_stale_neighbors_full_hold_gives_way::<Net>(Stale::NotCurrent);
+    with_local_network(|right| {
+        a_stale_neighbors_full_hold_gives_way(right, Stale::NotCurrent);
+    });
 }
 
 /// A `NoPlace` hold made stale is cancelled and a new offer is asked; the
 /// places are still taken, so that offer gets `NoPlace` again. The old works
 /// stay current and keep their places: this is the cancellation alone, apart
 /// from an acceptance.
-fn a_stale_no_place_hold_is_cancelled<Net: 'static>(how: Stale) {
+fn a_stale_no_place_hold_is_cancelled<'n, Net: Brand + 'n>(right: NetworkClaim<Net>, how: Stale) {
     let Bench {
         mut service,
         line,
         script,
         clock,
         ..
-    } = direct::<Net>();
+    } = direct(right);
     line.open(Room::Full);
     for index in 0..3 {
         script.push(tag(0, index), broadcast(), 16);
@@ -914,14 +928,16 @@ fn a_stale_no_place_hold_is_cancelled<Net: 'static>(how: Stale) {
 
 #[test]
 fn a_new_generation_cancels_a_no_place_hold() {
-    brand!(Net);
-    a_stale_no_place_hold_is_cancelled::<Net>(Stale::Generation);
+    with_local_network(|right| {
+        a_stale_no_place_hold_is_cancelled(right, Stale::Generation);
+    });
 }
 
 #[test]
 fn an_offer_no_longer_the_producer_s_cancels_its_no_place_hold() {
-    brand!(Net);
-    a_stale_no_place_hold_is_cancelled::<Net>(Stale::NotCurrent);
+    with_local_network(|right| {
+        a_stale_no_place_hold_is_cancelled(right, Stale::NotCurrent);
+    });
 }
 
 /// `NeighborsFull` asks nothing until the neighbor change counter moves,
@@ -930,47 +946,48 @@ fn an_offer_no_longer_the_producer_s_cancels_its_no_place_hold() {
 /// next turn. A wake with nothing changed is the control: it asks nothing.
 #[test]
 fn a_neighbors_full_hold_waits_for_a_release_without_any_arp_entry() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        mut socket,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    line.0.borrow_mut().incoming.push_back(peer_asks());
-    line.open(Room::Full);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    let known = channel_send(&mut socket, &mut run, peer(), b"known");
-    let _asking = channel_send(&mut socket, &mut run, host(7), b"asking");
-    settle(&mut run, &count, &waker);
-    let a = tag(0, 0);
-    script.push(a, host(9), 16);
-    script.wake();
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        script.calls(),
-        [
-            Call::Offered(a),
-            Call::Refused(a, SendRefusal::NeighborsFull)
-        ]
-    );
-    // The control: the same offer, nothing released.
-    script.wake();
-    settle(&mut run, &count, &waker);
-    assert_eq!(script.calls().len(), 2, "the hold stays");
-    line.open(Room::Free);
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        result_now(known),
-        Some(Sent::Ended(Outcome::Accepted)),
-        "its neighbor's protection was released"
-    );
-    assert!(line.0.borrow().incoming.is_empty(), "no ARP answer came");
-    assert_eq!(script.calls_from(2), [Call::Offered(a)], "asked again");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            mut socket,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        line.0.borrow_mut().incoming.push_back(peer_asks());
+        line.open(Room::Full);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        let known = channel_send(&mut socket, &mut run, peer(), b"known");
+        let _asking = channel_send(&mut socket, &mut run, host(7), b"asking");
+        settle(&mut run, &count, &waker);
+        let a = tag(0, 0);
+        script.push(a, host(9), 16);
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.calls(),
+            [
+                Call::Offered(a),
+                Call::Refused(a, SendRefusal::NeighborsFull)
+            ]
+        );
+        // The control: the same offer, nothing released.
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(script.calls().len(), 2, "the hold stays");
+        line.open(Room::Free);
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            result_now(known),
+            Some(Sent::Ended(Outcome::Accepted)),
+            "its neighbor's protection was released"
+        );
+        assert!(line.0.borrow().incoming.is_empty(), "no ARP answer came");
+        assert_eq!(script.calls_from(2), [Call::Offered(a)], "asked again");
+    });
 }
 
 /// What an observer holds now, without waiting.
@@ -983,49 +1000,50 @@ fn result_now(observer: Observer<'_>) -> Option<Sent> {
 /// fill.
 #[test]
 fn one_declining_fill_a_turn_and_the_channel_still_goes() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        mut socket,
-        line,
-        script,
-        clock,
-        ..
-    } = bench::<Net, 8>();
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let cx = &mut Context::from_waker(Waker::noop());
-    let first = blocks(&mut socket, &mut run, 2);
-    let mut first = first.into_iter();
-    let mut block = first.next().unwrap();
-    block.fill(b"first").unwrap();
-    let mut second = first.next().unwrap();
-    second.fill(b"second").unwrap();
-    script.0.borrow_mut().declines = true;
-    for index in 0..8 {
-        script.push(tag(0, index), broadcast(), 16);
-    }
-    drop(socket.send(broadcast(), block).ok().unwrap());
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(line.channel(), [b"first".to_vec()], "the datagram went");
-    assert_eq!(script.filled(), 1, "one declining fill in the turn");
-    drop(socket.send(broadcast(), second).ok().unwrap());
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(line.channel().len(), 2);
-    assert_eq!(script.filled(), 2, "at most one more in the next turn");
-    let declined = script
-        .calls()
-        .iter()
-        .filter(|call| matches!(call, Call::Ended(_, Outcome::Declined)))
-        .count();
-    assert_eq!(declined, 2, "each decline ends its work Declined");
-    assert!(
-        !script
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            mut socket,
+            line,
+            script,
+            clock,
+            ..
+        } = bench::<_, 8>(right);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let cx = &mut Context::from_waker(Waker::noop());
+        let first = blocks(&mut socket, &mut run, 2);
+        let mut first = first.into_iter();
+        let mut block = first.next().unwrap();
+        block.fill(b"first").unwrap();
+        let mut second = first.next().unwrap();
+        second.fill(b"second").unwrap();
+        script.0.borrow_mut().declines = true;
+        for index in 0..8 {
+            script.push(tag(0, index), broadcast(), 16);
+        }
+        drop(socket.send(broadcast(), block).ok().unwrap());
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(line.channel(), [b"first".to_vec()], "the datagram went");
+        assert_eq!(script.filled(), 1, "one declining fill in the turn");
+        drop(socket.send(broadcast(), second).ok().unwrap());
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(line.channel().len(), 2);
+        assert_eq!(script.filled(), 2, "at most one more in the next turn");
+        let declined = script
             .calls()
             .iter()
-            .any(|call| matches!(call, Call::Ended(_, Outcome::Rejected))),
-        "never Rejected"
-    );
+            .filter(|call| matches!(call, Call::Ended(_, Outcome::Declined)))
+            .count();
+        assert_eq!(declined, 2, "each decline ends its work Declined");
+        assert!(
+            !script
+                .calls()
+                .iter()
+                .any(|call| matches!(call, Call::Ended(_, Outcome::Rejected))),
+            "never Rejected"
+        );
+    });
 }
 
 /// A decline ends at publication and moves the turn past its socket: once
@@ -1033,45 +1051,46 @@ fn one_declining_fill_a_turn_and_the_channel_still_goes() {
 /// producer's next work.
 #[test]
 fn after_a_declining_fill_the_next_socket_goes_first() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        mut socket,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let cx = &mut Context::from_waker(Waker::noop());
-    let mut block = blocks(&mut socket, &mut run, 1).pop().unwrap();
-    block.fill(b"channel").unwrap();
-    script.0.borrow_mut().declining.push(0);
-    script.push(tag(0, 0), broadcast(), 16);
-    script.push(tag(0, 1), broadcast(), 16);
-    line.0
-        .borrow_mut()
-        .replies
-        .extend([Reply::Take, Reply::Full]);
-    drop(socket.send(broadcast(), block).ok().unwrap());
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(line.sent(), 0, "the decline, then no room");
-    line.open(Room::Free);
-    for _ in 0..4 {
-        let _pending = poll(&mut run, cx);
-    }
-    let sent = line.0.borrow().sent.clone();
-    let source = |frame: &Vec<u8>| {
-        let (_, packet) = EthernetHeader::parse(frame).unwrap();
-        let ip = Ipv4Header::parse(packet).unwrap();
-        UdpHeader::parse(ip.payload()).unwrap().0.ports.source
-    };
-    assert_eq!(
-        sent.iter().map(source).collect::<Vec<_>>(),
-        [CHANNEL_PORT, LOCAL_PORT],
-        "the channel's datagram first"
-    );
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            mut socket,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let cx = &mut Context::from_waker(Waker::noop());
+        let mut block = blocks(&mut socket, &mut run, 1).pop().unwrap();
+        block.fill(b"channel").unwrap();
+        script.0.borrow_mut().declining.push(0);
+        script.push(tag(0, 0), broadcast(), 16);
+        script.push(tag(0, 1), broadcast(), 16);
+        line.0
+            .borrow_mut()
+            .replies
+            .extend([Reply::Take, Reply::Full]);
+        drop(socket.send(broadcast(), block).ok().unwrap());
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(line.sent(), 0, "the decline, then no room");
+        line.open(Room::Free);
+        for _ in 0..4 {
+            let _pending = poll(&mut run, cx);
+        }
+        let sent = line.0.borrow().sent.clone();
+        let source = |frame: &Vec<u8>| {
+            let (_, packet) = EthernetHeader::parse(frame).unwrap();
+            let ip = Ipv4Header::parse(packet).unwrap();
+            UdpHeader::parse(ip.payload()).unwrap().0.ports.source
+        };
+        assert_eq!(
+            sent.iter().map(source).collect::<Vec<_>>(),
+            [CHANNEL_PORT, LOCAL_PORT],
+            "the channel's datagram first"
+        );
+    });
 }
 
 /// A new generation ends every old work in one turn, with no fill and no
@@ -1080,51 +1099,52 @@ fn after_a_declining_fill_the_next_socket_goes_first() {
 /// generation B's data under A's work.
 #[test]
 fn a_new_generation_ends_old_works_and_its_offers_go_in_the_same_turn() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    line.open(Room::Full);
-    script.push(tag(0, 0), broadcast(), 16);
-    script.push(tag(0, 1), broadcast(), 16);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    settle(&mut run, &count, &waker);
-    let publishes = line.publishes();
-    {
-        // Run B overwrites entry 0 with its own data.
-        let mut source = script.0.borrow_mut();
-        source.generation = 1;
-        source.held.clear();
-    }
-    script.push(tag(1, 0), broadcast(), 16);
-    line.open(Room::Free);
-    script.wake();
-    let cx = &mut Context::from_waker(&waker);
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(
-        script.calls_from(2),
-        [
-            Call::Ended(tag(0, 0), Outcome::Declined),
-            Call::Ended(tag(0, 1), Outcome::Declined),
-            Call::Offered(tag(1, 0)),
-            Call::Filled(tag(1, 0)),
-            Call::Ended(tag(1, 0), Outcome::Accepted),
-        ]
-    );
-    assert_eq!(line.publishes(), publishes + 1, "withdrawal calls no port");
-    assert_eq!(line.produced(), [data_of(tag(1, 0), 16)]);
-    let works = script.0.borrow().works.clone();
-    for (at, (id, tag)) in works.iter().enumerate() {
-        for (other, other_tag) in &works[at + 1..] {
-            assert_eq!(id == other, tag == other_tag, "one identity per work");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        line.open(Room::Full);
+        script.push(tag(0, 0), broadcast(), 16);
+        script.push(tag(0, 1), broadcast(), 16);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        settle(&mut run, &count, &waker);
+        let publishes = line.publishes();
+        {
+            // Run B overwrites entry 0 with its own data.
+            let mut source = script.0.borrow_mut();
+            source.generation = 1;
+            source.held.clear();
         }
-    }
+        script.push(tag(1, 0), broadcast(), 16);
+        line.open(Room::Free);
+        script.wake();
+        let cx = &mut Context::from_waker(&waker);
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(
+            script.calls_from(2),
+            [
+                Call::Ended(tag(0, 0), Outcome::Declined),
+                Call::Ended(tag(0, 1), Outcome::Declined),
+                Call::Offered(tag(1, 0)),
+                Call::Filled(tag(1, 0)),
+                Call::Ended(tag(1, 0), Outcome::Accepted),
+            ]
+        );
+        assert_eq!(line.publishes(), publishes + 1, "withdrawal calls no port");
+        assert_eq!(line.produced(), [data_of(tag(1, 0), 16)]);
+        let works = script.0.borrow().works.clone();
+        for (at, (id, tag)) in works.iter().enumerate() {
+            for (other, other_tag) in &works[at + 1..] {
+                assert_eq!(id == other, tag == other_tag, "one identity per work");
+            }
+        }
+    });
 }
 
 /// An accepted work's one outcome is given as its port takes its frame: a
@@ -1132,50 +1152,51 @@ fn a_new_generation_ends_old_works_and_its_offers_go_in_the_same_turn() {
 /// accepted ones are never told again.
 #[test]
 fn an_accepted_work_ends_once_and_a_new_generation_withdraws_only_open_work() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    script.push(tag(0, 0), broadcast(), 16);
-    script.push(tag(0, 1), broadcast(), 16);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        script.calls(),
-        [
-            Call::Offered(tag(0, 0)),
-            Call::Offered(tag(0, 1)),
-            Call::Filled(tag(0, 0)),
-            Call::Ended(tag(0, 0), Outcome::Accepted),
-            Call::Filled(tag(0, 1)),
-            Call::Ended(tag(0, 1), Outcome::Accepted),
-        ]
-    );
-    line.open(Room::Full);
-    script.push(tag(0, 2), broadcast(), 16);
-    script.wake();
-    settle(&mut run, &count, &waker);
-    assert_eq!(script.calls_from(6), [Call::Offered(tag(0, 2))]);
-    {
-        // A new generation takes the source's data, the open work's too.
-        let mut source = script.0.borrow_mut();
-        source.generation = 1;
-        source.held.clear();
-    }
-    script.wake();
-    let cx = &mut Context::from_waker(&waker);
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(
-        script.calls_from(7),
-        [Call::Ended(tag(0, 2), Outcome::Declined)],
-        "only the work still declared"
-    );
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        script.push(tag(0, 0), broadcast(), 16);
+        script.push(tag(0, 1), broadcast(), 16);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.calls(),
+            [
+                Call::Offered(tag(0, 0)),
+                Call::Offered(tag(0, 1)),
+                Call::Filled(tag(0, 0)),
+                Call::Ended(tag(0, 0), Outcome::Accepted),
+                Call::Filled(tag(0, 1)),
+                Call::Ended(tag(0, 1), Outcome::Accepted),
+            ]
+        );
+        line.open(Room::Full);
+        script.push(tag(0, 2), broadcast(), 16);
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(script.calls_from(6), [Call::Offered(tag(0, 2))]);
+        {
+            // A new generation takes the source's data, the open work's too.
+            let mut source = script.0.borrow_mut();
+            source.generation = 1;
+            source.held.clear();
+        }
+        script.wake();
+        let cx = &mut Context::from_waker(&waker);
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(
+            script.calls_from(7),
+            [Call::Ended(tag(0, 2), Outcome::Declined)],
+            "only the work still declared"
+        );
+    });
 }
 
 /// A work no longer current when its slot comes is declined by its
@@ -1183,83 +1204,86 @@ fn an_accepted_work_ends_once_and_a_new_generation_withdraws_only_open_work() {
 /// generation did not change: no frame goes.
 #[test]
 fn a_work_not_current_at_its_fill_ends_declined_unfilled() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    line.open(Room::Full);
-    script.push(tag(0, 0), broadcast(), 16);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    settle(&mut run, &count, &waker);
-    // The entry is reused for other data, the generation unchanged.
-    script.0.borrow_mut().held[0].tag = tag(0, 7);
-    line.open(Room::Free);
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        script.calls(),
-        [
-            Call::Offered(tag(0, 0)),
-            Call::Filled(tag(0, 0)),
-            Call::Ended(tag(0, 0), Outcome::Declined),
-        ]
-    );
-    assert_eq!(line.sent(), 0);
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        line.open(Room::Full);
+        script.push(tag(0, 0), broadcast(), 16);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        settle(&mut run, &count, &waker);
+        // The entry is reused for other data, the generation unchanged.
+        script.0.borrow_mut().held[0].tag = tag(0, 7);
+        line.open(Room::Free);
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.calls(),
+            [
+                Call::Offered(tag(0, 0)),
+                Call::Filled(tag(0, 0)),
+                Call::Ended(tag(0, 0), Outcome::Declined),
+            ]
+        );
+        assert_eq!(line.sent(), 0);
+    });
 }
 
 /// The port says `Ok` after a declining fill: `Unknown` and the port's
 /// fault, which wins over the decline.
 #[test]
 fn a_yes_after_a_declining_fill_is_unknown_and_ends_the_service() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    script.0.borrow_mut().declines = true;
-    line.0.borrow_mut().replies.push_back(Reply::Yes);
-    script.push(tag(0, 0), broadcast(), 16);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let cx = &mut Context::from_waker(Waker::noop());
-    assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::PortContract));
-    assert_eq!(
-        script.calls_from(2),
-        [Call::Ended(tag(0, 0), Outcome::Unknown)]
-    );
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        script.0.borrow_mut().declines = true;
+        line.0.borrow_mut().replies.push_back(Reply::Yes);
+        script.push(tag(0, 0), broadcast(), 16);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let cx = &mut Context::from_waker(Waker::noop());
+        assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::PortContract));
+        assert_eq!(
+            script.calls_from(2),
+            [Call::Ended(tag(0, 0), Outcome::Unknown)]
+        );
+    });
 }
 
 /// The port refuses on its own after a declining fill: the port's fault,
 /// and the work ends by the fill's recorded cause.
 #[test]
 fn a_refusal_after_a_declining_fill_ends_the_work_declined_and_the_service() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    script.0.borrow_mut().declines = true;
-    line.0.borrow_mut().replies.push_back(Reply::Misreport);
-    script.push(tag(0, 0), broadcast(), 16);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let cx = &mut Context::from_waker(Waker::noop());
-    assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::PortContract));
-    assert_eq!(
-        script.calls_from(2),
-        [Call::Ended(tag(0, 0), Outcome::Declined)]
-    );
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        script.0.borrow_mut().declines = true;
+        line.0.borrow_mut().replies.push_back(Reply::Misreport);
+        script.push(tag(0, 0), broadcast(), 16);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let cx = &mut Context::from_waker(Waker::noop());
+        assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::PortContract));
+        assert_eq!(
+            script.calls_from(2),
+            [Call::Ended(tag(0, 0), Outcome::Declined)]
+        );
+    });
 }
 
 /// `Accepted` and `Unknown` in one turn, then the service is dropped: the
@@ -1267,168 +1291,173 @@ fn a_refusal_after_a_declining_fill_ends_the_work_declined_and_the_service() {
 /// never reached the port.
 #[test]
 fn a_dropped_service_has_delivered_every_known_outcome() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        end,
-        clock,
-        ..
-    } = bench::<Net, 8>();
-    line.0
-        .borrow_mut()
-        .replies
-        .extend([Reply::Take, Reply::Lazy]);
-    for index in 0..3 {
-        script.push(tag(0, index), broadcast(), 16);
-    }
-    {
-        let mut events = ();
-        let mut run = pin!(service.run(clock, &mut events));
-        let cx = &mut Context::from_waker(Waker::noop());
-        assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::PortContract));
-    }
-    assert!(!end.is_ended());
-    let calls = script.calls();
-    drop(service);
-    assert!(end.is_ended(), "the guard set the flag");
-    assert_eq!(script.calls(), calls, "the drop called nothing");
-    assert!(calls.contains(&Call::Ended(tag(0, 0), Outcome::Accepted)));
-    assert!(calls.contains(&Call::Ended(tag(0, 1), Outcome::Unknown)));
-    assert!(!calls.contains(&Call::Filled(tag(0, 2))));
-    assert_eq!(line.publishes(), 2, "the open work never reached the port");
-    assert_eq!(
-        script.0.borrow().ended_after_end,
-        [false, false],
-        "both before the flag"
-    );
-    assert_eq!(
-        calls
-            .iter()
-            .filter(|call| matches!(call, Call::Offered(tag) if tag.index == 1))
-            .count(),
-        1,
-        "no second declaration after Unknown"
-    );
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            end,
+            clock,
+            ..
+        } = bench::<_, 8>(right);
+        line.0
+            .borrow_mut()
+            .replies
+            .extend([Reply::Take, Reply::Lazy]);
+        for index in 0..3 {
+            script.push(tag(0, index), broadcast(), 16);
+        }
+        {
+            let mut events = ();
+            let mut run = pin!(service.run(clock, &mut events));
+            let cx = &mut Context::from_waker(Waker::noop());
+            assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::PortContract));
+        }
+        assert!(!end.is_ended());
+        let calls = script.calls();
+        drop(service);
+        assert!(end.is_ended(), "the guard set the flag");
+        assert_eq!(script.calls(), calls, "the drop called nothing");
+        assert!(calls.contains(&Call::Ended(tag(0, 0), Outcome::Accepted)));
+        assert!(calls.contains(&Call::Ended(tag(0, 1), Outcome::Unknown)));
+        assert!(!calls.contains(&Call::Filled(tag(0, 2))));
+        assert_eq!(line.publishes(), 2, "the open work never reached the port");
+        assert_eq!(
+            script.0.borrow().ended_after_end,
+            [false, false],
+            "both before the flag"
+        );
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|call| matches!(call, Call::Offered(tag) if tag.index == 1))
+                .count(),
+            1,
+            "no second declaration after Unknown"
+        );
+    });
 }
 
 #[test]
 fn a_cancelled_run_keeps_declared_work_and_a_new_run_fills_each_once() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    line.open(Room::Full);
-    script.push(tag(0, 0), broadcast(), 16);
-    script.push(tag(0, 1), broadcast(), 16);
-    let mut events = ();
-    let (count, waker) = counter();
-    {
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        line.open(Room::Full);
+        script.push(tag(0, 0), broadcast(), 16);
+        script.push(tag(0, 1), broadcast(), 16);
+        let mut events = ();
+        let (count, waker) = counter();
+        {
+            let mut run = pin!(service.run(clock, &mut events));
+            settle(&mut run, &count, &waker);
+        }
+        assert_eq!(script.calls().len(), 2, "no end from the cancel");
+        line.open(Room::Free);
         let mut run = pin!(service.run(clock, &mut events));
         settle(&mut run, &count, &waker);
-    }
-    assert_eq!(script.calls().len(), 2, "no end from the cancel");
-    line.open(Room::Free);
-    let mut run = pin!(service.run(clock, &mut events));
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        script.calls_from(2),
-        [
-            Call::Filled(tag(0, 0)),
-            Call::Ended(tag(0, 0), Outcome::Accepted),
-            Call::Filled(tag(0, 1)),
-            Call::Ended(tag(0, 1), Outcome::Accepted),
-        ]
-    );
+        assert_eq!(
+            script.calls_from(2),
+            [
+                Call::Filled(tag(0, 0)),
+                Call::Ended(tag(0, 0), Outcome::Accepted),
+                Call::Filled(tag(0, 1)),
+                Call::Ended(tag(0, 1), Outcome::Accepted),
+            ]
+        );
+    });
 }
 
 #[test]
 fn a_retirement_ends_each_open_work_retired_and_returns_the_producer() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        end,
-        stop,
-        clock,
-        ..
-    } = direct::<Net>();
-    line.open(Room::Full);
-    script.push(tag(0, 0), broadcast(), 16);
-    script.push(tag(0, 1), broadcast(), 16);
-    let mut events = ();
-    let (count, waker) = counter();
-    {
-        let mut run = pin!(service.run(clock, &mut events));
-        settle(&mut run, &count, &waker);
-        stop.try_send(()).ok().unwrap();
-        let cx = &mut Context::from_waker(&waker);
-        assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::Stopped));
-    }
-    assert_eq!(script.calls().len(), 2, "nothing yet");
-    let ended = service.retire();
-    assert!(end.is_ended());
-    assert_eq!(
-        script.calls_from(2),
-        [
-            Call::Ended(tag(0, 0), Outcome::Retired),
-            Call::Ended(tag(0, 1), Outcome::Retired),
-        ]
-    );
-    assert_eq!(script.0.borrow().ended_after_end, [false, false]);
-    assert!(Rc::ptr_eq(&ended.producers.0, &script.0), "returned");
-    assert_eq!(line.sent(), 0, "nothing published");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            end,
+            stop,
+            clock,
+            ..
+        } = direct(right);
+        line.open(Room::Full);
+        script.push(tag(0, 0), broadcast(), 16);
+        script.push(tag(0, 1), broadcast(), 16);
+        let mut events = ();
+        let (count, waker) = counter();
+        {
+            let mut run = pin!(service.run(clock, &mut events));
+            settle(&mut run, &count, &waker);
+            stop.try_send(()).ok().unwrap();
+            let cx = &mut Context::from_waker(&waker);
+            assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::Stopped));
+        }
+        assert_eq!(script.calls().len(), 2, "nothing yet");
+        let ended = service.retire();
+        assert!(end.is_ended());
+        assert_eq!(
+            script.calls_from(2),
+            [
+                Call::Ended(tag(0, 0), Outcome::Retired),
+                Call::Ended(tag(0, 1), Outcome::Retired),
+            ]
+        );
+        assert_eq!(script.0.borrow().ended_after_end, [false, false]);
+        assert!(Rc::ptr_eq(&ended.producers.0, &script.0), "returned");
+        assert_eq!(line.sent(), 0, "nothing published");
+    });
 }
 
 #[test]
 fn a_service_dropped_unrun_sets_the_end_flag_and_calls_nothing() {
-    brand!(Net);
-    let Bench {
-        service,
-        script,
-        end,
-        ..
-    } = direct::<Net>();
-    script.push(tag(0, 0), broadcast(), 16);
-    drop(service);
-    assert!(end.is_ended());
-    assert!(script.calls().is_empty());
+    with_local_network(|right| {
+        let Bench {
+            service,
+            script,
+            end,
+            ..
+        } = direct(right);
+        script.push(tag(0, 0), broadcast(), 16);
+        drop(service);
+        assert!(end.is_ended());
+        assert!(script.calls().is_empty());
+    });
 }
 
 /// The time alone wakes the service: no other task looks.
 #[test]
 fn a_producer_s_next_time_alone_wakes_the_service() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    let due = clock.now().saturating_add(Duration::from_millis(5));
-    script.0.borrow_mut().due = Some((
-        due,
-        Item {
-            tag: tag(0, 0),
-            remote: broadcast(),
-            data: data_of(tag(0, 0), 16),
-        },
-    ));
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    settle(&mut run, &count, &waker);
-    assert_eq!(clock.next_deadline(), Some(due), "the wait names the time");
-    clock.advance_to(due);
-    settle(&mut run, &count, &waker);
-    assert_eq!(line.produced(), [data_of(tag(0, 0), 16)]);
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        let due = clock.now().saturating_add(Duration::from_millis(5));
+        script.0.borrow_mut().due = Some((
+            due,
+            Item {
+                tag: tag(0, 0),
+                remote: broadcast(),
+                data: data_of(tag(0, 0), 16),
+            },
+        ));
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        settle(&mut run, &count, &waker);
+        assert_eq!(clock.next_deadline(), Some(due), "the wait names the time");
+        clock.advance_to(due);
+        settle(&mut run, &count, &waker);
+        assert_eq!(line.produced(), [data_of(tag(0, 0), 16)]);
+    });
 }
 
 #[derive(Default)]
@@ -1448,38 +1477,40 @@ impl EventSink<ServiceEvent> for Drops {
 /// Input for the producer's port is dropped before a block is taken.
 #[test]
 fn a_producer_s_port_takes_no_block_on_input() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        clock,
-        ..
-    } = direct::<Net>();
-    line.0
-        .borrow_mut()
-        .incoming
-        .push_back(udp_frame(LOCAL_PORT, b"no"));
-    let mut events = Drops::default();
-    {
-        let mut run = pin!(service.run(clock, &mut events));
-        let cx = &mut Context::from_waker(Waker::noop());
-        for _ in 0..4 {
-            assert!(poll(&mut run, cx).is_pending());
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            clock,
+            ..
+        } = direct(right);
+        line.0
+            .borrow_mut()
+            .incoming
+            .push_back(udp_frame(LOCAL_PORT, b"no"));
+        let mut events = Drops::default();
+        {
+            let mut run = pin!(service.run(clock, &mut events));
+            let cx = &mut Context::from_waker(Waker::noop());
+            for _ in 0..4 {
+                assert!(poll(&mut run, cx).is_pending());
+            }
         }
-    }
-    assert_eq!(events.0, [NetEvent::SendOnly]);
-    let ended = service.retire();
-    assert_eq!(ended.retired.pool.free(), BLOCKS);
+        assert_eq!(events.0, [NetEvent::SendOnly]);
+        let ended = service.retire();
+        assert_eq!(ended.retired.pool.free(), BLOCKS);
+    });
 }
 
 #[test]
 fn a_producer_binds_once_and_a_refusal_changes_nothing() {
-    brand!(Net);
-    let Bench { mut service, .. } = direct::<Net>();
-    assert_eq!(
-        service.bind_local(LOCAL_PORT + 1, Dscp::default()),
-        Err(LocalRefused::Bound)
-    );
+    with_local_network(|right| {
+        let Bench { mut service, .. } = direct(right);
+        assert_eq!(
+            service.bind_local(LOCAL_PORT + 1, Dscp::default()),
+            Err(LocalRefused::Bound)
+        );
+    });
 }
 
 /// A producer whose next offer cannot be declared registers for changes
@@ -1488,43 +1519,44 @@ fn a_producer_binds_once_and_a_refusal_changes_nothing() {
 /// offers.
 #[test]
 fn a_producer_at_its_open_budget_waits_for_changes_only() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = bench::<Net, 16>();
-    line.open(Room::Full);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        script.interest(),
-        Some(Interest::Offers),
-        "nothing to offer yet"
-    );
-    for index in 0..9 {
-        script.push(tag(0, index), broadcast(), 16);
-    }
-    script.wake();
-    settle(&mut run, &count, &waker);
-    let offered = |script: &Script| {
-        script
-            .calls()
-            .iter()
-            .filter(|call| matches!(call, Call::Offered(_)))
-            .count()
-    };
-    assert_eq!(offered(&script), 8, "eight open works at most");
-    assert_eq!(script.interest(), Some(Interest::Changes));
-    line.open(Room::Free);
-    settle(&mut run, &count, &waker);
-    assert_eq!(offered(&script), 9, "the ninth once places came back");
-    assert_eq!(line.produced().len(), 9);
-    assert_eq!(script.interest(), Some(Interest::Offers));
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = bench::<_, 16>(right);
+        line.open(Room::Full);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.interest(),
+            Some(Interest::Offers),
+            "nothing to offer yet"
+        );
+        for index in 0..9 {
+            script.push(tag(0, index), broadcast(), 16);
+        }
+        script.wake();
+        settle(&mut run, &count, &waker);
+        let offered = |script: &Script| {
+            script
+                .calls()
+                .iter()
+                .filter(|call| matches!(call, Call::Offered(_)))
+                .count()
+        };
+        assert_eq!(offered(&script), 8, "eight open works at most");
+        assert_eq!(script.interest(), Some(Interest::Changes));
+        line.open(Room::Free);
+        settle(&mut run, &count, &waker);
+        assert_eq!(offered(&script), 9, "the ninth once places came back");
+        assert_eq!(line.produced().len(), 9);
+        assert_eq!(script.interest(), Some(Interest::Offers));
+    });
 }
 
 /// What the service told a sink of its producer.
@@ -1549,147 +1581,149 @@ impl EventSink<NetEvent> for Steps {
 /// each wait registered the producer for.
 #[test]
 fn a_counting_sink_hears_each_of_the_producer_s_steps() {
-    use crate::LocalEvent::{Declined, Held, Offered, Refused, Waits, Withdrawn};
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    line.open(Room::Full);
-    script.push(tag(0, 9), broadcast(), 2000);
-    for index in 0..3 {
-        script.push(tag(0, index), broadcast(), 16);
-    }
-    let mut steps = Steps::default();
-    let (count, waker) = counter();
-    {
-        let mut run = pin!(service.run(clock, &mut steps));
-        settle(&mut run, &count, &waker);
-    }
-    assert_eq!(
-        core::mem::take(&mut steps.0),
-        [
-            Offered,
-            Refused,
-            Offered,
-            Offered,
-            Offered,
-            Held,
-            Waits(Interest::Changes)
-        ]
-    );
-    {
-        let mut source = script.0.borrow_mut();
-        source.generation = 1;
-        source.held.clear();
-        source.ready.clear();
-    }
-    script.push(tag(1, 0), broadcast(), 16);
-    {
-        let mut run = pin!(service.run(clock, &mut steps));
-        settle(&mut run, &count, &waker);
-    }
-    assert_eq!(
-        core::mem::take(&mut steps.0),
-        [Withdrawn, Withdrawn, Offered, Waits(Interest::Offers)]
-    );
-    script.0.borrow_mut().declines = true;
-    line.open(Room::Free);
-    {
-        let mut run = pin!(service.run(clock, &mut steps));
-        settle(&mut run, &count, &waker);
-    }
-    assert_eq!(steps.0.first(), Some(&Declined));
+    with_local_network(|right| {
+        use crate::LocalEvent::{Declined, Held, Offered, Refused, Waits, Withdrawn};
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        line.open(Room::Full);
+        script.push(tag(0, 9), broadcast(), 2000);
+        for index in 0..3 {
+            script.push(tag(0, index), broadcast(), 16);
+        }
+        let mut steps = Steps::default();
+        let (count, waker) = counter();
+        {
+            let mut run = pin!(service.run(clock, &mut steps));
+            settle(&mut run, &count, &waker);
+        }
+        assert_eq!(
+            core::mem::take(&mut steps.0),
+            [
+                Offered,
+                Refused,
+                Offered,
+                Offered,
+                Offered,
+                Held,
+                Waits(Interest::Changes)
+            ]
+        );
+        {
+            let mut source = script.0.borrow_mut();
+            source.generation = 1;
+            source.held.clear();
+            source.ready.clear();
+        }
+        script.push(tag(1, 0), broadcast(), 16);
+        {
+            let mut run = pin!(service.run(clock, &mut steps));
+            settle(&mut run, &count, &waker);
+        }
+        assert_eq!(
+            core::mem::take(&mut steps.0),
+            [Withdrawn, Withdrawn, Offered, Waits(Interest::Offers)]
+        );
+        script.0.borrow_mut().declines = true;
+        line.open(Room::Free);
+        {
+            let mut run = pin!(service.run(clock, &mut steps));
+            settle(&mut run, &count, &waker);
+        }
+        assert_eq!(steps.0.first(), Some(&Declined));
+    });
 }
 
 #[test]
 fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_tells() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = bench_on::<Net, 2>(Interface::dhcp(LOCAL, 1500, 7).unwrap());
-    let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
-    service.watch(watch).unwrap();
-    assert_eq!(service.watch(watch), Err(WatchRefused::Taken));
-    let first = watch.changes();
-    assert_eq!(watch.read().unwrap().configuration.unwrap().ipv4, None);
-    let mut events = ();
-    {
-        let mut run = pin!(service.run(clock, &mut events));
-        let (count, waker) = counter();
-        settle(&mut run, &count, &waker);
-        let sent = dhcp_messages(&line.0.borrow().sent);
-        assert_eq!(sent.len(), 1);
-        let (kind, xid) = sent[0];
-        assert_eq!(kind, MessageType::Discover);
-        // The producer's offer meets no address and holds.
-        let a = tag(0, 0);
-        script.push(a, peer(), 16);
-        script.wake();
-        settle(&mut run, &count, &waker);
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = bench_on::<_, 2>(right, Interface::dhcp(LOCAL, 1500, 7).unwrap());
+        let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
+        service.watch(watch).unwrap();
+        assert_eq!(service.watch(watch), Err(WatchRefused::Taken));
+        let first = watch.changes();
+        assert_eq!(watch.read().unwrap().configuration.unwrap().ipv4, None);
+        let mut events = ();
+        {
+            let mut run = pin!(service.run(clock, &mut events));
+            let (count, waker) = counter();
+            settle(&mut run, &count, &waker);
+            let sent = dhcp_messages(&line.0.borrow().sent);
+            assert_eq!(sent.len(), 1);
+            let (kind, xid) = sent[0];
+            assert_eq!(kind, MessageType::Discover);
+            // The producer's offer meets no address and holds.
+            let a = tag(0, 0);
+            script.push(a, peer(), 16);
+            script.wake();
+            settle(&mut run, &count, &waker);
+            assert_eq!(
+                script.calls(),
+                [Call::Offered(a), Call::Refused(a, SendRefusal::NoAddress)]
+            );
+            script.wake();
+            settle(&mut run, &count, &waker);
+            assert_eq!(script.calls().len(), 2, "the hold stays without an address");
+            // OFFER, REQUEST, ACK.
+            line.0
+                .borrow_mut()
+                .incoming
+                .push_back(dhcp_reply(MessageType::Offer, xid, 600));
+            line.open(Room::Free);
+            settle(&mut run, &count, &waker);
+            assert_eq!(
+                dhcp_messages(&line.0.borrow().sent).last(),
+                Some(&(MessageType::Request, xid))
+            );
+            line.0
+                .borrow_mut()
+                .incoming
+                .push_back(dhcp_reply(MessageType::Ack, xid, 600));
+            line.0.borrow_mut().incoming.push_back(peer_asks());
+            line.open(Room::Free);
+            settle(&mut run, &count, &waker);
+            // The watch has the address, published at the turn's end.
+            assert_ne!(watch.changes(), first);
+            let configuration = watch.read().unwrap().configuration.unwrap();
+            assert_eq!(configuration.ipv4.unwrap().address(), OUR_IP);
+            assert_eq!(configuration.lease.unwrap().server, PEER_IP);
+            // The address version released the hold: the offer went.
+            script.wake();
+            settle(&mut run, &count, &waker);
+            assert_eq!(
+                script.calls_from(2),
+                [
+                    Call::Offered(a),
+                    Call::Filled(a),
+                    Call::Ended(a, Outcome::Accepted)
+                ]
+            );
+            // T1 is half of 600 s from the REQUEST.
+            let lease = watch.read().unwrap().configuration.unwrap().lease.unwrap();
+            assert_eq!(lease.obtained, clock.now());
+            assert_eq!(
+                lease.renew,
+                clock.now().saturating_add(Duration::from_secs(300))
+            );
+        }
+        let ended = service.retire();
         assert_eq!(
-            script.calls(),
-            [Call::Offered(a), Call::Refused(a, SendRefusal::NoAddress)]
+            watch.read().unwrap().configuration,
+            None,
+            "the lease left with the core"
         );
-        script.wake();
-        settle(&mut run, &count, &waker);
-        assert_eq!(script.calls().len(), 2, "the hold stays without an address");
-        // OFFER, REQUEST, ACK.
-        line.0
-            .borrow_mut()
-            .incoming
-            .push_back(dhcp_reply(MessageType::Offer, xid, 600));
-        line.open(Room::Free);
-        settle(&mut run, &count, &waker);
-        assert_eq!(
-            dhcp_messages(&line.0.borrow().sent).last(),
-            Some(&(MessageType::Request, xid))
-        );
-        line.0
-            .borrow_mut()
-            .incoming
-            .push_back(dhcp_reply(MessageType::Ack, xid, 600));
-        line.0.borrow_mut().incoming.push_back(peer_asks());
-        line.open(Room::Free);
-        settle(&mut run, &count, &waker);
-        // The watch has the address, published at the turn's end.
-        assert_ne!(watch.changes(), first);
-        let configuration = watch.read().unwrap().configuration.unwrap();
-        assert_eq!(configuration.ipv4.unwrap().address(), OUR_IP);
-        assert_eq!(configuration.lease.unwrap().server, PEER_IP);
-        // The address version released the hold: the offer went.
-        script.wake();
-        settle(&mut run, &count, &waker);
-        assert_eq!(
-            script.calls_from(2),
-            [
-                Call::Offered(a),
-                Call::Filled(a),
-                Call::Ended(a, Outcome::Accepted)
-            ]
-        );
-        // T1 is half of 600 s from the REQUEST.
-        let lease = watch.read().unwrap().configuration.unwrap().lease.unwrap();
-        assert_eq!(lease.obtained, clock.now());
-        assert_eq!(
-            lease.renew,
-            clock.now().saturating_add(Duration::from_secs(300))
-        );
-    }
-    let ended = service.retire();
-    assert_eq!(
-        watch.read().unwrap().configuration,
-        None,
-        "the lease left with the core"
-    );
-    drop(ended);
+        drop(ended);
+    });
 }
 
 /// The peer's echo request to us.
@@ -1731,85 +1765,87 @@ fn peer_pings() -> Vec<u8> {
 
 #[test]
 fn an_echo_reply_s_end_releases_a_neighbors_full_hold() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        mut socket,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    // The peer is known, and its echo reply waits for a full port: the
-    // reply holds its entry, a channel datagram holds the other.
-    line.0.borrow_mut().incoming.push_back(peer_asks());
-    line.0.borrow_mut().incoming.push_back(peer_pings());
-    line.open(Room::Full);
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    let _asking = channel_send(&mut socket, &mut run, host(7), b"asking");
-    settle(&mut run, &count, &waker);
-    let a = tag(0, 0);
-    script.push(a, host(9), 16);
-    script.wake();
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        script.calls(),
-        [
-            Call::Offered(a),
-            Call::Refused(a, SendRefusal::NeighborsFull)
-        ]
-    );
-    // The reply goes: its entry is free, and the hold gives way.
-    line.open(Room::Free);
-    settle(&mut run, &count, &waker);
-    let replies = line
-        .0
-        .borrow()
-        .sent
-        .iter()
-        .filter(|frame| frame.get(23) == Some(&1))
-        .count();
-    assert_eq!(replies, 1, "the echo reply went");
-    assert_eq!(script.calls_from(2), [Call::Offered(a)], "asked again");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            mut socket,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        // The peer is known, and its echo reply waits for a full port: the
+        // reply holds its entry, a channel datagram holds the other.
+        line.0.borrow_mut().incoming.push_back(peer_asks());
+        line.0.borrow_mut().incoming.push_back(peer_pings());
+        line.open(Room::Full);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        let _asking = channel_send(&mut socket, &mut run, host(7), b"asking");
+        settle(&mut run, &count, &waker);
+        let a = tag(0, 0);
+        script.push(a, host(9), 16);
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.calls(),
+            [
+                Call::Offered(a),
+                Call::Refused(a, SendRefusal::NeighborsFull)
+            ]
+        );
+        // The reply goes: its entry is free, and the hold gives way.
+        line.open(Room::Free);
+        settle(&mut run, &count, &waker);
+        let replies = line
+            .0
+            .borrow()
+            .sent
+            .iter()
+            .filter(|frame| frame.get(23) == Some(&1))
+            .count();
+        assert_eq!(replies, 1, "the echo reply went");
+        assert_eq!(script.calls_from(2), [Call::Offered(a)], "asked again");
+    });
 }
 
 #[test]
 fn dropping_the_service_ends_the_watch_and_wakes_its_reader() {
-    brand!(Net);
-    let Bench {
-        mut service, clock, ..
-    } = direct::<Net>();
-    let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
-    service.watch(watch).unwrap();
-    assert!(watch.read().unwrap().configuration.unwrap().ipv4.is_some());
-    let seen = watch.changes();
-    let (count, waker) = counter();
-    let cx = &mut Context::from_waker(&waker);
-    let mut changed = pin!(watch.changed(seen));
-    assert!(changed.as_mut().poll(cx).is_pending());
-    // A cancelled run keeps the service, and the watch with it.
-    {
-        let mut events = ();
-        let mut run = pin!(service.run(clock, &mut events));
-        assert!(run.as_mut().poll(cx).is_pending());
-    }
-    assert!(watch.read().unwrap().configuration.is_some());
-    // The run's first turn published the link it saw: that wait is over, and
-    // the reader waits again.
-    assert!(changed.as_mut().poll(cx).is_ready());
-    let seen = watch.changes();
-    let mut changed = pin!(watch.changed(seen));
-    assert!(changed.as_mut().poll(cx).is_pending());
-    let woken = count.0.load(core::sync::atomic::Ordering::SeqCst);
-    drop(service);
-    assert_eq!(watch.read().unwrap().configuration, None);
-    assert!(
-        count.0.load(core::sync::atomic::Ordering::SeqCst) > woken,
-        "the reader was woken"
-    );
-    assert!(changed.as_mut().poll(cx).is_ready());
+    with_local_network(|right| {
+        let Bench {
+            mut service, clock, ..
+        } = direct(right);
+        let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
+        service.watch(watch).unwrap();
+        assert!(watch.read().unwrap().configuration.unwrap().ipv4.is_some());
+        let seen = watch.changes();
+        let (count, waker) = counter();
+        let cx = &mut Context::from_waker(&waker);
+        let mut changed = pin!(watch.changed(seen));
+        assert!(changed.as_mut().poll(cx).is_pending());
+        // A cancelled run keeps the service, and the watch with it.
+        {
+            let mut events = ();
+            let mut run = pin!(service.run(clock, &mut events));
+            assert!(run.as_mut().poll(cx).is_pending());
+        }
+        assert!(watch.read().unwrap().configuration.is_some());
+        // The run's first turn published the link it saw: that wait is over, and
+        // the reader waits again.
+        assert!(changed.as_mut().poll(cx).is_ready());
+        let seen = watch.changes();
+        let mut changed = pin!(watch.changed(seen));
+        assert!(changed.as_mut().poll(cx).is_pending());
+        let woken = count.0.load(core::sync::atomic::Ordering::SeqCst);
+        drop(service);
+        assert_eq!(watch.read().unwrap().configuration, None);
+        assert!(
+            count.0.load(core::sync::atomic::Ordering::SeqCst) > woken,
+            "the reader was woken"
+        );
+        assert!(changed.as_mut().poll(cx).is_ready());
+    });
 }
 
 /// A declining fill keeps the producer's flow out of the rest of its turn
@@ -1817,26 +1853,27 @@ fn dropping_the_service_ends_the_watch_and_wakes_its_reader() {
 /// itself starts.
 #[test]
 fn after_a_declining_fill_the_producer_s_next_work_goes_unwoken() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    script.0.borrow_mut().declining.push(0);
-    script.push(tag(0, 0), broadcast(), 16);
-    script.push(tag(0, 1), broadcast(), 16);
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        line.produced(),
-        [data_of(tag(0, 1), 16)],
-        "the next work went"
-    );
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        script.0.borrow_mut().declining.push(0);
+        script.push(tag(0, 0), broadcast(), 16);
+        script.push(tag(0, 1), broadcast(), 16);
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            line.produced(),
+            [data_of(tag(0, 1), 16)],
+            "the next work went"
+        );
+    });
 }
 
 /// The owner's case: the producer is held on `NeighborsFull`, then starts a
@@ -1846,44 +1883,45 @@ fn after_a_declining_fill_the_producer_s_next_work_goes_unwoken() {
 /// any other wake.
 #[test]
 fn a_producer_s_change_that_comes_with_a_return_is_not_lost_to_it() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        mut socket,
-        script,
-        line,
-        clock,
-        ..
-    } = direct::<Net>();
-    let lane = Box::leak(Box::new(crate::ReturnLane::new()));
-    let (returner, end) = lane.split();
-    assert!(service.attach_returns(end).is_ok());
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    let _seven = channel_send(&mut socket, &mut run, host(7), b"seven");
-    let _eight = channel_send(&mut socket, &mut run, host(8), b"eight");
-    let spare = blocks(&mut socket, &mut run, 1).pop().unwrap();
-    settle(&mut run, &count, &waker);
-    let held = tag(0, 0);
-    script.push(held, host(9), 16);
-    script.wake();
-    settle(&mut run, &count, &waker);
-    assert_eq!(
-        script.calls(),
-        [
-            Call::Offered(held),
-            Call::Refused(held, SendRefusal::NeighborsFull)
-        ]
-    );
-    let next = tag(1, 0);
-    script.forget(held);
-    script.0.borrow_mut().generation = 1;
-    script.push(next, broadcast(), 16);
-    script.wake();
-    returner.give(spare).ok().unwrap();
-    settle(&mut run, &count, &waker);
-    assert_eq!(line.produced(), [data_of(next, 16)], "the broadcast went");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            mut socket,
+            script,
+            line,
+            clock,
+            ..
+        } = direct(right);
+        let lane = Box::leak(Box::new(crate::ReturnLane::new()));
+        let (returner, end) = lane.split();
+        assert!(service.attach_returns(end).is_ok());
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        let _seven = channel_send(&mut socket, &mut run, host(7), b"seven");
+        let _eight = channel_send(&mut socket, &mut run, host(8), b"eight");
+        let spare = blocks(&mut socket, &mut run, 1).pop().unwrap();
+        settle(&mut run, &count, &waker);
+        let held = tag(0, 0);
+        script.push(held, host(9), 16);
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(
+            script.calls(),
+            [
+                Call::Offered(held),
+                Call::Refused(held, SendRefusal::NeighborsFull)
+            ]
+        );
+        let next = tag(1, 0);
+        script.forget(held);
+        script.0.borrow_mut().generation = 1;
+        script.push(next, broadcast(), 16);
+        script.wake();
+        returner.give(spare).ok().unwrap();
+        settle(&mut run, &count, &waker);
+        assert_eq!(line.produced(), [data_of(next, 16)], "the broadcast went");
+    });
 }
 
 /// A time already due when the wait begins ends it at its first poll as a
@@ -1891,61 +1929,63 @@ fn a_producer_s_change_that_comes_with_a_return_is_not_lost_to_it() {
 /// in the same poll.
 #[test]
 fn a_time_due_at_the_wait_still_leaves_one_useful_turn_a_poll() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        mut socket,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let cx = &mut Context::from_waker(Waker::noop());
-    let mut block = blocks(&mut socket, &mut run, 1).pop().unwrap();
-    block.fill(b"first").unwrap();
-    let due = clock.now().saturating_add(Duration::from_millis(5));
-    script.0.borrow_mut().due = Some((
-        due,
-        Item {
-            tag: tag(0, 0),
-            remote: broadcast(),
-            data: data_of(tag(0, 0), 16),
-        },
-    ));
-    // Publishing the channel's datagram takes the clock to the producer's
-    // time: the wait after that turn finds it already due.
-    line.0.borrow_mut().elapse = Some((clock, due));
-    drop(socket.send(broadcast(), block).ok().unwrap());
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(line.channel(), [b"first".to_vec()]);
-    assert!(line.produced().is_empty(), "one useful turn in this poll");
-    assert!(poll(&mut run, cx).is_pending());
-    assert_eq!(line.produced(), [data_of(tag(0, 0), 16)], "the next poll's");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            mut socket,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let cx = &mut Context::from_waker(Waker::noop());
+        let mut block = blocks(&mut socket, &mut run, 1).pop().unwrap();
+        block.fill(b"first").unwrap();
+        let due = clock.now().saturating_add(Duration::from_millis(5));
+        script.0.borrow_mut().due = Some((
+            due,
+            Item {
+                tag: tag(0, 0),
+                remote: broadcast(),
+                data: data_of(tag(0, 0), 16),
+            },
+        ));
+        // Publishing the channel's datagram takes the clock to the producer's
+        // time: the wait after that turn finds it already due.
+        line.0.borrow_mut().elapse = Some((clock, due));
+        drop(socket.send(broadcast(), block).ok().unwrap());
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(line.channel(), [b"first".to_vec()]);
+        assert!(line.produced().is_empty(), "one useful turn in this poll");
+        assert!(poll(&mut run, cx).is_pending());
+        assert_eq!(line.produced(), [data_of(tag(0, 0), 16)], "the next poll's");
+    });
 }
 
 /// With no data the producer offers nothing and the turns send nothing;
 /// its first offer after them goes.
 #[test]
 fn a_producer_s_offer_after_turns_with_nothing_ready_goes() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        line,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    let mut events = ();
-    let mut run = pin!(service.run(clock, &mut events));
-    let (count, waker) = counter();
-    settle(&mut run, &count, &waker);
-    assert!(line.produced().is_empty(), "nothing went");
-    script.push(tag(0, 0), broadcast(), 16);
-    script.wake();
-    settle(&mut run, &count, &waker);
-    assert_eq!(line.produced(), [data_of(tag(0, 0), 16)]);
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            line,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        let mut events = ();
+        let mut run = pin!(service.run(clock, &mut events));
+        let (count, waker) = counter();
+        settle(&mut run, &count, &waker);
+        assert!(line.produced().is_empty(), "nothing went");
+        script.push(tag(0, 0), broadcast(), 16);
+        script.wake();
+        settle(&mut run, &count, &waker);
+        assert_eq!(line.produced(), [data_of(tag(0, 0), 16)]);
+    });
 }
 
 /// Every service event, in order, where the test reads it while the service
@@ -1991,79 +2031,81 @@ fn turn_kinds(events: &[ServiceEvent]) -> Vec<(bool, usize)> {
 /// turn comes until control work does.
 #[test]
 fn frames_always_ready_take_packet_turns_until_control_work_comes() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        script,
-        clock,
-        line,
-        ..
-    } = direct::<Net>();
-    for index in 0..200 {
-        script.push(tag(0, index), broadcast(), 40);
-    }
-    let tape = Tape::default();
-    let mut events = tape.clone();
-    {
-        let mut run = pin!(service.run(clock, &mut events));
-        let cx = &mut Context::from_waker(Waker::noop());
-        while line.sent() < 200 {
-            assert!(poll(&mut run, cx).is_pending());
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            script,
+            clock,
+            line,
+            ..
+        } = direct(right);
+        for index in 0..200 {
+            script.push(tag(0, index), broadcast(), 40);
         }
-    }
-    let turns = turn_kinds(&tape.0.borrow());
-    let (first, rest) = turns.split_first().unwrap();
-    assert!(!first.0, "the first turn is whole");
-    let packets = rest.iter().take_while(|turn| turn.0).count();
-    assert!(packets > 1, "frames always ready take packet turns");
-    let last = rest.iter().rposition(|turn| turn.0).unwrap();
-    assert!(
-        rest[..last].iter().all(|turn| turn.0),
-        "no full turn without control work while frames are ready"
-    );
-    assert_eq!(script.filled(), 200, "every frame went, each once");
+        let tape = Tape::default();
+        let mut events = tape.clone();
+        {
+            let mut run = pin!(service.run(clock, &mut events));
+            let cx = &mut Context::from_waker(Waker::noop());
+            while line.sent() < 200 {
+                assert!(poll(&mut run, cx).is_pending());
+            }
+        }
+        let turns = turn_kinds(&tape.0.borrow());
+        let (first, rest) = turns.split_first().unwrap();
+        assert!(!first.0, "the first turn is whole");
+        let packets = rest.iter().take_while(|turn| turn.0).count();
+        assert!(packets > 1, "frames always ready take packet turns");
+        let last = rest.iter().rposition(|turn| turn.0).unwrap();
+        assert!(
+            rest[..last].iter().all(|turn| turn.0),
+            "no full turn without control work while frames are ready"
+        );
+        assert_eq!(script.filled(), 200, "every frame went, each once");
+    });
 }
 
 /// A socket's command while frames are always ready takes the very next
 /// turn whole: control work pending ends the packet turns at once.
 #[test]
 fn a_command_while_frames_are_always_ready_takes_the_next_turn_whole() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        mut socket,
-        script,
-        clock,
-        ..
-    } = direct::<Net>();
-    for index in 0..200 {
-        script.push(tag(0, index), broadcast(), 40);
-    }
-    let tape = Tape::default();
-    let mut events = tape.clone();
-    let cx = &mut Context::from_waker(Waker::noop());
-    let mut run = pin!(service.run(clock, &mut events));
-    // Into the packet turns.
-    let mut polls = 0;
-    while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) {
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            mut socket,
+            script,
+            clock,
+            ..
+        } = direct(right);
+        for index in 0..200 {
+            script.push(tag(0, index), broadcast(), 40);
+        }
+        let tape = Tape::default();
+        let mut events = tape.clone();
+        let cx = &mut Context::from_waker(Waker::noop());
+        let mut run = pin!(service.run(clock, &mut events));
+        // Into the packet turns.
+        let mut polls = 0;
+        while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) {
+            assert!(poll(&mut run, cx).is_pending());
+            polls += 1;
+            assert!(polls < 64, "frames always ready reach a packet turn");
+        }
+        let mut reserve = pin!(socket.reserve());
+        assert!(
+            reserve.as_mut().poll(cx).is_pending(),
+            "the request waits for a turn"
+        );
+        let before = turn_kinds(&tape.0.borrow()).len();
         assert!(poll(&mut run, cx).is_pending());
-        polls += 1;
-        assert!(polls < 64, "frames always ready reach a packet turn");
-    }
-    let mut reserve = pin!(socket.reserve());
-    assert!(
-        reserve.as_mut().poll(cx).is_pending(),
-        "the request waits for a turn"
-    );
-    let before = turn_kinds(&tape.0.borrow()).len();
-    assert!(poll(&mut run, cx).is_pending());
-    let turns = turn_kinds(&tape.0.borrow());
-    let next = turns.get(before).copied();
-    assert_eq!(
-        next,
-        Some((false, 1)),
-        "the next turn is whole and takes the request"
-    );
+        let turns = turn_kinds(&tape.0.borrow());
+        let next = turns.get(before).copied();
+        assert_eq!(
+            next,
+            Some((false, 1)),
+            "the next turn is whole and takes the request"
+        );
+    });
 }
 
 /// A socket owed a block is control work: while it waits, every turn is
@@ -2071,36 +2113,37 @@ fn a_command_while_frames_are_always_ready_takes_the_next_turn_whole() {
 /// eviction, comes at the next turn though frames are always ready.
 #[test]
 fn a_socket_owed_a_block_keeps_every_turn_whole() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        mut socket,
-        script,
-        clock,
-        line,
-        ..
-    } = direct::<Net>();
-    let tape = Tape::default();
-    let mut events = tape.clone();
-    let cx = &mut Context::from_waker(Waker::noop());
-    let mut run = pin!(service.run(clock, &mut events));
-    // Every block the socket's: the next reserve waits.
-    let held = blocks(&mut socket, &mut run, BLOCKS);
-    let mut reserve = pin!(socket.reserve());
-    assert!(reserve.as_mut().poll(cx).is_pending(), "no block is free");
-    for index in 0..64 {
-        script.push(tag(0, index), broadcast(), 40);
-    }
-    let before = turn_kinds(&tape.0.borrow()).len();
-    while line.sent() < 64 {
-        assert!(poll(&mut run, cx).is_pending());
-    }
-    let turns = turn_kinds(&tape.0.borrow());
-    assert!(
-        turns[before..].iter().all(|turn| !turn.0),
-        "no packet turn while the socket is owed a block"
-    );
-    drop(held);
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            mut socket,
+            script,
+            clock,
+            line,
+            ..
+        } = direct(right);
+        let tape = Tape::default();
+        let mut events = tape.clone();
+        let cx = &mut Context::from_waker(Waker::noop());
+        let mut run = pin!(service.run(clock, &mut events));
+        // Every block the socket's: the next reserve waits.
+        let held = blocks(&mut socket, &mut run, BLOCKS);
+        let mut reserve = pin!(socket.reserve());
+        assert!(reserve.as_mut().poll(cx).is_pending(), "no block is free");
+        for index in 0..64 {
+            script.push(tag(0, index), broadcast(), 40);
+        }
+        let before = turn_kinds(&tape.0.borrow()).len();
+        while line.sent() < 64 {
+            assert!(poll(&mut run, cx).is_pending());
+        }
+        let turns = turn_kinds(&tape.0.borrow());
+        assert!(
+            turns[before..].iter().all(|turn| !turn.0),
+            "no packet turn while the socket is owed a block"
+        );
+        drop(held);
+    });
 }
 
 /// A received frame while frames are always ready to go is taken in by the
@@ -2108,75 +2151,20 @@ fn a_socket_owed_a_block_keeps_every_turn_whole() {
 /// full turn has to come for it.
 #[test]
 fn a_frame_received_while_frames_are_always_ready_is_taken_in_the_next_packet_turn() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        script,
-        clock,
-        line,
-        ..
-    } = direct::<Net>();
-    for index in 0..200 {
-        script.push(tag(0, index), broadcast(), 40);
-    }
-    let tape = Tape::default();
-    let mut events = tape.clone();
-    let cx = &mut Context::from_waker(Waker::noop());
-    let mut run = pin!(service.run(clock, &mut events));
-    let mut polls = 0;
-    while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) {
-        assert!(poll(&mut run, cx).is_pending());
-        polls += 1;
-        assert!(polls < 64, "frames always ready reach a packet turn");
-    }
-    line.0
-        .borrow_mut()
-        .incoming
-        .push_back(udp_frame(CHANNEL_PORT, b"in"));
-    let mark = tape.0.borrow().len();
-    assert!(poll(&mut run, cx).is_pending());
-    let after: Vec<ServiceEvent> = tape.0.borrow()[mark..].to_vec();
-    let began = after
-        .iter()
-        .position(|event| *event == ServiceEvent::TurnBegan)
-        .unwrap();
-    assert_eq!(
-        after.get(began + 1),
-        Some(&ServiceEvent::PacketTurn),
-        "the next turn takes only the frames"
-    );
-    assert!(
-        after.contains(&ServiceEvent::FrameTaken),
-        "and takes the received frame in"
-    );
-    assert!(
-        after.contains(&ServiceEvent::Accepted),
-        "while frames still go"
-    );
-}
-
-/// A stop while frames are always ready ends the run at the next pass,
-/// between turns; the retirement then ends each work still open: every
-/// work the producer filled ends once, accepted or retired, and none twice.
-#[test]
-fn a_stop_in_packet_turns_ends_the_run_and_every_work_ends_once() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        script,
-        stop,
-        clock,
-        line,
-        end,
-        ..
-    } = direct::<Net>();
-    for index in 0..200 {
-        script.push(tag(0, index), broadcast(), 40);
-    }
-    let tape = Tape::default();
-    let mut events = tape.clone();
-    let cx = &mut Context::from_waker(Waker::noop());
-    {
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            script,
+            clock,
+            line,
+            ..
+        } = direct(right);
+        for index in 0..200 {
+            script.push(tag(0, index), broadcast(), 40);
+        }
+        let tape = Tape::default();
+        let mut events = tape.clone();
+        let cx = &mut Context::from_waker(Waker::noop());
         let mut run = pin!(service.run(clock, &mut events));
         let mut polls = 0;
         while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) {
@@ -2184,33 +2172,90 @@ fn a_stop_in_packet_turns_ends_the_run_and_every_work_ends_once() {
             polls += 1;
             assert!(polls < 64, "frames always ready reach a packet turn");
         }
-        stop.try_send(()).ok().unwrap();
-        assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::Stopped));
-    }
-    let sent = line.sent();
-    let _retired = service.retire();
-    assert!(end.is_ended());
-    let calls = script.calls();
-    let ends = |tag: &Tag| {
-        calls
+        line.0
+            .borrow_mut()
+            .incoming
+            .push_back(udp_frame(CHANNEL_PORT, b"in"));
+        let mark = tape.0.borrow().len();
+        assert!(poll(&mut run, cx).is_pending());
+        let after: Vec<ServiceEvent> = tape.0.borrow()[mark..].to_vec();
+        let began = after
             .iter()
-            .filter(|call| matches!(call, Call::Ended(ended, _) if ended == tag))
-            .count()
-    };
-    for call in &calls {
-        match call {
-            // A work the producer filled ends once, accepted or retired.
-            Call::Filled(tag) => assert_eq!(ends(tag), 1, "{tag:?} ends once"),
-            // No work ends twice.
-            Call::Offered(tag) => assert!(ends(tag) <= 1, "{tag:?} ends at most once"),
-            _ => {}
+            .position(|event| *event == ServiceEvent::TurnBegan)
+            .unwrap();
+        assert_eq!(
+            after.get(began + 1),
+            Some(&ServiceEvent::PacketTurn),
+            "the next turn takes only the frames"
+        );
+        assert!(
+            after.contains(&ServiceEvent::FrameTaken),
+            "and takes the received frame in"
+        );
+        assert!(
+            after.contains(&ServiceEvent::Accepted),
+            "while frames still go"
+        );
+    });
+}
+
+/// A stop while frames are always ready ends the run at the next pass,
+/// between turns; the retirement then ends each work still open: every
+/// work the producer filled ends once, accepted or retired, and none twice.
+#[test]
+fn a_stop_in_packet_turns_ends_the_run_and_every_work_ends_once() {
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            script,
+            stop,
+            clock,
+            line,
+            end,
+            ..
+        } = direct(right);
+        for index in 0..200 {
+            script.push(tag(0, index), broadcast(), 40);
         }
-    }
-    let accepted = calls
-        .iter()
-        .filter(|call| matches!(call, Call::Ended(_, Outcome::Accepted)))
-        .count();
-    assert_eq!(accepted, sent, "each frame sent ended accepted");
+        let tape = Tape::default();
+        let mut events = tape.clone();
+        let cx = &mut Context::from_waker(Waker::noop());
+        {
+            let mut run = pin!(service.run(clock, &mut events));
+            let mut polls = 0;
+            while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) {
+                assert!(poll(&mut run, cx).is_pending());
+                polls += 1;
+                assert!(polls < 64, "frames always ready reach a packet turn");
+            }
+            stop.try_send(()).ok().unwrap();
+            assert_eq!(poll(&mut run, cx), Poll::Ready(EndCause::Stopped));
+        }
+        let sent = line.sent();
+        let _retired = service.retire();
+        assert!(end.is_ended());
+        let calls = script.calls();
+        let ends = |tag: &Tag| {
+            calls
+                .iter()
+                .filter(|call| matches!(call, Call::Ended(ended, _) if ended == tag))
+                .count()
+        };
+        for call in &calls {
+            match call {
+                // A work the producer filled ends once, accepted or retired.
+                Call::Filled(tag) => assert_eq!(ends(tag), 1, "{tag:?} ends once"),
+                // No work ends twice.
+                Call::Offered(tag) => assert!(ends(tag) <= 1, "{tag:?} ends at most once"),
+                _ => {}
+            }
+        }
+        let accepted = calls
+            .iter()
+            .filter(|call| matches!(call, Call::Ended(_, Outcome::Accepted)))
+            .count();
+        assert_eq!(accepted, sent, "each frame sent ended accepted");
+    });
 }
 
 /// A run cancelled while frames are always ready, dropped between polls,
@@ -2218,50 +2263,51 @@ fn a_stop_in_packet_turns_ends_the_run_and_every_work_ends_once() {
 /// every work the producer filled ends once, accepted or retired.
 #[test]
 fn a_run_cancelled_in_packet_turns_leaves_every_work_to_end_once() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        script,
-        clock,
-        line,
-        end,
-        ..
-    } = direct::<Net>();
-    for index in 0..200 {
-        script.push(tag(0, index), broadcast(), 40);
-    }
-    let tape = Tape::default();
-    let mut events = tape.clone();
-    let cx = &mut Context::from_waker(Waker::noop());
-    {
-        let mut run = pin!(service.run(clock, &mut events));
-        let mut polls = 0;
-        while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) || polls < 6 {
-            assert!(poll(&mut run, cx).is_pending());
-            polls += 1;
-            assert!(polls < 64, "frames always ready reach a packet turn");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            script,
+            clock,
+            line,
+            end,
+            ..
+        } = direct(right);
+        for index in 0..200 {
+            script.push(tag(0, index), broadcast(), 40);
         }
-    }
-    let sent = line.sent();
-    let _retired = service.retire();
-    assert!(end.is_ended());
-    let calls = script.calls();
-    let ends = |tag: &Tag| {
-        calls
+        let tape = Tape::default();
+        let mut events = tape.clone();
+        let cx = &mut Context::from_waker(Waker::noop());
+        {
+            let mut run = pin!(service.run(clock, &mut events));
+            let mut polls = 0;
+            while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) || polls < 6 {
+                assert!(poll(&mut run, cx).is_pending());
+                polls += 1;
+                assert!(polls < 64, "frames always ready reach a packet turn");
+            }
+        }
+        let sent = line.sent();
+        let _retired = service.retire();
+        assert!(end.is_ended());
+        let calls = script.calls();
+        let ends = |tag: &Tag| {
+            calls
+                .iter()
+                .filter(|call| matches!(call, Call::Ended(ended, _) if ended == tag))
+                .count()
+        };
+        for call in &calls {
+            if let Call::Filled(tag) = call {
+                assert_eq!(ends(tag), 1, "{tag:?} ends once");
+            }
+        }
+        let accepted = calls
             .iter()
-            .filter(|call| matches!(call, Call::Ended(ended, _) if ended == tag))
-            .count()
-    };
-    for call in &calls {
-        if let Call::Filled(tag) = call {
-            assert_eq!(ends(tag), 1, "{tag:?} ends once");
-        }
-    }
-    let accepted = calls
-        .iter()
-        .filter(|call| matches!(call, Call::Ended(_, Outcome::Accepted)))
-        .count();
-    assert_eq!(accepted, sent, "each frame sent ended accepted");
+            .filter(|call| matches!(call, Call::Ended(_, Outcome::Accepted)))
+            .count();
+        assert_eq!(accepted, sent, "each frame sent ended accepted");
+    });
 }
 
 /// A link that goes down while frames are always ready: the next turn's
@@ -2269,41 +2315,42 @@ fn a_run_cancelled_in_packet_turns_leaves_every_work_to_end_once() {
 /// and once it is up again the frames go on, each once.
 #[test]
 fn a_link_down_in_packet_turns_stops_the_frames_at_the_next_turn() {
-    brand!(Net);
-    let Bench {
-        mut service,
-        script,
-        clock,
-        line,
-        ..
-    } = direct::<Net>();
-    for index in 0..200 {
-        script.push(tag(0, index), broadcast(), 40);
-    }
-    let tape = Tape::default();
-    let mut events = tape.clone();
-    let cx = &mut Context::from_waker(Waker::noop());
-    let mut run = pin!(service.run(clock, &mut events));
-    let mut polls = 0;
-    while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) {
-        assert!(poll(&mut run, cx).is_pending());
-        polls += 1;
-        assert!(polls < 64, "frames always ready reach a packet turn");
-    }
-    line.0.borrow_mut().switches.on(LineSwitch::Down);
-    let sent = line.sent();
-    for _ in 0..4 {
-        assert!(poll(&mut run, cx).is_pending());
-    }
-    assert_eq!(line.sent(), sent, "nothing goes while the link is down");
-    line.0.borrow_mut().switches.off(LineSwitch::Down);
-    line.open(Room::Free);
-    script.wake();
-    let mut polls = 0;
-    while line.sent() < 200 {
-        assert!(poll(&mut run, cx).is_pending());
-        polls += 1;
-        assert!(polls < 1000, "the frames go on once the link is up");
-    }
-    assert_eq!(script.filled(), 200, "each once");
+    with_local_network(|right| {
+        let Bench {
+            mut service,
+            script,
+            clock,
+            line,
+            ..
+        } = direct(right);
+        for index in 0..200 {
+            script.push(tag(0, index), broadcast(), 40);
+        }
+        let tape = Tape::default();
+        let mut events = tape.clone();
+        let cx = &mut Context::from_waker(Waker::noop());
+        let mut run = pin!(service.run(clock, &mut events));
+        let mut polls = 0;
+        while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) {
+            assert!(poll(&mut run, cx).is_pending());
+            polls += 1;
+            assert!(polls < 64, "frames always ready reach a packet turn");
+        }
+        line.0.borrow_mut().switches.on(LineSwitch::Down);
+        let sent = line.sent();
+        for _ in 0..4 {
+            assert!(poll(&mut run, cx).is_pending());
+        }
+        assert_eq!(line.sent(), sent, "nothing goes while the link is down");
+        line.0.borrow_mut().switches.off(LineSwitch::Down);
+        line.open(Room::Free);
+        script.wake();
+        let mut polls = 0;
+        while line.sent() < 200 {
+            assert!(poll(&mut run, cx).is_pending());
+            polls += 1;
+            assert!(polls < 1000, "the frames go on once the link is up");
+        }
+        assert_eq!(script.filled(), 200, "each once");
+    });
 }

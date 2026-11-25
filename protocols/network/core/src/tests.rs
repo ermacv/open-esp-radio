@@ -12,9 +12,9 @@ use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
 
 use crate::{
-    Block, BrandRefusal, CommandState, Core, CoreBrand, Eviction, GROUPS, Group, GroupsFull,
-    Interface, InterfaceError, LoansRefused, NetEvent, NetworkOwner, NotLent, OpenRefused, Outcome,
-    Pool, Remote, SendRefusal, Unsent, claim,
+    Block, Brand, CommandState, Core, CoreBrand, Eviction, GROUPS, Group, GroupsFull, Interface,
+    InterfaceError, LoansRefused, LocalNetwork, NetEvent, NetworkClaim, NetworkOwner, NotLent,
+    OpenRefused, Outcome, Pool, Remote, SendRefusal, Unsent, claim, with_local_network,
 };
 use oer_protocols_network_port::{Class, FramePort, Unpublished};
 
@@ -254,61 +254,55 @@ fn best_effort() -> Dscp {
     Dscp::default()
 }
 
-/// A brand of the test's own.
-macro_rules! brand {
-    ($name:ident) => {
-        #[derive(Debug, Eq, PartialEq)]
-        struct $name;
-    };
+/// The pool and the core's right of `right`'s brand, over storage of its own.
+fn claimed<B: Brand>(right: NetworkClaim<B>) -> (Blocks<B>, CoreBrand<B>) {
+    claim(
+        right,
+        std::boxed::Box::leak(std::boxed::Box::new([[0; SIZE]; BLOCKS])),
+    )
 }
 
-/// The pool and the core's right of brand `B`, over storage of its own.
-fn claimed<B: 'static>() -> (Blocks<B>, CoreBrand<B>) {
-    let memory = std::boxed::Box::leak(std::boxed::Box::new([[0; SIZE]; BLOCKS]));
-    claim(memory).unwrap()
-}
-
-/// A world of one owner of brand `B` on `interface`.
-fn run<B: 'static>(interface: Interface, test: impl FnOnce(&mut Stack<B>)) {
-    let (pool, brand) = claimed::<B>();
-    test(&mut NetworkOwner::new(
-        brand,
-        interface,
-        pool,
-        Port::default(),
-    ));
+/// A world of one owner, of a brand of its own, on `interface`.
+fn run(interface: Interface, test: impl for<'n> FnOnce(&mut Stack<LocalNetwork<'n>>)) {
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        test(&mut NetworkOwner::new(
+            brand,
+            interface,
+            pool,
+            Port::default(),
+        ));
+    });
 }
 
 /// A world of one socket, one place, one receive slot and two neighbors.
-fn run_small<B: 'static>(test: impl FnOnce(&mut Small<B>)) {
-    let (pool, brand) = claimed::<B>();
-    test(&mut NetworkOwner::new(
-        brand,
-        interface(OUR_IP, 24, None),
-        pool,
-        Port::default(),
-    ));
+fn run_small(test: impl for<'n> FnOnce(&mut Small<LocalNetwork<'n>>)) {
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        test(&mut NetworkOwner::new(
+            brand,
+            interface(OUR_IP, 24, None),
+            pool,
+            Port::default(),
+        ));
+    });
 }
 
-/// Each use has a brand of its own, as a brand claims once.
 macro_rules! world {
     ($test:expr) => {{
-        brand!(Net);
-        run::<Net>(interface(OUR_IP, 24, Some(GATEWAY)), $test);
+        run(interface(OUR_IP, 24, Some(GATEWAY)), $test);
     }};
 }
 
 macro_rules! world_on {
     ($interface:expr, $test:expr) => {{
-        brand!(Net);
-        run::<Net>($interface, $test);
+        run($interface, $test);
     }};
 }
 
 macro_rules! small {
     ($test:expr) => {{
-        brand!(Net);
-        run_small::<Net>($test);
+        run_small($test);
     }};
 }
 
@@ -1046,107 +1040,103 @@ fn every_reply_owed_is_listed_and_any_can_be_chosen() {
 }
 
 #[test]
-fn a_brand_claims_once() {
-    brand!(Once);
-    let _first = claimed::<Once>();
-    let memory = std::boxed::Box::leak(std::boxed::Box::new([[0; SIZE]; BLOCKS]));
-    let refused = claim::<Once, SIZE, BLOCKS>(memory).err().unwrap();
-    assert_eq!(refused.reason, BrandRefusal::Claimed);
-}
-
-#[test]
 fn a_retired_core_returns_its_blocks_and_the_next_finds_old_handles_gone() {
-    brand!(Net);
-    let (pool, brand) = claimed::<Net>();
-    let local = interface(OUR_IP, 24, None);
-    let mut stack: Stack<Net> = NetworkOwner::new(brand, local, pool, Port::default());
-    let socket = stack.open(5000, best_effort()).unwrap();
-    let block = filled(stack.pool(), b"waits");
-    let command = stack.send(at(0), &socket, peer(), block).unwrap();
-    stack.input(at(0), &udp_frame(7, 5000, b"unread"), &mut ());
-    let held = stack.pool().take().unwrap();
-    let stale = stack.demands(at(0), &()).next().unwrap().grant();
-    let mut retired = stack.retire();
-    assert_eq!(retired.pool.outstanding(), 1, "the application's block");
-    assert_eq!(retired.results.received_dropped, 1);
-    retired.pool.give(held);
-    assert_eq!(retired.pool.outstanding(), 0);
-    let mut next: Stack<Net> = NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
-    assert_eq!(next.take_result(command), CommandState::Gone);
-    assert_eq!(next.receive(&socket).err(), Some(crate::StaleSocket));
-    assert_eq!(
-        next.transmit(at(0), stale, unproduced, &()),
-        Err(Unsent::Stale)
-    );
-    let reused = next.open(5000, best_effort()).unwrap();
-    assert_ne!(reused, socket);
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        let local = interface(OUR_IP, 24, None);
+        let mut stack: Stack<_> = NetworkOwner::new(brand, local, pool, Port::default());
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"waits");
+        let command = stack.send(at(0), &socket, peer(), block).unwrap();
+        stack.input(at(0), &udp_frame(7, 5000, b"unread"), &mut ());
+        let held = stack.pool().take().unwrap();
+        let stale = stack.demands(at(0), &()).next().unwrap().grant();
+        let mut retired = stack.retire();
+        assert_eq!(retired.pool.outstanding(), 1, "the application's block");
+        assert_eq!(retired.results.received_dropped, 1);
+        retired.pool.give(held);
+        assert_eq!(retired.pool.outstanding(), 0);
+        let mut next: Stack<_> =
+            NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
+        assert_eq!(next.take_result(command), CommandState::Gone);
+        assert_eq!(next.receive(&socket).err(), Some(crate::StaleSocket));
+        assert_eq!(
+            next.transmit(at(0), stale, unproduced, &()),
+            Err(Unsent::Stale)
+        );
+        let reused = next.open(5000, best_effort()).unwrap();
+        assert_ne!(reused, socket);
+    });
 }
 
 #[test]
 fn a_confirmed_result_outlives_its_core_unread() {
-    brand!(Net);
-    let (pool, brand) = claimed::<Net>();
-    let local = interface(OUR_IP, 24, Some(GATEWAY));
-    let mut stack: NetworkOwner<'static, Net, SIZE, 3, 2, 2, 2, BLOCKS, Port> =
-        NetworkOwner::new(brand, local, pool, Port::default());
-    let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
-    stack.input(at(0), &request, &mut ());
-    let demand = stack.poll_demand(at(0)).unwrap();
-    stack
-        .transmit(at(0), demand.grant(), unproduced, &())
-        .unwrap();
-    let first = stack.open(5000, best_effort()).unwrap();
-    let block = filled(stack.pool(), b"one");
-    let read = stack.send(at(1), &first, peer(), block).unwrap();
-    let block = filled(stack.pool(), b"two");
-    let unread = stack.send(at(1), &first, peer(), block).unwrap();
-    for _ in 0..2 {
-        let demand = stack.poll_demand(at(1)).unwrap();
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        let local = interface(OUR_IP, 24, Some(GATEWAY));
+        let mut stack: NetworkOwner<'static, _, SIZE, 3, 2, 2, 2, BLOCKS, Port> =
+            NetworkOwner::new(brand, local, pool, Port::default());
+        let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
+        stack.input(at(0), &request, &mut ());
+        let demand = stack.poll_demand(at(0)).unwrap();
         stack
-            .transmit(at(1), demand.grant(), unproduced, &())
+            .transmit(at(0), demand.grant(), unproduced, &())
             .unwrap();
-    }
-    assert_eq!(finished(stack.take_result(read)), Outcome::Accepted);
-    let second = stack.open(5001, best_effort()).unwrap();
-    let block = filled(stack.pool(), b"cancelled");
-    let cancelled = stack.send(at(1), &second, peer(), block).unwrap();
-    let close = stack.close(second).unwrap();
-    let block = filled(stack.pool(), b"running");
-    let running = stack.send(at(1), &first, peer(), block).unwrap();
-    let third = stack.open(5002, best_effort()).unwrap();
-    let block = filled(stack.pool(), b"unobserved");
-    let unobserved = stack.send(at(1), &third, peer(), block).unwrap();
-    stack.drop_observer(unobserved);
-    let mut retired = stack.retire();
-    assert_eq!(retired.pool.free(), BLOCKS);
-    assert_eq!(retired.results.unread(), 4);
-    let results = &mut retired.results;
-    assert_eq!(finished(results.take(unread)), Outcome::Accepted);
-    assert_eq!(finished(results.take(cancelled)), Outcome::Closed);
-    assert_eq!(finished(results.take(close)), Outcome::SocketClosed);
-    assert_eq!(finished(results.take(running)), Outcome::Retired);
-    assert_eq!(results.unread(), 0);
+        let first = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"one");
+        let read = stack.send(at(1), &first, peer(), block).unwrap();
+        let block = filled(stack.pool(), b"two");
+        let unread = stack.send(at(1), &first, peer(), block).unwrap();
+        for _ in 0..2 {
+            let demand = stack.poll_demand(at(1)).unwrap();
+            stack
+                .transmit(at(1), demand.grant(), unproduced, &())
+                .unwrap();
+        }
+        assert_eq!(finished(stack.take_result(read)), Outcome::Accepted);
+        let second = stack.open(5001, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"cancelled");
+        let cancelled = stack.send(at(1), &second, peer(), block).unwrap();
+        let close = stack.close(second).unwrap();
+        let block = filled(stack.pool(), b"running");
+        let running = stack.send(at(1), &first, peer(), block).unwrap();
+        let third = stack.open(5002, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"unobserved");
+        let unobserved = stack.send(at(1), &third, peer(), block).unwrap();
+        stack.drop_observer(unobserved);
+        let mut retired = stack.retire();
+        assert_eq!(retired.pool.free(), BLOCKS);
+        assert_eq!(retired.results.unread(), 4);
+        let results = &mut retired.results;
+        assert_eq!(finished(results.take(unread)), Outcome::Accepted);
+        assert_eq!(finished(results.take(cancelled)), Outcome::Closed);
+        assert_eq!(finished(results.take(close)), Outcome::SocketClosed);
+        assert_eq!(finished(results.take(running)), Outcome::Retired);
+        assert_eq!(results.unread(), 0);
+    });
 }
 
 #[test]
 fn a_network_task_holds_its_core_across_an_await() {
-    use core::task::{Context, Poll, Waker};
-    brand!(Net);
-    async fn service(pool: Blocks<Net>, brand: CoreBrand<Net>, interface: Interface) -> bool {
-        let mut stack: Stack<Net> = NetworkOwner::new(brand, interface, pool, Port::default());
-        let socket = stack.open(5000, best_effort()).unwrap();
-        embassy_futures::yield_now().await;
-        stack.close(socket).is_ok()
-    }
-    fn task<F: Future + 'static>(future: F) -> F {
-        future
-    }
-    let (pool, brand) = claimed::<Net>();
-    let run = task(service(pool, brand, interface(OUR_IP, 24, None)));
-    let mut run = core::pin::pin!(run);
-    let mut cx = Context::from_waker(Waker::noop());
-    assert_eq!(run.as_mut().poll(&mut cx), Poll::Pending);
-    assert_eq!(run.as_mut().poll(&mut cx), Poll::Ready(true));
+    with_local_network(|right| {
+        use core::task::{Context, Poll, Waker};
+        async fn service<B: Brand>(
+            pool: Blocks<B>,
+            brand: CoreBrand<B>,
+            interface: Interface,
+        ) -> bool {
+            let mut stack: Stack<B> = NetworkOwner::new(brand, interface, pool, Port::default());
+            let socket = stack.open(5000, best_effort()).unwrap();
+            embassy_futures::yield_now().await;
+            stack.close(socket).is_ok()
+        }
+        let (pool, brand) = claimed(right);
+        let run = service(pool, brand, interface(OUR_IP, 24, None));
+        let mut run = core::pin::pin!(run);
+        let mut cx = Context::from_waker(Waker::noop());
+        assert_eq!(run.as_mut().poll(&mut cx), Poll::Pending);
+        assert_eq!(run.as_mut().poll(&mut cx), Poll::Ready(true));
+    });
 }
 
 #[test]
@@ -1178,24 +1168,25 @@ fn a_closed_socket_leaves_no_neighbor_asked_for() {
 
 #[test]
 fn a_port_that_contradicted_itself_publishes_nothing_more() {
-    brand!(Net);
-    let (pool, brand) = claimed::<Net>();
-    let local = interface(OUR_IP, 24, None);
-    let mut stack: Stack<Net> = NetworkOwner::new(brand, local, pool, Port::default());
-    let socket = stack.open(5000, best_effort()).unwrap();
-    let block = filled(stack.pool(), b"x");
-    let _command = stack.send(at(0), &socket, peer(), block).unwrap();
-    stack.port_mut().faults.inject(PortFault::Lazy);
-    assert_eq!(send_next(&mut stack, at(0)), Err(Unsent::PortContract));
-    assert!(stack.port_broken());
-    stack.port_mut().faults.clear(PortFault::Lazy);
-    let now = stack.poll_deadline().unwrap();
-    stack.tick(now, &mut ());
-    assert_eq!(send_next(&mut stack, now), Err(Unsent::PortContract));
-    assert!(stack.port().sent.is_empty(), "no later ARP request");
-    let retired = stack.retire();
-    let next: Stack<Net> = NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
-    assert!(!next.port_broken());
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        let local = interface(OUR_IP, 24, None);
+        let mut stack: Stack<_> = NetworkOwner::new(brand, local, pool, Port::default());
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"x");
+        let _command = stack.send(at(0), &socket, peer(), block).unwrap();
+        stack.port_mut().faults.inject(PortFault::Lazy);
+        assert_eq!(send_next(&mut stack, at(0)), Err(Unsent::PortContract));
+        assert!(stack.port_broken());
+        stack.port_mut().faults.clear(PortFault::Lazy);
+        let now = stack.poll_deadline().unwrap();
+        stack.tick(now, &mut ());
+        assert_eq!(send_next(&mut stack, now), Err(Unsent::PortContract));
+        assert!(stack.port().sent.is_empty(), "no later ARP request");
+        let retired = stack.retire();
+        let next: Stack<_> = NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
+        assert!(!next.port_broken());
+    });
 }
 
 #[test]
@@ -1603,43 +1594,46 @@ fn work_the_port_took_cannot_be_evicted() {
 
 #[test]
 fn a_group_counts_a_block_until_the_pool_has_it_back() {
-    brand!(Net);
-    let (mut pool, _) = claimed::<Net>();
-    let group = pool.group(1).unwrap();
-    let block = pool.take_as(group).unwrap();
-    assert_eq!(block.group(), group);
-    assert_eq!(pool.held(group), 1);
-    assert!(
-        pool.take_as(group).is_none(),
-        "free blocks do not lift a limit"
-    );
-    assert!(pool.take().is_some(), "the shared group has its own count");
-    pool.give(block);
-    assert_eq!(pool.held(group), 0);
-    assert!(pool.take_as(group).is_some());
+    with_local_network(|right| {
+        let (mut pool, _) = claimed(right);
+        let group = pool.group(1).unwrap();
+        let block = pool.take_as(group).unwrap();
+        assert_eq!(block.group(), group);
+        assert_eq!(pool.held(group), 1);
+        assert!(
+            pool.take_as(group).is_none(),
+            "free blocks do not lift a limit"
+        );
+        assert!(pool.take().is_some(), "the shared group has its own count");
+        pool.give(block);
+        assert_eq!(pool.held(group), 0);
+        assert!(pool.take_as(group).is_some());
+    });
 }
 
 #[test]
 fn the_heaviest_group_is_found_with_no_socket_in_it() {
-    brand!(Net);
-    let (mut pool, _) = claimed::<Net>();
-    assert!(pool.heaviest().is_none(), "nothing is out");
-    let first = pool.group(usize::MAX).unwrap();
-    let second = pool.group(usize::MAX).unwrap();
-    let _one = pool.take_as(first).unwrap();
-    let _two = pool.take_as(second).unwrap();
-    let _three = pool.take_as(second).unwrap();
-    assert_eq!(pool.heaviest(), Some((second, 2)));
+    with_local_network(|right| {
+        let (mut pool, _) = claimed(right);
+        assert!(pool.heaviest().is_none(), "nothing is out");
+        let first = pool.group(usize::MAX).unwrap();
+        let second = pool.group(usize::MAX).unwrap();
+        let _one = pool.take_as(first).unwrap();
+        let _two = pool.take_as(second).unwrap();
+        let _three = pool.take_as(second).unwrap();
+        assert_eq!(pool.heaviest(), Some((second, 2)));
+    });
 }
 
 #[test]
 fn a_pool_keeps_as_many_groups_as_it_can() {
-    brand!(Net);
-    let (mut pool, _) = claimed::<Net>();
-    for _ in 1..GROUPS {
-        pool.group(1).unwrap();
-    }
-    assert_eq!(pool.group(1), Err(GroupsFull));
+    with_local_network(|right| {
+        let (mut pool, _) = claimed(right);
+        for _ in 1..GROUPS {
+            pool.group(1).unwrap();
+        }
+        assert_eq!(pool.group(1), Err(GroupsFull));
+    });
 }
 
 /// A generator of no consequence: the walk below only needs to be repeatable.
@@ -1655,7 +1649,7 @@ impl Walk {
 }
 
 /// What the test itself knows is out of the pool, apart from the pool's count.
-struct Ledger<B: 'static> {
+struct Ledger<B> {
     /// In the application's hands, with the group each was taken for.
     held: Vec<(Block<'static, B, SIZE>, usize)>,
     /// Commands running, with their blocks' groups.
@@ -1664,7 +1658,7 @@ struct Ledger<B: 'static> {
     received: [Vec<usize>; 2],
 }
 
-impl<B: core::fmt::Debug + 'static> Ledger<B> {
+impl<B: core::fmt::Debug> Ledger<B> {
     fn count(&self, group: usize) -> usize {
         self.held.iter().filter(|(_, of)| *of == group).count()
             + self.running.iter().filter(|(_, of)| *of == group).count()
@@ -1689,9 +1683,9 @@ impl<B: core::fmt::Debug + 'static> Ledger<B> {
 
 /// Every way a block moves, in a repeatable order, with the pool's count held to
 /// the test's own ledger after each step.
-fn walk_blocks<B: core::fmt::Debug + 'static>(seed: u64) {
+fn walk_blocks<B: Brand>(right: NetworkClaim<B>, seed: u64) {
     const LIMITS: [usize; 3] = [usize::MAX, 2, 3];
-    let (mut pool, brand) = claimed::<B>();
+    let (mut pool, brand) = claimed(right);
     let groups = [
         Group::shared(),
         pool.group(LIMITS[1]).unwrap(),
@@ -1816,17 +1810,14 @@ fn walk_blocks<B: core::fmt::Debug + 'static>(seed: u64) {
 
 #[test]
 fn a_block_counts_toward_its_group_through_every_move() {
-    brand!(First);
-    brand!(Second);
-    brand!(Third);
-    walk_blocks::<First>(1);
-    walk_blocks::<Second>(2);
-    walk_blocks::<Third>(3);
+    for seed in 1..=3 {
+        with_local_network(|right| walk_blocks(right, seed));
+    }
 }
 
 /// A core with a pool of one driver buffer, lent to `socket` 0.
-fn lending<B: 'static>() -> (Blocks<B>, CoreBrand<B>) {
-    let (mut pool, brand) = claimed::<B>();
+fn lending<B: Brand>(right: NetworkClaim<B>) -> (Blocks<B>, CoreBrand<B>) {
+    let (mut pool, brand) = claimed(right);
     pool.loans().pool(1, 0).unwrap();
     pool.loans().grant(0, 1).unwrap();
     (pool, brand)
@@ -1834,7 +1825,7 @@ fn lending<B: 'static>() -> (Blocks<B>, CoreBrand<B>) {
 
 type LoanCore<B> = Core<'static, B, SIZE, 1, 1, 1, 1>;
 
-fn next_core<B: 'static>(mut pool: Blocks<B>, brand: CoreBrand<B>) -> (Blocks<B>, CoreBrand<B>) {
+fn next_core<B>(mut pool: Blocks<B>, brand: CoreBrand<B>) -> (Blocks<B>, CoreBrand<B>) {
     let core: LoanCore<B> = Core::new(brand, interface(OUR_IP, 24, None));
     let (_results, brand) = core.retire(&mut pool);
     (pool, brand)
@@ -1842,37 +1833,39 @@ fn next_core<B: 'static>(mut pool: Blocks<B>, brand: CoreBrand<B>) -> (Blocks<B>
 
 #[test]
 fn a_loan_stays_owed_across_a_core() {
-    brand!(Net);
-    let (mut pool, brand) = lending::<Net>();
-    let held = pool.loans().lend(0).unwrap();
-    let (mut pool, _brand) = next_core(pool, brand);
-    assert_eq!(pool.loans().outstanding(), 1);
-    assert_eq!(
-        pool.loans().grant(0, 1),
-        Err(LoansRefused::Pool { room: 0 }),
-        "the old loan still takes its buffer"
-    );
-    pool.loans().give_back(held);
-    assert!(pool.loans().released());
-    pool.loans().grant(0, 1).unwrap();
+    with_local_network(|right| {
+        let (mut pool, brand) = lending(right);
+        let held = pool.loans().lend(0).unwrap();
+        let (mut pool, _brand) = next_core(pool, brand);
+        assert_eq!(pool.loans().outstanding(), 1);
+        assert_eq!(
+            pool.loans().grant(0, 1),
+            Err(LoansRefused::Pool { room: 0 }),
+            "the old loan still takes its buffer"
+        );
+        pool.loans().give_back(held);
+        assert!(pool.loans().released());
+        pool.loans().grant(0, 1).unwrap();
+    });
 }
 
 #[test]
 fn an_old_loan_pays_nothing_of_a_new_one() {
-    brand!(Net);
-    let (mut pool, brand) = lending::<Net>();
-    pool.loans().pool(2, 0).unwrap();
-    pool.loans().grant(0, 2).unwrap();
-    let old = pool.loans().lend(0).unwrap();
-    let (mut pool, _brand) = next_core(pool, brand);
-    pool.loans().grant(0, 1).unwrap();
-    let new = pool.loans().lend(0).unwrap();
-    pool.loans().give_back(old);
-    assert_eq!(pool.loans().outstanding(), 1, "the new loan is still out");
-    assert!(!pool.loans().released());
-    assert_eq!(pool.loans().lend(0).err(), Some(NotLent::NoCredit));
-    pool.loans().give_back(new);
-    assert!(pool.loans().released());
+    with_local_network(|right| {
+        let (mut pool, brand) = lending(right);
+        pool.loans().pool(2, 0).unwrap();
+        pool.loans().grant(0, 2).unwrap();
+        let old = pool.loans().lend(0).unwrap();
+        let (mut pool, _brand) = next_core(pool, brand);
+        pool.loans().grant(0, 1).unwrap();
+        let new = pool.loans().lend(0).unwrap();
+        pool.loans().give_back(old);
+        assert_eq!(pool.loans().outstanding(), 1, "the new loan is still out");
+        assert!(!pool.loans().released());
+        assert_eq!(pool.loans().lend(0).err(), Some(NotLent::NoCredit));
+        pool.loans().give_back(new);
+        assert!(pool.loans().released());
+    });
 }
 
 #[test]

@@ -422,7 +422,9 @@ mod tests {
     use std::boxed::Box;
     use std::vec::Vec;
 
-    use oer_protocols_network_core::{Datagram, Pool, Remote, claim};
+    use oer_protocols_network_core::{
+        Brand, Datagram, NetworkClaim, Pool, Remote, claim, with_local_network,
+    };
     use oer_protocols_network_port::{EthernetFrame, EthernetFrameView, FrameLengthError};
 
     use super::{LendingLanes, LendingSocket, LentDatagram, LentEnd, Received, lending_lanes};
@@ -449,18 +451,18 @@ mod tests {
         }
     }
 
-    type Socket<B> = LendingSocket<'static, 'static, B, SIZE, 4, LANE, 2, Frame>;
+    type Socket<'n, B> = LendingSocket<'n, 'n, B, SIZE, 4, LANE, 2, Frame>;
 
-    struct Ends<B: 'static> {
-        socket: Socket<B>,
-        end: ServiceEnd<'static, 'static, B, SIZE, 4, LANE, 2>,
-        lent: LentEnd<'static, B, Frame, LANE>,
-        pool: Pool<'static, B, SIZE, 1>,
+    struct Ends<'n, B: 'n> {
+        socket: Socket<'n, B>,
+        end: ServiceEnd<'n, 'n, B, SIZE, 4, LANE, 2>,
+        lent: LentEnd<'n, B, Frame, LANE>,
+        pool: Pool<'n, B, SIZE, 1>,
     }
 
-    fn ends<B: 'static>() -> Ends<B> {
+    fn ends<'n, B: Brand + 'n>(right: NetworkClaim<B>) -> Ends<'n, B> {
         let memory = Box::leak(Box::new([[0; SIZE]; 1]));
-        let (mut pool, _brand) = claim::<B, SIZE, 1>(memory).unwrap();
+        let (mut pool, _brand) = claim(right, memory);
         pool.loans().pool(LANE, 0).unwrap();
         pool.loans().grant(0, LANE).unwrap();
         let storage = Box::leak(Box::new(LendingLanes::new()));
@@ -474,7 +476,7 @@ mod tests {
     }
 
     /// A format copy arrives first, then `LANE` loans.
-    fn copy_then_loans<B>(ends: &mut Ends<B>) {
+    fn copy_then_loans<B>(ends: &mut Ends<'_, B>) {
         let mut block = ends.pool.take().unwrap();
         block.fill(b"copy").unwrap();
         assert!(
@@ -500,8 +502,8 @@ mod tests {
     }
 
     /// What each receive gave: `true` for the copy.
-    fn order<B>(
-        mut receive: impl FnMut() -> Option<Received<'static, 'static, B, SIZE, Frame>>,
+    fn order<'n, B: 'n>(
+        mut receive: impl FnMut() -> Option<Received<'n, 'n, B, SIZE, Frame>>,
     ) -> Vec<bool> {
         core::iter::from_fn(|| receive())
             .map(|received| matches!(received, Received::Copied(_)))
@@ -510,51 +512,54 @@ mod tests {
 
     #[test]
     fn a_copy_behind_loans_comes_within_two_tries() {
-        struct Net;
-        let mut ends = ends::<Net>();
-        copy_then_loans(&mut ends);
-        let socket = &mut ends.socket;
-        let order = order(|| socket.try_receive());
-        assert_eq!(order.len(), LANE + 1, "everything comes");
-        assert_eq!(order.iter().position(|copy| *copy), Some(1));
+        with_local_network(|right| {
+            let mut ends = ends(right);
+            copy_then_loans(&mut ends);
+            let socket = &mut ends.socket;
+            let order = order(|| socket.try_receive());
+            assert_eq!(order.len(), LANE + 1, "everything comes");
+            assert_eq!(order.iter().position(|copy| *copy), Some(1));
+        });
     }
 
     #[test]
     fn a_copy_behind_loans_comes_within_two_receives() {
-        struct Net;
-        let mut ends = ends::<Net>();
-        copy_then_loans(&mut ends);
-        let socket = &mut ends.socket;
-        let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
-        let order = order(|| {
-            let mut receive = core::pin::pin!(socket.receive());
-            match receive.as_mut().poll(cx) {
-                core::task::Poll::Ready(received) => received.ok(),
-                core::task::Poll::Pending => None,
-            }
+        with_local_network(|right| {
+            let mut ends = ends(right);
+            copy_then_loans(&mut ends);
+            let socket = &mut ends.socket;
+            let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
+            let order = order(|| {
+                let mut receive = core::pin::pin!(socket.receive());
+                match receive.as_mut().poll(cx) {
+                    core::task::Poll::Ready(received) => received.ok(),
+                    core::task::Poll::Pending => None,
+                }
+            });
+            assert_eq!(order.len(), LANE + 1, "everything comes");
+            assert_eq!(order.iter().position(|copy| *copy), Some(1));
         });
-        assert_eq!(order.len(), LANE + 1, "everything comes");
-        assert_eq!(order.iter().position(|copy| *copy), Some(1));
     }
 
     #[test]
     fn while_both_lanes_hold_datagrams_receives_alternate() {
-        struct Net;
-        let mut ends = ends::<Net>();
-        copy_then_loans(&mut ends);
-        let first = ends.socket.try_receive();
-        assert!(matches!(first, Some(Received::Lent(_))));
-        let Some(Received::Copied(copy)) = ends.socket.try_receive() else {
-            panic!("the copy's turn");
-        };
-        assert_eq!(copy.block.octets(), b"copy");
-        // A second copy waits behind one loan only.
-        assert!(ends.end.datagrams.try_send(copy).is_ok());
-        assert!(matches!(ends.socket.try_receive(), Some(Received::Lent(_))));
-        assert!(matches!(
-            ends.socket.try_receive(),
-            Some(Received::Copied(_))
-        ));
-        drop(first);
+        with_local_network(|right| {
+            let mut ends = ends(right);
+            copy_then_loans(&mut ends);
+            let first = ends.socket.try_receive();
+            assert!(matches!(first, Some(Received::Lent(_))));
+            let Some(Received::Copied(copy)) = ends.socket.try_receive() else {
+                panic!("the copy's turn");
+            };
+            assert_eq!(copy.block.octets(), b"copy");
+            // A second copy waits behind one loan only.
+            assert!(ends.end.datagrams.try_send(copy).is_ok());
+            assert!(matches!(ends.socket.try_receive(), Some(Received::Lent(_))));
+            assert!(matches!(
+                ends.socket.try_receive(),
+                Some(Received::Copied(_))
+            ));
+            drop(first);
+        });
     }
 }

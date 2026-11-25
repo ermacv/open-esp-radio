@@ -67,17 +67,20 @@ impl Count for Counter {
 /// Four places a socket, the peer known.
 type Wide<B> = NetworkOwner<'static, B, SIZE, 2, 4, 2, 2, BLOCKS, Port>;
 
-fn wide<B: 'static>(test: impl FnOnce(&mut Wide<B>)) {
-    let (pool, brand) = claimed::<B>();
-    let mut stack = NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
-    let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
-    stack.input(at(0), &request, &mut ());
-    let reply = stack.poll_demand(at(0)).unwrap();
-    stack
-        .transmit(at(0), reply.grant(), unproduced, &())
-        .unwrap();
-    stack.port_mut().sent.clear();
-    test(&mut stack);
+fn wide(test: impl for<'n> FnOnce(&mut Wide<LocalNetwork<'n>>)) {
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        let mut stack =
+            NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
+        let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
+        stack.input(at(0), &request, &mut ());
+        let reply = stack.poll_demand(at(0)).unwrap();
+        stack
+            .transmit(at(0), reply.grant(), unproduced, &())
+            .unwrap();
+        stack.port_mut().sent.clear();
+        test(&mut stack);
+    });
 }
 
 fn send_to<B: core::fmt::Debug>(
@@ -106,8 +109,7 @@ fn four_running<B: core::fmt::Debug>(stack: &mut Wide<B>) -> crate::SocketId<B> 
 
 #[test]
 fn a_readiness_walk_counts_every_running_place_it_visits() {
-    brand!(Net);
-    wide::<Net>(|stack| {
+    wide(|stack| {
         let _socket = four_running(stack);
         let counter = Counter::on();
         let ready: Vec<_> = stack
@@ -138,8 +140,7 @@ fn a_readiness_walk_counts_every_running_place_it_visits() {
 
 #[test]
 fn ends_and_frames_count_where_they_are_told_and_built() {
-    brand!(Net);
-    wide::<Net>(|stack| {
+    wide(|stack| {
         let socket = four_running(stack);
         let ends = socket.ends();
         let counter = Counter::on();
@@ -197,24 +198,20 @@ fn script<B: core::fmt::Debug>(counter: &Counter, stack: &mut Wide<B>) -> Vec<st
 
 #[test]
 fn a_count_that_is_off_hears_nothing_and_changes_nothing() {
-    brand!(Off);
-    brand!(On);
     let off = Counter::default();
     let mut off_seen = Vec::new();
-    wide::<Off>(|stack| off_seen = script(&off, stack));
+    wide(|stack| off_seen = script(&off, stack));
     assert!(off.asked.get() > 0, "an enabled count is asked");
     let on = Counter::on();
     let mut on_seen = Vec::new();
-    wide::<On>(|stack| on_seen = script(&on, stack));
+    wide(|stack| on_seen = script(&on, stack));
     assert_eq!(on_seen, off_seen, "the same work, frames and ends");
     assert!(on.walked.get() > 0 && on.told.get() == 3 && on.materialised.get() == 4);
 }
 
 #[test]
 fn a_refusal_for_credit_counts_the_loans_then_out() {
-    #[derive(Debug, Eq, PartialEq)]
-    struct Net;
-    run::<Net>(interface(OUR_IP, 24, None), |stack| {
+    run(interface(OUR_IP, 24, None), |stack| {
         stack.pool().loans().pool(4, 1).unwrap();
         let group = stack.pool().group(4).unwrap();
         let _socket = stack.open_lending(9, best_effort(), group, 1).unwrap();

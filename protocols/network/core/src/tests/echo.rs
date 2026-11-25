@@ -257,33 +257,33 @@ fn an_echo_never_takes_the_pools_last_free_block() {
 
 #[test]
 fn a_reply_the_port_refuses_waits_and_retirement_brings_its_block_home() {
-    world!(|stack| {
-        knows_peer(stack);
-        assert!(ask(stack, at(0), &echo(1, b"ping")).is_empty());
-        stack.port_mut().faults.inject(PortFault::Full);
-        let demand = stack.poll_demand(at(0)).unwrap();
-        assert!(
-            stack
-                .transmit(at(0), demand.grant(), unproduced, &())
-                .is_err()
-        );
-        assert!(stack.poll_demand(at(0)).is_some(), "it stays ready");
+    with_local_network(|right| {
+        world!(|stack| {
+            knows_peer(stack);
+            assert!(ask(stack, at(0), &echo(1, b"ping")).is_empty());
+            stack.port_mut().faults.inject(PortFault::Full);
+            let demand = stack.poll_demand(at(0)).unwrap();
+            assert!(
+                stack
+                    .transmit(at(0), demand.grant(), unproduced, &())
+                    .is_err()
+            );
+            assert!(stack.poll_demand(at(0)).is_some(), "it stays ready");
+        });
+        // Retirement: the owed reply's block goes home with the rest.
+        let (pool, brand) = claimed(right);
+        let mut stack: Stack<_> =
+            NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
+        knows_peer(&mut stack);
+        assert!(ask(&mut stack, at(0), &echo(1, b"ping")).is_empty());
+        let retired = stack.retire();
+        assert_eq!(retired.pool.free(), BLOCKS);
     });
-    // Retirement: the owed reply's block goes home with the rest.
-    brand!(Net);
-    let (pool, brand) = claimed::<Net>();
-    let mut stack: Stack<Net> =
-        NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
-    knows_peer(&mut stack);
-    assert!(ask(&mut stack, at(0), &echo(1, b"ping")).is_empty());
-    let retired = stack.retire();
-    assert_eq!(retired.pool.free(), BLOCKS);
 }
 
 #[test]
 fn an_interface_without_an_address_answers_no_echo() {
-    brand!(Net);
-    run::<Net>(Interface::dhcp(LOCAL, 1500, 1).unwrap(), |stack| {
+    run(Interface::dhcp(LOCAL, 1500, 1).unwrap(), |stack| {
         // No address yet: an echo to any address is no one's.
         let mut dropped = Dropped::default();
         stack.input(at(0), &icmp_frame(OUR_IP, &echo(1, b"ping")), &mut dropped);

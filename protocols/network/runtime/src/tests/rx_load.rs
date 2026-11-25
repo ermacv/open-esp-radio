@@ -13,7 +13,7 @@ use std::boxed::Box;
 
 use oer_portable_events::EventSink;
 use oer_portable_time_virtual::VirtualClock;
-use oer_protocols_network_core::{Interface, NetEvent, NetworkOwner, claim};
+use oer_protocols_network_core::{Interface, NetEvent, NetworkOwner, claim, with_local_network};
 use oer_protocols_network_port::Holding;
 use oer_protocols_network_wire::ip::Dscp;
 
@@ -55,89 +55,81 @@ impl EventSink<ServiceEvent> for Turns {
 
 #[test]
 fn a_receive_load_lends_every_frame_and_counts_its_turns() {
-    #[derive(Debug)]
-    struct Net;
-    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
-    let (mut pool, brand) = claim::<Net, SIZE, BLOCKS>(memory).unwrap();
-    pool.loans().pool(CREDIT + 2, 2).unwrap();
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
-    let wire = WirePort::default();
-    {
-        let mut state = wire.0.borrow_mut();
-        state.switches.on(super::WireSwitch::Answers);
-        state.holding = Some(Holding::Lendable);
-    }
-    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
-    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service: Service<
-        'static,
-        'static,
-        Net,
-        SIZE,
-        2,
-        CREDITS,
-        RECEIVED,
-        2,
-        BLOCKS,
-        DEPTH,
-        RECEIVED,
-        WirePort,
-    > = Service::new(owner, MemoryPolicy::KEEP, stopping);
-    let group = service.group(CREDIT).unwrap();
-    let lanes: &'static mut LendingLanes<
-        'static,
-        'static,
-        Net,
-        SIZE,
-        DEPTH,
-        RECEIVED,
-        CREDIT,
-        WireHeld,
-    > = Box::leak(Box::new(LendingLanes::new()));
-    let mut socket = service
-        .bind_lending::<CREDIT>(PORT, Dscp::default(), group, lanes)
-        .ok()
-        .unwrap();
-    let clock = Box::leak(Box::new(VirtualClock::new()));
-    let mut turns = Turns::default();
-    let mut lent = 0_usize;
-    let drive = async {
-        for burst in 0..BURSTS {
-            {
-                let mut state = wire.0.borrow_mut();
-                for at in 0..BURST {
-                    state
-                        .incoming
-                        .push_back(udp_frame(PORT, &[(burst * BURST + at) as u8; 64]));
-                }
-                state.wake();
-            }
-            for _ in 0..BURST {
-                match socket.receive().await.unwrap() {
-                    Received::Lent(datagram) => {
-                        lent += 1;
-                        drop(datagram);
-                    }
-                    Received::Copied(_) => panic!("lent, not copied"),
-                }
-            }
-            settle().await;
+    with_local_network(|right| {
+        let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+        let (mut pool, brand) = claim(right, memory);
+        pool.loans().pool(CREDIT + 2, 2).unwrap();
+        let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+        let wire = WirePort::default();
+        {
+            let mut state = wire.0.borrow_mut();
+            state.switches.on(super::WireSwitch::Answers);
+            state.holding = Some(Holding::Lendable);
         }
-        stop.try_send(()).ok().unwrap();
-    };
-    run_tasks(clock, service.run(clock, &mut turns), drive);
-    let state = wire.0.borrow();
-    std::println!(
-        "rx-load frames {} lent {lent} | turns {} yields {} waits {} | takes {} empty {} | notices {} empty {} | registers {}",
-        BURSTS * BURST,
-        turns.turns,
-        turns.yields,
-        turns.waits,
-        state.takes,
-        state.empty_takes,
-        state.notice_takes,
-        state.empty_notices,
-        state.registers,
-    );
-    assert_eq!(lent, BURSTS * BURST, "every frame lent");
+        let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+        let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+        let mut service: Service<
+            '_,
+            '_,
+            _,
+            SIZE,
+            2,
+            CREDITS,
+            RECEIVED,
+            2,
+            BLOCKS,
+            DEPTH,
+            RECEIVED,
+            WirePort,
+        > = Service::new(owner, MemoryPolicy::KEEP, stopping);
+        let group = service.group(CREDIT).unwrap();
+        let lanes: &mut LendingLanes<'_, '_, _, SIZE, DEPTH, RECEIVED, CREDIT, WireHeld> =
+            Box::leak(Box::new(LendingLanes::new()));
+        let mut socket = service
+            .bind_lending::<CREDIT>(PORT, Dscp::default(), group, lanes)
+            .ok()
+            .unwrap();
+        let clock = Box::leak(Box::new(VirtualClock::new()));
+        let mut turns = Turns::default();
+        let mut lent = 0_usize;
+        let drive = async {
+            for burst in 0..BURSTS {
+                {
+                    let mut state = wire.0.borrow_mut();
+                    for at in 0..BURST {
+                        state
+                            .incoming
+                            .push_back(udp_frame(PORT, &[(burst * BURST + at) as u8; 64]));
+                    }
+                    state.wake();
+                }
+                for _ in 0..BURST {
+                    match socket.receive().await.unwrap() {
+                        Received::Lent(datagram) => {
+                            lent += 1;
+                            drop(datagram);
+                        }
+                        Received::Copied(_) => panic!("lent, not copied"),
+                    }
+                }
+                settle().await;
+            }
+            stop.try_send(()).ok().unwrap();
+        };
+        run_tasks(clock, service.run(clock, &mut turns), drive);
+        let state = wire.0.borrow();
+        std::println!(
+            "rx-load frames {} lent {lent} | turns {} yields {} waits {} | takes {} empty {} | notices {} empty {} | registers {}",
+            BURSTS * BURST,
+            turns.turns,
+            turns.yields,
+            turns.waits,
+            state.takes,
+            state.empty_takes,
+            state.notice_takes,
+            state.empty_notices,
+            state.registers,
+        );
+        assert_eq!(lent, BURSTS * BURST, "every frame lent");
+    });
 }

@@ -245,7 +245,7 @@ The neutral `oer-protocols-network-port::NetDevice` transfers Ethernet owners an
 the link epoch; the transmit owner (`OwnedTransmit`)
 writes each frame in the role's transmit buffer it goes to the radio in. The
 network core (`oer-protocols-network-core` and its runtime) is the one network:
-an instance over one role's port, with the storage and brand the image lends
+an instance over one role's port, with the storage the image lends and a brand of its own
 ([docs/network.md](network.md)). Its interface is leased by DHCP or given;
 reassociation is a new link epoch, which the core's DHCP client follows.
 Stop wakes independently of queue capacity. The HIL network vocabulary

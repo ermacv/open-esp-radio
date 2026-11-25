@@ -16,15 +16,17 @@
 //! installation, and an old loan pays only what is owed for it. Another network's
 //! loan does not compile here:
 //!
-//! ```compile_fail,E0308
-//! # use oer_protocols_network_core::claim;
-//! struct First;
-//! struct Second;
+//! ```compile_fail,E0521
+//! # use oer_protocols_network_core::{claim, with_local_network};
 //! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
-//! let (mut first, _) = claim::<First, 64, 1>(a).unwrap();
-//! let (mut second, _) = claim::<Second, 64, 1>(b).unwrap();
-//! let loan = second.loans().lend(0).unwrap();
-//! first.loans().give_back(loan);
+//! with_local_network(|first| {
+//!     with_local_network(|second| {
+//!         let (mut first, _) = claim(first, a);
+//!         let (mut second, _) = claim(second, b);
+//!         let loan = second.loans().lend(0).unwrap();
+//!         first.loans().give_back(loan);
+//!     });
+//! });
 //! # }
 //! ```
 

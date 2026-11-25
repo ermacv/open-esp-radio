@@ -190,12 +190,11 @@ a lease without end. Everything
 else (broadcast echoes, other types, malformed, too long, over a bound) is
 counted (`NetEvent::Icmp`) and never answered.
 
-Any type can be a brand. `claim` lets it claim once, giving one pool and the right
-to one core, and this crate holds that record, so no code outside can claim a brand
-twice. An image has room for 8 brands, and `test-support` for a test binary's. Blocks are values lent from that pool, and
-they and every handle carry the brand, invariantly. A brand is a type rather than a
-lifetime, so `'static` tasks and their queues can name a block, and another
-network's value does not compile. A block
+A brand is made by its scope, `with_local_network`, which gives the one right to
+claim it (`NetworkClaim`, neither `Copy` nor `Clone`). `claim` takes that right and
+cannot refuse: it gives one pool and the right to one core. Blocks are values lent
+from that pool, and they and every handle carry the brand, invariantly, so another
+network's value does not compile. A brand lives as long as its scope. A block
 always has its place in its pool. A socket has `CREDITS` command places and a place of its own for its
 close. A place frees when its command finished and its result was read or its
 observer dropped; a dropped observer alone frees nothing, so a late end never

@@ -20,109 +20,102 @@
 
 //! A sans-IO network core with one owner (see the crate's README).
 //!
-//! A core's values carry its brand, a type, so another network's handle
-//! does not compile here:
+//! A core's values carry its brand, so another network's handle does not
+//! compile here. A brand lives as long as its scope
+//! ([`with_local_network`]).
 //!
-//! ```compile_fail,E0308
-//! # use oer_protocols_network_core::{Core, Interface, claim};
+//! ```compile_fail,E0521
+//! # use oer_protocols_network_core::{Core, Interface, claim, with_local_network};
 //! # use oer_protocols_network_wire::ip::Dscp;
-//! struct First;
-//! struct Second;
 //! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1], interface: Interface) {
-//! let (_, brand) = claim::<First, 64, 1>(a).unwrap();
-//! let mut first: Core<'_, First, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-//! let (_, brand) = claim::<Second, 64, 1>(b).unwrap();
-//! let mut second: Core<'_, Second, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-//! let socket = second.open(1, Dscp::default()).unwrap();
-//! first.receive(&socket).unwrap();
+//! with_local_network(|first| {
+//!     with_local_network(|second| {
+//!         let (_, brand) = claim(first, a);
+//!         let mut first: Core<'_, _, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//!         let (_, brand) = claim(second, b);
+//!         let mut second: Core<'_, _, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//!         let socket = second.open(1, Dscp::default()).unwrap();
+//!         first.receive(&socket).unwrap();
+//!     });
+//! });
 //! # }
 //! ```
 //!
 //! Nor does another network's block:
 //!
-//! ```compile_fail,E0308
-//! # use oer_protocols_network_core::claim;
-//! struct First;
-//! struct Second;
+//! ```compile_fail,E0521
+//! # use oer_protocols_network_core::{claim, with_local_network};
 //! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
-//! let (mut first, _) = claim::<First, 64, 1>(a).unwrap();
-//! let (mut second, _) = claim::<Second, 64, 1>(b).unwrap();
-//! let block = second.take().unwrap();
-//! first.give(block);
+//! with_local_network(|first| {
+//!     with_local_network(|second| {
+//!         let (mut first, _) = claim(first, a);
+//!         let (mut second, _) = claim(second, b);
+//!         let block = second.take().unwrap();
+//!         first.give(block);
+//!     });
+//! });
 //! # }
 //! ```
 //!
-//! Nor does a block of a brand that is a subtype of another's:
+//! Nor its group:
 //!
-//! ```compile_fail,E0308
-//! # use oer_protocols_network_core::claim;
-//! type Wider = for<'a> fn(&'a ());
-//! type Narrower = fn(&'static ());
+//! ```compile_fail,E0521
+//! # use oer_protocols_network_core::{claim, with_local_network};
 //! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
-//! let (mut wider, _) = claim::<Wider, 64, 1>(a).unwrap();
-//! let (mut narrower, _) = claim::<Narrower, 64, 1>(b).unwrap();
-//! let block = wider.take().unwrap();
-//! narrower.give(block);
+//! with_local_network(|first| {
+//!     with_local_network(|second| {
+//!         let (mut first, _) = claim(first, a);
+//!         let (mut second, _) = claim(second, b);
+//!         let group = second.group(1).unwrap();
+//!         first.take_as(group);
+//!     });
+//! });
 //! # }
 //! ```
 //!
-//! The same code within one brand compiles:
+//! Nor does a block of a longer scope stand for one of a shorter:
+//!
+//! ```compile_fail
+//! # use oer_protocols_network_core::{Block, LocalNetwork};
+//! fn shorter<'m, 'long: 'short, 'short>(
+//!     block: Block<'m, LocalNetwork<'long>, 64>,
+//! ) -> Block<'m, LocalNetwork<'short>, 64> {
+//!     block
+//! }
+//! ```
+//!
+//! The same calls, each within its brand, compile in two scopes at once:
 //!
 //! ```
-//! # use oer_protocols_network_core::{Core, Interface, claim};
+//! # use oer_protocols_network_core::{Core, Interface, claim, with_local_network};
 //! # use oer_protocols_network_wire::ip::Dscp;
-//! struct Net;
-//! # fn f(a: &mut [[u8; 64]; 1], interface: Interface) {
-//! let (mut pool, brand) = claim::<Net, 64, 1>(a).unwrap();
-//! let mut core: Core<'_, Net, 64, 1, 1, 1, 1> = Core::new(brand, interface);
-//! let socket = core.open(1, Dscp::default()).unwrap();
-//! core.receive(&socket).unwrap();
-//! let block = pool.take().unwrap();
-//! pool.give(block);
+//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1], interface: Interface) {
+//! with_local_network(|first| {
+//!     with_local_network(|second| {
+//!         let (mut pool, brand) = claim(first, a);
+//!         let mut core: Core<'_, _, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//!         let (mut other, brand) = claim(second, b);
+//!         let mut other_core: Core<'_, _, 64, 1, 1, 1, 1> = Core::new(brand, interface);
+//!         let socket = core.open(1, Dscp::default()).unwrap();
+//!         core.receive(&socket).unwrap();
+//!         let socket = other_core.open(1, Dscp::default()).unwrap();
+//!         other_core.receive(&socket).unwrap();
+//!         let group = pool.group(1).unwrap();
+//!         let block = pool.take_as(group).unwrap();
+//!         pool.give(block);
+//!         let block = other.take().unwrap();
+//!         other.give(block);
+//!         pool.loans().pool(1, 0).unwrap();
+//!         pool.loans().grant(0, 1).unwrap();
+//!         let loan = pool.loans().lend(0).unwrap();
+//!         pool.loans().give_back(loan);
+//!     });
+//! });
 //! # }
-//! ```
-//!
-//! A brand is a type, so tasks and their queues can name a block:
-//!
-//! ```
-//! # use oer_protocols_network_core::{Block, claim};
-//! # use std::sync::Mutex;
-//! struct Net;
-//! type Lane = Mutex<Option<Block<'static, Net, 64>>>;
-//! static TO_NETWORK: Lane = Mutex::new(None);
-//! static BACK: Lane = Mutex::new(None);
-//!
-//! async fn application(mut block: Block<'static, Net, 64>) {
-//!     block.fill(b"filled by the application").unwrap();
-//!     *TO_NETWORK.lock().unwrap() = Some(block);
-//! }
-//!
-//! async fn network() {
-//!     let block = TO_NETWORK.lock().unwrap().take().unwrap();
-//!     assert_eq!(block.octets(), b"filled by the application");
-//!     *BACK.lock().unwrap() = Some(block);
-//! }
-//!
-//! fn task<F: Future<Output = ()> + Send + 'static>(future: F) -> F {
-//!     future
-//! }
-//!
-//! let storage = Box::leak(Box::new([[0; 64]; 1]));
-//! let (mut pool, _brand) = claim::<Net, 64, 1>(storage).unwrap();
-//! let block = pool.take().unwrap();
-//! let (first, second) = (task(application(block)), task(network()));
-//! let run = async {
-//!     first.await;
-//!     second.await;
-//! };
-//! let mut run = std::pin::pin!(run);
-//! let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
-//! assert!(run.as_mut().poll(&mut cx).is_ready());
-//! pool.give(BACK.lock().unwrap().take().unwrap());
-//! assert_eq!(pool.outstanding(), 0);
 //! ```
 
 mod block;
+mod brand;
 mod dhcp;
 mod diagnostics;
 mod echo;
@@ -134,10 +127,8 @@ mod owner;
 mod payload;
 mod places;
 
-pub use block::{
-    Block, BlockTooShort, BrandRefusal, ClaimRefused, Claimed, CoreBrand, GROUPS, Group,
-    GroupsFull, Pool, claim,
-};
+pub use block::{Block, BlockTooShort, Claimed, CoreBrand, GROUPS, Group, GroupsFull, Pool, claim};
+pub use brand::{Brand, LocalNetwork, NetworkClaim, with_local_network};
 pub use dhcp::{DNS_SERVERS, DhcpDrop, DhcpState, Lease, LeaseFault, Servers};
 pub use diagnostics::Count;
 pub use echo::{ECHOES, IcmpDrop, RATE as ECHO_RATE};
