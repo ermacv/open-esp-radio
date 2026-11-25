@@ -3196,3 +3196,5 @@ impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
 
 #[cfg(test)]
 mod idle;
+#[cfg(test)]
+mod lengths;
