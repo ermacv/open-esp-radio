@@ -121,7 +121,6 @@ const BELOW_THE_BOUNDARY: &[&str] = &[
     "chips/family/platform/interrupt-table",
     "tools/os/process",
     "tools/os/serial",
-    "tools/vendor/ieee802154-esp32s31",
     "chips/esp32s31/platform/bootstrap",
     "hil/probes/",
 ];
@@ -146,7 +145,7 @@ fn the_boundary_is_named_by_package_or_domain() {
         assert!(below_the_boundary(package), "{package}");
     }
     for package in [
-        "chips/esp32s31/radio/bluetooth/backend",
+        "chips/esp32s31/radio/ieee80211/backend",
         "chips/esp32s31/radio/phy",
         "portable/trace",
         "portable/embassy/net",
@@ -171,12 +170,9 @@ const ESPRESSIF_SANS_IO: &[&str] = &[
     "chips/family/drivers/efuse",
     "chips/family/facts",
     "chips/family/radio/ieee80211/policy",
-    "chips/family/radio/ieee802154/engine",
-    "chips/family/radio/ieee802154/values",
     "chips/family/radio/modem-clock",
     "chips/family/radio/power",
     "chips/family/radio/phy",
-    "chips/family/radio/bluetooth/ports",
     "chips/family/drivers/system-timer",
 ];
 
@@ -514,56 +510,6 @@ fn sans_io_has_no_normal_dependency_on_platform_or_terminal_fault_owners() {
 }
 
 #[test]
-fn ieee802154_engine_has_no_terminal_custody_or_retained_policy() {
-    let root = root();
-    let packages = packages(&root);
-    let workspace = read_toml(&root.join("Cargo.toml"));
-    let graph = packages
-        .values()
-        .map(|manifest| {
-            (
-                manifest["package"]["name"]
-                    .as_str()
-                    .expect("package name")
-                    .to_owned(),
-                normal_dependencies(manifest, &workspace["workspace"]),
-            )
-        })
-        .collect();
-    assert!(
-        forbidden_paths(&graph, "oer-chips-family-radio-ieee802154-engine", |name| {
-            forbidden_dependency(name) || name == "oer-chips-family-platform-runtime"
-        })
-        .is_empty()
-    );
-    let mut pending = vec![root.join("chips/family/radio/ieee802154/engine/src")];
-    while let Some(path) = pending.pop() {
-        if path.is_dir() {
-            pending.extend(
-                std::fs::read_dir(path)
-                    .expect("engine sources")
-                    .map(|entry| entry.expect("source entry").path()),
-            );
-        } else if path.extension().is_some_and(|extension| extension == "rs") {
-            let source = std::fs::read_to_string(&path).expect("source text");
-            for terminal in [
-                "Quarantined",
-                "FaultRecord",
-                "retained_static",
-                "reset_recording",
-                "fatal::",
-            ] {
-                assert!(
-                    !source.contains(terminal),
-                    "{} contains {terminal}",
-                    path.display()
-                );
-            }
-        }
-    }
-}
-
-#[test]
 fn normal_dependency_graph_includes_aliases_inheritance_targets_and_optional_edges() {
     let manifest: toml::Value = toml::from_str(
         r#"
@@ -735,56 +681,6 @@ fn lint_catalogue_comparison_accepts_tables_and_strings_and_rejects_missing_path
     );
 }
 
-/// Neither low-level HAL transactions nor chip facts may pull in the engine,
-/// including through target-specific, optional or indirect normal dependencies.
-#[test]
-fn hal_and_knowledge_do_not_reach_the_ieee802154_engine_or_driver() {
-    let root = root();
-    let workspace = read_toml(&root.join("Cargo.toml"));
-    let graph = packages(&root)
-        .values()
-        .map(|manifest| {
-            (
-                manifest["package"]["name"]
-                    .as_str()
-                    .expect("name")
-                    .to_owned(),
-                normal_dependencies(manifest, &workspace["workspace"]),
-            )
-        })
-        .collect();
-    for owner in ["oer-chips-esp32s31-hal", "oer-chips-esp32s31-knowledge"] {
-        let violations = forbidden_paths(&graph, owner, ieee802154_execution);
-        assert!(violations.is_empty(), "{owner}: {violations:?}");
-    }
-}
-
-fn ieee802154_execution(name: &str) -> bool {
-    matches!(
-        name,
-        "oer-chips-family-radio-ieee802154-engine" | "oer-chips-esp32s31-radio-ieee802154-backend"
-    )
-}
-
-#[test]
-fn the_ieee802154_boundary_rejects_the_indirect_knowledge_path() {
-    let graph = BTreeMap::from([
-        ("hal".into(), BTreeSet::from(["knowledge".into()])),
-        (
-            "knowledge".into(),
-            BTreeSet::from([
-                "hal".into(),
-                "oer-chips-family-radio-ieee802154-engine".into(),
-            ]),
-        ),
-    ]);
-    assert_eq!(
-        forbidden_paths(&graph, "hal", ieee802154_execution),
-        ["hal -> knowledge -> oer-chips-family-radio-ieee802154-engine"],
-    );
-    assert!(forbidden_paths(&graph, "unrelated", ieee802154_execution).is_empty());
-}
-
 #[test]
 fn radio_system_boundary_rejects_optional_target_and_transitive_driver_paths() {
     let manifest: toml::Value = toml::from_str(
@@ -837,7 +733,7 @@ build-driver = "1"
 }
 
 /// Protocol roles follow the leaf directory, including nested protocols such
-/// as bluetooth/le. Shared radio, network and HIL vocabulary and the bridges
+/// as ieee80211. Shared radio, network and HIL vocabulary and the bridges
 /// between formats are infrastructure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ProtocolRole {
@@ -1308,11 +1204,7 @@ fn every_chip_and_hil_package_has_a_listed_role() {
 
 #[test]
 fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
-    for prefix in [
-        "protocols/ieee802154",
-        "protocols/bluetooth/le",
-        "protocols/example",
-    ] {
+    for prefix in ["protocols/example"] {
         for (directory, protocol) in [
             ("wire", ProtocolRole::Wire),
             ("cipher", ProtocolRole::Cipher),
@@ -1456,44 +1348,6 @@ build-core = "1"
     assert_eq!(
         backend_core_paths(&graph, &roles, "backend"),
         ["backend -> core", "backend -> runtime"]
-    );
-}
-
-#[test]
-fn bluetooth_backend_core_edges_have_no_exemption() {
-    let graph = BTreeMap::from([(
-        "oer-chips-esp32s31-radio-bluetooth-backend".into(),
-        BTreeSet::from([
-            "oer-protocols-bluetooth-le-ll".into(),
-            "oer-protocols-bluetooth-hci".into(),
-            "oer-protocols-bluetooth-le-port".into(),
-            "oer-protocols-bluetooth-le-wire".into(),
-        ]),
-    )]);
-    let roles = BTreeMap::from([
-        (
-            "oer-protocols-bluetooth-le-ll".into(),
-            Role::Protocol(ProtocolRole::Core),
-        ),
-        (
-            "oer-protocols-bluetooth-hci".into(),
-            Role::Protocol(ProtocolRole::Core),
-        ),
-        (
-            "oer-protocols-bluetooth-le-port".into(),
-            Role::Protocol(ProtocolRole::Port),
-        ),
-        (
-            "oer-protocols-bluetooth-le-wire".into(),
-            Role::Protocol(ProtocolRole::Wire),
-        ),
-    ]);
-    assert_eq!(
-        backend_core_paths(&graph, &roles, "oer-chips-esp32s31-radio-bluetooth-backend"),
-        [
-            "oer-chips-esp32s31-radio-bluetooth-backend -> oer-protocols-bluetooth-hci",
-            "oer-chips-esp32s31-radio-bluetooth-backend -> oer-protocols-bluetooth-le-ll",
-        ]
     );
 }
 
@@ -2339,7 +2193,7 @@ fn every_protocol_package_but_runtimes_ports_models_and_tests_must_not_wait() {
     for other in [
         "protocols/ieee80211/runtime",
         "protocols/network/port",
-        "protocols/bluetooth/le/model",
+        "protocols/example/model",
         "protocols/hil/agent",
         "protocols/ieee80211/testing/conformance",
         "protocols/network/testing/model",
@@ -2918,7 +2772,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         }
         for path in [
             "portable/embassy/other",
-            "protocols/bluetooth/le/runtime",
+            "protocols/ieee80211/runtime",
             "chips/esp32s31/hal",
         ] {
             assert!(
@@ -2928,16 +2782,16 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         }
     }
     for (path, allowed) in [
-        ("protocols/bluetooth/le/wire", false),
+        ("protocols/ieee80211/wire", false),
         ("protocols/ieee80211/core/security/cipher", false),
-        ("protocols/bluetooth/le/controller", false),
+        ("protocols/ieee80211/core/upper-mac", false),
         ("chips/family/radio/ieee80211/policy", false),
         ("chips/family/facts", false),
         ("chips/esp32s31/pac", false),
         ("chips/esp32s31/hal", false),
-        ("protocols/bluetooth/le/runtime", true),
-        ("protocols/bluetooth/le/port", true),
-        ("protocols/bluetooth/le/model", true),
+        ("protocols/ieee80211/runtime", true),
+        ("protocols/ieee80211/contracts/port", true),
+        ("protocols/network/testing/model", true),
         ("portable/cooperate", true),
         ("portable/embassy/net", true),
         ("hil/probes/esp32s31-radio-root", true),
@@ -3459,7 +3313,7 @@ fn facts_pac_and_platform_contracts_stand_on_values_alone() {
             (Role::Portable, "portable/memory", true),
             (Role::Hal, "chips/esp32s31/hal", false),
             (Role::HardwareDriver, "chips/family/drivers/regi2c", false),
-            (PROTOCOL_PORT, "protocols/ieee802154/port", false),
+            (PROTOCOL_PORT, "protocols/ieee80211/contracts/port", false),
         ],
     );
     assert_role_cases(
@@ -4178,10 +4032,6 @@ const HAL_SEQUENCES: &[(&str, usize)] = &[
 /// The change that moves the driver code out of each HAL module, by path
 /// prefix below `chips/esp32s31/hal/src/`.
 const HAL_SEQUENCE_REMOVAL: &[(&str, &str)] = &[
-    (
-        "radio/bluetooth",
-        "Bluetooth LE's own plan: the controller driver out of the HAL",
-    ),
     (
         "system/boot",
         "the rows no step rewrites: the boot block drivers and the cold-start sequence",

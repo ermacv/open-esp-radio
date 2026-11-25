@@ -155,30 +155,11 @@ members = [
     "hil/probes/esp32s31-radio-root",
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
-# Not built. Kept as sources: the Bluetooth LE and IEEE 802.15.4 backends.
-# Awaiting deletion at their successor: the old Wi-Fi path (its backend, the
+# Not built. Awaiting deletion at their successor: the old Wi-Fi path (its backend, the
 # station, the radio system and its client contract) and what stands on it.
 exclude = [
     "hil/services/load",
-    "protocols/bluetooth/le/cipher",
-    "protocols/bluetooth/le/controller",
-    "protocols/bluetooth/le/ll",
-    "protocols/bluetooth/le/model",
-    "protocols/bluetooth/le/port",
-    "protocols/bluetooth/le/runtime",
-    "protocols/bluetooth/le/wire",
     "protocols/ieee80211/core/extensions/esp-now",
-    "protocols/ieee802154/mac",
-    "protocols/ieee802154/model",
-    "protocols/ieee802154/port",
-    "protocols/ieee802154/wire",
-    "chips/family/radio/bluetooth/ports",
-    "chips/family/radio/ieee802154/engine",
-    "chips/family/radio/ieee802154/values",
-    "tools/vendor/ieee802154-esp32s31",
-    "tools/vendor/ieee802154-esp32s31-cli",
-    "chips/esp32s31/radio/bluetooth/backend",
-    "chips/esp32s31/radio/ieee802154/backend",
     "chips/esp32s31/radio/ieee80211/backend",
     "chips/esp32s31/radio/ieee80211/station",
     "chips/esp32s31/radio/system",
@@ -349,7 +330,6 @@ oer-chips-family-platform-layout = { path = "chips/family/platform/layout" }
 oer-chips-family-drivers-usb-serial-jtag = { path = "chips/family/drivers/usb-serial-jtag" }
 oer-chips-esp32s31-platform-layout = { path = "chips/esp32s31/platform/layout" }
 # The HIL agent images' shared dependencies.
-embassy-sync = "0.8.0"
 embassy-time = "0.5.1"
 oer-chips-family-platform-executor = { path = "chips/family/platform/executor" }
 oer-protocols-hil-protocol = { path = "protocols/hil/protocol", default-features = false }

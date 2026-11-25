@@ -15,11 +15,10 @@ complete standard implementation or certification.
 | IEEE 802.11 | WLAN MAC and PHY specification family | `ieee80211` for internal protocol implementation |
 | WLAN | Wireless local area network | A network/interface category, not an additional driver layer |
 | Wi-Fi | Technology and ecosystem based on IEEE 802.11 | `wifi` is appropriate for user-facing APIs; it does not imply Wi-Fi certification |
-| IEEE 802.15.4 | MAC/PHY family for low-rate wireless networks | `ieee802154`; each implementation states its PHY/channel/frame limits |
+| IEEE 802.15.4 | MAC/PHY family for low-rate wireless networks | `ieee802154`; the register model's facts only |
 | WPAN | Wireless personal area network | A broader category, not a replacement name for the 802.15.4 backend |
-| Bluetooth | Bluetooth SIG family, including BR/EDR and LE | `bluetooth`, with implemented LE procedures under `le` |
+| Bluetooth | Bluetooth SIG family, including BR/EDR and LE | `bluetooth`, `bluetooth/hci` alone in the tree |
 | HCI | Host–Controller commands, events and data transport | `bluetooth/hci`; neither an on-air protocol nor a complete Host stack |
-| LE Link Layer | LE on-air PDUs and Link Layer procedures | `bluetooth/le/wire`, `bluetooth/le/ll` |
 
 IEEE 802.15.4 does not itself provide Thread or Zigbee. HCI also applies to
 BR/EDR and must not be named as if it were exclusively LE Link Layer.
@@ -55,10 +54,7 @@ do not establish the same ownership here.
 ## Module and API names
 
 Use path context instead of repeating a chip/protocol prefix on every private
-type. For example, portable Bluetooth LE procedures live under
-`bluetooth/le/ll/{scanning,connection,control}`; the chip IRQ and scheduler
-remain in the hardware engine, outside those procedure modules. Each procedure
-retains its own lifecycle owner.
+type. Each procedure retains its own lifecycle owner.
 
 Encoding a frame does not authorize installing a key or publishing DMA work.
 WPA2 secrets and zeroization remain with their state owner; association

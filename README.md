@@ -1,12 +1,12 @@
 # open-esp-radio
 
-Source-only `no_std` radio stack in Rust for Espressif chips, today the
-ESP32-S31: Wi-Fi, Bluetooth LE and IEEE 802.15.4, without the vendor's radio
-binaries. The stand's ESP-IDF peers run on the ESP32-C5.
+Source-only `no_std` radio stack in Rust for Espressif chips, today Wi-Fi on
+the ESP32-S31, without the vendor's radio binaries. The stand's ESP-IDF peers run on the ESP32-C5.
 
 **Status.** The tree contains portable protocol cores and runtimes, host
 reference models and tests, the S31 register model, PAC, HAL, PHY and drivers
-for Wi-Fi, Bluetooth LE and IEEE 802.15.4. Application images, HIL scenarios
+for Wi-Fi. Of Bluetooth LE and IEEE 802.15.4 it holds the register model's
+facts. Application images, HIL scenarios
 and ESP-IDF peers exercise those components; their implemented scope is
 documented beside the code. The [architecture](docs/architecture.md) describes
 the system and its boundaries.
@@ -19,7 +19,7 @@ Not affiliated with or endorsed by Espressif Systems.
 | --- | --- |
 | `tools/` | the developer's machine, by domain: `cargo registers`, `cargo fw`, `cargo stand`, `cargo hil`, ... ([tools](tools/README.md)) |
 | `portable/` | generic `no_std` support: time, memory, trace, crypto, Embassy bindings |
-| `protocols/` | sans-IO protocols: Wi-Fi, Bluetooth LE, IEEE 802.15.4, the radio port, network, HIL ([layout](docs/repository-layout.md)) |
+| `protocols/` | sans-IO protocols: Wi-Fi, the radio port, network, HIL ([layout](docs/repository-layout.md)) |
 | `chips/` | the hardware layers: `family/` what every chip shares (staged boot, executor, facts), `<chip>/` its register model, PAC, HAL, PHY, drivers, bootstrap and application entry |
 | `oer/` | the application entry (`oer`): what an image uses, the chip selected by the build |
 | `examples/` | examples on the entry |
@@ -42,6 +42,5 @@ Host `espflash` encodes and flashes images; no esp-* platform crate is linked.
 ## License
 
 MIT OR Apache-2.0, except the crates holding ESP-IDF ports, which are
-Apache-2.0 only. The shared IEEE 802.15.4 MAC vocabulary is one such port
-crate; packages depending on it declare Apache-2.0 as their effective license
-in Cargo metadata; see [NOTICE](NOTICE) for attribution and third-party material.
+Apache-2.0 only; packages depending on one declare Apache-2.0 as their
+effective license in Cargo metadata; see [NOTICE](NOTICE) for attribution and third-party material.

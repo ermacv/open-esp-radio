@@ -50,7 +50,6 @@ the end go deeper.
 application          credentials, the network core, sockets
   protocol runtime   one async loop per role set, over the protocol's port
   protocols          sans-IO state machines: frames, MAC, RSN, station, AP,
-                     BLE link layer and HCI, IEEE 802.15.4 MAC
   radio port         lifecycle and capacity vocabulary shared by the ports
 image                boot (chosen peripherals and services), application tasks
   application entry  `oer` over `chips/<chip>/app`: peripherals taken once,
@@ -59,7 +58,7 @@ image                boot (chosen peripherals and services), application tasks
                      image's behalf
   service / facade   radio system (one owner of the shared RF front-end),
                      protocol facades, the chip's composition (`runtime`)
-  chip adapters      ESP32-S31 Wi-Fi, BLE and IEEE 802.15.4 backends
+  chip adapters      ESP32-S31 Wi-Fi backend
   drivers            block and subsystem operations: PHY (calibration,
                      tracking, channel, TX power; Rust port of libphy), boot
                      blocks, watchdog, console, coexistence, family engines
@@ -144,12 +143,8 @@ backend port and the installed-protection contract), the sans-IO cores under
 transmit queues) and `arbiter`, the security transforms and handshakes in
 `security/`, the `roles/` station and access point, and `extensions/`), a
 `runtime`, and `testing/` (the backend conformance suite and the reference
-model), which no product package depends on. Bluetooth LE has wire formats, a
-backend port, synchronous LL/controller cores, an executor-independent
-runtime and a reference model. IEEE 802.15.4 has `wire`, `port`, the `mac`
-core and a separate host reference `model`. Both are kept as sources outside
-the build, but for Bluetooth's `hci`, which the stand's fixture helpers use
-([repository layout](repository-layout.md)). A backend depends on its
+model), which no product package depends on. Bluetooth's `hci` is the codec the
+stand's fixture helpers use ([repository layout](repository-layout.md)). A backend depends on its
 protocol's port, wire formats, protocol contracts and implemented `cipher`
 only. A protocol contract (`protocols/<protocol>/contracts/*`) owns what a
 protocol installs and a backend programs, apart from the codecs and the
@@ -289,12 +284,9 @@ packages aside) has no configuration of its own.
 | `oer-chips-family-drivers-efuse` | `chips/family/drivers/efuse` |
 | `oer-chips-family-facts` | `chips/family/facts` |
 | `oer-chips-family-radio-ieee80211-policy` | `chips/family/radio/ieee80211/policy` |
-| `oer-chips-family-radio-ieee802154-engine` | `chips/family/radio/ieee802154/engine` (kept as sources, not built) |
-| `oer-chips-family-radio-ieee802154-values` | `chips/family/radio/ieee802154/values` (kept as sources, not built) |
 | `oer-chips-family-radio-modem-clock` | `chips/family/radio/modem-clock` |
 | `oer-chips-family-radio-power` | `chips/family/radio/power` |
 | `oer-chips-family-radio-phy` | `chips/family/radio/phy` |
-| `oer-chips-family-radio-bluetooth-ports` | `chips/family/radio/bluetooth/ports` (kept as sources, not built) |
 
 The console `oer-chips-family-drivers-usb-serial-jtag` depends transitively on mmio
 through `oer-chips-family-platform-interrupt-table`, which owns platform interrupt
@@ -595,13 +587,6 @@ probe has one at each of P1 to P4).
   handler learns which fired from the peripherals' status. A part is bound
   once and its handler holds it for the image's life: a task asks the
   handler for each bank transition, and the CPU route never changes.
-  IEEE 802.15.4 prepares its IRQ owner before binding: while task code still
-  owns both sides, it masks delivery, issues STOP and both timer stops and
-  discards all fourteen stale event lanes without sampling. No pre-bind event
-  can be serviced. The bindable IRQ owner is returned only after this step;
-  bound activation then publishes the same ten runtime events as later
-  sessions through the task owner alone. No task accesses the handler cell.
-  Polling retains `Silent` after the same pre-bind discard.
   A binding is refused for nothing of the table's: an entry's membership,
   class, handler and cell are its table's by type, and the controller's
   writes name only its own line and sources, by an entry's number at compile
@@ -644,7 +629,7 @@ probe has one at each of P1 to P4).
   The declaration checks the executor's software source, the same-level
   raiser's class, the directions and the common hart, or for a peer-hart
   raiser a different one.
-  Doorbell construction, Wi-Fi activation and BLE gate exchange check that
+  Doorbell construction and Wi-Fi activation check that
   the request handler is above the requesting executor on the same hart;
   the driver also checks the doorbell against the bound handler. These are
   const checks over the table's entries, with no separate level-order proof
@@ -1014,7 +999,7 @@ The current mechanisms have narrower guarantees than the policy:
 - Peek does not clear. Each reporter clears only after its complete output
   succeeds. Ordinary panic renderers acknowledge the exact snapshot. The HIL
   console serves what the boot read before that. A refused output retains the record.
-- Payloads preserve panic text, Wi-Fi RAW, IEEE 802.15.4 entry observations and completed service prefix, HIL
+- Payloads preserve panic text, Wi-Fi RAW, HIL
   failure records, the S31 exception observations, and RX-chain observations.
   PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
   numeric foreign-reunion identities. None of these values grants ownership.
@@ -1207,8 +1192,6 @@ typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
 
 The radio system depends on client contracts, never on protocol drivers,
 including through optional, target-specific or transitive normal dependencies.
-`oer-chips-esp32s31-radio-client::bluetooth::RadioController` defines the controller
-lifecycle operations the actor invokes; the Bluetooth driver implements it.
 
 - **PHY.** Constructing the actor does not calibrate. After the executor
   starts, the first client join calls `prepare` → `register_concurrent_phy`
@@ -1329,10 +1312,8 @@ its model and conformance case.
   publishes no frontend or ordinary join. No missing resource is replaced with
   an empty or newly minted owner.
 - Reference models are backends and use the port's conformance cases.
-  Wi-Fi, Bluetooth LE and IEEE 802.15.4 models live in their protocol's
-  `model` host crate. Frame protection
-  lives in `cipher` where a software implementation exists; IEEE 802.15.4
-  currently describes hardware offload through its port.
+  Wi-Fi's model lives in its protocol's `model` host crate. Frame protection
+  lives in `cipher` where a software implementation exists.
 - A port's owner runs on the application's level; the tasks of its levels
   are its own, commanded through its private hand-over and named nowhere
   outside it. The pair's probes are the composition that applies it today:
@@ -1366,13 +1347,10 @@ its model and conformance case.
 - A caller that drops an admitted request detaches only its waker; the port
   keeps the registration and buffer lease until the terminal event and
   reclaims exactly once. Event streams end with the uninstall.
-- A slot installation (Bluetooth LE) is abandoned through a static typed
-  signal, executed only in the driver's context, which silences routes; a
-  stop the driver does not confirm in its bound leaves the installation
-  quarantined. The Wi-Fi port's stop always ends; the data's stop removes
+- The Wi-Fi port's stop always ends; the data's stop removes
   its keys and agreements by their own commands before a retirement.
 - No radio-system token crosses a port; PHY membership stays inside the
-  backend. The Bluetooth LE port takes the form of the Wi-Fi lower-MAC port.
+  backend.
 
 ## Protocols
 
@@ -1388,104 +1366,6 @@ its model and conformance case.
   and `drive` carries its steps out on the port. The engine
   (`core/datapath`) fills and publishes the arenas, settles their ends and
   charges what an attempt cost on the air.
-- **Bluetooth LE** (`protocols/bluetooth`, backend `chips/esp32s31/radio/bluetooth`,
-  the HAL's `radio/bluetooth`, kept as sources and not built but for `hci`).
-  Wire formats carry no protocol state or clock domain. The port owns radio
-  vocabulary and the shared DTM window calculation; backends autonomously
-  progress the admitted test with the Core Part F interval grid and 5 ms RX
-  windows. Public backend identity crosses as an explicit wire value with
-  named canonical/air byte order; the driver depends on neither LL nor HCI.
-  The backend does not parse air PDUs: wire codecs, LL decisions and role
-  policy stay above the port. An address needed by the backend crosses the
-  port as a `LeDeviceAddress`, separately from encoded packet bytes. Role
-  images contain only hardware scheduler values, SRAM layout, channels and
-  execution timing.
-  The family `oer-chips-family-radio-bluetooth-ports` declares separate task/interrupt
-  register ports, controller-time ports, modify/stop progress and non-repeating
-  installation identities. HAL implements them with its existing owners and
-  retains affine receipts, arena brands, memory projection and DMA custody.
-  Execution-lock/modify/stop orchestration, diagnostic settling, interrupt
-  exchange, terminal-release policy and hardware workers still reside in HAL.
-  HCI is the world boundary. The controller's DTM service owns correlation,
-  command credit, pending commands, session leases and retained faulty terminals
-  without IO. The LE runtime awaits capacity and terminals and runs the HCI
-  service loop over composition-owned transport and port traits. The H4
-  packet-indicator codec is one module of HCI; firmware owns the transport
-  (the serial port, the gap that ends an unfinished command), HAL entropy,
-  installation/shutdown and task spawning. The LL
-  exposes per-connection progression; arbitration between conflicting
-  connections and Host receive backpressure are not implemented. Controller
-  memory is generated layouts with a HAL handover engine; no controller
-  address reaches the driver. How much of an interval a connection event may
-  take is policy of the portable link
-  layer, from timing allowances the backend reports. The permanently bound
-  Bluetooth handler retains the modem LP timer's register owner and positional
-  epoch while P2 processes the software queue. A value-only time snapshot goes
-  to P2; an unarmed deadline plan returns through a single-slot queue. Only the
-  handler performs rollover acknowledgement and the sourced compare-disable,
-  counter/rollover sample, target or software-pending publication and bit-18
-  command. During planning the handler acknowledges new pending/rollover facts
-  and retains their software work until the in-flight plan returns. P2 shares
-  no register writer or lock with the handler.
-  The primary handler also acknowledges controller-time overflow and counts
-  every observed wrap independently of scheduler-notification coalescing. P2
-  brackets a live latch with that count and requests a post-latch handler
-  service barrier before its second read. That entry counts hardware-pending
-  overflow before P2 resumes. P2 retries a crossing transaction and joins the
-  stable count and low raw word into continuous time. Sample gaps
-  may span multiple raw periods; P3 still services each hardware wrap. Terminal
-  output release masks and clears overflow before the bank leaves the handler.
-  Admission checks primary/task enables before HAL/PHY initialization against
-  the explicit production baseline, dynamic and task-lifecycle set; an enable
-  outside that set is a named `ForeignEnable` fault. Release alternates handler
-  and task steps, masks sourced feature lanes and task17, and acknowledges sampled
-  NRT with the runtime transaction before the
-  last visible fault check preceding masking and before final release confirmation.
-  NRT admission refuses both writes for a pair containing a shared primary fault
-  or overflow clear lane; release retains that exact pair in `ReleaseNotQuiet`.
-  Other sampled NRT lanes are acknowledged even outside the fixed cleanup subset.
-  Release writes fixed non-fault primary/NRT W1C images under the mask and
-  acknowledges the task WT bank. Fault lanes are excluded from unconditional W1C,
-  so arrivals after the check remain retained. Release verifies zero primary/task enables and rejects
-  residual visible status as `ReleaseNotQuiet`. It never reopens ENA or changes
-  matrix routing; masked pending is not observable and no zero-pending proof
-  follows. Bank1 CC0/CC1/overflow have hw32 masked-W1C coverage; bank0/NRT
-  and other feature lanes have vendor coverage, not hardware verification. The opaque task +0x4bc view is diagnostic-only and is never read by
-  production. Both faults retain primary observations and task enables and
-  quarantine owners for the image's terminal policy. The separate CTE interrupt bank is outside this policy;
-  production has no enabled CTE interrupt consumer. These sequential reads
-  neither prove producer shutdown nor name opaque causes.
-- **IEEE 802.15.4** (`protocols/ieee802154`, driver
-  `chips/esp32s31/radio/ieee802154/backend`, the engine and the HAL's
-  `radio/ieee802154`, kept as sources and not built). The S31 driver implements the family
-  engine's LL contract over HAL's owned polling transactions and retains the
-  engine with its placed DMA storage through detach/rebind. The family owner's
-  borrowed `service` returns `Fault` with the complete source observation and
-  entry state before acknowledgement or dispatch for unsupported samples. Supported
-  samples retain their completed dispatch prefix, current state and typed invariant
-  reason on failure, without replay or rollback. The S31 driver's consuming
-  ISR entry quarantines the MAC and DMA owners without release or reuse;
-  the engine owns neither quarantine nor retained/reset policy. PHY HIL owns the
-  fault payload codec, common-format retained slot and safe `fatal::reset_recording` call,
-  reporting the previous fault on the next boot and retaining it on output refusal.
-  The family engine owns reset/foundation readback, static policy and interrupt
-  startup/teardown order over hardware-free register-port contracts. HAL owns
-  PAC access, DMA allocation/projection and affine startup/teardown phases;
-  only the final pre-bind discard fence releases a bindable IRQ owner. The
-  existing S31Mac adapter retains its Silent polling pair. HAL's normal
-  dependency closure contains neither engine nor driver. Chip knowledge
-  supplies hardware-free power facts; the driver composes the engine's typed
-  level set. The port boundary follows the
-  OpenThread radio platform: the backend executes acknowledgement, a single
-  clear-channel assessment per transmission and the cipher as advertised
-  capabilities; the CSMA-CA backoff between assessments, retries, the
-  pending-table policy, keys and counters stay in the core. The port owns
-  shared pending tables, pending-bit selection and enhanced-ACK probing
-  tables: the core configures their data and the backend executes the
-  advertised offloads. Validated channels are wire values. CSL phase and
-  network-time calculations stay in the core; wire codecs write ready IE
-  values. Configuration is admitted in any radio state.
-
 ### Names of standard mechanisms
 
 - A mechanism or format defined by a standard is named after that
@@ -1571,9 +1451,7 @@ that already holds them, so a comparison probe reaches them through the public
 API. Such access grants nothing the owner's partition does not hold, and
 production has no `cfg(oer_probe)`, probe constructor or probe module.
 A comparison probe's observation needs do not justify generalizing driver
-attachment, lifecycle or retirement APIs. Bluetooth retains the concrete
-`ChipGate` for these paths; the additional typed register access stays on
-the existing HAL owner.
+attachment, lifecycle or retirement APIs.
 
 ### Switchable network-core diagnostics
 

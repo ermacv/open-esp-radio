@@ -154,7 +154,6 @@ Below it are, by directory (`/` ends a domain), for the S31 workspace:
 | Cores of memory the hardware shares | `portable/memory`, `chips/family/platform/layout` |
 | The hot-code attribute | `portable/hot` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
-| The C-driver stand (kept as sources, not built) | `tools/vendor/ieee802154-esp32s31` |
 | Bootstrap and probe images | `chips/esp32s31/platform/bootstrap/`, `hil/probes/` |
 
 `oer-chips-family-platform-interrupt-table` owns the Espressif interrupt matrix contract,
@@ -524,70 +523,6 @@ packet-pool owners without adopting detached DMA storage. Preserve the proof
 at the smallest operation; a safe state machine in a crate below the boundary
 remains safe.
 
-Kept as sources, not built (the HAL's `radio/bluetooth` and `radio/ieee802154`
-modules, to the end of the IEEE 802.15.4 paragraphs below):
-`oer_chips_esp32s31_hal::radio::bluetooth::engine` owns the controller-SRAM protocol.
-One `Engine` owns the register token and the complete `Placed<BluetoothArena>`;
-its private components retain graph bindings. The codecs
-and scheduler lists encode the addresses the controller follows: `DmaRef`
-and the volatile arena carry the memory contract, while `&mut` register owners
-and typestate enforce publication order and lifecycle without `unsafe`.
-Driver role builders select detached
-values, never layout references; HAL checks their binding anchors before
-writing them. Pool and epoch brands bind each affine lease to its owner;
-logical item identities also carry an acquisition generation.
-The same engine moves through initialization, activation, scheduler workers,
-stop and reset. PHY/DF owners cannot be detached. Address publication and
-completion return go through the engine; raw proofs and address getters stay
-private. Finished-list receipts carry the capturing engine installation epoch, so a
-fence from before reset cannot authorize a later installation's completion. Opaque
-projections and public scheduler Debug output do not expose physical links.
-`scheduler::hardware::live` publishes list-zero items only after resolving
-each address to a submitted item of the `'static` scheduler pools, in the
-executor's order. The BLE PHY engine, the direction-finding workspace, the
-device table and the receive chain each mint, in one place, the HAL proof of
-the storage the hardware is pointed at (`BlePhyHardwareObjects`,
-`DirectionFindingDescriptor`, `DeviceTablePublication`, `RxChainHead`)
-through safe crate-private constructors. Their typed `DmaRef`s carry the
-complete retained layout's extent and alignment; the device-table count is
-an `Index<capacity + 1>` admitted before table mutation, with its register
-width checked at compile time. The HAL publications that take them are safe.
-The private placement adapter consumes `Placed`, projects fields within its
-allocation and calls the HAL's typed-address constructors. `engine::arena`
-retains the root pointer, then derives every field borrow from that pointer.
-After a verified reset, consuming all graph owners ends their borrows; the
-backing is dropped in place to end its pin contract and zero-initialized in
-place before returning the original `Placed` allocation. No field reference
-escapes this return. Constructor refusal returns both original inputs before
-mutation. Unconfirmed stop and reset failure retain the whole graph with its
-register partitions in absorbing quarantine; Drop never returns a placement.
-The P2 engine holds only the task endpoint of `scheduler::interrupt`'s static
-request/reply channel. Its unique P3 endpoint stays beside the IRQ register
-owner. The channel uses `oer-portable-memory::RequestSlot`, with no
-stored wakers. Release/Acquire state transitions transfer exclusive access:
-P2 posts the exchange, P3 borrows it in place and writes its reply, then P2
-validates and consumes the exchange exactly once. A rejected reply stays in
-place. Neither side accesses the other's phase, and no task waker enters P3.
-The static typed signal carries only reply readiness. Installation epochs and command numbers
-that never wrap or reset reject stale replies. Abandoning a pending future
-retains the request seat, quarantines graph publications and prevents
-retirement. Reusing the slot consumes both quiet endpoints after scheduler
-stop and route removal. Adjacent tests
-cover delayed replies, duplicate entries, stale replies, registration races,
-abandonment and endpoint reunion; a paired UI case rejects repeated retirement.
-The adjacent `engine::owner::tests` cover exact-allocation retry, completion,
-stop, reset, stale epochs and both terminal failure paths; paired UI cases
-cover moved inputs, private custody and stale leases. Its range metadata
-holds no reference that could alias the retained owner. The RX byte storage
-and its transparent volatile byte cells derive `Zeroable`; this permits
-zero initialization and grants no concurrent access.
-An `unsafe` contract there states only the memory the hardware reaches: the
-Controller's lifecycle order, power and PHY membership are correctness,
-which the driver's typestate holds, and the driver forbids unsafe code. The
-scanner start takes the scanning list's publication of the same Controller
-epoch, so a list another epoch published, or a reset head, never starts
-it.
-
 Each chip's HAL has one module that makes typed DMA addresses,
 `memory::dma_address`: the only caller of the `unsafe` `DmaWindowAddress` and
 `DmaRef` constructors of `oer-portable-memory`, which the PAC's generated `layouts`
@@ -615,77 +550,13 @@ allowing replacement of its backing. `PlacedBacking::dma_region` only returns
 that cached proof without width, emptiness or containment admission.
 A rejected A-MPDU backing insertion returns the last slot and clears its
 metadata before reporting refusal; an empty region follows the same LIFO
-release path. The BLE adapter uses the same projection; DF workspace overlays
-check type geometry in const blocks, derive positions from generated member
-accessors and return typed errors before arena mutation. DF preflight returns
-the original `Placed` on refusal. After verified reset, the arena's existing
-unsafe reclaim block calls `Placed::from_retained`: its contract requires the
-exact original placed allocation, with field borrows and hardware use ended.
-No safe constructor can restore placement from an arbitrary static reference.
+release path.
 
 Its `memory::dma_static` module holds the placement constructor:
 `DmaStatic::placed`, `unsafe` and called only by the `dma_static!` macro,
 whose section is checked to be `.dma.bss.<block>`; the runtime linker
 script's ASSERTs over the DMA range (from the generated `dma-window.x`) are
 the proof.
-
-The 802.15.4 HAL frame owner consumes its `Placed` buffers and constructs the
-complete address table through the safe placement projection. The S31 driver
-retains the MAC during projection; refusal returns both unchanged affine inputs. Every projection names a frame
-inside the retained allocation; subsequent register publications take those
-typed addresses. The shared engine and the combined engine/MAC owner contain
-no unsafe code and perform no address arithmetic.
-
-The S31 802.15.4 HAL's runtime acknowledgement consumes an affine
-`Ieee802154EventSnapshot`; its copyable observation grants no write authority.
-Startup is a separate, typed pre-bind discard. The family driver's `arm` consumes the task and
-inactive IRQ owners, masks every event, installs the abort baseline, issues
-STOP and both timer stops, then writes the fixed W1C set of all fourteen event
-lanes through the existing `Ieee802154MacIrq` part. This write does not use a
-status sample: every pre-bind event is stale and cannot be serviced. Its
-register read preserves undeclared bits only; masked zero status cannot narrow
-the discard. The policy records this consumption proof and the generated
-accessor preserves undeclared bits rather than treating it as a whole-word
-vendor image. A word consisting entirely of W1C fields is its own status/clear
-pair and needs the same explicit fixed-image proof as a named pair.
-
-HAL implements each consuming phase as one register atom or fence, with
-private fields and no public intermediate owner extraction. The family driver
-executes their order; HAL and chip knowledge reach neither engine nor driver.
-Only after the final fence does `arm` return the bindable IRQ owner and an
-affine task owner without operational methods. `Router::bind` transfers the
-IRQ owner permanently into its handler. Consuming task activation with its
-`Bound` proof publishes the same ten runtime events as later sessions; it
-writes only task-owned enables and never borrows `HandlerCell`. A polled pair
-instead requires `Silent`; its startup discard has already completed. The
-pre-bind transaction enables no event lane.
-Masked acknowledgement is measured for timers0/1 (HW8) and RX_ABORT reason26
-(HW26). Hidden pending and masked visibility on 7/10/13 remain unmeasured;
-neither a zero read nor the discard is an all-lane visibility or producer-drain
-proof. Deactivation issues STOP and both timer-stop commands, samples before
-masking and acknowledges the saved sample. Commands and selected
-acknowledgements do not prove producer drain.
-Engine interrupt service rejects a sample containing lane 7, 10 or 13 with
-`Fault::UnhandledEvents` before acknowledgement or dispatch, preserving
-all named events, each unnamed lane and the entry state. The consuming
-engine/MAC owner becomes an absorbing quarantine with no recovery API.
-The PHY HIL image records the fault through safe `fatal::reset_recording`
-without dropping its quarantined owners. The common fault envelope retains
-all fourteen event flags, entry state, ordered service progress and eight
-detail words, with one version and integrity protocol. It prints at the next boot and remains
-retained on output refusal.
-Malformed secured ACK output from the environment is refused as API input.
-The engine issues STOP, reports the typed security error to its environment,
-delivers the received frame without an ACK and selects the next operation.
-It writes no security setter or TX DMA publication and returns no fault;
-no retained record is added or extended.
-During ACK reception the engine stops timer0, samples and clears its event
-while enabled, then masks
-it. A new ACK wait enables and clears old pending while timer0 is stopped,
-before programming and starting it. The HAL never resamples status as the
-authority for acknowledgement. Same-lane recurrence is not an event count.
-SOURCE: `hw8-20261026-radio-local-05`, `ieee-timers.json`, retained-snapshot
-and selective-W1C phases, [PR #689](https://github.com/ermacv/open-esp-radio/pull/689).
 
 The HAL's owned PHY transaction adds no unsafe code. A permanently claimed
 `TransactionSeat` supplies one affine domain identity. `RadioTransaction`
@@ -870,7 +741,7 @@ Calls remain direct for stack analysis.
 `DmaBytes<N>` holds bytes whose address a driver publishes to a
 DMA engine: reads copy them out by volatile accesses through `&self`,
 writes copy them in through `&mut self`, so no reference aliases memory the
-engine writes; the IEEE 802.15.4 engine's frame buffers are such bytes.
+engine writes.
 
 `HandlerCell` hands one `&'static mut T` from the context that installs it
 to an interrupt handler. Its state (`EMPTY`, `INSTALLING`, `READY`, `BUSY`)
@@ -920,8 +791,6 @@ same way), and, behind the `linux-socket` feature, `linux_socket` for the
 link-layer, HCI and L2CAP addresses and three socket options. `oer-tools-os-serial`
 takes an open serial port's descriptor; it is its own crate so that the root
 fixture installer, which links `oer-tools-os-process`, does not link `serialport`.
-The 802.15.4 host stand (kept as sources, not built) binds the pinned ESP-IDF
-C driver through its FFI.
 
 ## Firmware and platform code below the boundary
 
@@ -1017,91 +886,6 @@ unchecked lifetimes, generic PAC callbacks or independently reusable interrupt
 owners. MMIO outside the restricted PAC must use typed accessors. Missing
 register fields are reviewed in `chips/<chip>/registers/` and regenerated
 into the PAC, never reconstructed with local masks in a HAL or adapter.
-
-Kept as sources, not built, to the end of the Bluetooth paragraphs:
-Bluetooth admission checks primary and task enables before HAL/PHY
-initialization can mask inherited lanes. `ForeignEnable` retains primary
-enables, masked status, NRT words and task enables. The opaque task +0x4bc
-word is diagnostic-only; production never reads it. The typed production set
-covers baseline fault/overflow, dynamic scheduler and task14 lifecycle lanes.
-Terminal masking covers sourced primary feature lanes and all task enables,
-including unnamed task17. The runtime affine NRT transaction runs before the
-last visible-fault check preceding masking and before final release confirmation.
-It acknowledges admitted sampled lanes, including those outside the fixed cleanup
-subset; a pair containing shared primary fault/overflow lanes refuses both writes
-and returns `ReleaseNotQuiet` with its exact snapshots and primary/task observations.
-Fixed non-fault W1C images are written under the mask after task RUN-disable,
-followed by CONTROL1/2 and zero-enable verification. No enable is reopened and
-no matrix route changes. Bank0[15] and bank1[8/9/12] are absent from the fixed
-images, so a late masked fault is never blindly erased. Task acknowledgement
-uses the sourced WT all-lane strobe. Masked pending is not observable; release
-establishes fixed acknowledgement writes and zero enables, not zero pending
-or producer shutdown. `ReleaseNotQuiet` retains nonzero enables or unexpected
-visible observations. SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`.
-Bank1 CC0/CC1/overflow have hardware coverage from
-`hw32-20261027-ble-masked-01` (#757); bank0/NRT and other feature lanes are
-vendor-covered and not hardware-verified. Both named faults quarantine the
-task/IRQ owners and return the seven policy source words to the image's
-terminal policy. Bank1[0,2] and task17 remain
-opaque with their existing SOURCEs. CTE +0x4c4/+0x4c8/+0x4cc is outside this
-policy; production has no enabled CTE interrupt consumer. Sequential readback
-is not a producer-drain proof.
-
-Bluetooth controller-time overflow stays with the primary IRQ bank owner.
-Preparation arms bank-one `CONTROLLER_TIME_OVERFLOW` in baseline `0x1302`;
-P3 acknowledges its saved snapshot and publishes a checked wrap count as a
-value to P2. This counter is independent of coalesced scheduler work and grants
-no MMIO authority. P2 requires an unchanged count throughout each latch, with
-a post-latch handler service barrier before the second read, so hardware-pending
-overflow cannot escape the comparison. Only then does it join the count and raw
-word into continuous time. Terminal release masks
-and clears overflow before the bank leaves the handler; CONTROL1/2 alone do
-not silence enabled pending (SOURCE: `HW12_S31_BLE_OVERFLOW_ACK_20261026` and
-`HW9_S31_MAC_RELEASE_20261027`). Exhaustion retains its original count or raw
-word in a named fault. Owners remain quarantined for the image's terminal
-policy. No additional unsafe sharing is involved.
-
-NRT acknowledgement checks the exact sampled pair against shared primary
-fault and overflow clear lanes before either clear. A pair containing one returns a
-named fault preserving both words. Runtime capture reports `BluetoothNrtInterruptFault`;
-terminal release reports `ReleaseNotQuiet` with that pair in its policy observation.
-The gate quarantines its owners and returns the fault observations to the image. NRT cannot consume a primary
-overflow observation or blindly clear a primary fault. Arrivals absent from
-the affine sample are not included in its acknowledgement.
-
-The Bluetooth modem LP timer retains its register authority in the permanently
-bound handler throughout software queue work. P2 receives only a positional
-time/epoch snapshot and returns an unarmed plan through the gate's single-slot
-queues. The snapshot and plan grant no MMIO access. Rollover acknowledgement,
-compare programming and software-pending commands execute only with the
-handler's retained owner. Repeated interrupts during planning acknowledge and
-retain new software work there; no additional unsafe sharing or second register
-writer is involved. Preparation samples both inherited pending bytes before
-its whole-word all-ones `+0x34` command clears the two tested causes, then
-arms the rollover lane with the counter stopped (SOURCE:
-HW9_S31_LP_CLEAR34_20261027, hw9-20261027-lp-06). The returned observation
-retains the removed stale state. Shutdown
-disables both measured delivery lanes, stops the counter and fences, retains
-both sampled pending bytes in its returned type, then clears both whole words
-and fences again. Controller reset and clock gating supply no LP-quiescence
-proof (SOURCE: HW6_S31_LP_QUIET_20261026 and
-HW6_S31_LP_RESET_RETENTION_20261026, hw6-20261026-reset-02). A stopped typestate
-acknowledges rollover without dispatch or rearming.
-Outstanding dispatch refuses stop, while rollover-only planning can retire
-its ending epoch projection. The handler steps the timer before taking a
-stop request, so a dispatch in that entry is retained and refuses stop.
-Pending observations cross retirement, Controller reset and reunion into the
-returned result.
-The handler permanently retains a copyable, read-only `BtdmLpTimerStatus`
-capability for the side-effect-free LP cause word, independent of the timer's
-runtime-control owner. A vacant timer with nonzero LP status is an invariant
-failure. `GateFault::Invariant` retains the full entry LP cause, both NRT cause words
-when the bank is present (explicitly unavailable otherwise), the timer phase,
-and the stopped-timer fault's pending bytes and raw unexpected status.
-The first fault is published once; subsequent service returns it without
-hardware access, queue service or owner release. The image chooses the terminal
-policy without releasing any gate or interrupted task owner.
-The port lifecycle's fault flag is separate and carries no gate fault.
 
 The Wi-Fi source120 fatal-assertion path keeps the full sampled RAW as
 an opaque diagnostic. It quarantines both interrupt banks before returning a

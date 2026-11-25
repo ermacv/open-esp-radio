@@ -1,9 +1,10 @@
 # open-esp-radio
 
-Rust 2024 `no_std` radio stack for Espressif chips, today the ESP32-S31:
-Wi-Fi, Bluetooth LE and IEEE 802.15.4, without vendor radio binaries. The
-build holds Wi-Fi and the shared PHY; Bluetooth LE and IEEE 802.15.4 are kept
-as sources outside the build ([repository layout](docs/repository-layout.md)).
+Rust 2024 `no_std` radio stack for Espressif chips, today Wi-Fi on the
+ESP32-S31, without vendor radio binaries. Of Bluetooth LE and IEEE 802.15.4
+the tree holds the register model's facts and no code; their last sources are
+at the tag `legacy-bluetooth-ieee802154-2026-11-15`
+([repository layout](docs/repository-layout.md)).
 Read [docs/architecture.md](docs/architecture.md) before any task: it is the
 system these rules serve. This file holds the rules; the contracts of each
 subsystem live in its page or README, listed under **Subsystem contracts**.
