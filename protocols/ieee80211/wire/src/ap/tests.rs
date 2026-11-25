@@ -1196,3 +1196,29 @@ fn an_action_is_robust_by_its_category() {
     assert!(ApManagementSubtype::Disassociation.is_robust(&[]));
     assert!(ApManagementSubtype::Deauthentication.is_robust(&[]));
 }
+
+/// A WMM element is a vendor element of at least six octets whose first four
+/// are the Microsoft OUI and type 2; the legacy WPA element's are type 1.
+#[test]
+fn wmm_and_legacy_wpa_are_vendor_elements_of_their_type() {
+    let wpa = |bytes: &[u8]| {
+        association_security_observation(
+            bytes,
+            crate::management::CapabilityInformation::from_bytes([0; 2]),
+        )
+        .legacy_wpa
+            == crate::scan::ElementPresence::Present
+    };
+    for (bytes, is_wmm, is_wpa) in [
+        (&[221, 6, 0, 0x50, 0xf2, 2, 0, 1][..], true, false),
+        (&[221, 5, 0, 0x50, 0xf2, 2, 0], false, false),
+        (&[220, 6, 0, 0x50, 0xf2, 2, 0, 1], false, false),
+        (&[221, 6, 0, 0x50, 0xf3, 2, 0, 1], false, false),
+        (&[221, 4, 0, 0x50, 0xf2, 1], false, true),
+        (&[220, 4, 0, 0x50, 0xf2, 1], false, false),
+        (&[221, 4, 0, 0x50, 0xf3, 1], false, false),
+    ] {
+        assert_eq!(supports_wmm(bytes), is_wmm, "{bytes:?}");
+        assert_eq!(wpa(bytes), is_wpa, "{bytes:?}");
+    }
+}

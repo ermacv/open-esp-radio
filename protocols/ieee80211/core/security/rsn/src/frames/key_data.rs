@@ -9,6 +9,7 @@ use oer_protocols_ieee80211_wire::eapol::{
     GTK_KDE_LEN, GtkKde, GtkKdeInfo, GtkTx, IGTK_KDE_LEN, IgtkKde, Kde, KeyDataElements,
     key_data_padding, write_key_data_padding,
 };
+use oer_protocols_ieee80211_wire::element::ElementId;
 use oer_protocols_ieee80211_wire::security::GroupManagementCipher;
 
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -219,9 +220,9 @@ fn parse_key_data(
         let Some(&first) = element.first() else {
             return Err(RsnFrameError::MalformedKeyData);
         };
-        match (first, &context) {
+        match (ElementId::new(first), &context) {
             (
-                RSN_ELEMENT_ID,
+                ElementId::RSN,
                 KeyDataContext::Message3 {
                     expected_rsn_ie, ..
                 },
@@ -234,7 +235,7 @@ fn parse_key_data(
                 }
                 saw_rsn = true;
             }
-            (RSNXE_ELEMENT_ID, KeyDataContext::Message3 { expected_rsnxe, .. }) => {
+            (ElementId::RSNX, KeyDataContext::Message3 { expected_rsnxe, .. }) => {
                 if saw_rsnxe {
                     return Err(RsnFrameError::DuplicateRsnxe);
                 }
@@ -246,7 +247,7 @@ fn parse_key_data(
                 }
                 saw_rsnxe = true;
             }
-            (KDE_ELEMENT_ID, _) => {
+            (ElementId::VENDOR_SPECIFIC, _) => {
                 let Some(Kde {
                     data_type,
                     data: body,

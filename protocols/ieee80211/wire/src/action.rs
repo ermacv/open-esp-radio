@@ -1,42 +1,9 @@
 //! The codes of Action frames: their categories, and each category's
 //! actions.
 
-macro_rules! octet_code {
-    (
-        $(#[$meta:meta])*
-        $name:ident {
-            $($(#[$value_meta:meta])* $value:ident = $number:literal),+ $(,)?
-        }
-    ) => {
-        $(#[$meta])*
-        ///
-        /// A number is no code until it is named one:
-        ///
-        /// ```compile_fail,E0308
-        #[doc = concat!("use oer_protocols_ieee80211_wire::action::", stringify!($name), ";")]
-        #[doc = concat!("let code: ", stringify!($name), " = 0;")]
-        /// ```
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        #[repr(transparent)]
-        pub struct $name(u8);
+use crate::code::octet_code;
 
-        impl $name {
-            $($(#[$value_meta])* pub const $value: Self = Self($number);)+
-
-            /// The code `value`, a named one or not.
-            pub const fn new(value: u8) -> Self {
-                Self(value)
-            }
-
-            /// Its octet.
-            pub const fn value(self) -> u8 {
-                self.0
-            }
-        }
-    };
-}
-
-octet_code! {
+octet_code! { action;
     /// An Action frame's category: any octet, some of them named.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.11 (Action field).
@@ -70,7 +37,7 @@ impl ActionCategory {
     }
 }
 
-octet_code! {
+octet_code! { action;
     /// An action of the Spectrum Management category.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.6.2 (Spectrum Management Action frame
@@ -81,7 +48,7 @@ octet_code! {
     }
 }
 
-octet_code! {
+octet_code! { action;
     /// An action of the Block Ack category.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
@@ -95,7 +62,7 @@ octet_code! {
     }
 }
 
-octet_code! {
+octet_code! { action;
     /// An action of the Public category.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.6.7.1 (Public Action frames).
@@ -109,7 +76,7 @@ octet_code! {
     }
 }
 
-octet_code! {
+octet_code! { action;
     /// An action of the SA Query category.
     ///
     /// SOURCE: IEEE Std 802.11-2016, 9.6.10 (SA Query).
@@ -121,7 +88,7 @@ octet_code! {
     }
 }
 
-octet_code! {
+octet_code! { action;
     /// An action of the S1G category.
     ///
     /// SOURCE: Linux v6.1 `include/linux/ieee80211.h`.

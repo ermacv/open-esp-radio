@@ -14,13 +14,8 @@
 
 use crate::action::{ActionCategory, PublicAction, SpectrumManagementAction};
 use crate::channel::{Band, Channel, ChannelError, ChannelWidth};
+use crate::element::ElementId;
 
-/// The Channel Switch Announcement element.
-pub const CHANNEL_SWITCH_ELEMENT_ID: u8 = 37;
-/// The Secondary Channel Offset element.
-pub const SECONDARY_CHANNEL_OFFSET_ELEMENT_ID: u8 = 62;
-/// The Extended Channel Switch Announcement element.
-pub const EXTENDED_CHANNEL_SWITCH_ELEMENT_ID: u8 = 60;
 /// Whether the BSS's stations may transmit until the switch.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ChannelSwitchMode {
@@ -119,7 +114,7 @@ impl ChannelSwitch {
     pub fn encode_elements(self, out: &mut [u8]) -> Option<usize> {
         if let Some(class) = self.operating_class {
             let element = [
-                EXTENDED_CHANNEL_SWITCH_ELEMENT_ID,
+                ElementId::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT.value(),
                 4,
                 mode_value(self.mode),
                 class,
@@ -130,7 +125,7 @@ impl ChannelSwitch {
             return Some(element.len());
         }
         let announcement = [
-            CHANNEL_SWITCH_ELEMENT_ID,
+            ElementId::CHANNEL_SWITCH_ANNOUNCEMENT.value(),
             3,
             mode_value(self.mode),
             self.channel_number,
@@ -147,7 +142,7 @@ impl ChannelSwitch {
                     a2,
                     a3,
                     a4,
-                    SECONDARY_CHANNEL_OFFSET_ELEMENT_ID,
+                    ElementId::SECONDARY_CHANNEL_OFFSET.value(),
                     1,
                     offset_value(offset),
                 ];
@@ -190,16 +185,20 @@ pub fn parse_channel_switch(elements: &[u8]) -> Result<Option<ChannelSwitch>, Ch
             .take(usize::from(length))
             .map_err(|_| ChannelSwitchError::Malformed)?;
         remaining = reader.remaining();
-        match (id, body) {
-            (CHANNEL_SWITCH_ELEMENT_ID, &[mode, channel, count]) => {
+        match (ElementId::new(id), body) {
+            (ElementId::CHANNEL_SWITCH_ANNOUNCEMENT, &[mode, channel, count]) => {
                 plain = Some((mode_of(mode)?, channel, count));
             }
-            (EXTENDED_CHANNEL_SWITCH_ELEMENT_ID, &[mode, class, channel, count]) => {
+            (ElementId::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT, &[mode, class, channel, count]) => {
                 extended = Some((mode_of(mode)?, class, channel, count));
             }
-            (SECONDARY_CHANNEL_OFFSET_ELEMENT_ID, &[value]) => secondary = offset_of(value)?,
-            (CHANNEL_SWITCH_ELEMENT_ID | EXTENDED_CHANNEL_SWITCH_ELEMENT_ID, _)
-            | (SECONDARY_CHANNEL_OFFSET_ELEMENT_ID, _) => {
+            (ElementId::SECONDARY_CHANNEL_OFFSET, &[value]) => secondary = offset_of(value)?,
+            (
+                ElementId::CHANNEL_SWITCH_ANNOUNCEMENT
+                | ElementId::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT,
+                _,
+            )
+            | (ElementId::SECONDARY_CHANNEL_OFFSET, _) => {
                 return Err(ChannelSwitchError::Malformed);
             }
             _ => {}

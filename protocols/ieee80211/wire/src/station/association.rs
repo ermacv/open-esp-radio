@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::address::OwnAddress;
+use crate::element::{ElementId, ElementIdExtension};
 use crate::management::AidField;
 use crate::status::StatusCode;
 use oer_portable_wire::PrefixLength;
@@ -54,9 +55,9 @@ impl HeUlMuPowerCapability {
 
     fn encode(self) -> [u8; HE_UL_MU_POWER_CAPABILITY_IE_LEN] {
         let mut element = [0_u8; HE_UL_MU_POWER_CAPABILITY_IE_LEN];
-        element[0] = 255;
+        element[0] = ElementId::EXTENSION.value();
         element[1] = 12;
-        element[2] = HE_UL_MU_POWER_CAPABILITY_EXTENSION_ID;
+        element[2] = ElementIdExtension::UL_MU_POWER_CAPABILITIES.value();
         crate::encoding::write_array::<3, _, _>(&mut element, &self.relative_to_rate_16);
         element
     }
@@ -101,7 +102,7 @@ impl StaPowerCapability {
 
     fn encode(self) -> [u8; POWER_CAPABILITY_IE_LEN] {
         [
-            33,
+            ElementId::POWER_CAPABILITY.value(),
             2,
             self.minimum_dbm.cast_unsigned(),
             self.maximum_dbm.cast_unsigned(),
@@ -264,7 +265,10 @@ impl AssociationRequest<'_> {
                 .ok_or(too_many)?;
         let extended_rates_len =
             PrefixLength::<MAX_SUPPORTED_RATES_LEN>::new(extended_rates.len()).ok_or(too_many)?;
-        let extended_header = [50, extended_rates_len.to_u8()];
+        let extended_header = [
+            ElementId::EXTENDED_SUPPORTED_RATES.value(),
+            extended_rates_len.to_u8(),
+        ];
         let power_capability = power_capability.map(|value| value.encode());
         let he_ul_mu_power = he_ul_mu_power.map(|value| value.encode());
         // SOURCE(esp32s31): complete `libnet80211.a[ieee80211_output.o]::
@@ -272,9 +276,9 @@ impl AssociationRequest<'_> {
         // only after the selected RSN and the HE Power Capability.
         crate::encoding::FrameParts([
             fixed.as_slice(),
-            &[0, ssid_len.to_u8()],
+            &[ElementId::SSID.value(), ssid_len.to_u8()],
             ssid,
-            &[1, first_rates_len.to_u8()],
+            &[ElementId::SUPPORTED_RATES.value(), first_rates_len.to_u8()],
             first_rates,
             selected_rsn.as_bytes(),
             power_capability
@@ -396,22 +400,16 @@ impl ResponseHeElements {
     /// HE Operation by its Element ID Extension; mark the pair unusable for
     /// a repeated element or one that does not fit.
     fn record(&mut self, element: &[u8]) {
-        use crate::he::{HE_CAPABILITIES_EXTENSION_ID, HE_OPERATION_EXTENSION_ID};
-        let kept = match *element {
-            [255, _, HE_CAPABILITIES_EXTENSION_ID, ..] if self.capability().is_empty() => {
+        let kept = match ElementIdExtension::read(element) {
+            Some(ElementIdExtension::HE_CAPABILITIES) if self.capability().is_empty() => {
                 crate::scan::store_value(&mut self.capability, element)
                     .map(|length| self.capability_len = length)
             }
-            [255, _, HE_OPERATION_EXTENSION_ID, ..] if self.operation().is_empty() => {
+            Some(ElementIdExtension::HE_OPERATION) if self.operation().is_empty() => {
                 crate::scan::store_value(&mut self.operation, element)
                     .map(|length| self.operation_len = length)
             }
-            [
-                255,
-                _,
-                HE_CAPABILITIES_EXTENSION_ID | HE_OPERATION_EXTENSION_ID,
-                ..,
-            ] => None,
+            Some(ElementIdExtension::HE_CAPABILITIES | ElementIdExtension::HE_OPERATION) => None,
             _ => Some(()),
         };
         if kept.is_none() {
@@ -462,25 +460,20 @@ pub fn parse_association_response(
         let mut reader = oer_portable_wire::Reader::new(remaining);
         let element = reader.take(length.checked_add(2)?).ok()?;
         let tail = reader.remaining();
-        if id == 45 && length == 26 {
+        let id = ElementId::new(id);
+        if id == ElementId::HT_CAPABILITIES && length == 26 {
             ht_capability = crate::scan::ElementPresence::Present;
         }
         he.record(element);
-        let is_wmm = length >= 6 && matches!(element, [221, _, 0x00, 0x50, 0xf2, 0x02, ..]);
+        let is_wmm = id == ElementId::VENDOR_SPECIFIC
+            && length >= 6
+            && matches!(element, [_, _, 0x00, 0x50, 0xf2, 0x02, ..]);
         if is_wmm {
             wmm_element = crate::scan::ElementPresence::Present;
             wmm_parameters = parse_wmm_parameter_element(element).or(wmm_parameters);
         }
-        if let [
-            TIMEOUT_INTERVAL_ELEMENT_ID,
-            _,
-            TIMEOUT_INTERVAL_ASSOCIATION_COMEBACK,
-            a,
-            b,
-            c,
-            d,
-            ..,
-        ] = *element
+        if id == ElementId::TIMEOUT_INTERVAL
+            && let [_, _, TIMEOUT_INTERVAL_ASSOCIATION_COMEBACK, a, b, c, d, ..] = *element
         {
             let comeback =
                 crate::management::TimeoutIntervalValue::from_bytes([a, b, c, d]).value();
@@ -501,8 +494,6 @@ pub fn parse_association_response(
     })
 }
 
-/// Timeout Interval element identifier.
-const TIMEOUT_INTERVAL_ELEMENT_ID: u8 = 56;
 /// Timeout Interval type of the association comeback time.
 const TIMEOUT_INTERVAL_ASSOCIATION_COMEBACK: u8 = 3;
 
@@ -518,7 +509,7 @@ fn copy_rates(access_point: &ScanRecord, output: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
-    use super::StaPowerCapability;
+    use super::*;
 
     /// IEEE Std 802.11-2020, 9.4.2.14 (Power Capability element): both
     /// powers are signed, in dBm.
@@ -526,5 +517,82 @@ mod tests {
     fn a_power_capability_carries_both_powers_in_two_s_complement() {
         let capability = StaPowerCapability::new(-2, 20).unwrap();
         assert_eq!(capability.encode(), [33, 2, 0xfe, 20]);
+    }
+
+    #[test]
+    fn a_ul_mu_power_capability_is_its_extension_element() {
+        let capability = HeUlMuPowerCapability::from_rate_power_indices([
+            20, 19, 18, 17, 16, 15, 14, 13, 12, 11,
+        ])
+        .unwrap();
+        assert_eq!(
+            capability.encode(),
+            [255, 12, 60, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0][..HE_UL_MU_POWER_CAPABILITY_IE_LEN]
+        );
+    }
+
+    /// An HE element is kept once; a second of its kind makes the pair
+    /// unusable, and another extension changes nothing.
+    #[test]
+    fn an_he_element_is_kept_once() {
+        let capability = [255, 3, 35, 1, 2];
+        let operation = [255, 3, 36, 3, 4];
+        let mut he = ResponseHeElements::NONE;
+        he.record(&[255, 3, 37, 5, 6]);
+        he.record(&[254, 3, 35, 5, 6]);
+        assert_eq!(he, ResponseHeElements::NONE);
+        he.record(&capability);
+        assert_eq!(
+            (he.capability(), he.operation()),
+            (&capability[..], &[][..])
+        );
+        he.record(&operation);
+        assert_eq!(
+            (he.capability(), he.operation()),
+            (&capability[..], &operation[..])
+        );
+        assert!(!he.unusable());
+        for again in [[255, 3, 35, 7, 8], [255, 3, 36, 7, 8]] {
+            let mut repeated = he;
+            repeated.record(&again);
+            assert!(repeated.unusable());
+            assert_eq!(
+                (repeated.capability(), repeated.operation()),
+                (&capability[..], &operation[..])
+            );
+        }
+    }
+
+    /// HT is an element of its identifier and length; WMM a vendor element
+    /// of at least six octets with its OUI and type.
+    #[test]
+    fn ht_and_wmm_are_elements_of_their_identifier_and_length() {
+        use crate::scan::ElementPresence::{Absent, Present};
+        let local = [2, 0, 0, 0, 0, 2];
+        let bssid = [2, 0, 0, 0, 0, 1];
+        let mut ht = [0_u8; 28];
+        ht[..2].copy_from_slice(&[45, 26]);
+        let mut other = ht;
+        other[0] = 46;
+        for (element, ht_present, wmm_present) in [
+            (&ht[..], Present, Absent),
+            (&other[..], Absent, Absent),
+            (&[45, 1, 0], Absent, Absent),
+            (&[221, 6, 0, 0x50, 0xf2, 2, 0, 1], Absent, Present),
+            (&[221, 5, 0, 0x50, 0xf2, 2, 0], Absent, Absent),
+            (&[220, 6, 0, 0x50, 0xf2, 2, 0, 1], Absent, Absent),
+            (&[221, 6, 0, 0x50, 0xf3, 2, 0, 1], Absent, Absent),
+        ] {
+            let mut frame = std::vec![0_u8; 30];
+            frame[..2].copy_from_slice(&ASSOCIATION_RESPONSE_FRAME_CONTROL.to_bytes());
+            frame[4..10].copy_from_slice(&local);
+            frame[10..16].copy_from_slice(&bssid);
+            frame[16..22].copy_from_slice(&bssid);
+            frame.extend_from_slice(element);
+            let response =
+                parse_association_response(&frame, Eui48::new(local), Eui48::new(bssid)).unwrap();
+            assert_eq!(response.ht_capability, ht_present, "{element:?}");
+            assert_eq!(response.wmm_element, wmm_present, "{element:?}");
+        }
     }
 }

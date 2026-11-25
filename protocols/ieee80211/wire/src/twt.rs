@@ -15,9 +15,9 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::action::{ActionCategory, S1gAction};
+use crate::element::ElementId;
 use crate::management::DialogToken;
 
-pub const TWT_ELEMENT_ID: u8 = 216;
 pub const INDIVIDUAL_TWT_ELEMENT_BODY_LEN: u8 = 15;
 pub const INDIVIDUAL_TWT_SETUP_BODY_LEN: usize = 20;
 pub const INDIVIDUAL_TWT_TEARDOWN_BODY_LEN: usize = 3;
@@ -446,7 +446,7 @@ impl IndividualTwtSetup {
             ActionCategory::S1G.value(),
             S1gAction::TWT_SETUP.value(),
             self.dialog_token.value(),
-            TWT_ELEMENT_ID,
+            ElementId::TWT.value(),
             INDIVIDUAL_TWT_ELEMENT_BODY_LEN,
             control,
             r0,
@@ -493,7 +493,7 @@ impl IndividualTwtSetup {
         })?;
         if ActionCategory::new(category) != ActionCategory::S1G
             || S1gAction::new(action) != S1gAction::TWT_SETUP
-            || element_id != TWT_ELEMENT_ID
+            || ElementId::new(element_id) != ElementId::TWT
             || element_length != INDIVIDUAL_TWT_ELEMENT_BODY_LEN
         {
             return Err(TwtWireError::InvalidElement);
@@ -816,7 +816,7 @@ mod tests {
                 category,
                 action,
                 1,
-                TWT_ELEMENT_ID,
+                ElementId::TWT.value(),
                 INDIVIDUAL_TWT_ELEMENT_BODY_LEN,
             ]);
             body
@@ -860,7 +860,7 @@ mod tests {
         let mut setup = [0_u8; INDIVIDUAL_TWT_SETUP_BODY_LEN];
         setup[0] = ActionCategory::S1G.value();
         setup[1] = S1gAction::TWT_SETUP.value();
-        setup[3] = TWT_ELEMENT_ID;
+        setup[3] = ElementId::TWT.value();
         setup[4] = INDIVIDUAL_TWT_ELEMENT_BODY_LEN;
         let teardown = [
             ActionCategory::S1G.value(),

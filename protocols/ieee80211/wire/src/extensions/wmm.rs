@@ -5,9 +5,9 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::element::ElementId;
 use crate::qos::WmmAccessCategory;
 
-const VENDOR_ELEMENT_ID: u8 = 221;
 const WMM_PARAMETER_BODY_LEN: u8 = 24;
 const WMM_OUI_AND_TYPE: [u8; 4] = [0x00, 0x50, 0xf2, 0x02];
 const WMM_PARAMETER_SUBTYPE: u8 = 1;
@@ -167,7 +167,7 @@ pub(crate) const fn encode_wmm_parameter_element(
     let [vo0, vo1, vo2, vo3] = record(WmmAccessCategory::Voice, vo);
     let [oui0, oui1, oui2, kind] = WMM_OUI_AND_TYPE;
     [
-        VENDOR_ELEMENT_ID,
+        ElementId::VENDOR_SPECIFIC.value(),
         WMM_PARAMETER_BODY_LEN,
         oui0,
         oui1,
@@ -229,7 +229,7 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
         _reserved,
         records @ ..,
     ] = fixed;
-    if id != VENDOR_ELEMENT_ID
+    if ElementId::new(id) != ElementId::VENDOR_SPECIFIC
         || length < WMM_PARAMETER_BODY_LEN
         || element.len() < usize::from(length) + 2
         || [oui0, oui1, oui2, kind] != WMM_OUI_AND_TYPE

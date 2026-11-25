@@ -1,4 +1,5 @@
 use super::*;
+use crate::element::ElementId;
 
 const CCMP: [u8; 4] = ieee_suite(RSN_CIPHER_CCMP);
 const PSK: [u8; 4] = ieee_suite(RSN_AKM_PSK);
@@ -8,7 +9,7 @@ const BIP: [u8; 4] = ieee_suite(6);
 /// Frame `body` as an RSN element.
 fn element(body: &[u8]) -> ([u8; 64], usize) {
     let mut element = [0; 64];
-    element[0] = RSN_ELEMENT_ID;
+    element[0] = ElementId::RSN.value();
     element[1] = body.len() as u8;
     element[2..2 + body.len()].copy_from_slice(body);
     (element, body.len() + 2)
@@ -85,7 +86,7 @@ fn counted_views_preserve_every_entry_and_refuse_partial_pmkids() {
             .map(|index| [index as u8; RSN_PMKID_LEN])
             .collect();
         body.extend(expected.iter().flatten());
-        let mut bytes = std::vec![RSN_ELEMENT_ID, body.len() as u8];
+        let mut bytes = std::vec![ElementId::RSN.value(), body.len() as u8];
         bytes.extend_from_slice(&body);
         let parsed = RsnElement::parse(&bytes).unwrap();
         assert_eq!(parsed.pmkid_count(), Some(usize::from(count)));

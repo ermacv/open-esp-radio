@@ -7,6 +7,7 @@
 //! before accessing fields; variable information elements remain borrowed slices.
 
 use crate::data::{MsduHeader, MsduParts, PeerQos};
+use crate::element::ElementId;
 use crate::frame::{FrameControlFields, FrameType, QosAckPolicy};
 use crate::management::{AidField, AssociationId};
 use crate::management::{AuthenticationAlgorithm, AuthenticationTransaction};
@@ -726,7 +727,7 @@ impl ApProtectedManagementFrame<'_> {
 
 fn supports_wmm(bytes: &[u8]) -> bool {
     let mut remaining = oer_portable_wire::Reader::new(bytes);
-    while let [_, length, ..] = *remaining.remaining() {
+    while let [id, length, ..] = *remaining.remaining() {
         let length = usize::from(length);
         let Some(record) = length
             .checked_add(2)
@@ -734,7 +735,10 @@ fn supports_wmm(bytes: &[u8]) -> bool {
         else {
             return false;
         };
-        if length >= 6 && matches!(record, [221, _, 0x00, 0x50, 0xf2, 0x02, ..]) {
+        if ElementId::new(id) == ElementId::VENDOR_SPECIFIC
+            && length >= 6
+            && matches!(record, [_, _, 0x00, 0x50, 0xf2, 0x02, ..])
+        {
             return true;
         }
     }
@@ -766,13 +770,17 @@ fn association_security_observation(
             observation.information_elements = crate::scan::ElementList::Truncated;
             break;
         };
-        if id == 48 {
+        let id = ElementId::new(id);
+        if id == ElementId::RSN {
             observation.rsn_ie = observation.rsn_ie.and(record);
         }
-        if id == 244 {
+        if id == ElementId::RSNX {
             observation.rsnxe = observation.rsnxe.and(record);
         }
-        if id == 221 && length >= 4 && matches!(record, [_, _, 0x00, 0x50, 0xf2, 0x01, ..]) {
+        if id == ElementId::VENDOR_SPECIFIC
+            && length >= 4
+            && matches!(record, [_, _, 0x00, 0x50, 0xf2, 0x01, ..])
+        {
             observation.legacy_wpa = crate::scan::ElementPresence::Present;
         }
     }
@@ -786,7 +794,10 @@ fn maximum_ap_legacy_rate(profile: &Advertisement, bytes: &[u8]) -> u8 {
         let Ok(value) = remaining.take(usize::from(length)) else {
             break;
         };
-        if id == 1 || id == 50 {
+        if matches!(
+            ElementId::new(id),
+            ElementId::SUPPORTED_RATES | ElementId::EXTENDED_SUPPORTED_RATES
+        ) {
             for encoded in value {
                 let rate = crate::phy::SupportedRate::from_bytes([*encoded]).rate();
                 if profile.legacy_rates.supports(rate) {
@@ -989,14 +1000,14 @@ pub fn write_ht_association_response(
     };
     let ht_capability = ht_capability_ie_for_peer(profile.ht, channel, peer_ht);
     let ht_operation = ht_operation_ie(channel, protection.ht);
-    let erp = [42, 1, protection.erp_information()];
+    let erp = [ElementId::ERP.value(), 1, protection.erp_information()];
     crate::encoding::FrameParts([
         &profile.capabilities(LinkProtection::Ccmp).to_bytes(),
         &crate::management::StatusCodeField::of(status).to_bytes(),
         &encoded_association_id.to_bytes(),
-        &[1, 8],
+        &[ElementId::SUPPORTED_RATES.value(), 8],
         profile.legacy_rates.supported(),
-        &[50, 4],
+        &[ElementId::EXTENDED_SUPPORTED_RATES.value(), 4],
         profile.legacy_rates.extended(),
         if channel.band() == Band::Ghz2_4 {
             &erp

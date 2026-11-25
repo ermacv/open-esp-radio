@@ -1,4 +1,5 @@
 use super::*;
+use crate::element::ElementId;
 
 fn request_parameters() -> FtmRequestParameters {
     FtmRequestParameters::new(
@@ -191,7 +192,7 @@ fn every_prefix_of_a_body_is_handled() {
     let mut measurement = [0_u8; FTM_MEASUREMENT_PREFIX_LEN + FTM_PARAMETERS_ELEMENT_LEN];
     measurement[0] = ActionCategory::PUBLIC.value();
     measurement[1] = PublicAction::FTM.value();
-    measurement[FTM_MEASUREMENT_PREFIX_LEN] = FTM_PARAMETERS_ELEMENT_ID;
+    measurement[FTM_MEASUREMENT_PREFIX_LEN] = ElementId::FTM_PARAMETERS.value();
     measurement[FTM_MEASUREMENT_PREFIX_LEN + 1] = FTM_PARAMETERS_FIELD_LEN as u8;
     for len in 0..=measurement.len() {
         let _ = FtmRequest::decode_body(request.get(..len).unwrap_or(&request));

@@ -3,11 +3,7 @@
 //! These are the values a BSS advertises; the transmitter's per-PPDU choice
 //! of RTS/CTS or CTS-to-self is `oer-protocols-ieee80211-core-upper-mac`'s protection
 //! policy.
-
-/// ERP element identifier.
-///
-/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1 (Element IDs).
-pub const ERP_ELEMENT_ID: u8 = 42;
+use crate::element::ElementId;
 
 /// ERP Information element requirements on transmitters.
 ///
@@ -173,7 +169,7 @@ impl<'a> ErpElements<'a> {
         while !remaining.is_empty() {
             let (element, rest) = crate::element::Element::split(remaining)
                 .ok_or(ErpElementsError::MalformedElements)?;
-            if element.id == ERP_ELEMENT_ID && element.body.len() != 1 {
+            if element.id == ElementId::ERP && element.body.len() != 1 {
                 return Err(ErpElementsError::ErpLength);
             }
             remaining = rest;
@@ -191,7 +187,7 @@ impl<'a> ErpElements<'a> {
             Some(element)
         })
         .filter_map(|element| match (element.id, element.body) {
-            (ERP_ELEMENT_ID, &[information]) => Some(information),
+            (ElementId::ERP, &[information]) => Some(information),
             _ => None,
         })
     }
