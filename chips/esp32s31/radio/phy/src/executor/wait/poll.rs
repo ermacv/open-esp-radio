@@ -1,8 +1,8 @@
 //! Direct hardware observation: a named settle bounded in time, and the
 //! the time bounds of measured direct observations.
 
+use oer_portable_settle::{Settle, SettleCounter, SettleLimit, Unsettled};
 use oer_portable_time::Duration;
-use oer_portable_time::settle::{self, Settle, SettleCounter, SettleLimit, Unsettled};
 
 /// The longest a direct observation of a measured site may wait: the worst
 /// measured direct wait was 87 reads, 2976 cycles (18.6 µs at 160 MHz)
@@ -22,7 +22,7 @@ pub(crate) fn settled<T, K: SettleCounter + ?Sized>(
     counter: &K,
     attempt: impl FnMut() -> Option<T>,
 ) -> Result<T, Unsettled> {
-    settle::settle(Settle::new(OBSERVATION_SETTLE_LIMIT, counter), attempt)
+    oer_portable_settle::settle(Settle::new(OBSERVATION_SETTLE_LIMIT, counter), attempt)
 }
 
 /// Complete one measured direct edge within the named 20 µs settle on the

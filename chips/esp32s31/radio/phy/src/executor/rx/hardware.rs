@@ -5,7 +5,7 @@ use super::*;
 #[cfg(target_arch = "riscv32")]
 impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R {
     #[inline]
-    fn control<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    fn control<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
         &mut self,
         counter: &K,
         command: ControlCommand,
@@ -42,7 +42,7 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
         Ok(())
     }
     #[inline]
-    fn pbus<C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn pbus<C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         clock: &C,
         command: PhyPbusForceTest,
@@ -63,7 +63,7 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
         Ok(())
     }
     #[inline]
-    fn estimator<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    fn estimator<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
         &mut self,
         counter: &K,
         command: PhyDcIqAction,
@@ -83,7 +83,7 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
         }
     }
     #[inline]
-    fn frequency<D: PhyShortDelay, C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn frequency<D: PhyShortDelay, C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         clock: &C,
         command: RfpllFrequencyAction,
@@ -99,7 +99,7 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
         }
     }
     #[inline]
-    fn direct_i2c<C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn direct_i2c<C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         clock: &C,
         transaction: &mut PhyColdI2cTransaction,
@@ -148,7 +148,7 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
 }
 
 #[cfg(target_arch = "riscv32")]
-fn settle<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+fn settle<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
     counter: &K,
     micros: u32,
 ) -> Result<(), RxError> {

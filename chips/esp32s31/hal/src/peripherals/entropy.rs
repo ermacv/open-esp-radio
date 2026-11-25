@@ -2,8 +2,8 @@
 //! reads.
 
 use oer_portable_mmio::{Fixed, Placement};
+use oer_portable_settle::{Settle, SettleCounter, SettleLimit, Unsettled, settle};
 use oer_portable_time::Duration;
-use oer_portable_time::settle::{Settle, SettleCounter, SettleLimit, Unsettled, settle};
 
 use oer_chips_esp32s31_pac::{
     instances, lp_peri_clkrst::LpPericlkrstRngInit, ownership::EntropyPeripherals, trng::Trng,

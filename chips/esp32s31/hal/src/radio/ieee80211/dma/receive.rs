@@ -45,10 +45,8 @@ use core::mem::{MaybeUninit, replace};
 
 use oer_portable_memory::Occupied;
 use oer_portable_memory::arena::{Arena, Brand, Handle, Lent, Quiet, Released, Span};
-use oer_portable_time::{
-    Duration,
-    settle::{Settle, SettleCounter, SettleLimit, Unsettled, settle},
-};
+use oer_portable_settle::{Settle, SettleCounter, SettleLimit, Unsettled, settle};
+use oer_portable_time::Duration;
 
 use crate::layouts::{DmaRef, DmaWindow, WifiRxDmaDescriptor, WifiRxDmaDescriptorControl};
 use crate::radio::ieee80211::dma::descriptor::{RxDescriptor, cursor_ring_index, rx_armed_word};

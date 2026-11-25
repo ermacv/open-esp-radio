@@ -1,0 +1,17 @@
+[package]
+name = "oer-portable-settle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The one named busy-wait a driver of the open ESP radio may make"
+
+[dependencies]
+oer-portable-time = { path = "../time" }
+
+[dev-dependencies]
+oer-portable-time-virtual = { path = "../time-virtual" }
+
+[lints]
+workspace = true

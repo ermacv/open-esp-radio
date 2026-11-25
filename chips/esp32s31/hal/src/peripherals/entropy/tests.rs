@@ -106,8 +106,8 @@ fn a_read_sooner_than_the_gap_waits_it_out_and_a_later_one_does_not_wait() {
     /// A hundred cycles a microsecond, one cycle each sample: the gap is
     /// 200 samples, far more than a read takes.
     struct Fast(VirtualCounter);
-    impl oer_portable_time::settle::SettleCounter for Fast {
-        fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+    impl oer_portable_settle::SettleCounter for Fast {
+        fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
             limit.micros() * 100
         }
         fn sample(&self) -> u32 {

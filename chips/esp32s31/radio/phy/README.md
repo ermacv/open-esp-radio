@@ -326,7 +326,7 @@ registration and common tracking. Borrowed typed step tokens carry each
 hardware command directly to one poll loop; consuming a completion updates
 that same cursor and coefficient bank. Short ready leaves share a bounded
 poll, while an incomplete DC/IQ observation waits on the caller's timer.
-Other required 1–20 us hardware settles are `oer_portable_time::settle` holds on
+Other required 1–20 us hardware settles are `oer_portable_settle` holds on
 the settle counter the caller gives beside its timer (`executor::wait::PhyTimer`):
 on the chip, the HAL's `CycleCounter` at the CPU rate the runtime handover adopted.
 PBus/I2C leaves retain their bounded direct observation policy.

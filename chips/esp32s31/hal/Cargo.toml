@@ -32,6 +32,7 @@ oer-chips-family-registers-analog-i2c = { path = "../../family/registers/analog-
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-portable-time = { path = "../../../portable/time" }
+oer-portable-settle = { path = "../../../portable/settle" }
 oer-chips-esp32s31-pac = { path = "../pac" }
 oer-chips-family-radio-coex = { path = "../../family/radio/coex" }
 oer-chips-family-radio-modem-clock = { path = "../../family/radio/modem-clock" }

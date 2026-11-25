@@ -28,6 +28,7 @@ oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform
 oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
+oer-portable-settle = { path = "../../../portable/settle" }
 oer-portable-cooperate = { path = "../../../portable/cooperate" }
 static_cell.workspace = true
 

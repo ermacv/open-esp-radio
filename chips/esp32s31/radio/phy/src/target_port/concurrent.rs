@@ -158,9 +158,7 @@ impl oer_portable_diagnostics::DiagnosticPath for ConcurrentPhyTrackingError {
 // function here adds a whole-future temporary before the poll wrapper is built.
 #[inline(always)]
 fn execute_register<'a, B: PlatformClockBackend + 'a, P, D, O>(
-    timer: &'a (
-            impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter
-        ),
+    timer: &'a (impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     initial: RadioTransaction<B, ConcurrentPhy>,
     platform: &'a mut P,
     clocks: &'a impl PlatformClockProvider<Backend = B>,
@@ -325,7 +323,7 @@ fn finish_concurrent_registration<B: PlatformClockBackend>(
 /// transaction and records its fault before reset.
 #[inline(always)]
 fn execute_close<B: PlatformClockBackend, P, D>(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     initial: RadioTransaction<B, ConcurrentPhy>,
     platform: &mut P,
 ) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
@@ -412,7 +410,7 @@ where
 /// transaction and records its fault before reset.
 #[inline(always)]
 fn execute_wake<B: PlatformClockBackend, D>(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     initial: RadioTransaction<B, ConcurrentPhy>,
     clocks: &impl PlatformClockProvider<Backend = B>,
 ) -> impl core::future::Future<Output = (RadioDomain<B, ConcurrentPhy>, Result<(), ConcurrentRfError>)>
@@ -489,7 +487,7 @@ where
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
 async fn execute_maintain<B: PlatformClockBackend, P, D, O>(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     initial: RadioTransaction<B, ConcurrentPhy>,
     platform: &mut P,
     observer: O,
@@ -633,7 +631,7 @@ impl oer_portable_diagnostics::DiagnosticPath for ConcurrentTrackingTick {
 pub fn track_concurrent_phy<B: PlatformClockBackend, P, D, O>(
     radio: RadioDomain<B, ConcurrentPhy>,
     platform: &mut P,
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     observer: O,
     pilot: &mut impl crate::sar_pilot::Service,
 ) -> impl core::future::Future<
@@ -725,7 +723,7 @@ pub fn select_concurrent_wifi_channel<
     P,
     O: PhyTargetObserver,
 >(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     channel_or_frequency: u16,
     cbw: u8,
     mut transaction: oer_chips_esp32s31_hal::radio::ieee80211::channel::ChannelTransaction<
@@ -779,7 +777,7 @@ pub fn switch_concurrent_wifi_channel<
     P,
     O: PhyTargetObserver,
 >(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     channel_or_frequency: u16,
     cbw: u8,
     mut transaction: oer_chips_esp32s31_hal::radio::ieee80211::channel::ChannelTransaction<

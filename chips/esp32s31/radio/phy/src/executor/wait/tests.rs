@@ -148,9 +148,9 @@ mod delays {
     impl PhyShortDelay for Short {
         const MAX_MICROS: u32 = 20;
 
-        fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+        fn settle<K: oer_portable_settle::SettleCounter + ?Sized>(
             _: &K,
-            limit: oer_portable_time::settle::SettleLimit,
+            limit: oer_portable_settle::SettleLimit,
         ) {
             SETTLED.with(|settled| settled.set(settled.get() + limit.micros()));
         }

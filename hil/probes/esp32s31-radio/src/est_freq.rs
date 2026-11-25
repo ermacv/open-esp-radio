@@ -80,14 +80,14 @@ oer_tools_probe_macros::probe! {
 }
 
 /// The vendor's 1 µs settle.
-const ONE_MICRO: oer_portable_time::settle::SettleLimit =
-    match oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1)) {
+const ONE_MICRO: oer_portable_settle::SettleLimit =
+    match oer_portable_settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1)) {
         Some(limit) => limit,
         None => panic!("one microsecond lies within the longest a settle may wait"),
     };
 /// The vendor's 2 µs settle.
-const TWO_MICROS: oer_portable_time::settle::SettleLimit =
-    match oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(2)) {
+const TWO_MICROS: oer_portable_settle::SettleLimit =
+    match oer_portable_settle::SettleLimit::new(oer_portable_time::Duration::from_micros(2)) {
         Some(limit) => limit,
         None => panic!("two microseconds lie within the longest a settle may wait"),
     };

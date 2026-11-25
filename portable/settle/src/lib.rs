@@ -1,3 +1,7 @@
+#![no_std]
+#![forbid(unsafe_code)]
+#![expect(clippy::cast_possible_truncation, reason = "a level's task")]
+
 //! The one named settle: a busy-wait of known length, at most
 //! [`SettleLimit::MAX`], counted in the cycles of the caller's counter.
 //!
@@ -8,7 +12,7 @@
 //! may make, and it counts against the step bound of its context. A wait of
 //! unknown length is a timer-woken step with a deadline instead.
 
-use crate::Duration;
+use oer_portable_time::Duration;
 
 /// The longest a settle may wait: nonzero and at most [`Self::MAX`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

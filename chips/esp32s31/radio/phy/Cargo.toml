@@ -17,6 +17,7 @@ oer-chips-family-registers-analog-i2c = { path = "../../../family/registers/anal
 oer-portable-diagnostics = { path = "../../../../portable/diagnostics" }
 oer-portable-hot = { path = "../../../../portable/hot" }
 oer-portable-time = { path = "../../../../portable/time" }
+oer-portable-settle = { path = "../../../../portable/settle" }
 oer-portable-cooperate = { path = "../../../../portable/cooperate" }
 oer-portable-memory = { path = "../../../../portable/memory" }
 oer-chips-family-platform-interrupt-table = { path = "../../../family/platform/interrupt-table" }

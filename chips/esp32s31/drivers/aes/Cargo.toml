@@ -11,6 +11,7 @@ description = "Value-owned S31 Typical AES key unwrap over HAL atoms"
 oer-chips-esp32s31-hal = { path = "../../hal" }
 oer-portable-crypto = { path = "../../../../portable/crypto" }
 oer-portable-time = { path = "../../../../portable/time" }
+oer-portable-settle = { path = "../../../../portable/settle" }
 zeroize = { version = "1.9.0", default-features = false }
 
 [dev-dependencies]

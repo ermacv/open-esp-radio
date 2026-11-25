@@ -1610,6 +1610,83 @@ fn workspace_dependency_graph() -> BTreeMap<String, BTreeSet<String>> {
         .collect()
 }
 
+/// Who may make the one busy-wait of a driver: hardware code. The chip
+/// crates, the family's drivers and radio crates, the probes, and virtual
+/// time for its counter.
+fn may_settle(path: &str) -> bool {
+    path.starts_with("chips/esp32s31/")
+        || path.starts_with("chips/family/drivers/")
+        || path.starts_with("chips/family/radio/")
+        || path.starts_with("hil/probes/")
+        || path == "portable/time-virtual"
+}
+
+/// The packages whose normal or build dependencies name the settle and may
+/// not.
+fn settling(packages: &BTreeMap<String, toml::Value>, workspace: &toml::Value) -> BTreeSet<String> {
+    packages
+        .iter()
+        .filter(|(path, _)| !may_settle(path))
+        .filter(|(_, manifest)| {
+            ["dependencies", "build-dependencies"].iter().any(|table| {
+                scoped_dependencies(manifest, workspace, table).contains("oer-portable-settle")
+            })
+        })
+        .map(|(path, _)| path.clone())
+        .collect()
+}
+
+/// No package but hardware code names `portable/settle`, no protocol package
+/// among them.
+#[test]
+fn only_hardware_code_settles() {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let packages = packages(&root);
+    assert!(packages.contains_key("portable/settle"));
+    let violations = settling(&packages, &workspace["workspace"]);
+    assert!(violations.is_empty(), "not hardware code: {violations:?}");
+}
+
+#[test]
+fn the_settle_rule_refuses_a_protocol_and_a_platform_and_takes_a_driver() {
+    let manifest: toml::Value = toml::from_str(
+        r#"
+[dependencies]
+pause = { package = "oer-portable-settle", version = "1", optional = true }
+"#,
+    )
+    .expect("manifest");
+    let workspace: toml::Value = toml::from_str("[dependencies]").expect("workspace");
+    let of = |paths: &[&str]| {
+        let packages = paths
+            .iter()
+            .map(|path| ((*path).to_owned(), manifest.clone()))
+            .collect();
+        settling(&packages, &workspace)
+    };
+    for hardware in [
+        "chips/esp32s31/hal",
+        "chips/family/drivers/watchdog",
+        "chips/family/radio/power",
+        "hil/probes/esp32s31-radio",
+        "portable/time-virtual",
+    ] {
+        assert!(of(&[hardware]).is_empty(), "{hardware}");
+    }
+    for other in [
+        "protocols/ieee80211/wire",
+        "protocols/network/runtime",
+        "protocols/radio/port",
+        "chips/family/platform/executor",
+        "portable/memory",
+        "hil/images/aes",
+        "oer",
+    ] {
+        assert_eq!(of(&[other]).len(), 1, "{other}");
+    }
+}
+
 /// The wire crate holds only formats and standard constants: no normal
 /// dependency of it, optional, target-specific or transitive, reaches time
 /// or an IEEE 802.11 crate above it.
@@ -4130,7 +4207,7 @@ const HAL_MARKERS_IN_ATOMS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/peripherals/watchdog.rs",
-        9,
+        8,
         "the family watchdog driver's deadline types over the HAL's register port",
     ),
     (
@@ -4675,7 +4752,7 @@ const PHY_DRIVER: &str = "the PHY under one owner: to the PHY driver, with the P
 const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/descriptor.rs", 382, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
-    ("radio/ieee80211/dma/receive.rs", 1026, RX_RING_ATOMS),
+    ("radio/ieee80211/dma/receive.rs", 1024, RX_RING_ATOMS),
     ("radio/ieee80211/dma/space.rs", 97, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
@@ -5987,7 +6064,10 @@ const STEP_BY_PLACE: &[(&str, &str)] = &[
     ("protocols/network/core/src/owner.rs", BY_PUMP),
     ("portable/memory/src/waking_spsc", CORRECT),
     ("portable/memory/src/pinned_tx", BY_TRANSMIT),
-    ("portable/time/src/deadline.rs", BY_UNOWNED_ROWS),
+    (
+        "chips/family/drivers/watchdog/src/policy.rs",
+        BY_UNOWNED_ROWS,
+    ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/receive",
         BY_RECEIVE,
@@ -6295,7 +6375,11 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         BY_PHY_OWNER,
     ),
     ("chips/family/radio/power/src/modem.rs", 1, BY_PHY_OWNER),
-    ("portable/time/src/deadline.rs", 1, BY_UNOWNED_ROWS),
+    (
+        "chips/family/drivers/watchdog/src/policy.rs",
+        1,
+        BY_UNOWNED_ROWS,
+    ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs",
         1,
@@ -10398,7 +10482,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "an ordering instruction / architectural CSR and wait instructions",
     ),
     (
-        "portable/time/src/lib.rs",
+        "portable/settle/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
         BY_LEVEL_TASK,

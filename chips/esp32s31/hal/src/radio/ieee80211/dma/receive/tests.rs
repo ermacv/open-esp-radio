@@ -14,7 +14,7 @@ use std::vec::Vec;
 use oer_portable_memory::Occupied;
 use oer_portable_memory::arena::{Arena, ArenaPlace, Brand, Handle, PlacedStatic};
 use oer_portable_memory::zeroed::ZeroedStatic;
-use oer_portable_time::settle::SettleCounter;
+use oer_portable_settle::SettleCounter;
 use oer_portable_time_virtual::VirtualCounter;
 
 use super::{

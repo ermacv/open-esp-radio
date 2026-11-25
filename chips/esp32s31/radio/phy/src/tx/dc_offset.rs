@@ -814,7 +814,7 @@ impl PhyTxDcReadyBinding {
 
     #[cfg(target_arch = "riscv32")]
     pub fn execute_target<
-        C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+        C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
     >(
         self,
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyContext,

@@ -1,6 +1,6 @@
 //! Finite system-deadline protection owned by the platform watchdog.
 //!
-//! The pure [`oer_portable_time::deadline`] policy checks time observations; this
+//! The pure [`crate::policy`] checks time observations; this
 //! owner alone programs and stops the hardware reset. No periodic feed,
 //! implicit renewal or Drop-based disarm exists. A caller completes a lease
 //! only after its own physical postconditions hold. This is engineering
@@ -8,7 +8,7 @@
 //! Sleep and external clock changes while armed are unsupported.
 //!
 //! ```compile_fail,E0382
-//! use oer_chips_family_drivers_watchdog::{MainWatchdogRegisters, deadline::{DeadlineBudget, DeadlineWatchdog}};
+//! use oer_chips_family_drivers_watchdog::{MainWatchdogRegisters, deadline::DeadlineWatchdog, policy::DeadlineBudget};
 //! fn arm_twice<R: MainWatchdogRegisters, C: oer_portable_time::Clock>(
 //!     watchdog: DeadlineWatchdog<R, C>, budget: DeadlineBudget,
 //! ) {
@@ -17,9 +17,9 @@
 //! }
 //! ```
 
-pub use oer_portable_time::deadline::{DeadlineBudget, DeadlineError};
-use oer_portable_time::{Clock, deadline::Controller};
+use oer_portable_time::Clock;
 
+use crate::policy::{Controller, DeadlineBudget, DeadlineError};
 use crate::{MainWatchdog, MainWatchdogRegisters, Microseconds};
 
 /// The exclusive platform reset owner, moved into its task and each lease.

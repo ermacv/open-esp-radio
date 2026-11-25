@@ -2,8 +2,8 @@
 //! The virtual settle counter: one cycle a microsecond, each sample
 //! advancing it by its step.
 
+use oer_portable_settle::{SettleCounter, SettleLimit};
 use oer_portable_time::Duration;
-use oer_portable_time::settle::{SettleCounter, SettleLimit};
 use oer_portable_time_virtual::VirtualCounter;
 
 #[test]

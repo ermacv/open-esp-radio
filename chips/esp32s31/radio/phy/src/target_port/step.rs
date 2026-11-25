@@ -15,7 +15,7 @@ type Result =
 pub(super) async fn temperature<
     D: crate::PhyShortDelay,
     R: Registers,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
 >(
     timer: &T,
     mut child: PhyParamTrackingTemperatureTransition<'_>,

@@ -23,29 +23,29 @@ use oer_portable_cooperate::CooperativeTimer as Timer;
 use oer_portable_time::{Clock, Duration, Instant};
 
 pub(crate) trait Hardware {
-    fn control<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    fn control<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
         &mut self,
         counter: &K,
         command: ControlCommand,
     ) -> Result<(), RxError>;
-    fn pbus<C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn pbus<C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         clock: &C,
         command: PhyPbusForceTest,
     ) -> Result<bool, RxError>;
     fn read_pbus(&mut self, selector: u8, path: u8) -> Result<u32, RxError>;
     fn entry(&mut self, command: PhyGainMemoryEntry) -> Result<(), RxError>;
-    fn estimator<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    fn estimator<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
         &mut self,
         counter: &K,
         command: PhyDcIqAction,
     ) -> Result<PhyDcIqCompletion, RxError>;
-    fn frequency<D: PhyShortDelay, C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn frequency<D: PhyShortDelay, C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         clock: &C,
         command: RfpllFrequencyAction,
     ) -> Result<RfpllFrequencyCompletion, RxError>;
-    fn direct_i2c<C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn direct_i2c<C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         clock: &C,
         transaction: &mut PhyColdI2cTransaction,
@@ -67,7 +67,7 @@ enum Atom {
 /// before this function returns. No await or early ? separates publication
 /// from recording the program's cleanup obligation.
 #[inline(never)]
-fn atom<D: PhyShortDelay, R: Hardware, C: Clock + oer_portable_time::settle::SettleCounter>(
+fn atom<D: PhyShortDelay, R: Hardware, C: Clock + oer_portable_settle::SettleCounter>(
     program: &mut RxProgram,
     registers: &mut R,
     clock: &C,
@@ -254,7 +254,7 @@ fn operation(phase: RxPhase) -> Operation {
 impl<
     'a,
     R: Hardware,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: PhyShortDelay,
@@ -405,7 +405,7 @@ pub(crate) fn drive<
     'a,
     D: PhyShortDelay + 'a,
     R: Hardware,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
     O: FnMut(Operation, Event) + 'a,
 >(
     program: &'a mut RxProgram,

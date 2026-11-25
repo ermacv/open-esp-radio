@@ -23,7 +23,7 @@ const fn preclose_i2c_failure(error: PhyTargetPortError) -> PhyRfCloseTemperatur
 }
 
 pub(super) async fn observe_temperature_with_hal<P, D: PhyShortDelay>(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     platform: &mut P,
     registers: &mut impl SharedPhyAccess,
     state: &mut PhyState,
@@ -70,7 +70,7 @@ pub(super) async fn observe_temperature_with_hal<P, D: PhyShortDelay>(
 /// means the powered hardware epoch is ambiguous and must remain poisoned.
 pub(super) fn execute_rf_close_with_hal<
     D: PhyShortDelay,
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -125,7 +125,7 @@ pub(super) fn execute_rf_close_with_hal<
 
 #[cfg(target_arch = "riscv32")]
 async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     operation: oer_chips_esp32s31_hal::radio::phy::i2c::PhyI2cConfigurationOperation,
 ) -> Result<(), PhyTargetPortError> {
@@ -168,7 +168,7 @@ async fn drive_wake_i2c_configuration<D: PhyShortDelay>(
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset_wake_i2c_master<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
@@ -195,7 +195,7 @@ pub(crate) fn reset_wake_i2c_master<
 }
 
 #[cfg(target_arch = "riscv32")]
-fn force_wake_txrx<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+fn force_wake_txrx<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
     counter: &K,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     enabled: bool,
@@ -216,7 +216,7 @@ fn force_wake_txrx<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter
 
 #[cfg(target_arch = "riscv32")]
 fn open_wake_i2c_power<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
@@ -269,7 +269,7 @@ fn open_wake_i2c_power<
 #[cfg(target_arch = "riscv32")]
 fn clear_wake_pbus<
     D: PhyShortDelay,
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyContext,
@@ -327,7 +327,7 @@ fn clear_wake_pbus<
 
 #[cfg(target_arch = "riscv32")]
 fn publish_wake_frequency_i2c<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
@@ -403,7 +403,7 @@ fn restore_wake_pbus_boundaries(
 /// and baseband mode have all returned to their operational values.
 #[cfg(target_arch = "riscv32")]
 pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
     registers: &mut impl PhyInitializationAccess,
     state: &PhyState,
 ) -> Result<(), PhyTargetPortError> {

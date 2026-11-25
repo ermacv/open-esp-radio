@@ -48,6 +48,11 @@ or transitive, reaches a protocol core, runtime or core-side policy. Only
 `Composition` and `Facade` assemble runtimes with backends. The radio
 service reaches no chip adapter by any path.
 
+`portable/settle`, the one busy-wait a driver may make, is hardware code's: the
+chip crates, the family's drivers and radio crates, the probes and
+`portable/time-virtual` may depend on it, and no other package does, a
+protocol package among them.
+
 ## Deviation lists
 
 An edge, inclusion or HAL file that the tree still has against a rule is

@@ -39,7 +39,7 @@ pub(crate) fn run_param_tx_power<
     'a,
     D: crate::executor::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
 >(
     timer: &'a T,
     child: PhyParamTrackingTxPowerTransition<'a>,
@@ -127,7 +127,7 @@ fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, 
 #[inline(never)]
 pub(super) fn advance<
     D: crate::executor::wait::PhyShortDelay,
-    C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
 >(
     io: &mut Io<'_>,
     child: &mut PhyParamTrackingTxPowerTransition<'_>,
@@ -224,7 +224,7 @@ fn gain_record(
 #[inline(never)]
 fn execute<
     D: crate::executor::wait::PhyShortDelay,
-    K: oer_portable_time::settle::SettleCounter + ?Sized,
+    K: oer_portable_settle::SettleCounter + ?Sized,
 >(
     io: &mut Io<'_>,
     counter: &K,

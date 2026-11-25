@@ -64,7 +64,7 @@ use oer_chips_esp32s31_hal::system::owner::SharedPhyAccess;
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn force_pbus_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -90,7 +90,7 @@ pub(crate) fn force_pbus_direct<
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn read_i2c_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -115,7 +115,7 @@ pub(crate) fn read_i2c_direct<
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn write_i2c_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -147,7 +147,7 @@ pub(crate) fn write_i2c_direct<
 #[cfg(target_arch = "riscv32")]
 #[inline]
 pub(crate) fn write_i2c_field_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -161,7 +161,7 @@ pub(crate) fn write_i2c_field_direct<
 /// `phy_reset_ckgen` within named 20 µs completion settles.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reset_clock_generator_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
@@ -220,22 +220,22 @@ impl DirectOperationBudget {
 pub struct RomShortDelay;
 
 impl RomShortDelay {
-    pub const MAX_MICROS: u32 = oer_portable_time::settle::SettleLimit::MAX.as_micros() as u32;
+    pub const MAX_MICROS: u32 = oer_portable_settle::SettleLimit::MAX.as_micros() as u32;
 
-    pub fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    pub fn settle<K: oer_portable_settle::SettleCounter + ?Sized>(
         counter: &K,
-        limit: oer_portable_time::settle::SettleLimit,
+        limit: oer_portable_settle::SettleLimit,
     ) {
-        oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(limit, counter));
+        oer_portable_settle::hold(oer_portable_settle::Settle::new(limit, counter));
     }
 }
 
 impl PhyShortDelay for crate::RomShortDelay {
     const MAX_MICROS: u32 = crate::RomShortDelay::MAX_MICROS;
 
-    fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    fn settle<K: oer_portable_settle::SettleCounter + ?Sized>(
         counter: &K,
-        limit: oer_portable_time::settle::SettleLimit,
+        limit: oer_portable_settle::SettleLimit,
     ) {
         crate::RomShortDelay::settle(counter, limit);
     }
@@ -285,7 +285,7 @@ impl oer_portable_diagnostics::DiagnosticPath for PhyTargetPortError {
 /// error. Applications must not reinterpret a write action or select another
 /// polling bound at this boundary.
 pub async fn complete_final_i2c<D: PhyShortDelay>(
-    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl Timer + oer_portable_settle::SettleCounter),
     mut binding: PhyRegisterFinalI2cBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<PhyRegisterCompletion, PhyTargetPortError> {
@@ -442,7 +442,7 @@ define_i2c_executor!(
     PhyTxPowerCompletion
 );
 pub async fn complete_bluetooth_i2c<D: PhyShortDelay>(
-    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl Timer + oer_portable_settle::SettleCounter),
     mut binding: PhyBluetoothI2cBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<PhyBluetoothTxPowerCompletion, PhyTargetPortError> {
@@ -473,7 +473,7 @@ pub async fn complete_bluetooth_i2c<D: PhyShortDelay>(
 }
 
 pub async fn complete_i2c_configuration<D: PhyShortDelay>(
-    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl Timer + oer_portable_settle::SettleCounter),
     mut binding: PhyColdI2cConfigurationBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<crate::analog::i2c::PhyRfInitPrefixCompletion, PhyTargetPortError> {

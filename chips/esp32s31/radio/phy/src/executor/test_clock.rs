@@ -43,8 +43,8 @@ impl<const N: usize> Timer for VirtualClock<N> {
 }
 /// The settle counter beside the timer: one cycle a microsecond of the
 /// clock's time, wrapping, so a test moves both by advancing the clock.
-impl<const N: usize> oer_portable_time::settle::SettleCounter for VirtualClock<N> {
-    fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+impl<const N: usize> oer_portable_settle::SettleCounter for VirtualClock<N> {
+    fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
         limit.micros()
     }
     fn sample(&self) -> u32 {

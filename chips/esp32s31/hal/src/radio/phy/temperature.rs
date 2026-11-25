@@ -15,8 +15,8 @@ use oer_chips_esp32s31_pac::{
 pub mod ops;
 
 /// Named minimum settle between asserting SAR-I2C reset and enabling power.
-pub const SAR_I2C_RESET_SETTLE: oer_portable_time::settle::SettleLimit =
-    match oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1)) {
+pub const SAR_I2C_RESET_SETTLE: oer_portable_settle::SettleLimit =
+    match oer_portable_settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1)) {
         Some(limit) => limit,
         None => panic!("the SAR-I2C reset settle lies within the longest a settle may wait"),
     };
