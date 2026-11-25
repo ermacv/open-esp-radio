@@ -148,7 +148,7 @@ impl Pma {
             "    // Generated from the chip's `[hart-entry] pma` and the family's `[pma]`.\n    .macro PMA_PROGRAM fail, kind\n    li a0, \\kind\n",
         );
         for write in self.writes() {
-            let _ = writeln!(
+            add_line!(
                 text,
                 "    li a1, {index:#x}\n    li t0, {value:#010x}\n    csrw {csr:#x}, t0\n    csrr t1, {csr:#x}\n    bne t1, t0, \\fail",
                 index = write.index,
