@@ -1,4 +1,5 @@
 use crate::ap::profile::tests::TEST_ADVERTISEMENT;
+use crate::management::DialogToken;
 use crate::qos::Tid;
 
 const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities = crate::ht::HtLocalCapabilities::new(
@@ -292,11 +293,11 @@ fn ap_action_frame_and_parser_preserve_per_peer_addba_identity() {
         Some(ApManagementRequest::BlockAck {
             peer: parsed_peer,
             action: BlockAckAction::AddbaResponse {
-                dialog_token: 7,
+                dialog_token,
                 parameters,
                 ..
             },
-        }) if parsed_peer == Eui48::new(peer) && (parameters.tid(), parameters.window()) == (Tid::constant::<0>(), 32)
+        }) if dialog_token == DialogToken::new(7) && parsed_peer == Eui48::new(peer) && (parameters.tid(), parameters.window()) == (Tid::constant::<0>(), 32)
     ));
 }
 

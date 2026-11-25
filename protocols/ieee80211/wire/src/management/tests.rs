@@ -121,3 +121,14 @@ fn a_management_header_round_trips_and_a_short_frame_is_refused() {
     let (header, _) = ManagementHeader::split(&frame).unwrap();
     assert!(!header.group_receiver());
 }
+
+#[test]
+fn a_dialog_token_is_any_octet_and_a_nonzero_sequence_skips_zero() {
+    assert_eq!(DialogToken::ZERO.value(), 0);
+    for value in 0..=u8::MAX {
+        assert_eq!(DialogToken::new(value).value(), value);
+    }
+    assert_eq!(DialogToken::new(1).next_nonzero(), DialogToken::new(2));
+    assert_eq!(DialogToken::new(254).next_nonzero(), DialogToken::new(255));
+    assert_eq!(DialogToken::new(255).next_nonzero(), DialogToken::new(1));
+}

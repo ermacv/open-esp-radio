@@ -38,7 +38,7 @@ pub use banks::{
 pub use originator::{
     DialogTokenSequence, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
     TxBlockAckOriginatorError, TxBlockAckOriginatorPolicy, TxBlockAckOriginatorResponse,
-    TxBlockAckResponseDisposition, TxBlockAckRetry, next_nonzero_dialog_token,
+    TxBlockAckResponseDisposition, TxBlockAckRetry,
 };
 pub use recipient::{
     AddbaResponse, AddbaStatus, Amsdu, AmsduInAmpdu, BankRoom, RxAddbaRequest, RxBlockAckError,
@@ -50,8 +50,7 @@ pub use reorder::{
 };
 pub use session::{
     AddbaRequest, MAX_TX_BLOCK_ACK_WINDOW, OperationalTxBlockAck, TxBlockAckAlarm,
-    TxBlockAckConfig, TxBlockAckDialogToken, TxBlockAckError, TxBlockAckResponse,
-    TxBlockAckSession,
+    TxBlockAckConfig, TxBlockAckError, TxBlockAckResponse, TxBlockAckSession,
 };
 
 #[cfg(test)]

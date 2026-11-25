@@ -14,6 +14,8 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::management::DialogToken;
+
 pub const TWT_ACTION_CATEGORY: u8 = 22;
 pub const TWT_SETUP_ACTION: u8 = 6;
 pub const TWT_TEARDOWN_ACTION: u8 = 7;
@@ -409,7 +411,7 @@ impl IndividualTwtParameterSet {
 /// Complete body of one individual TWT Setup Action frame.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IndividualTwtSetup {
-    pub dialog_token: u8,
+    pub dialog_token: DialogToken,
     pub control: TwtControlFields,
     pub parameters: IndividualTwtParameterSet,
 }
@@ -445,7 +447,7 @@ impl IndividualTwtSetup {
         let body = [
             TWT_ACTION_CATEGORY,
             TWT_SETUP_ACTION,
-            self.dialog_token,
+            self.dialog_token.value(),
             TWT_ELEMENT_ID,
             INDIVIDUAL_TWT_ELEMENT_BODY_LEN,
             control,
@@ -504,7 +506,7 @@ impl IndividualTwtSetup {
             parameters,
         );
         Self {
-            dialog_token,
+            dialog_token: DialogToken::new(dialog_token),
             control,
             parameters,
         }
@@ -691,7 +693,7 @@ mod tests {
     #[test]
     fn a_rejected_setup_with_the_largest_exponent_round_trips() {
         let setup = IndividualTwtSetup {
-            dialog_token: 9,
+            dialog_token: DialogToken::new(9),
             control: TwtControlFields::REQUEST,
             parameters: IndividualTwtParameterSet {
                 request: TwtRequestFields::from_bytes([0; 2])
@@ -715,7 +717,7 @@ mod tests {
     #[test]
     fn a_setup_body_has_the_bytes_of_every_field() {
         let setup = IndividualTwtSetup {
-            dialog_token: 9,
+            dialog_token: DialogToken::new(9),
             control: TwtControlFields::REQUEST
                 .with_responder_pm(true)
                 .with_information_disabled(true)

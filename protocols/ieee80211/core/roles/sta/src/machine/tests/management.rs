@@ -2,6 +2,7 @@
 use super::*;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_security_rsn::{Ptk, frames::RsnTxFrame};
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::security::rsn::Akm;
 
@@ -273,7 +274,7 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
         let clock = oer_portable_time_virtual::VirtualClock::<8>::starting_at(at(40));
         world.frames.clear();
         let body = encode_addba_request(
-            17,
+            DialogToken::new(17),
             Tid::constant::<15>(),
             16,
             0,
@@ -321,11 +322,12 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
         assert!(matches!(
             parse_block_ack_action(&response[32..]),
             Some(BlockAckAction::AddbaResponse {
-                dialog_token: 17,
+                dialog_token,
                 status: 37,
                 parameters,
                 ..
-            }) if parameters.tid() == Tid::constant::<15>()
+            }) if dialog_token == DialogToken::new(17)
+                && parameters.tid() == Tid::constant::<15>()
         ));
         world.receive(clock.now(), &request);
         assert_eq!(

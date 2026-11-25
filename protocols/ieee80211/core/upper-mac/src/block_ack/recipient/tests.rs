@@ -4,7 +4,7 @@ type VirtualClock = oer_portable_time_virtual::VirtualClock<8>;
 
 fn request(tid: u8, timeout_tu: u16) -> RxAddbaRequest {
     RxAddbaRequest::from_action(BlockAckAction::AddbaRequest {
-        dialog_token: 17,
+        dialog_token: DialogToken::new(17),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
@@ -60,7 +60,7 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
     let response = negotiation.response();
     assert_eq!(response.status, AddbaStatus::Success);
     assert_eq!(response.window, 8);
-    assert_eq!(response.dialog_token, 17);
+    assert_eq!(response.dialog_token, DialogToken::new(17));
     assert_eq!(response.tid, Tid::constant::<3>());
     assert!(response.amsdu);
     assert!(matches!(
@@ -68,11 +68,12 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
             &response.encode().unwrap()
         ),
         Some(BlockAckAction::AddbaResponse {
-            dialog_token: 17,
+            dialog_token,
             status: 0,
             parameters,
             ..
-        }) if (parameters.tid(), parameters.window(), parameters.amsdu()) == (Tid::constant::<3>(), 8, true)
+        }) if dialog_token == DialogToken::new(17)
+            && (parameters.tid(), parameters.window(), parameters.amsdu()) == (Tid::constant::<3>(), 8, true)
     ));
 }
 
@@ -153,7 +154,7 @@ fn unavailable_bank_and_unsupported_parameters_have_explicit_responses() {
         .err()
         .unwrap();
         assert_eq!(response.status, AddbaStatus::RequestDeclined);
-        assert_eq!(response.dialog_token, 17);
+        assert_eq!(response.dialog_token, DialogToken::new(17));
         assert_eq!(response.tid, request.tid);
         assert!(response.encode().is_some());
     }

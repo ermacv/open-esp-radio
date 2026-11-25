@@ -18,23 +18,17 @@
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 
 use super::{
     AddbaRequest, BlockAckAction, OperationalTxBlockAck, TxBlockAckAlarm, TxBlockAckConfig,
-    TxBlockAckDialogToken, TxBlockAckError, TxBlockAckResponse, TxBlockAckSession,
-    parse_block_ack_action,
+    TxBlockAckError, TxBlockAckResponse, TxBlockAckSession, parse_block_ack_action,
 };
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// The QoS TIDs: the most agreements one originator owns.
 pub const TX_BLOCK_ACK_MAX_TIDS: usize = 8;
-
-/// The Dialog Token after `current` in a sequence that skips zero.
-pub const fn next_nonzero_dialog_token(current: u8) -> u8 {
-    let next = current.wrapping_add(1);
-    if next == 0 { 1 } else { next }
-}
 
 /// A Dialog Token sequence: it starts at `first`, and each next token is
 /// one more, back to `lowest` after `highest`. A sequence is data, so the
@@ -42,30 +36,31 @@ pub const fn next_nonzero_dialog_token(current: u8) -> u8 {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DialogTokenSequence {
     /// The Dialog Token of the first request, from `lowest` to `highest`.
-    pub first: u8,
-    pub lowest: u8,
-    pub highest: u8,
+    pub first: DialogToken,
+    pub lowest: DialogToken,
+    pub highest: DialogToken,
 }
 
 impl DialogTokenSequence {
-    /// From 1 through 255, skipping zero ([`next_nonzero_dialog_token`]).
+    /// From 1 through 255, skipping zero ([`DialogToken::next_nonzero`]).
     pub const NONZERO: Self = Self {
-        first: 1,
-        lowest: 1,
-        highest: u8::MAX,
+        first: DialogToken::new(1),
+        lowest: DialogToken::new(1),
+        highest: DialogToken::new(u8::MAX),
     };
 
     /// The Dialog Token after `current`.
-    pub const fn next(self, current: u8) -> u8 {
-        if current >= self.highest || current < self.lowest {
+    pub const fn next(self, current: DialogToken) -> DialogToken {
+        let value = current.value();
+        if value >= self.highest.value() || value < self.lowest.value() {
             self.lowest
         } else {
-            current.saturating_add(1)
+            DialogToken::new(value.saturating_add(1))
         }
     }
 
     const fn holds_first(self) -> bool {
-        self.lowest <= self.first && self.first <= self.highest
+        self.lowest.value() <= self.first.value() && self.first.value() <= self.highest.value()
     }
 }
 
@@ -124,7 +119,7 @@ pub enum TxBlockAckResponseDisposition {
     Matched(TxBlockAckOriginatorResponse),
     /// The response names no live negotiation, such as one that already
     /// timed out: it changes no agreement and does not end the link.
-    StaleDialogToken(u8),
+    StaleDialogToken(DialogToken),
 }
 
 struct Agreement {
@@ -155,7 +150,7 @@ pub struct TxBlockAckOriginator<const TIDS: usize> {
     agreements: [Option<Agreement>; TIDS],
     /// How long a failed negotiation waits before the next is due.
     retry_interval: Duration,
-    next_dialog_token: u8,
+    next_dialog_token: DialogToken,
     dialog_tokens: DialogTokenSequence,
 }
 
@@ -328,11 +323,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             .ok_or(TxBlockAckOriginatorError::UnsupportedTid(tid))?;
         let request = agreement
             .session
-            .begin_with_dialog_token(
-                starting_sequence,
-                now,
-                TxBlockAckDialogToken::from_value(token),
-            )
+            .begin_with_dialog_token(starting_sequence, now, token)
             .map_err(|error| TxBlockAckOriginatorError::Session { tid, error })?;
         agreement.negotiation = Negotiation::Awaiting(request.alarm);
         self.next_dialog_token = self.dialog_tokens.next(token);

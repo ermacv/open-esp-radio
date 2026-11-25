@@ -4,6 +4,7 @@ use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_wire::block_ack::frame::{
     ADDBA_STATUS_REQUEST_DECLINED, BlockAckAction, encode_addba_request, parse_block_ack_action,
 };
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
@@ -16,7 +17,7 @@ fn unsupported_addba_receives_an_explicit_decline() {
         // The backend accepts TIDs 0..=7. A parsed request for TID 15 still
         // needs a response, without allocating a receive agreement.
         let body = encode_addba_request(
-            17,
+            DialogToken::new(17),
             Tid::constant::<15>(),
             16,
             0,
@@ -42,11 +43,12 @@ fn unsupported_addba_receives_an_explicit_decline() {
         assert!(matches!(
             responses.as_slice(),
             [BlockAckAction::AddbaResponse {
-                dialog_token: 17,
+                dialog_token,
                 status: ADDBA_STATUS_REQUEST_DECLINED,
                 parameters,
                 ..
-            }] if parameters.tid() == Tid::constant::<15>()
+            }] if *dialog_token == DialogToken::new(17)
+                && parameters.tid() == Tid::constant::<15>()
         ));
         assert!(world.station.is_connected());
     });
@@ -62,7 +64,7 @@ fn an_encoder_refusal_returns_the_reply_without_marking_tx_busy() {
             world.station.epoch.unwrap(),
             Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap(),
             oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaResponse {
-                dialog_token: 17,
+                dialog_token: DialogToken::new(17),
                 status:
                     oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
                 tid: Tid::constant::<0>(),

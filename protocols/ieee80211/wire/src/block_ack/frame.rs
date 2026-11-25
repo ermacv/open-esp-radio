@@ -3,6 +3,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::frame::{ControlSubtype, FrameControlFields};
+use crate::management::DialogToken;
 use crate::qos::Tid;
 use crate::sequence::{SequenceControl, SequenceNumber};
 use oer_protocols_ieee802_wire::Eui48;
@@ -54,7 +55,7 @@ impl From<AddbaParametersError> for AddbaRequestError {
 /// The session owner supplies the dialog token, timeout and starting sequence;
 /// the wire encoder owns the BA Parameter Set and field order.
 pub fn encode_addba_request(
-    dialog_token: u8,
+    dialog_token: DialogToken,
     tid: Tid,
     window: u16,
     timeout_tu: u16,
@@ -75,7 +76,7 @@ pub fn encode_addba_request(
     Ok([
         BLOCK_ACK_CATEGORY,
         ADDBA_REQUEST_ACTION,
-        dialog_token,
+        dialog_token.value(),
         p0,
         p1,
         t0,
@@ -88,13 +89,13 @@ pub fn encode_addba_request(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlockAckAction {
     AddbaRequest {
-        dialog_token: u8,
+        dialog_token: DialogToken,
         parameters: AddbaParameters,
         timeout_tu: u16,
         starting_sequence: SequenceNumber,
     },
     AddbaResponse {
-        dialog_token: u8,
+        dialog_token: DialogToken,
         status: u16,
         parameters: AddbaParameters,
         timeout_tu: u16,
@@ -119,7 +120,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
         // SOURCE: IEEE Std 802.11-2020, 9.6.5.2 (ADDBA Request frame
         // format).
         ADDBA_REQUEST_ACTION => Some(BlockAckAction::AddbaRequest {
-            dialog_token: reader.u8().ok()?,
+            dialog_token: DialogToken::new(reader.u8().ok()?),
             parameters: AddbaParameters::from_bytes(reader.read().ok()?),
             timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?).time_units(),
             starting_sequence: SequenceNumber::from_sequence_control(SequenceControl::from_bytes(
@@ -129,7 +130,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
         // SOURCE: IEEE Std 802.11-2020, 9.6.5.3 (ADDBA Response frame
         // format).
         ADDBA_RESPONSE_ACTION => Some(BlockAckAction::AddbaResponse {
-            dialog_token: reader.u8().ok()?,
+            dialog_token: DialogToken::new(reader.u8().ok()?),
             status: crate::management::StatusCodeField::from_bytes(reader.read().ok()?).code(),
             parameters: AddbaParameters::from_bytes(reader.read().ok()?),
             timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?).time_units(),
@@ -211,7 +212,7 @@ impl From<AddbaParametersError> for RxAddbaResponseError {
 /// A-MSDU is deliberately not advertised by the initial strict RX path.
 pub fn write_successful_addba_response(
     body: &mut [u8],
-    dialog_token: u8,
+    dialog_token: DialogToken,
     tid: Tid,
     window: u16,
 ) -> Result<(), RxAddbaResponseError> {
@@ -239,7 +240,7 @@ pub const ADDBA_STATUS_REQUEST_DECLINED: u16 = crate::status::status_code::REQUE
 /// body.
 pub fn write_declined_addba_response(
     body: &mut [u8],
-    dialog_token: u8,
+    dialog_token: DialogToken,
     tid: Tid,
     requested_window: u16,
 ) -> Result<(), RxAddbaResponseError> {
@@ -268,7 +269,7 @@ pub fn write_declined_addba_response(
 ///
 /// A window wider than ten bits.
 pub fn encode_addba_response(
-    dialog_token: u8,
+    dialog_token: DialogToken,
     status: u16,
     tid: Tid,
     window: u16,
@@ -281,7 +282,7 @@ pub fn encode_addba_response(
     Ok([
         BLOCK_ACK_CATEGORY,
         ADDBA_RESPONSE_ACTION,
-        dialog_token,
+        dialog_token.value(),
         s0,
         s1,
         p0,

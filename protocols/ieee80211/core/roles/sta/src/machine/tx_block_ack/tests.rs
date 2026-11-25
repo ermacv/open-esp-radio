@@ -1,4 +1,5 @@
 use super::*;
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
@@ -22,7 +23,7 @@ fn at(millis: u64) -> Instant {
 
 fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckAction {
     BlockAckAction::AddbaResponse {
-        dialog_token,
+        dialog_token: DialogToken::new(dialog_token),
         status,
         timeout_tu: 0,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
@@ -51,7 +52,7 @@ fn a_refused_response_owes_the_delba_of_its_own_tid() {
     let request = tx
         .begin(WmmUserPriority::UP5, SequenceNumber::ZERO, at(0))
         .unwrap();
-    assert!(tx.on_action(response(request.dialog_token, 5, 0, 64), at(1)));
+    assert!(tx.on_action(response(request.dialog_token.value(), 5, 0, 64), at(1)));
     assert_eq!(
         tx.poll(at(1), SendRoom::Free),
         Some(TxBlockAckOwed::Delba {
@@ -78,7 +79,7 @@ pub(crate) fn operational() -> StaTxBlockAck {
     let request = tx
         .begin(WmmUserPriority::UP0, SequenceNumber::new(5).unwrap(), at(0))
         .unwrap();
-    assert!(tx.on_action(response(request.dialog_token, 0, 0, 32), at(1)));
+    assert!(tx.on_action(response(request.dialog_token.value(), 0, 0, 32), at(1)));
     tx
 }
 
@@ -151,7 +152,7 @@ fn data_of_a_tid_negotiates_it_only_with_an_admitting_association() {
         Some(at(100)),
         "the response deadline"
     );
-    assert!(tx.on_action(response(request.dialog_token, 6, 0, 16), at(3)));
+    assert!(tx.on_action(response(request.dialog_token.value(), 6, 0, 16), at(3)));
     let agreement = tx.operational(WmmUserPriority::UP6).unwrap();
     assert_eq!(
         (agreement.window, agreement.starting_sequence.get()),
@@ -259,7 +260,7 @@ fn only_due_work_makes_the_agreements_owe() {
     let request = tx
         .begin(WmmUserPriority::UP2, SequenceNumber::ZERO, at(110))
         .unwrap();
-    assert!(tx.on_action(response(request.dialog_token, 2, 0, 32), at(111)));
+    assert!(tx.on_action(response(request.dialog_token.value(), 2, 0, 32), at(111)));
     tx.traffic(WmmUserPriority::UP2, at(111));
     assert!(
         !tx.may_owe(at(112)),
@@ -278,7 +279,7 @@ fn a_refusal_closes_the_tid_without_a_delba() {
     let request = tx
         .begin(WmmUserPriority::UP0, SequenceNumber::ZERO, at(0))
         .unwrap();
-    assert!(tx.on_action(response(request.dialog_token, 0, 37, 0), at(1)));
+    assert!(tx.on_action(response(request.dialog_token.value(), 0, 37, 0), at(1)));
     assert_eq!(tx.operational(WmmUserPriority::UP0), None);
     tx.traffic(WmmUserPriority::UP0, at(2));
     assert_eq!(tx.poll(at(2), SendRoom::Free), None);
@@ -293,7 +294,7 @@ fn a_response_beyond_the_requested_window_ends_with_a_delba() {
     let request = tx
         .begin(WmmUserPriority::UP0, SequenceNumber::ZERO, at(0))
         .unwrap();
-    assert!(tx.on_action(response(request.dialog_token, 0, 0, 64), at(1)));
+    assert!(tx.on_action(response(request.dialog_token.value(), 0, 0, 64), at(1)));
     assert_eq!(tx.operational(WmmUserPriority::UP0), None);
     assert_eq!(
         tx.poll(at(1), SendRoom::Free),
@@ -370,7 +371,7 @@ fn the_recipient_s_delba_ends_the_agreement_and_receive_actions_pass_by() {
         "the recipient wants no answer"
     );
     let request = BlockAckAction::AddbaRequest {
-        dialog_token: 1,
+        dialog_token: DialogToken::new(1),
         timeout_tu: 0,
         starting_sequence: SequenceNumber::ZERO,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(

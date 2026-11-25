@@ -3,6 +3,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use oer_protocols_ieee80211_wire::qos::Tid;
+use oer_protocols_ieee80211_wire::sequence::SequenceControl;
 
 /// The Retry subfield of an MPDU's Frame Control (IEEE Std 802.11-2020,
 /// 9.2.4.1.4): set in a retransmission.
@@ -20,14 +21,14 @@ pub enum RetrySubfield {
 /// STA association or AP peer epoch.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxDuplicateFilter {
-    last_sequence_control: [u16; 17],
+    last_sequence_control: [SequenceControl; 17],
     valid: u32,
 }
 
 impl RxDuplicateFilter {
     pub const fn new() -> Self {
         Self {
-            last_sequence_control: [0; 17],
+            last_sequence_control: [SequenceControl::from_bytes([0; 2]); 17],
             valid: 0,
         }
     }
@@ -42,7 +43,7 @@ impl RxDuplicateFilter {
     pub fn is_known_duplicate(
         &self,
         retry: RetrySubfield,
-        sequence_control: u16,
+        sequence_control: SequenceControl,
         tid: Option<Tid>,
     ) -> bool {
         let (bit, last) = space(&self.last_sequence_control, tid);
@@ -53,7 +54,7 @@ impl RxDuplicateFilter {
     pub fn is_duplicate(
         &mut self,
         retry: RetrySubfield,
-        sequence_control: u16,
+        sequence_control: SequenceControl,
         tid: Option<Tid>,
     ) -> bool {
         if self.is_known_duplicate(retry, sequence_control, tid) {
@@ -68,7 +69,7 @@ impl RxDuplicateFilter {
 
 /// The validity bit and history entry of `tid`'s sequence space: the legacy
 /// space (bit 0) for a non-QoS MPDU, else that TID's (bits 1 to 16).
-fn space(history: &[u16; 17], tid: Option<Tid>) -> (u32, &u16) {
+fn space(history: &[SequenceControl; 17], tid: Option<Tid>) -> (u32, &SequenceControl) {
     let [legacy, tids @ ..] = history;
     match tid {
         Some(tid) => (tid_bit(tid), tid.select(tids)),
@@ -77,7 +78,7 @@ fn space(history: &[u16; 17], tid: Option<Tid>) -> (u32, &u16) {
 }
 
 /// The mutable entry of [`space`].
-fn space_mut(history: &mut [u16; 17], tid: Option<Tid>) -> (u32, &mut u16) {
+fn space_mut(history: &mut [SequenceControl; 17], tid: Option<Tid>) -> (u32, &mut SequenceControl) {
     let [legacy, tids @ ..] = history;
     match tid {
         Some(tid) => (tid_bit(tid), tid.select_mut(tids)),

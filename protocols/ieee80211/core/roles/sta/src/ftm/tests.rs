@@ -78,8 +78,8 @@ fn cancellation_failure_and_timeout_return_samples_and_unmatched_local_timing() 
                         Instant::from_micros(50)
                     ),
                     Err(FtmRequesterError::DialogTokenOutOfSequence {
-                        expected: 3,
-                        actual: 4
+                        expected: DialogToken::new(3),
+                        actual: DialogToken::new(4)
                     })
                 );
                 session.cancel()
@@ -116,7 +116,7 @@ fn cancellation_failure_and_timeout_return_samples_and_unmatched_local_timing() 
         assert_eq!(partial.sample_count(), 1);
         assert_eq!(partial.pending, Some(pending));
         let sample = partial.sample(0).unwrap();
-        assert_eq!(sample.dialog_token, 1);
+        assert_eq!(sample.dialog_token, DialogToken::new(1));
         let next = requester
             .start(individual(8), Instant::from_micros(20_000))
             .unwrap();
@@ -152,7 +152,7 @@ fn cancel_after_rx_completed_delivers_the_unconsumed_result() {
         panic!("cancellation must not erase a pending result")
     };
     assert_eq!(result.sample_count(), 1);
-    assert_eq!(result.sample(0).unwrap().dialog_token, 1);
+    assert_eq!(result.sample(0).unwrap().dialog_token, DialogToken::new(1));
     assert!(
         requester
             .start(individual(10), Instant::from_micros(50))
@@ -224,8 +224,8 @@ fn initial_body(
 ) -> [u8; FTM_MEASUREMENT_PREFIX_LEN + FTM_PARAMETERS_ELEMENT_LEN] {
     measurement_body(
         FtmMeasurementFields {
-            dialog_token: token,
-            follow_up_dialog_token: 0,
+            dialog_token: DialogToken::new(token),
+            follow_up_dialog_token: DialogToken::new(0),
             tod: FtmTimestampPs::ZERO,
             toa: FtmTimestampPs::ZERO,
             tod_error: FtmTodError {
@@ -248,8 +248,8 @@ fn follow_up_body(
 ) -> [u8; FTM_MEASUREMENT_PREFIX_LEN] {
     measurement_body(
         FtmMeasurementFields {
-            dialog_token,
-            follow_up_dialog_token,
+            dialog_token: DialogToken::new(dialog_token),
+            follow_up_dialog_token: DialogToken::new(follow_up_dialog_token),
             tod: ps(t1),
             toa: ps(t4),
             tod_error: FtmTodError {
@@ -496,7 +496,7 @@ fn three_ftm_frames_deliver_two_owned_samples_without_claiming_distance() {
             oer_portable_time::Instant::from_micros(30),
         ),
         Ok(FtmMeasurementDisposition::InitialAccepted {
-            dialog_token: 1,
+            dialog_token: DialogToken::new(1),
             allocated_ftms_per_burst: 3,
             maximum_samples: 2,
         })
@@ -511,7 +511,7 @@ fn three_ftm_frames_deliver_two_owned_samples_without_claiming_distance() {
             oer_portable_time::Instant::from_micros(40),
         ),
         Ok(FtmMeasurementDisposition::SampleAccepted {
-            dialog_token: 1,
+            dialog_token: DialogToken::new(1),
             sample_index: 0,
         })
     );
@@ -552,8 +552,8 @@ fn three_ftm_frames_deliver_two_owned_samples_without_claiming_distance() {
     assert_eq!(empty.sample_count(), 0);
     assert!(empty.sample(0).is_none());
     assert_eq!(result.sample_count(), 2);
-    assert_eq!(result.sample(0).unwrap().dialog_token, 1);
-    assert_eq!(result.sample(1).unwrap().dialog_token, 2);
+    assert_eq!(result.sample(0).unwrap().dialog_token, DialogToken::new(1));
+    assert_eq!(result.sample(1).unwrap().dialog_token, DialogToken::new(2));
     assert!(result.sample(2).is_none());
 }
 
@@ -587,7 +587,9 @@ fn ftm_retransmission_deduplicates_follow_up_but_owns_new_token() {
             Some(FtmLocalExchangeTiming::new(3, ps(300), ps(320)).unwrap()),
             oer_portable_time::Instant::from_micros(50),
         ),
-        Ok(FtmMeasurementDisposition::DuplicateSample { dialog_token: 1 })
+        Ok(FtmMeasurementDisposition::DuplicateSample {
+            dialog_token: DialogToken::new(1)
+        })
     );
     let terminal = follow_up_body(0, 3, 280, 360);
     requester
@@ -601,7 +603,7 @@ fn ftm_retransmission_deduplicates_follow_up_but_owns_new_token() {
     let (_requester, result) = finish(requester);
     assert_eq!(result.sample_count(), 2);
     assert!(result.sample(0).is_some());
-    assert_eq!(result.sample(1).unwrap().dialog_token, 3);
+    assert_eq!(result.sample(1).unwrap().dialog_token, DialogToken::new(3));
 }
 
 #[test]
@@ -752,8 +754,8 @@ fn initial_retransmission_replaces_timing_and_tokens_wrap_consecutively() {
             oer_portable_time::Instant::from_micros(40),
         ),
         Ok(FtmMeasurementDisposition::InitialRetransmissionAccepted {
-            abandoned_dialog_token: 254,
-            dialog_token: 255,
+            abandoned_dialog_token: DialogToken::new(254),
+            dialog_token: DialogToken::new(255),
         })
     );
 
@@ -766,7 +768,7 @@ fn initial_retransmission_replaces_timing_and_tokens_wrap_consecutively() {
             oer_portable_time::Instant::from_micros(50),
         ),
         Ok(FtmMeasurementDisposition::SampleAccepted {
-            dialog_token: 255,
+            dialog_token: DialogToken::new(255),
             sample_index: 0,
         })
     );
@@ -781,7 +783,10 @@ fn initial_retransmission_replaces_timing_and_tokens_wrap_consecutively() {
         .unwrap();
     let (_requester, result) = finish(requester);
     assert_eq!(result.sample_count(), 2);
-    assert_eq!(result.sample(0).unwrap().dialog_token, 255);
+    assert_eq!(
+        result.sample(0).unwrap().dialog_token,
+        DialogToken::new(255)
+    );
     assert_eq!(result.sample(0).unwrap().initiator_arrival_t2_ps, ps(200));
 }
 
@@ -807,8 +812,8 @@ fn nonconsecutive_dialog_token_fails_before_sample_mutation() {
             oer_portable_time::Instant::from_micros(40),
         ),
         Err(FtmRequesterError::DialogTokenOutOfSequence {
-            expected: 2,
-            actual: 3,
+            expected: DialogToken::new(2),
+            actual: DialogToken::new(3),
         })
     );
     assert_eq!(requester.owner.samples.len(), 0);
@@ -846,7 +851,7 @@ fn initial_retransmission_must_preserve_the_negotiated_body() {
 #[test]
 fn timestamp_wrap_is_bounded_to_half_range() {
     let exchange = FtmRawExchange {
-        dialog_token: 1,
+        dialog_token: DialogToken::new(1),
         responder_departure_t1_ps: ps(FTM_TIMESTAMP_MASK - 9),
         responder_ack_arrival_t4_ps: ps(20),
         initiator_arrival_t2_ps: ps(100),
@@ -888,13 +893,63 @@ fn local_timing_proves_a_nonzero_token_through_the_bitmap_boundary() {
     for token in [1, 31, 32, 254, 255] {
         let timing = FtmLocalExchangeTiming::new(token, ps(100), ps(120)).unwrap();
         assert_eq!(timing.dialog_token.get(), token);
-        assert!(!tokens.contains(token));
+        assert!(!tokens.contains(DialogToken::new(token)));
         tokens.insert(timing.dialog_token);
-        assert!(tokens.contains(token));
+        assert!(tokens.contains(DialogToken::new(token)));
     }
-    assert!(!tokens.contains(0));
+    assert!(!tokens.contains(DialogToken::new(0)));
 }
 
 fn individual(octet: u8) -> IndividualAddress {
     IndividualAddress::new(Eui48::new([2, octet, octet, octet, octet, octet])).unwrap()
+}
+
+/// A frame of two zero tokens ends the session with the samples it has.
+#[test]
+fn a_frame_of_two_zero_tokens_is_the_terminal_one() {
+    let peer = individual(11);
+    let mut session = start_published(FtmRequester::<2>::new(config(3, 1)), peer);
+    session
+        .on_measurement(
+            peer,
+            FtmMeasurement::decode_body(&initial_body(1, 3)).unwrap(),
+            Some(FtmLocalExchangeTiming::new(1, ps(100), ps(120)).unwrap()),
+            Instant::from_micros(30),
+        )
+        .unwrap();
+    let mut terminal = [0; FTM_MEASUREMENT_PREFIX_LEN];
+    terminal[..2].copy_from_slice(&[4, 33]);
+    assert_eq!(
+        session.on_measurement(
+            peer,
+            FtmMeasurement::decode_body(&terminal).unwrap(),
+            None,
+            Instant::from_micros(40),
+        ),
+        Ok(FtmMeasurementDisposition::Complete { samples: 0 })
+    );
+}
+
+/// A repeated initial frame names a token: one of zero is none.
+#[test]
+fn an_initial_retransmission_of_no_token_is_refused() {
+    let peer = individual(12);
+    let mut session = start_published(FtmRequester::<2>::new(config(3, 1)), peer);
+    session
+        .on_measurement(
+            peer,
+            FtmMeasurement::decode_body(&initial_body(1, 3)).unwrap(),
+            Some(FtmLocalExchangeTiming::new(1, ps(100), ps(120)).unwrap()),
+            Instant::from_micros(30),
+        )
+        .unwrap();
+    assert_eq!(
+        session.on_measurement(
+            peer,
+            FtmMeasurement::decode_body(&initial_body(0, 3)).unwrap(),
+            None,
+            Instant::from_micros(40),
+        ),
+        Err(FtmRequesterError::InitialRetransmissionMismatch)
+    );
 }
