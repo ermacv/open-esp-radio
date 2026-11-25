@@ -124,7 +124,7 @@ fn active(start: u16, window: u16) -> TxBlockAckSession {
     session
         .on_response_action(BlockAckAction::AddbaResponse {
             dialog_token: request.dialog_token,
-            status: 0,
+            status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
             timeout_tu: 0,
             parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
                 oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
@@ -172,7 +172,7 @@ fn terminal_marks_are_idempotent_and_reset_with_the_agreement() {
     session
         .on_response_action(BlockAckAction::AddbaResponse {
             dialog_token: request.dialog_token,
-            status: 0,
+            status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
             timeout_tu: 0,
             parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
                 oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
@@ -206,7 +206,9 @@ fn rejected_response_returns_to_idle_without_a_timer_retry() {
     let response = [3, 1, request.dialog_token.value(), 37, 0, 0, 0, 0, 0];
     assert_eq!(
         session.on_response(&response),
-        Ok(TxBlockAckResponse::Rejected(37))
+        Ok(TxBlockAckResponse::Rejected(
+            oer_protocols_ieee80211_wire::status::StatusCode::REQUEST_DECLINED
+        ))
     );
     assert_eq!(session.operational(), None);
     assert!(!session.on_alarm(request.alarm));

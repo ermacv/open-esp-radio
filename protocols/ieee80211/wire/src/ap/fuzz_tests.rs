@@ -53,8 +53,8 @@ fn management_seeds() -> Vec<Vec<u8>> {
         source: source(),
         bssid: bssid(),
         sequence_number: seq(2),
-        transaction: 1,
-        status_code: 126,
+        transaction: crate::management::AuthenticationTransaction::new(1),
+        status_code: crate::status::StatusCode::SAE_HASH_TO_ELEMENT,
         body: &[0x13, 0, 0xaa, 0xbb],
     }
     .encode(&mut frame)

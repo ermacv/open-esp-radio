@@ -42,7 +42,7 @@ mod associated_peer {
         AssociationResponse {
             capability_info:
                 oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([0; 2]),
-            status_code,
+            status_code: oer_protocols_ieee80211_wire::status::StatusCode::new(status_code),
             association_id: oer_protocols_ieee80211_wire::management::AidField::from_bytes([
                 7, 0xc0,
             ]),
@@ -112,7 +112,7 @@ mod associated_peer {
                 oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
                 eight_microseconds,
             ),
-            Err(StaAssociatedPeerError::Rejected(17))
+            Err(StaAssociatedPeerError::Rejected(oer_protocols_ieee80211_wire::status::StatusCode::DENIED_NO_MORE_STAS))
         );
     }
 

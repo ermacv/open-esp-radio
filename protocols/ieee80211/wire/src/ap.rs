@@ -9,6 +9,8 @@
 use crate::data::{MsduHeader, MsduParts, PeerQos};
 use crate::frame::{FrameControlFields, FrameType, QosAckPolicy};
 use crate::management::{AidField, AssociationId};
+use crate::management::{AuthenticationAlgorithm, AuthenticationTransaction};
+use crate::status::{ReasonCode, StatusCode};
 use oer_protocols_ieee802_wire::{EtherType, Eui48, IndividualAddress};
 
 use crate::{
@@ -24,7 +26,6 @@ use crate::{
     qos::WmmUserPriority,
     security::{BssSecurityElements, LinkProtection},
     sequence::SequenceNumber,
-    station::SAE_AUTHENTICATION_ALGORITHM,
     station_power_save::STA_NULL_DATA_FRAME_LEN,
 };
 
@@ -40,7 +41,6 @@ pub const AP_PEER_DISCONNECT_LEN: usize = MANAGEMENT_HEADER_LEN + 2;
 pub const AP_ASSOCIATION_RESPONSE_LEN: usize = 24 + AP_ASSOCIATION_RESPONSE_BODY_LEN;
 
 const MANAGEMENT_HEADER_LEN: usize = 24;
-const OPEN_SYSTEM_AUTHENTICATION_ALGORITHM: u16 = 0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApAssociationResponseError {
@@ -407,8 +407,8 @@ pub enum ApManagementRequest<'a> {
     /// (transaction 2) with its status and the body after the status.
     SaeAuthentication {
         peer: Eui48,
-        transaction: u16,
-        status: u16,
+        transaction: AuthenticationTransaction,
+        status: StatusCode,
         body: &'a [u8],
     },
     Association {
@@ -429,11 +429,11 @@ pub enum ApManagementRequest<'a> {
     },
     Disassociation {
         peer: Eui48,
-        reason: u16,
+        reason: ReasonCode,
     },
     Deauthentication {
         peer: Eui48,
-        reason: u16,
+        reason: ReasonCode,
     },
     BlockAck {
         peer: Eui48,
@@ -568,9 +568,11 @@ pub fn parse_ap_management_request<'a>(
             let transaction = fields.transaction();
             let status = fields.status_code();
             match algorithm {
-                OPEN_SYSTEM_AUTHENTICATION_ALGORITHM => (transaction == 1 && status == 0)
+                AuthenticationAlgorithm::OPEN_SYSTEM => (transaction
+                    == AuthenticationTransaction::OPEN_REQUEST
+                    && status == StatusCode::SUCCESS)
                     .then_some(ApManagementRequest::OpenAuthentication { peer }),
-                SAE_AUTHENTICATION_ALGORITHM => Some(ApManagementRequest::SaeAuthentication {
+                AuthenticationAlgorithm::SAE => Some(ApManagementRequest::SaeAuthentication {
                     peer,
                     transaction,
                     status,
@@ -800,7 +802,7 @@ pub fn write_open_authentication_response(
     output: &mut [u8],
     access_point: Eui48,
     peer: Eui48,
-    status: u16,
+    status: StatusCode,
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
     let header = management_header(
@@ -813,8 +815,8 @@ pub fn write_open_authentication_response(
         header.as_slice(),
         // Open System, the second frame of its exchange.
         &crate::management::AuthenticationFields::of(
-            OPEN_SYSTEM_AUTHENTICATION_ALGORITHM,
-            2,
+            AuthenticationAlgorithm::OPEN_SYSTEM,
+            AuthenticationTransaction::OPEN_RESPONSE,
             status,
         )
         .to_bytes(),
@@ -829,8 +831,8 @@ pub fn write_sae_authentication(
     output: &mut [u8],
     access_point: Eui48,
     peer: Eui48,
-    transaction: u16,
-    status: u16,
+    transaction: AuthenticationTransaction,
+    status: StatusCode,
     body: &[u8],
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
@@ -843,7 +845,7 @@ pub fn write_sae_authentication(
     crate::encoding::FrameParts([
         header.as_slice(),
         &crate::management::AuthenticationFields::of(
-            SAE_AUTHENTICATION_ALGORITHM,
+            AuthenticationAlgorithm::SAE,
             transaction,
             status,
         )
@@ -865,7 +867,7 @@ pub fn write_ht_association_response_frame_for_security(
     output: &mut [u8],
     access_point: Eui48,
     peer: Eui48,
-    status: u16,
+    status: StatusCode,
     association_id: Option<AssociationId>,
     management_sequence: SequenceNumber,
     channel: Channel,
@@ -921,7 +923,7 @@ pub fn write_ap_peer_disconnect(
     access_point: Eui48,
     peer: Eui48,
     kind: ApPeerDisconnectKind,
-    reason: u16,
+    reason: ReasonCode,
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
     let frame_control = match kind {
@@ -969,7 +971,7 @@ fn management_header(
 pub fn write_ht_association_response(
     profile: &Advertisement,
     body: &mut [u8; AP_ASSOCIATION_RESPONSE_BODY_LEN],
-    status: u16,
+    status: StatusCode,
     association_id: Option<AssociationId>,
     channel: Channel,
     peer_ht: Option<HtPeerCapabilities>,
@@ -977,7 +979,7 @@ pub fn write_ht_association_response(
 ) -> Result<usize, ApAssociationResponseError> {
     // The AID field: the association ID with both marker bits set, or zero
     // when the association is refused (IEEE Std 802.11-2020, 9.4.1.8).
-    let encoded_association_id = if status == 0 {
+    let encoded_association_id = if status == StatusCode::SUCCESS {
         association_id
             .ok_or(ApAssociationResponseError::MissingAssociationId)?
             .field()

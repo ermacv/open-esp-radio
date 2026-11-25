@@ -11,6 +11,7 @@ use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_protocols_ieee80211_wire::security::spp::SppScope;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::status::StatusCode;
 
 mod block_ack;
 mod management;
@@ -347,11 +348,11 @@ pub struct ApAssociationCapabilities {
 pub enum ApMlmeAction {
     AuthenticationResponse {
         peer: [u8; 6],
-        status: u16,
+        status: StatusCode,
     },
     AssociationResponse {
         peer: [u8; 6],
-        status: u16,
+        status: StatusCode,
         association_id: Option<AssociationId>,
     },
     BeginWpa2 {

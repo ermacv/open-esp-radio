@@ -2,6 +2,8 @@
 //! codecs.
 
 use crate::frame::FrameControlFields;
+use crate::management::{AuthenticationAlgorithm, AuthenticationTransaction};
+use crate::status::{ReasonCode, StatusCode};
 use oer_protocols_ieee802_wire::Eui48;
 
 use super::*;
@@ -49,9 +51,9 @@ impl OpenAuthenticationRequest {
         crate::encoding::FrameParts([
             header.as_slice(),
             &crate::management::AuthenticationFields::of(
-                OPEN_SYSTEM_ALGORITHM,
-                OPEN_SYSTEM_REQUEST_SEQUENCE,
-                0,
+                AuthenticationAlgorithm::OPEN_SYSTEM,
+                AuthenticationTransaction::OPEN_REQUEST,
+                StatusCode::SUCCESS,
             )
             .to_bytes(),
         ])
@@ -62,7 +64,7 @@ impl OpenAuthenticationRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OpenAuthenticationResponse {
-    pub status_code: u16,
+    pub status_code: StatusCode,
 }
 
 /// Management transition by which the selected AP ends the STA relationship.
@@ -75,7 +77,7 @@ pub enum StaDisconnectKind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaDisconnect {
     pub kind: StaDisconnectKind,
-    pub reason_code: u16,
+    pub reason_code: ReasonCode,
 }
 
 /// Management subtype of a frame this station originates after association.
@@ -165,21 +167,14 @@ impl StaProtectedManagementFrame<'_> {
     }
 }
 
-/// SAE authentication algorithm number.
-pub const SAE_AUTHENTICATION_ALGORITHM: u16 = 3;
-/// SAE Commit authentication transaction.
-pub const SAE_COMMIT_TRANSACTION: u16 = 1;
-/// SAE Confirm authentication transaction.
-pub const SAE_CONFIRM_TRANSACTION: u16 = 2;
-
 /// One SAE Authentication frame this station sends: a Commit or a Confirm.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SaeAuthenticationFrame<'a> {
     pub source: OwnAddress,
     pub bssid: Bssid,
     pub sequence_number: SequenceNumber,
-    pub transaction: u16,
-    pub status_code: u16,
+    pub transaction: AuthenticationTransaction,
+    pub status_code: StatusCode,
     pub body: &'a [u8],
 }
 
@@ -195,7 +190,7 @@ impl SaeAuthenticationFrame<'_> {
         crate::encoding::FrameParts([
             header.as_slice(),
             &crate::management::AuthenticationFields::of(
-                SAE_AUTHENTICATION_ALGORITHM,
+                AuthenticationAlgorithm::SAE,
                 self.transaction,
                 self.status_code,
             )
@@ -210,8 +205,8 @@ impl SaeAuthenticationFrame<'_> {
 /// One SAE Authentication frame the selected access point sent this station.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SaeAuthentication<'a> {
-    pub transaction: u16,
-    pub status_code: u16,
+    pub transaction: AuthenticationTransaction,
+    pub status_code: StatusCode,
     pub body: &'a [u8],
 }
 
@@ -231,7 +226,7 @@ pub fn parse_sae_authentication(
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
-        || algorithm != SAE_AUTHENTICATION_ALGORITHM
+        || algorithm != AuthenticationAlgorithm::SAE
     {
         return None;
     }
@@ -261,8 +256,8 @@ pub fn parse_open_authentication_response(
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
-        || algorithm != OPEN_SYSTEM_ALGORITHM
-        || transaction != OPEN_SYSTEM_RESPONSE_SEQUENCE
+        || algorithm != AuthenticationAlgorithm::OPEN_SYSTEM
+        || transaction != AuthenticationTransaction::OPEN_RESPONSE
     {
         return None;
     }

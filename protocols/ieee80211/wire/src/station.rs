@@ -33,9 +33,6 @@ const ASSOCIATION_REQUEST_FRAME_CONTROL: crate::frame::FrameControlFields =
     crate::frame::FrameControlFields::from_bytes([0x00, 0x00]);
 const ASSOCIATION_RESPONSE_FRAME_CONTROL: crate::frame::FrameControlFields =
     crate::frame::FrameControlFields::from_bytes([0x10, 0x00]);
-const OPEN_SYSTEM_ALGORITHM: u16 = 0;
-const OPEN_SYSTEM_REQUEST_SEQUENCE: u16 = 1;
-const OPEN_SYSTEM_RESPONSE_SEQUENCE: u16 = 2;
 const ASSOCIATION_FIXED_BODY_LEN: usize = 4;
 const SUPPORTED_RATES_ELEMENT_CAPACITY: usize = 8;
 const SELECTED_RSN_IE_LEN: usize = 22;
@@ -77,11 +74,10 @@ pub use data::{
     StaProtectedAmsduFrame, StaProtectedDataFrame, sta_protected_amsdu_frame_length,
 };
 pub use management::{
-    OpenAuthenticationRequest, OpenAuthenticationResponse, SAE_AUTHENTICATION_ALGORITHM,
-    SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION, SaeAuthentication, SaeAuthenticationFrame,
-    StaDisconnect, StaDisconnectKind, StaManagementFrame, StaManagementSubtype,
-    StaProtectedManagementFrame, parse_open_authentication_response, parse_sae_authentication,
-    parse_sta_disconnect,
+    OpenAuthenticationRequest, OpenAuthenticationResponse, SaeAuthentication,
+    SaeAuthenticationFrame, StaDisconnect, StaDisconnectKind, StaManagementFrame,
+    StaManagementSubtype, StaProtectedManagementFrame, parse_open_authentication_response,
+    parse_sae_authentication, parse_sta_disconnect,
 };
 pub use security::SelectedRsn;
 

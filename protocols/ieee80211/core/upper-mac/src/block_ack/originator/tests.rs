@@ -45,7 +45,7 @@ fn sequence(value: u16) -> SequenceNumber {
 fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckAction {
     BlockAckAction::AddbaResponse {
         dialog_token: DialogToken::new(dialog_token),
-        status,
+        status: oer_protocols_ieee80211_wire::status::StatusCode::new(status),
         timeout_tu: 7,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
@@ -191,7 +191,9 @@ fn attempts_requeue_until_the_peer_answers_or_they_run_out() {
         Ok(TxBlockAckResponseDisposition::Matched(
             TxBlockAckOriginatorResponse {
                 tid: WmmUserPriority::UP7,
-                response: TxBlockAckResponse::Rejected(37),
+                response: TxBlockAckResponse::Rejected(
+                    oer_protocols_ieee80211_wire::status::StatusCode::REQUEST_DECLINED
+                ),
             }
         ))
     );

@@ -69,7 +69,7 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
         ),
         Some(BlockAckAction::AddbaResponse {
             dialog_token,
-            status: 0,
+            status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
             parameters,
             ..
         }) if dialog_token == DialogToken::new(17)
@@ -190,17 +190,17 @@ fn reorder_wraparound_duplicate_and_delba_return_each_owner_once() {
     assert!(!receiver.peer_delba(BlockAckAction::Delba {
         tid: Tid::constant::<0>(),
         initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
-        reason: 37,
+        reason: oer_protocols_ieee80211_wire::status::ReasonCode::new(37),
     }));
     assert!(!receiver.peer_delba(BlockAckAction::Delba {
         tid: Tid::constant::<1>(),
         initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
-        reason: 37,
+        reason: oer_protocols_ieee80211_wire::status::ReasonCode::new(37),
     }));
     assert!(receiver.peer_delba(BlockAckAction::Delba {
         tid: Tid::constant::<0>(),
         initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
-        reason: 37,
+        reason: oer_protocols_ieee80211_wire::status::ReasonCode::new(37),
     }));
     receiver.ingest(clock.now(), frame(3, 4), gap).unwrap();
     let (bank, release) = receiver.stop();

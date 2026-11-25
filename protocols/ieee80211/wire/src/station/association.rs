@@ -3,6 +3,7 @@
 use super::*;
 use crate::address::OwnAddress;
 use crate::management::AidField;
+use crate::status::StatusCode;
 use oer_portable_wire::PrefixLength;
 use oer_protocols_ieee802_wire::Eui48;
 
@@ -315,7 +316,7 @@ pub enum AssociationRequestError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AssociationResponse {
     pub capability_info: crate::management::CapabilityInformation,
-    pub status_code: u16,
+    pub status_code: StatusCode,
     pub association_id: AidField,
     /// An HT Capabilities element of its 26 octets.
     pub ht_capability: crate::scan::ElementPresence,

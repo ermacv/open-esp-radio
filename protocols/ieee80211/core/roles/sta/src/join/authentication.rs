@@ -2,7 +2,7 @@
 
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-use oer_protocols_ieee80211_wire::status::status_code;
+use oer_protocols_ieee80211_wire::status::StatusCode;
 use {
     oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter,
     oer_protocols_ieee80211_wire::station::{
@@ -28,7 +28,7 @@ pub struct StaAuthenticationAttempt {
 pub enum StaAuthenticationFailure {
     Timeout,
     PeerDisconnect(StaDisconnect),
-    Rejected { status_code: u16 },
+    Rejected { status_code: StatusCode },
 }
 
 /// Result of observing a management frame or expiring an attempt deadline.
@@ -119,7 +119,7 @@ impl StaAuthenticationExchange {
             return StaAuthenticationEvent::Irrelevant(self);
         };
         let runtime = self.finish_attempt();
-        if response.status_code == status_code::SUCCESS {
+        if response.status_code == StatusCode::SUCCESS {
             StaAuthenticationEvent::Authenticated {
                 attempt: runtime.attempts_started,
             }

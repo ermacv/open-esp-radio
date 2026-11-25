@@ -36,7 +36,7 @@ fn authentication_response(status_code: u16) -> [u8; 30] {
     frame[4..10].copy_from_slice(&LOCAL);
     frame[10..16].copy_from_slice(&BSSID);
     frame[16..22].copy_from_slice(&BSSID);
-    frame[26..28].copy_from_slice(&OPEN_SYSTEM_RESPONSE_SEQUENCE.to_le_bytes());
+    frame[26..28].copy_from_slice(&2_u16.to_le_bytes());
     frame[28..30].copy_from_slice(&status_code.to_le_bytes());
     frame
 }
@@ -197,8 +197,8 @@ fn sae_authentication_frames_round_trip() {
         )
         .unwrap(),
         sequence_number: seq(0x123),
-        transaction: SAE_COMMIT_TRANSACTION,
-        status_code: 126,
+        transaction: crate::management::AuthenticationTransaction::SAE_COMMIT,
+        status_code: crate::status::StatusCode::SAE_HASH_TO_ELEMENT,
         body: &body,
     }
     .encode(&mut output)
@@ -216,8 +216,8 @@ fn sae_authentication_frames_round_trip() {
     assert_eq!(
         parse_sae_authentication(&reply[..length], Eui48::new(LOCAL), Eui48::new(BSSID)),
         Some(SaeAuthentication {
-            transaction: SAE_CONFIRM_TRANSACTION,
-            status_code: 126,
+            transaction: crate::management::AuthenticationTransaction::SAE_CONFIRM,
+            status_code: crate::status::StatusCode::SAE_HASH_TO_ELEMENT,
             body: &body,
         })
     );
@@ -233,12 +233,44 @@ fn parses_only_matching_open_authentication_response() {
     let frame = authentication_response(17);
     assert_eq!(
         parse_open_authentication_response(&frame, Eui48::new(LOCAL), Eui48::new(BSSID)),
-        Some(OpenAuthenticationResponse { status_code: 17 })
+        Some(OpenAuthenticationResponse {
+            status_code: crate::status::StatusCode::DENIED_NO_MORE_STAS
+        })
     );
     assert_eq!(
         parse_open_authentication_response(&frame, Eui48::new([0; 6]), Eui48::new(BSSID)),
         None
     );
+}
+
+/// Each field that names the exchange refuses the frame alone.
+#[test]
+fn an_authentication_of_another_exchange_is_not_read() {
+    // Frame Control, Address 1 to 3, algorithm, transaction.
+    for (octet, sae) in [
+        (0, true),
+        (4, true),
+        (10, true),
+        (16, true),
+        (24, true),
+        (26, false),
+    ] {
+        let mut open = authentication_response(0);
+        open[octet] ^= 0x10;
+        assert_eq!(
+            parse_open_authentication_response(&open, Eui48::new(LOCAL), Eui48::new(BSSID)),
+            None,
+            "{octet}"
+        );
+        let mut equals = authentication_response(0);
+        equals[24] = 3;
+        equals[octet] ^= 0x10;
+        assert_eq!(
+            parse_sae_authentication(&equals, Eui48::new(LOCAL), Eui48::new(BSSID)).is_none(),
+            sae,
+            "{octet}"
+        );
+    }
 }
 
 #[test]
@@ -264,7 +296,7 @@ fn disconnect_parser_checks_receiver_bss_geometry_and_protection() {
         frame[24..26].copy_from_slice(&7_u16.to_le_bytes());
         let expected = Some(StaDisconnect {
             kind,
-            reason_code: 7,
+            reason_code: crate::status::ReasonCode::INVALID_CLASS3_FRAME,
         });
         assert_eq!(parse_sta_disconnect(&frame, local, bssid), expected);
         let mut broadcast = frame;
@@ -591,7 +623,7 @@ fn parses_association_response_and_masks_aid() {
     ]);
     let response =
         parse_association_response(&frame[..58], Eui48::new(LOCAL), Eui48::new(BSSID)).unwrap();
-    assert_eq!(response.status_code, 0);
+    assert_eq!(response.status_code, crate::status::StatusCode::SUCCESS);
     assert_eq!(response.association_id.aid().get(), 42);
     assert_eq!(
         response.ht_capability,
@@ -680,8 +712,8 @@ fn station_encoders_admit_complete_capacity_before_writing() {
         source,
         bssid,
         sequence_number,
-        transaction: 1,
-        status_code: 0,
+        transaction: crate::management::AuthenticationTransaction::new(1),
+        status_code: crate::status::StatusCode::SUCCESS,
         body: &[1, 2, 3],
     };
     type Encoder<'a> = dyn Fn(&mut [u8]) -> Result<usize, StationFrameError> + 'a;
@@ -873,7 +905,7 @@ fn wmm_is_accepted_by_a_wmm_element_ht_or_he_alone() {
     use crate::scan::ElementPresence::{Absent, Present};
     let response = |ht_capability, wmm_element, he| AssociationResponse {
         capability_info: crate::management::CapabilityInformation::from_bytes([0; 2]),
-        status_code: 0,
+        status_code: crate::status::StatusCode::SUCCESS,
         association_id: crate::management::AidField::from_bytes([1, 0xc0]),
         ht_capability,
         he,
@@ -896,7 +928,7 @@ fn a_response_matches_its_security_by_privacy() {
     let response = |privacy| AssociationResponse {
         capability_info: crate::management::CapabilityInformation::from_bytes([0; 2])
             .with_privacy(privacy),
-        status_code: 0,
+        status_code: crate::status::StatusCode::SUCCESS,
         association_id: crate::management::AidField::from_bytes([1, 0xc0]),
         ht_capability: Absent,
         he: ResponseHeElements::NONE,

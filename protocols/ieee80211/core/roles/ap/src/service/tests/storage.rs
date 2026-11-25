@@ -13,7 +13,7 @@ fn retirement_returns_the_table_without_secrets_and_preserves_its_frontier() {
                 oer_portable_time::Instant::from_micros(1)
             )
             .unwrap(),
-        status_code::SUCCESS,
+        StatusCode::SUCCESS,
     );
     let old = service.peer_status(PEER).unwrap().association_identity();
     assert!(service.storage().pmksa.find(PEER, SAE_PMKID).is_some());
@@ -54,7 +54,7 @@ fn dropping_an_active_service_clears_its_caller_placed_secrets() {
                     oer_portable_time::Instant::from_micros(1)
                 )
                 .unwrap(),
-            status_code::SUCCESS,
+            StatusCode::SUCCESS,
         );
         assert!(service.storage().pmksa.find(PEER, SAE_PMKID).is_some());
         service.storage().generation
@@ -130,7 +130,7 @@ fn the_last_generation_is_usable_and_exhaustion_preserves_the_live_peer_and_pmks
     let now = oer_portable_time::Instant::from_micros(1);
     assert_eq!(
         service.authenticate_sae(PEER, Pmk::from_bytes(SAE_PMK), SAE_PMKID, now),
-        Ok(status_code::SUCCESS)
+        Ok(StatusCode::SUCCESS)
     );
     let binding = service.bind_peer(PEER).unwrap();
     let status = service.peer_status(PEER).unwrap();

@@ -382,7 +382,7 @@ struct World<'id, const G: usize = 2> {
     /// queued.
     outcomes: std::collections::VecDeque<(Outcome, bool)>,
     /// The reason codes of the Deauthentications sent.
-    deauthentications: Vec<u16>,
+    deauthentications: Vec<ReasonCode>,
     /// Each EAPOL frame's Protected bit and whether it went under the key.
     eapol: Vec<(bool, bool)>,
     /// Every frame the station sent, in its buffer.
@@ -645,7 +645,7 @@ struct Record<'w> {
     frames: &'w mut Vec<Vec<u8>>,
     seen: &'w mut Vec<Seen>,
     eapol: &'w mut Vec<(bool, bool)>,
-    deauthentications: &'w mut Vec<u16>,
+    deauthentications: &'w mut Vec<ReasonCode>,
     submitted: &'w mut Vec<StaTxTag>,
     packet_numbers: &'w mut Vec<u64>,
     pairwise: &'w mut Option<EngineKey>,
@@ -769,7 +769,7 @@ fn transmitted(record: Record<'_>, mut transmit: StaTransmit<'_, Caps>, sealing:
         let body = 24 + usize::from(protected) * 8;
         record
             .deauthentications
-            .push(u16::from_le_bytes([frame[body], frame[body + 1]]));
+            .push(ReasonCodeField::from_bytes([frame[body], frame[body + 1]]).code());
     }
     record.seen.push(Seen::Transmit {
         subtype,
@@ -3100,7 +3100,7 @@ fn a_handshake_that_times_out_deauthenticates_with_its_reason() {
         world.advance();
         assert_eq!(
             world.deauthentications,
-            [reason_code::FOUR_WAY_HANDSHAKE_TIMEOUT]
+            [ReasonCode::FOUR_WAY_HANDSHAKE_TIMEOUT]
         );
         assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
             StaDisconnectReason::HandshakeFailed
@@ -3127,7 +3127,7 @@ fn a_message_3_whose_key_data_does_not_unwrap_deauthenticates() {
         .authenticate(&ptk, &mut SoftwareAes128)
         .unwrap();
         world.receive(at(33), &eapol_frame(message3.as_bytes()));
-        assert_eq!(world.deauthentications, [reason_code::UNSPECIFIED]);
+        assert_eq!(world.deauthentications, [ReasonCode::UNSPECIFIED]);
     });
 }
 
@@ -3150,7 +3150,9 @@ fn the_access_points_deauthentication_is_not_answered_with_one() {
         );
         assert!(world.deauthentications.is_empty());
         assert!(seen.contains(&Seen::Notify(StaNotice::Disconnected(
-            StaDisconnectReason::Peer { reason_code: 7 }
+            StaDisconnectReason::Peer {
+                reason_code: oer_protocols_ieee80211_wire::status::ReasonCode::INVALID_CLASS3_FRAME
+            }
         ))));
     });
 }
@@ -3219,7 +3221,7 @@ fn local_or_broadcast_disconnect_from_selected_bss_ends_the_link() {
                     assert!(world.station.keys.clear());
                     assert!(world.deauthentications.is_empty());
                     assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
-                        StaDisconnectReason::Peer { reason_code: 7 }
+                        StaDisconnectReason::Peer { reason_code: oer_protocols_ieee80211_wire::status::ReasonCode::INVALID_CLASS3_FRAME }
                     ))));
                 });
             }
@@ -3233,7 +3235,7 @@ fn leaving_on_request_deauthenticates_as_leaving() {
         let (mut world, _) = wpa2_connected::<2>(mint);
         world.command(at(50), 2, StaCommand::Disconnect).unwrap();
         world.run(at(50));
-        assert_eq!(world.deauthentications, [reason_code::DEAUTH_LEAVING]);
+        assert_eq!(world.deauthentications, [ReasonCode::DEAUTH_LEAVING]);
     });
 }
 
@@ -4059,7 +4061,7 @@ fn every_control_encoder_takes_its_place_before_consuming_its_sequence() {
                                     .unwrap(),
                                 )
                                 .unwrap(),
-                                &reason_code::UNSPECIFIED.to_le_bytes(),
+                                &ReasonCodeField::of(ReasonCode::UNSPECIFIED).to_bytes(),
                                 TxPurpose::Deauthentication,
                                 if encoding == 6 {
                                     oer_protocols_ieee80211_wire::frame::FrameProtection::Protected

@@ -2,7 +2,7 @@ use super::*;
 use oer_portable_time::Clock;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_wire::block_ack::frame::{
-    ADDBA_STATUS_REQUEST_DECLINED, BlockAckAction, encode_addba_request, parse_block_ack_action,
+    BlockAckAction, encode_addba_request, parse_block_ack_action,
 };
 use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::Tid;
@@ -44,7 +44,7 @@ fn unsupported_addba_receives_an_explicit_decline() {
             responses.as_slice(),
             [BlockAckAction::AddbaResponse {
                 dialog_token,
-                status: ADDBA_STATUS_REQUEST_DECLINED,
+                status: oer_protocols_ieee80211_wire::status::StatusCode::REQUEST_DECLINED,
                 parameters,
                 ..
             }] if *dialog_token == DialogToken::new(17)
@@ -102,7 +102,7 @@ fn the_station_s_own_delba_names_it_the_agreement_s_originator() {
                 tid: tid.tid(),
                 initiator:
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
-                reason: oer_protocols_ieee80211_wire::status::reason_code::TIMEOUT,
+                reason: oer_protocols_ieee80211_wire::status::ReasonCode::TIMEOUT,
             })
         );
     }

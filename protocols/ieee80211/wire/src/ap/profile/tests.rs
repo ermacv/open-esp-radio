@@ -164,7 +164,7 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
         &mut response,
         Eui48::new(address),
         Eui48::new(peer),
-        0,
+        crate::status::StatusCode::SUCCESS,
         crate::management::AssociationId::new(1),
         seq(0),
         crate::channel::Channel::from_ghz2_4_channel(channel),

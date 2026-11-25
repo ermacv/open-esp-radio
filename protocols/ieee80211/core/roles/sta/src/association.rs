@@ -8,6 +8,7 @@ use oer_protocols_ieee80211_core_upper_mac::phy_mode::{NegotiatedPhy, PhyMode};
 use oer_protocols_ieee80211_core_upper_mac::protection::{
     BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
 };
+use oer_protocols_ieee80211_wire::status::StatusCode;
 
 /// Whether `access_point` admits an HE association: it advertises HT
 /// Capabilities, HE Capabilities with HE-MCS 0..9 both ways on one stream
@@ -255,7 +256,7 @@ pub struct StaAssociatedPeer {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaAssociatedPeerError {
     /// The Association Response refused the association with this status.
-    Rejected(u16),
+    Rejected(StatusCode),
     /// The association contains no usable non-HT rate for control/fallback.
     NoLegacyRates,
     /// An HE association whose Association Response's HE Capabilities do
@@ -335,7 +336,7 @@ impl StaAssociatedPeer {
             he::{parse_he_capabilities, parse_he_operation, parse_he_peer_state},
             protection::HtProtectionMode,
         };
-        if response.status_code != 0 {
+        if response.status_code != StatusCode::SUCCESS {
             return Err(StaAssociatedPeerError::Rejected(response.status_code));
         }
         // The A-MPDU Parameters field of the access point's HT Capabilities

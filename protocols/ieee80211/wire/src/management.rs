@@ -1,5 +1,6 @@
 //! Allocation-free IEEE 802.11 management-frame construction.
 
+use crate::status::{ReasonCode, StatusCode};
 use oer_portable_wire::PrefixLength;
 use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
 
@@ -306,46 +307,145 @@ oer_portable_wire::bitfield! {
     /// Authentication transaction sequence number (9.4.1.2), Status code
     /// (9.4.1.9).
     pub struct AuthenticationFields[6] (little) {
-        pub algorithm, with_algorithm: {u16} = 0..16;
-        pub transaction, with_transaction: {u16} = 16..32;
-        pub status_code, with_status_code: {u16} = 32..48;
+        algorithm_number, with_algorithm_number: {u16} = 0..16;
+        transaction_number, with_transaction_number: {u16} = 16..32;
+        status_number, with_status_number: {u16} = 32..48;
     }
 }
 
 impl AuthenticationFields {
     /// The fields of `algorithm`, `transaction` and `status_code`.
-    pub const fn of(algorithm: u16, transaction: u16, status_code: u16) -> Self {
+    pub const fn of(
+        algorithm: AuthenticationAlgorithm,
+        transaction: AuthenticationTransaction,
+        status_code: StatusCode,
+    ) -> Self {
         Self::from_bytes([0; 6])
-            .with_algorithm(algorithm)
-            .with_transaction(transaction)
-            .with_status_code(status_code)
+            .with_algorithm_number(algorithm.value())
+            .with_transaction_number(transaction.value())
+            .with_status_number(status_code.value())
+    }
+
+    /// The authentication algorithm.
+    pub const fn algorithm(self) -> AuthenticationAlgorithm {
+        AuthenticationAlgorithm::new(self.algorithm_number())
+    }
+
+    /// The place of the frame in its exchange.
+    pub const fn transaction(self) -> AuthenticationTransaction {
+        AuthenticationTransaction::new(self.transaction_number())
+    }
+
+    /// The status.
+    pub const fn status_code(self) -> StatusCode {
+        StatusCode::new(self.status_number())
+    }
+}
+
+/// An authentication algorithm: any number, some of them named.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.1.1 (Authentication Algorithm Number
+/// field).
+///
+/// A number is no algorithm until it is named one:
+///
+/// ```compile_fail,E0308
+/// use oer_protocols_ieee80211_wire::management::AuthenticationAlgorithm;
+/// let algorithm: AuthenticationAlgorithm = 3;
+/// ```
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct AuthenticationAlgorithm(u16);
+
+impl AuthenticationAlgorithm {
+    /// Open System.
+    pub const OPEN_SYSTEM: Self = Self(0);
+    /// Simultaneous authentication of equals.
+    pub const SAE: Self = Self(3);
+
+    /// The algorithm `value`, a named one or not.
+    pub const fn new(value: u16) -> Self {
+        Self(value)
+    }
+
+    /// Its number.
+    pub const fn value(self) -> u16 {
+        self.0
+    }
+}
+
+/// The place of an Authentication frame in its exchange. What a place is
+/// named, the algorithm says.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.1.2 (Authentication Transaction
+/// Sequence Number field); Table 9-41 (Presence of fields and elements in
+/// Authentication frames).
+///
+/// A number is no place until it is named one:
+///
+/// ```compile_fail,E0308
+/// use oer_protocols_ieee80211_wire::management::AuthenticationTransaction;
+/// let transaction: AuthenticationTransaction = 1;
+/// ```
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct AuthenticationTransaction(u16);
+
+impl AuthenticationTransaction {
+    /// Open System's request.
+    pub const OPEN_REQUEST: Self = Self(1);
+    /// Open System's response.
+    pub const OPEN_RESPONSE: Self = Self(2);
+    /// SAE's Commit.
+    pub const SAE_COMMIT: Self = Self(1);
+    /// SAE's Confirm.
+    pub const SAE_CONFIRM: Self = Self(2);
+
+    /// The place `value`, a named one or not.
+    pub const fn new(value: u16) -> Self {
+        Self(value)
+    }
+
+    /// Its number.
+    pub const fn value(self) -> u16 {
+        self.0
     }
 }
 
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.9 (Status Code field).
     pub struct StatusCodeField[2] (little) {
-        pub code, with_code: {u16} = 0..16;
+        number, with_number: {u16} = 0..16;
     }
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.7 (Reason Code field).
     pub struct ReasonCodeField[2] (little) {
-        pub code, with_code: {u16} = 0..16;
+        number, with_number: {u16} = 0..16;
     }
 }
 
 impl StatusCodeField {
     /// The field holding `code`.
-    pub const fn of(code: u16) -> Self {
-        Self::from_bytes([0; 2]).with_code(code)
+    pub const fn of(code: StatusCode) -> Self {
+        Self::from_bytes([0; 2]).with_number(code.value())
+    }
+
+    /// The code.
+    pub const fn code(self) -> StatusCode {
+        StatusCode::new(self.number())
     }
 }
 
 impl ReasonCodeField {
     /// The field holding `code`.
-    pub const fn of(code: u16) -> Self {
-        Self::from_bytes([0; 2]).with_code(code)
+    pub const fn of(code: ReasonCode) -> Self {
+        Self::from_bytes([0; 2]).with_number(code.value())
+    }
+
+    /// The code.
+    pub const fn code(self) -> ReasonCode {
+        ReasonCode::new(self.number())
     }
 }
 oer_portable_wire::bitfield! {

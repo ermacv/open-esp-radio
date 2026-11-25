@@ -136,7 +136,7 @@ fn association_runtime_accepts_only_selected_peer_response() {
                 oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([
                     0x31, 0x04
                 ]),
-            status_code: 0,
+            status_code: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
             association_id: oer_protocols_ieee80211_wire::management::AidField::from_bytes([
                 42, 0xc0
             ]),
@@ -157,13 +157,15 @@ fn association_runtime_reports_peer_disconnect_and_rejection() {
         disconnected.observe_management_frame(&deauthentication(7), at(0)),
         StaAssociationFailure::PeerDisconnect(StaDisconnect {
             kind: StaDisconnectKind::Deauthentication,
-            reason_code: 7,
+            reason_code: oer_protocols_ieee80211_wire::status::ReasonCode::INVALID_CLASS3_FRAME,
         }),
     );
     let (rejected, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     failed(
         rejected.observe_management_frame(&association_response(17), at(0)),
-        StaAssociationFailure::Rejected { status_code: 17 },
+        StaAssociationFailure::Rejected {
+            status_code: oer_protocols_ieee80211_wire::status::StatusCode::DENIED_NO_MORE_STAS,
+        },
     );
 }
 
@@ -211,7 +213,9 @@ fn a_long_or_unnamed_temporary_refusal_ends_the_association() {
     let (unnamed, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     failed(
         unnamed.observe_management_frame(&association_response(30), at(0)),
-        StaAssociationFailure::Rejected { status_code: 30 },
+        StaAssociationFailure::Rejected {
+            status_code: oer_protocols_ieee80211_wire::status::StatusCode::REFUSED_TEMPORARILY,
+        },
     );
 }
 
@@ -243,7 +247,7 @@ fn disconnect_during_comeback_consumes_the_owner_and_keeps_accounting() {
         runtime.observe_management_frame(&deauthentication(8), at(2)),
         StaAssociationFailure::PeerDisconnect(StaDisconnect {
             kind: StaDisconnectKind::Deauthentication,
-            reason_code: 8,
+            reason_code: oer_protocols_ieee80211_wire::status::ReasonCode::new(8),
         }),
     );
 }

@@ -14,7 +14,7 @@ use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_protocols_ieee80211_wire::{
     block_ack::frame::{encode_addba_request, encode_block_ack_request, parse_block_ack_action},
     frame::{MacHeader, QosControl},
-    status::status_code,
+    status::StatusCode,
 };
 use std::vec::Vec;
 
@@ -302,7 +302,7 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
         } => {
             assert_eq!(
                 (status, parameters.tid()),
-                (status_code::SUCCESS, Tid::constant::<3>())
+                (StatusCode::SUCCESS, Tid::constant::<3>())
             );
         }
         other => panic!("expected an ADDBA Response, got {other:?}"),
@@ -349,7 +349,7 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
         BlockAckAction::AddbaResponse {
             status, parameters, ..
         } => {
-            assert_eq!((status, parameters.window()), (status_code::SUCCESS, 16));
+            assert_eq!((status, parameters.window()), (StatusCode::SUCCESS, 16));
         }
         other => panic!("expected an ADDBA Response, got {other:?}"),
     }
@@ -394,7 +394,7 @@ fn a_station_without_agreements_declines_through_the_reply_queue() {
     assert_eq!(reply.place, ReplyPlace::Queued);
     match parse_block_ack_action(&reply.body).unwrap() {
         BlockAckAction::AddbaResponse { status, .. } => {
-            assert_eq!(status, status_code::REQUEST_DECLINED);
+            assert_eq!(status, StatusCode::REQUEST_DECLINED);
         }
         other => panic!("expected an ADDBA Response, got {other:?}"),
     }
