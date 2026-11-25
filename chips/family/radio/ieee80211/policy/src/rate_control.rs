@@ -13,6 +13,7 @@
 
 use core::num::{NonZeroU16, NonZeroU32};
 
+use crate::narrow::low_octet;
 use crate::rate_record::RateScheduleRef;
 use crate::rate_schedule::schedule_state;
 use oer_portable_time::Instant;
@@ -82,16 +83,23 @@ impl AckSnrFilter {
         let midpoint = if self.latest == Self::UNINITIALIZED {
             0
         } else {
-            (i16::from(self.latest).saturating_add(i16::from(sample)) >> 1) as i8
+            // The floor of the mean (`rcUpdateAckSnr`, `srai a4, a5, 1`),
+            // which lies between the two.
+            (self.latest >> 1)
+                .wrapping_add(sample >> 1)
+                .wrapping_add(self.latest & sample & 1)
         };
         self.latest = sample;
         self.filtered = if self.filtered == Self::UNINITIALIZED {
             midpoint
         } else {
-            (i16::from(self.filtered)
+            // A weighted mean of two octets is one: the vendor's byte store
+            // (`rcUpdateAckSnr`, `sb a5, 1(a0)`) loses nothing.
+            let mean = i32::from(self.filtered)
                 .saturating_mul(3)
-                .saturating_add(i16::from(midpoint))
-                / 4) as i8
+                .saturating_add(i32::from(midpoint))
+                / 4;
+            low_octet(mean.cast_unsigned()).cast_signed()
         };
     }
 
@@ -128,16 +136,16 @@ pub struct RateControlState {
     pub reevaluate_after_us: u32,
     pub retry_state_1d: u8,
     pub retry_state_1e: u8,
-    pub maximum_schedule_index: u8,
     pub current_schedule: RateScheduleState,
-    pub legacy_schedule: RateScheduleRef,
+    /// The slowest record the walk reaches: the vendor's legacy table at its
+    /// greatest index.
+    pub floor_schedule: RateScheduleRef,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScheduleSelection {
     Unchanged,
     Selected(RateScheduleRef),
-    Invalid,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -203,14 +211,9 @@ impl AmpduRateControlState {
     const MAX_PROMOTE_COOLDOWN_US: u32 = 4_000_000;
     const VENDOR_AMPDU_FLOOR_INDEX: u8 = 8;
 
-    fn new(
-        schedule_kind: RateScheduleKind,
-        ordinary_schedule_index: u8,
-        highest_schedule_index: u8,
-    ) -> Option<Self> {
-        let ampdu_index = ordinary_schedule_index.min(Self::VENDOR_AMPDU_FLOOR_INDEX);
-        Some(Self {
-            current_schedule: crate::rate_schedule::rate_schedule(schedule_kind, ampdu_index)?,
+    const fn new(initial: RateScheduleRef, highest_schedule_index: u8) -> Self {
+        Self {
+            current_schedule: initial,
             highest_schedule_index,
             attempted_mpdu: 0,
             acknowledged_mpdu: 0,
@@ -222,7 +225,7 @@ impl AmpduRateControlState {
             filtered_success_ratio: 0,
             evaluation_count: 0,
             promotion_probe: false,
-        })
+        }
     }
 
     pub const fn current_schedule(&self) -> RateScheduleRef {
@@ -281,26 +284,37 @@ impl AmpduRateControlState {
             return AmpduRateDecision::Accumulating;
         }
 
-        let raw_success_ratio = ((self.acknowledged_mpdu << 7) / accumulated) as u8;
+        // `rcUpdateTxDoneAmpdu2+0x1b2`, `andi a3, a5, 255`.
+        let raw_success_ratio = low_octet((self.acknowledged_mpdu << 7) / accumulated);
         let rate = schedule_state(self.current_schedule).rate;
-        let ack_snr = filtered_ack_snr.unwrap_or(AckSnrFilter::UNINITIALIZED) as u8;
+        let ack_snr = filtered_ack_snr
+            .unwrap_or(AckSnrFilter::UNINITIALIZED)
+            .cast_unsigned();
         let down_threshold = ampdu_down_threshold(rate, ack_snr);
         let previous_filtered = self.filtered_success_ratio;
         let filtered_success_ratio = if previous_filtered == 0 {
-            let initial = (u16::from(down_threshold)
-                .saturating_mul(3)
-                .saturating_add(128)
-                >> 2) as u8;
+            // `rcUpdateTxDoneAmpdu2+0x1fe`, `andi a4, a0, 255`.
+            let initial = low_octet(
+                u32::from(down_threshold)
+                    .saturating_mul(3)
+                    .saturating_add(128)
+                    >> 2,
+            );
             if initial >= raw_success_ratio {
                 initial
             } else {
-                (u16::from(initial).saturating_add(u16::from(raw_success_ratio)) >> 1) as u8
+                // A mean of two octets (`+0x210`, `srai a0, a0, 1`).
+                initial.midpoint(raw_success_ratio)
             }
         } else {
-            (u16::from(previous_filtered)
-                .saturating_mul(3)
-                .saturating_add(u16::from(raw_success_ratio))
-                >> 2) as u8
+            // A weighted mean of two octets is one: the vendor's byte store
+            // (`+0x1cc`, `sb s1, 32(s0)`) loses nothing.
+            low_octet(
+                u32::from(previous_filtered)
+                    .saturating_mul(3)
+                    .saturating_add(u32::from(raw_success_ratio))
+                    >> 2,
+            )
         };
 
         self.last_evaluation_us = now_us;
@@ -414,11 +428,13 @@ const fn ampdu_rssi_margin(rate: u8, filtered_ack_snr: u8) -> u8 {
         8 => 36,
         _ => 41,
     };
-    if filtered_ack_snr == AckSnrFilter::UNINITIALIZED as u8 || filtered_ack_snr <= reference {
+    if filtered_ack_snr == AckSnrFilter::UNINITIALIZED.cast_unsigned()
+        || filtered_ack_snr <= reference
+    {
         return 0;
     }
-    let scaled =
-        (((filtered_ack_snr.saturating_sub(reference)) >> 1) as u16).saturating_mul(3) as u8;
+    // `rssi_margin+0x38..+0x44`: the product's low octet (`andi a5, a5, 255`).
+    let scaled = (filtered_ack_snr.saturating_sub(reference) >> 1).wrapping_mul(3);
     if scaled > 32 { 32 } else { scaled }
 }
 
@@ -457,10 +473,11 @@ impl RateControlState {
     /// penalty is truncated to a byte before it is accumulated, retry pressure
     /// is a wrapping byte, and large counters are halved together.
     pub fn update_tx_per(&mut self, retries: u32) -> TxPerUpdate {
-        let penalty = if u32::from(self.current_schedule.retry_limit) < retries {
-            self.current_schedule.retry_limit.wrapping_add(2)
-        } else {
-            retries.wrapping_add(1) as u8
+        let limit = self.current_schedule.retry_limit;
+        let penalty = match u8::try_from(retries) {
+            // `rcTxUpdatePer+0x14`, `andi a5, a5, 255`.
+            Ok(retries) if retries <= limit => retries.wrapping_add(1),
+            _ => limit.wrapping_add(2),
         };
 
         if self.transmissions.wrapping_add(1) >= Self::COUNTER_RESCALE_LIMIT {
@@ -493,16 +510,13 @@ impl RateControlState {
         self.retry_state_1e = 0;
         self.retry_pressure = 0;
 
-        let next_index = u16::from(self.current_schedule.reference.index()) + 1;
-        let selected = if u16::from(self.maximum_schedule_index) < next_index {
-            crate::rate_schedule::offset_schedule(self.legacy_schedule, self.maximum_schedule_index)
-        } else {
-            crate::rate_schedule::offset_schedule(self.current_schedule.reference, 1)
-        };
-        let schedule = match selected {
-            Some(schedule) => ScheduleSelection::Selected(schedule),
-            None => ScheduleSelection::Invalid,
-        };
+        // `rcLowerSched+0x14..+0x2c` and `+0x62`: the next record while its
+        // index is no greater than the maximum, or the legacy table's at the
+        // maximum. Both are of the floor's arena.
+        let schedule = ScheduleSelection::Selected(crate::rate_schedule::lowered_toward(
+            self.current_schedule.reference,
+            self.floor_schedule,
+        ));
         TxPerUpdate { schedule }
     }
 }
@@ -686,11 +700,13 @@ impl StaLinkMetric {
 /// vendor 0x98-byte record or its C offsets.
 #[derive(Debug, Eq, PartialEq)]
 pub struct StaRateControlAssociation {
-    selection: PhyModeSelection,
+    fallback: RateScheduleRef,
+    schedule_count: u8,
     control_schedule: RateScheduleRef,
     beamforming_report: BeamformingReportRate,
     ack_snr: AckSnrFilter,
     runtime: RateControlState,
+    /// The A-MPDU walk of an HT or HE link; no other link has one.
     ampdu_runtime: Option<AmpduRateControlState>,
 }
 
@@ -720,15 +736,12 @@ impl StaRateControlAssociation {
             input.he_low_metric_report,
         );
         let current = schedule_state(selection.current);
-        let ampdu_runtime = selection.ampdu_limit_rate.and_then(|_| {
-            AmpduRateControlState::new(
-                selection.current.kind(),
-                selection.current.index(),
-                selection.highest_index,
-            )
-        });
+        let ampdu_runtime = selection
+            .ampdu
+            .map(|initial| AmpduRateControlState::new(initial, selection.highest_index));
         Self {
-            selection,
+            fallback: selection.fallback,
+            schedule_count: selection.schedule_count,
             control_schedule: control_schedule(input.phy, input.p2p),
             beamforming_report,
             ack_snr: AckSnrFilter::new(),
@@ -740,13 +753,12 @@ impl StaRateControlAssociation {
                 reevaluate_after_us: 0,
                 retry_state_1d: 0,
                 retry_state_1e: 0,
-                maximum_schedule_index: selection.maximum_index,
                 current_schedule: RateScheduleState {
                     reference: selection.current,
                     retry_limit: current.retry_limit,
                     adaptive: current.adaptive,
                 },
-                legacy_schedule: selection.legacy,
+                floor_schedule: selection.floor,
             },
             ampdu_runtime,
         }
@@ -763,19 +775,15 @@ impl StaRateControlAssociation {
     }
 
     pub const fn fallback_schedule(&self) -> RateScheduleRef {
-        self.selection.fallback
+        self.fallback
     }
 
     pub const fn maximum_schedule_index(&self) -> u8 {
-        self.selection.maximum_index
+        self.runtime.floor_schedule.index()
     }
 
     pub const fn schedule_count(&self) -> u8 {
-        self.selection.schedule_count
-    }
-
-    pub const fn ampdu_limit_rate(&self) -> Option<u8> {
-        self.selection.ampdu_limit_rate
+        self.schedule_count
     }
 
     pub const fn current_ampdu_schedule(&self) -> Option<RateScheduleRef> {
@@ -895,13 +903,14 @@ pub(crate) struct PhyModeSelection {
     pub current: RateScheduleRef,
     pub secondary: RateScheduleRef,
     pub fallback: RateScheduleRef,
-    pub legacy: RateScheduleRef,
+    /// The legacy table's record at the greatest index the walk reaches.
+    pub floor: RateScheduleRef,
     pub highest_index: u8,
-    pub maximum_index: u8,
     pub schedule_count: u8,
     pub index_map: RateIndexMap,
-    /// The rate byte used to derive the initial AMPDU limit for HT/HE.
-    pub ampdu_limit_rate: Option<u8>,
+    /// The initial A-MPDU record of HT and HE, whose rate derives the initial
+    /// A-MPDU limit.
+    pub ampdu: Option<RateScheduleRef>,
 }
 
 // Constant schedules are constructed only from literal compile-time values.
@@ -1100,124 +1109,118 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
     let highest = highest_rate_schedule(input);
     let lora_fallback = LORA_1;
 
-    let (current, secondary, legacy, maximum_index, schedule_count, index_map, ampdu_limit_rate) =
-        match input.phy_type {
-            0 => {
-                let current = if input.use_supplied_highest_rate {
-                    highest
+    let (current, secondary, floor, schedule_count, index_map, ampdu) = match input.phy_type {
+        0 => {
+            let current = if input.use_supplied_highest_rate {
+                highest
+            } else {
+                DOT11B_3
+            };
+            (
+                current,
+                DOT11B_3,
+                if input.long_range_rates.present() {
+                    literal_schedule!(RateScheduleKind::Dot11B, 5)
                 } else {
                     DOT11B_3
-                };
-                (
-                    current,
-                    DOT11B_3,
-                    DOT11B_0,
-                    if input.long_range_rates.present() {
-                        5
-                    } else {
-                        3
-                    },
-                    6,
-                    RateIndexMap::Dot11B,
-                    None,
-                )
-            }
-            1 => {
-                let current = if input.use_supplied_highest_rate {
-                    highest
-                } else if input.metric <= 11 {
-                    if input.p2p.is_p2p() {
-                        P2P_DOT11G_7
-                    } else {
-                        literal_schedule!(RateScheduleKind::Dot11G, 10)
-                    }
-                } else if input.metric <= 16 {
-                    g_schedule!(input.p2p, 5)
-                } else if input.metric <= 21 {
-                    g_schedule!(input.p2p, 3)
-                } else if input.metric < 30 {
-                    g_schedule!(input.p2p, 2)
-                } else {
-                    g_schedule!(input.p2p, 0)
-                };
-                (
-                    current,
-                    if input.p2p.is_p2p() {
-                        P2P_DOT11G_7
-                    } else {
-                        BASIC_OFDM_0
-                    },
-                    g_schedule!(input.p2p, 0),
-                    if input.p2p.is_p2p() {
-                        7
-                    } else if input.long_range_rates.present() {
-                        12
-                    } else {
-                        10
-                    },
-                    if input.p2p.is_p2p() { 8 } else { 13 },
-                    RateIndexMap::Dot11G,
-                    None,
-                )
-            }
-            2..=5 => {
-                let he = input.he_type == 7;
-                let metric_schedule = ht_metric_schedule(
-                    input.metric,
-                    if he { HtFamily::He } else { HtFamily::Ht },
-                    highest,
-                );
-                let current = if input.use_supplied_highest_rate {
-                    highest
-                } else if input.p2p.is_p2p() && metric_schedule.index() > 7 {
-                    ht_schedule!(he, 7)
-                } else {
-                    metric_schedule
-                };
-                let limit_schedule = if current.index() > 8 {
-                    ht_schedule!(he, 8)
-                } else {
-                    current
-                };
-                (
-                    current,
-                    if input.p2p.is_p2p() {
-                        P2P_DOT11G_7
-                    } else {
-                        BASIC_OFDM_0
-                    },
-                    ht_schedule!(he, 0),
-                    if input.long_range_rates.present() {
-                        if he { 15 } else { 13 }
-                    } else if he {
-                        13
-                    } else {
-                        11
-                    },
-                    if he { 16 } else { 14 },
-                    if he {
-                        RateIndexMap::Dot11Ax
-                    } else {
-                        RateIndexMap::Dot11N
-                    },
-                    Some(schedule_state(limit_schedule).rate),
-                )
-            }
-            6 => (LORA_0, LORA_0, LORA_0, 1, 2, RateIndexMap::Lora, None),
-            _ => (
-                DOT11B_3,
-                DOT11B_3,
-                DOT11B_0,
-                if input.long_range_rates.present() {
-                    5
-                } else {
-                    3
                 },
                 6,
                 RateIndexMap::Dot11B,
                 None,
-            ),
-        };
+            )
+        }
+        1 => {
+            let current = if input.use_supplied_highest_rate {
+                highest
+            } else if input.metric <= 11 {
+                if input.p2p.is_p2p() {
+                    P2P_DOT11G_7
+                } else {
+                    literal_schedule!(RateScheduleKind::Dot11G, 10)
+                }
+            } else if input.metric <= 16 {
+                g_schedule!(input.p2p, 5)
+            } else if input.metric <= 21 {
+                g_schedule!(input.p2p, 3)
+            } else if input.metric < 30 {
+                g_schedule!(input.p2p, 2)
+            } else {
+                g_schedule!(input.p2p, 0)
+            };
+            (
+                current,
+                if input.p2p.is_p2p() {
+                    P2P_DOT11G_7
+                } else {
+                    BASIC_OFDM_0
+                },
+                if input.p2p.is_p2p() {
+                    P2P_DOT11G_7
+                } else if input.long_range_rates.present() {
+                    literal_schedule!(RateScheduleKind::Dot11G, 12)
+                } else {
+                    literal_schedule!(RateScheduleKind::Dot11G, 10)
+                },
+                if input.p2p.is_p2p() { 8 } else { 13 },
+                RateIndexMap::Dot11G,
+                None,
+            )
+        }
+        2..=5 => {
+            let he = input.he_type == 7;
+            let metric_schedule = ht_metric_schedule(
+                input.metric,
+                if he { HtFamily::He } else { HtFamily::Ht },
+                highest,
+            );
+            let current = if input.use_supplied_highest_rate {
+                highest
+            } else if input.p2p.is_p2p() && metric_schedule.index() > 7 {
+                ht_schedule!(he, 7)
+            } else {
+                metric_schedule
+            };
+            let limit_schedule = if current.index() > 8 {
+                ht_schedule!(he, 8)
+            } else {
+                current
+            };
+            (
+                current,
+                if input.p2p.is_p2p() {
+                    P2P_DOT11G_7
+                } else {
+                    BASIC_OFDM_0
+                },
+                match (he, input.long_range_rates.present()) {
+                    (true, true) => literal_schedule!(RateScheduleKind::Dot11Ax, 15),
+                    (true, false) => literal_schedule!(RateScheduleKind::Dot11Ax, 13),
+                    (false, true) => literal_schedule!(RateScheduleKind::Dot11N, 13),
+                    (false, false) => literal_schedule!(RateScheduleKind::Dot11N, 11),
+                },
+                if he { 16 } else { 14 },
+                if he {
+                    RateIndexMap::Dot11Ax
+                } else {
+                    RateIndexMap::Dot11N
+                },
+                Some(limit_schedule),
+            )
+        }
+        6 => (LORA_0, LORA_0, LORA_1, 2, RateIndexMap::Lora, None),
+        _ => (
+            DOT11B_3,
+            DOT11B_3,
+            if input.long_range_rates.present() {
+                literal_schedule!(RateScheduleKind::Dot11B, 5)
+            } else {
+                DOT11B_3
+            },
+            6,
+            RateIndexMap::Dot11B,
+            None,
+        ),
+    };
 
     PhyModeSelection {
         current,
@@ -1227,12 +1230,11 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
         } else {
             secondary
         },
-        legacy,
+        floor,
         highest_index: highest.index(),
-        maximum_index,
         schedule_count,
         index_map,
-        ampdu_limit_rate,
+        ampdu,
     }
 }
 
@@ -1245,7 +1247,10 @@ pub const fn beamforming_report_rate(
     quarter_noise_floor: i32,
     features: HeLowMetricReportFeatures,
 ) -> BeamformingReportRate {
-    let metric = filtered_ack_snr.wrapping_sub(quarter_noise_floor as u8) as i8;
+    // `rcLowerSched+0x50..+0x52`, `slli a1, a1, 24; srai a1, a1, 24`.
+    let metric = filtered_ack_snr
+        .wrapping_sub(low_octet(quarter_noise_floor.cast_unsigned()))
+        .cast_signed();
     beamforming_report_rate_for_metric(metric as i32, features)
 }
 

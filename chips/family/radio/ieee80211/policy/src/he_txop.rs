@@ -3,6 +3,7 @@
 
 use core::num::NonZeroU64;
 
+use crate::narrow::low_halfword;
 use oer_protocols_ieee80211_core_upper_mac::HeTxopRtsBudget;
 use oer_protocols_ieee80211_core_upper_mac::protection::{
     HePacketPadding, HeTxopDurationRtsThreshold,
@@ -132,17 +133,18 @@ pub fn maximum_unprotected_apep_bytes(
     if budget <= overhead {
         return 0;
     }
-    let symbols = whole_symbols(budget.wrapping_sub(overhead), symbol) as i32;
-    let mut bits: i32 = data_bits;
+    let symbols = whole_symbols(budget.wrapping_sub(overhead), symbol).cast_signed();
+    let mut bits: i64 = data_bits;
     if rate.dcm() {
         bits /= 2;
     }
     // bits <= 1560 and symbols < 2405: the product and subtraction fit
-    // i32, even when zero whole symbols leave -22 SERVICE/tail bits.
-    // The signed shift and final u16 cast intentionally retain the vendor
-    // halfword's low 16 bits. A positive sub-symbol budget produces 65533;
+    // an i64, even when zero whole symbols leave -22 SERVICE/tail bits.
+    // The signed shift and the halfword store (`sh a2, 0(a5)`,
+    // `ic_set_he_rts_threshold_bytes_tab+0x12a`) keep the vendor's low 16
+    // bits. A positive sub-symbol budget produces 65533;
     // clamping that result to zero would change the recovered policy.
-    (bits.wrapping_mul(symbols).wrapping_sub(22) >> 3) as u16
+    low_halfword(bits.wrapping_mul(symbols).wrapping_sub(22) >> 3)
 }
 
 /// Round a positive fixed-point value to binary32's 24 significant bits.

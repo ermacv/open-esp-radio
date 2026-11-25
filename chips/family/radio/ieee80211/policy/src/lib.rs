@@ -1,6 +1,12 @@
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
-#![expect(clippy::cast_possible_wrap, reason = "the final crates cleaned")]
-#![expect(clippy::cast_sign_loss, reason = "the final crates cleaned")]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(clippy::let_underscore_must_use, clippy::let_underscore_untyped)]
@@ -56,6 +62,7 @@ pub mod classification;
 pub mod connection_coex;
 pub mod he_txop;
 pub mod lmac;
+mod narrow;
 pub mod rate_code;
 pub mod rate_control;
 pub mod rate_record;
