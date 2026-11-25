@@ -473,7 +473,7 @@ mod tests {
         format!(
             "schema = 2\nid = \"{id}\"\nfamily = \"{family}\"\nisa = \"rv32imac\"\n\
              rust-target = \"riscv32imac-unknown-none-elf\"\nboot = \"staged\"\n\
-             espflash-chip = \"x\"\nrevisions = []\n[properties]\nwifi-bands = []\n\
+             espflash-chip = \"x\"\nrevisions = []\nobserved-functions = []\n[properties]\nwifi-bands = []\n\
              bluetooth = []\nieee802154 = false\ncores = 1\n"
         )
     }
