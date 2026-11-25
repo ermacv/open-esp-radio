@@ -192,7 +192,7 @@ impl Measurements {
                     )
                 })?
                 .attributes;
-            let kind = match (attributes.cached, attributes.writable) {
+            let kind = match (attributes.cached(), attributes.writable()) {
                 (false, _) => "sram",
                 (true, true) => "psram",
                 (true, false) => "flash",

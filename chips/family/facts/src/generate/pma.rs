@@ -3,7 +3,7 @@
 //! the straight-line assembly its generated entry runs.
 
 use super::*;
-use crate::{PmaAccess, PmaCsrs, PmaRange};
+use crate::{PmaAccess, PmaCsrs, PmaRange, PmaRegion, RegionAccess};
 
 /// One programmed entry: its byte end (the address CSR holds it shifted) and
 /// configuration. The entry covers the previous entry's end, or zero, up to
@@ -73,14 +73,14 @@ impl Pma {
             if start < previous || end <= start {
                 return Err(format!(
                     "PMA range `{}` {start:#010x}..{end:#010x} is empty or not above the previous range",
-                    range.name
+                    range.name()
                 )
                 .into());
             }
             if !start.is_multiple_of(granule) || !end.is_multiple_of(granule) {
                 return Err(format!(
                     "PMA range `{}` bounds are not multiples of {granule} bytes",
-                    range.name
+                    range.name()
                 )
                 .into());
             }
@@ -92,7 +92,7 @@ impl Pma {
                 });
             }
             entries.push(PmaEntry {
-                name: range.name.clone(),
+                name: range.name().into(),
                 end,
                 config: configuration(access, cached),
             });
@@ -163,14 +163,8 @@ impl Pma {
 
 /// A range's bounds, access and cacheability.
 fn resolve(range: &PmaRange, memory: &crate::Memory) -> Result<(u32, u32, PmaAccess, bool)> {
-    match (
-        &range.region,
-        range.start,
-        range.end,
-        range.access,
-        range.cached,
-    ) {
-        (Some(region), None, None, None, None) => {
+    match range {
+        PmaRange::Region(PmaRegion { name, region }) => {
             let (bounds, attributes) = if region == "internal-sram" {
                 (memory.internal_sram, memory.attributes.get("sram").copied())
             } else {
@@ -179,38 +173,26 @@ fn resolve(range: &PmaRange, memory: &crate::Memory) -> Result<(u32, u32, PmaAcc
                     .into_iter()
                     .find(|mapped| mapped.name == region)
                     .ok_or_else(|| {
-                        format!(
-                            "PMA range `{}` names no mapped region `{region}`",
-                            range.name
-                        )
+                        format!("PMA range `{name}` names no mapped region `{region}`")
                     })?;
                 (mapped.region, Some(mapped.attributes))
             };
-            let attributes = attributes.ok_or_else(|| {
-                format!("PMA range `{}`: `{region}` has no attributes", range.name)
-            })?;
-            let access = match (attributes.writable, attributes.executable) {
-                (true, true) => PmaAccess::Rwx,
-                (true, false) => PmaAccess::Rw,
-                (false, true) => PmaAccess::Rx,
-                (false, false) => PmaAccess::R,
+            let attributes = attributes
+                .ok_or_else(|| format!("PMA range `{name}`: `{region}` has no attributes"))?;
+            let access = match attributes.access {
+                RegionAccess::Rwx => PmaAccess::Rwx,
+                RegionAccess::Rx => PmaAccess::Rx,
             };
-            Ok((bounds.origin(), bounds.end(), access, attributes.cached))
+            Ok((bounds.origin(), bounds.end(), access, attributes.cached()))
         }
-        (None, Some(start), Some(end), Some(access), Some(cached)) => {
-            Ok((start, end, access, cached))
-        }
-        _ => Err(format!(
-            "PMA range `{}` names either a `region` or its `start`, `end`, `access` and `cached`",
-            range.name
-        )
-        .into()),
+        PmaRange::Bounds(bounds) => Ok((bounds.start, bounds.end, bounds.access, bounds.cached)),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::PmaBounds;
     use crate::tests::tracked;
 
     #[test]
@@ -220,8 +202,8 @@ mod tests {
         let entries = usize::from(pma.csrs.entries);
         // Every entry disabled before any is programmed.
         for (entry, write) in writes.iter().take(entries).enumerate() {
-            assert_eq!(write.index, entry as u32);
-            assert_eq!(write.csr, pma.csrs.cfg_csr + entry as u16);
+            assert_eq!(write.index, u32::try_from(entry).unwrap());
+            assert_eq!(write.csr, pma.csrs.cfg_csr + u16::try_from(entry).unwrap());
             assert_eq!(write.value, pma.csrs.disabled);
         }
         // Then each entry's address before its configuration, ascending.
@@ -229,8 +211,14 @@ mod tests {
         assert_eq!(programmed.len(), 2 * pma.entries.len());
         let mut end = 0;
         for (entry, pair) in programmed.chunks_exact(2).enumerate() {
-            assert_eq!(pair[0].csr, pma.csrs.addr_csr + entry as u16);
-            assert_eq!(pair[1].csr, pma.csrs.cfg_csr + entry as u16);
+            assert_eq!(
+                pair[0].csr,
+                pma.csrs.addr_csr + u16::try_from(entry).unwrap()
+            );
+            assert_eq!(
+                pair[1].csr,
+                pma.csrs.cfg_csr + u16::try_from(entry).unwrap()
+            );
             let address = pair[0].value << pma.csrs.address_shift;
             assert!(address > end, "ascending top-of-range chain");
             end = address;
@@ -293,20 +281,31 @@ mod tests {
             Pma::of(&facts)
         };
         assert!(edit(&|ranges| ranges.reverse()).is_err());
-        assert!(edit(&|ranges| ranges[0].start = Some(0x2010_0001)).is_err());
-        assert!(edit(&|ranges| ranges[1].start = Some(0)).is_err());
-        assert!(edit(&|ranges| ranges[1].region = Some("nowhere".into())).is_err());
+        let bounds = |start: u32, end: u32| {
+            PmaRange::Bounds(PmaBounds {
+                name: "added".into(),
+                start,
+                end,
+                access: PmaAccess::Rw,
+                cached: false,
+            })
+        };
+        assert!(edit(&|ranges| ranges.insert(0, bounds(0x2010_0001, 0x2010_0101))).is_err());
+        assert!(edit(&|ranges| ranges.insert(1, bounds(0, 0x100))).is_err());
         assert!(
             edit(&|ranges| {
-                let last = ranges.last().unwrap().clone();
+                ranges.push(PmaRange::Region(PmaRegion {
+                    name: "added".into(),
+                    region: "nowhere".into(),
+                }));
+            })
+            .is_err()
+        );
+        assert!(
+            edit(&|ranges| {
                 for step in 1..12 {
-                    let mut range = last.clone();
-                    range.region = None;
-                    range.start = Some(0x6000_0000 + step * 0x100_0000);
-                    range.end = Some(0x6000_0000 + step * 0x100_0000 + 0x10);
-                    range.access = Some(PmaAccess::Rw);
-                    range.cached = Some(false);
-                    ranges.push(range);
+                    let start = 0x6000_0000 + step * 0x100_0000;
+                    ranges.push(bounds(start, start + 0x10));
                 }
             })
             .is_err()
@@ -314,5 +313,30 @@ mod tests {
         let mut missing = base.clone();
         missing.pma = None;
         assert!(Pma::of(&missing).is_err());
+    }
+
+    #[test]
+    fn a_range_in_a_file_names_one_of_its_two_shapes() {
+        let range = |text: &str| toml::from_str::<PmaRange>(text);
+        let bounds = "name = 'a'\nstart = 0\nend = 16\naccess = 'rw'\n";
+        assert_eq!(
+            range("name = 'a'\nregion = 'sram'\n"),
+            Ok(PmaRange::Region(PmaRegion {
+                name: "a".into(),
+                region: "sram".into(),
+            }))
+        );
+        assert_eq!(
+            range(&format!("{bounds}cached = false\n")).map(|range| range.name().into()),
+            Ok(alloc::string::String::from("a"))
+        );
+        for text in [
+            "name = 'a'\n".into(),
+            bounds.into(),
+            format!("{bounds}cached = false\nregion = 'sram'\n"),
+        ] {
+            let error = range(&text).expect_err("neither shape");
+            assert!(error.to_string().contains("either a `region`"), "{error}");
+        }
     }
 }

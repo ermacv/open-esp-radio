@@ -53,13 +53,14 @@ the chip layer to the ISA and the family.
 - A rule with `per-line = true` numbers `{n}` by every vector-entry line, 1
   to `[interrupts] lines` less one.
 - `rust-target` is checked against `isa`; `[core-start]` is named by exactly
-  the chips with more than one core; SRAM lies below PSRAM, flash and PSRAM
-  in the shared `cache-window` of a chip that has one, and the boot chain's
-  loader and retained tail in the bootstrap's SRAM and the retained memory.
+  the chips with more than one core; SRAM lies below PSRAM, and the boot
+  chain's loader and retained tail in the bootstrap's SRAM and the retained
+  memory.
 - `[memory.attributes]` names exactly the regions the chip maps (`sram`,
-  `flash-xip`, and `psram` and `retained` where mapped), each `executable`,
-  `cached`, `dma` (in the radio's DMA window), `retained` (no reset entry
-  initializes it) and `writable`; `runtime-psram` has the PSRAM's. The host
+  `flash-xip`, and `psram` and `retained` where mapped), each its `access`
+  (`rx` or `rwx`) and its `kind`: `dma` (in the radio's DMA window),
+  `retained` (no reset entry initializes it) or `cached`; `runtime-psram` has
+  the PSRAM's. A list a chip has nothing in is stated empty. The host
   checks classify memory by these, never by a region's name.
 - The ROM's `[rom] sram` ranges lie in the internal SRAM in address order,
   each `kept` during `download` mode only, until the `boot` chain hands over,

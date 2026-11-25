@@ -527,6 +527,7 @@ rust-target = "riscv32imac-unknown-none-elf"
 boot = "staged"
 espflash-chip = "esp32s31"
 revisions = ["test"]
+observed-functions = []
 [properties]
 wifi-bands = []
 bluetooth = []
@@ -538,9 +539,9 @@ flash-xip = { origin = 0x10000, length = 0x1000 }
 retained = { origin = 0x20000, length = 0x100 }
 task-stacks = "sram"
 [memory.attributes]
-sram = { executable = true, cached = false, dma = true, retained = false, writable = true }
-retained = { executable = true, cached = false, dma = false, retained = true, writable = true }
-flash-xip = { executable = true, cached = true, dma = false, retained = false, writable = false }
+sram = { access = "rwx", kind = "dma" }
+retained = { access = "rwx", kind = "retained" }
+flash-xip = { access = "rx", kind = "cached" }
 "#,
     )
     .unwrap();

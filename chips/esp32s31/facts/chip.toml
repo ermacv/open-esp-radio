@@ -82,10 +82,10 @@ task-stacks = "psram"
 # PSRAM), `:156-159` (`SOC_RTC_IRAM`/`SOC_RTC_DRAM`), `:167-170` (`SOC_DIRAM_*`),
 # `:177-178` (`SOC_DMA_LOW 0x2F000000`, `SOC_DMA_HIGH 0x2F080000`).
 [memory.attributes]
-sram = { executable = true, cached = false, dma = true, retained = false, writable = true }
-retained = { executable = true, cached = false, dma = false, retained = true, writable = true }
-flash-xip = { executable = true, cached = true, dma = false, retained = false, writable = false }
-psram = { executable = true, cached = true, dma = false, retained = false, writable = true }
+sram = { access = "rwx", kind = "dma" }
+retained = { access = "rwx", kind = "retained" }
+flash-xip = { access = "rx", kind = "cached" }
+psram = { access = "rwx", kind = "cached" }
 
 # What the pinned second-stage bootloader keeps for itself.
 [boot-chain]

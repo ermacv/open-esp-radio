@@ -116,13 +116,13 @@ range = [
     { range = ["__runtime_cpu{hart}_irq_stack_bottom", "__runtime_cpu{hart}_irq_stack_top"], region = "sram", per-hart = true },
 ]
 symbol = [
-    { name = "_start_trap", bytes = 4, region = "sram" },
-    { name = "_runtime_irq_h{hart}_l{n}", per-line = true, bytes = 4, region = "sram", per-hart = true },
-    { name = "_runtime_irq_exit", bytes = 4, region = "sram" },
+    { name = "_start_trap", bytes = 4, region = "sram", presence = "required" },
+    { name = "_runtime_irq_h{hart}_l{n}", per-line = true, bytes = 4, region = "sram", per-hart = true, presence = "required" },
+    { name = "_runtime_irq_exit", bytes = 4, region = "sram", presence = "required" },
     # Each hart's 64-word vector table (`vector-table-hart-slots`).
-    { name = "_runtime_mtvt", bytes-per-hart = 256, region = "sram" },
-    { name = "__rustc::rust_begin_unwind", bytes = 4, region = "sram" },
-    { name = "oer_platform_panic_hook", bytes = 4, region = "sram", optional = true },
+    { name = "_runtime_mtvt", bytes-per-hart = 256, region = "sram", presence = "required" },
+    { name = "__rustc::rust_begin_unwind", bytes = 4, region = "sram", presence = "required" },
+    { name = "oer_platform_panic_hook", bytes = 4, region = "sram", presence = "optional" },
 ]
 # Code reachable from an interrupt runs from SRAM or the mask ROM.
 interrupt-handlers = ["sram", "rom"]

@@ -121,23 +121,45 @@ impl PmaAccess {
     }
 }
 
-/// One range of a secondary hart's PMA chain: a `[memory]` region by name,
-/// with its bounds and attributes, or explicit bounds, access and
-/// cacheability.
+/// One range of a secondary hart's PMA chain.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(
+    untagged,
+    expecting = "a PMA range names either a `region` or its `start`, `end`, `access` and `cached`"
+)]
+pub enum PmaRange {
+    Region(PmaRegion),
+    Bounds(PmaBounds),
+}
+
+/// A PMA range of a `[memory]` region by name, with its bounds and
+/// attributes.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct PmaRange {
+pub struct PmaRegion {
     pub name: String,
-    #[serde(default)]
-    pub region: Option<String>,
-    #[serde(default)]
-    pub start: Option<u32>,
-    #[serde(default)]
-    pub end: Option<u32>,
-    #[serde(default)]
-    pub access: Option<PmaAccess>,
-    #[serde(default)]
-    pub cached: Option<bool>,
+    pub region: String,
+}
+
+/// A PMA range of explicit bounds, access and cacheability.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct PmaBounds {
+    pub name: String,
+    pub start: u32,
+    pub end: u32,
+    pub access: PmaAccess,
+    pub cached: bool,
+}
+
+impl PmaRange {
+    /// The range's name.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Region(range) => &range.name,
+            Self::Bounds(range) => &range.name,
+        }
+    }
 }
 
 /// The `[hart-entry]` table: what a secondary hart's generated entry sets up
@@ -266,18 +288,44 @@ impl Region {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Attributes {
-    /// The CPU fetches instructions from it.
-    pub executable: bool,
+    pub access: RegionAccess,
+    pub kind: RegionKind,
+}
+
+/// What the CPU may do in a region of the memory map.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RegionAccess {
+    /// It reads and fetches instructions.
+    Rx,
+    /// It reads, writes and fetches instructions.
+    Rwx,
+}
+
+/// What a region of the memory map is.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RegionKind {
+    /// It lies in the window the radio's DMA reaches (`SOC_DMA_LOW` to
+    /// `SOC_DMA_HIGH`), and a reset entry initializes it.
+    Dma,
+    /// No reset entry initializes it: a record there survives a reset.
+    Retained,
     /// Access goes through the cache and its MMU: code there cannot run while
     /// the cache is off.
-    pub cached: bool,
-    /// It lies in the window the radio's DMA reaches (`SOC_DMA_LOW` to
-    /// `SOC_DMA_HIGH`).
-    pub dma: bool,
-    /// No reset entry initializes it: a record there survives a reset.
-    pub retained: bool,
-    /// An image's own code writes it.
-    pub writable: bool,
+    Cached,
+}
+
+impl Attributes {
+    /// Whether access goes through the cache and its MMU.
+    pub const fn cached(self) -> bool {
+        matches!(self.kind, RegionKind::Cached)
+    }
+
+    /// Whether an image's own code writes it.
+    pub const fn writable(self) -> bool {
+        matches!(self.access, RegionAccess::Rwx)
+    }
 }
 
 /// A region of the memory map with its name, as [`Memory::region`] names it,
@@ -298,8 +346,7 @@ pub struct MappedRegion {
 /// `bootstrap_sram` is its part below what the boot chain keeps
 /// (`[boot-chain] application-sram-end`); `runtime_psram` is the PSRAM after
 /// the family's bootstrap probe page.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Memory {
     /// The chip's whole internal (HP) SRAM, the ROM's and the boot chain's
     /// reserves included.
@@ -314,19 +361,12 @@ pub struct Memory {
     pub flash_xip: Region,
     /// The module's PSRAM in the cached external RAM aperture, on a chip
     /// that maps one apart from flash.
-    #[serde(default)]
     pub psram: Option<Region>,
     /// Where a staged boot's runtime is linked.
-    #[serde(default)]
     pub runtime_psram: Option<Region>,
     /// Memory no reset entry initializes (the chip's RTC fast or LP RAM),
     /// which keeps the panic record across a reset.
-    #[serde(default)]
     pub retained: Option<Region>,
-    /// The one cache window flash and PSRAM share, on a chip whose MMU maps
-    /// both through it: `flash-xip` and the PSRAM lie inside it.
-    #[serde(default)]
-    pub cache_window: Option<Region>,
     /// The region the runtime's task stacks lie in, by [`Memory::region`]
     /// name.
     pub task_stacks: String,
@@ -381,8 +421,7 @@ impl Memory {
     }
 
     /// SRAM lies below PSRAM (the trap entries tell an interrupt stack from a
-    /// task stack by address), flash and PSRAM lie in the shared cache window
-    /// of a chip that has one, the boot chain's loader and retained tail lie
+    /// task stack by address), the boot chain's loader and retained tail lie
     /// in SRAM and the retained memory, every mapped region has its
     /// attributes, and the ROM's SRAM ranges lie in the internal SRAM, those
     /// it keeps while an image runs clear of the application's SRAM.
@@ -408,20 +447,6 @@ impl Memory {
             .is_some_and(|psram| self.sram.end() > psram.origin())
         {
             return Err("SRAM must lie below PSRAM".into());
-        }
-        if let Some(window) = self.cache_window {
-            let inside = |region: Region| {
-                window.contains_range(u64::from(region.origin()), u64::from(region.end()))
-            };
-            if !inside(self.flash_xip) || self.psram.is_some_and(|psram| !inside(psram)) {
-                return Err("flash and PSRAM must lie in the shared cache window".into());
-            }
-            if self
-                .psram
-                .is_some_and(|psram| self.flash_xip.end() > psram.origin())
-            {
-                return Err("the flash half of the cache window must end below PSRAM".into());
-            }
         }
         if let Some(chain) = boot_chain {
             if !self.bootstrap_sram.contains_range(
@@ -482,7 +507,7 @@ impl Memory {
     pub fn cached(&self) -> Vec<Region> {
         self.regions()
             .into_iter()
-            .filter(|mapped| mapped.attributes.cached)
+            .filter(|mapped| mapped.attributes.cached())
             .map(|mapped| mapped.region)
             .collect()
     }
@@ -604,7 +629,9 @@ impl InterruptContract {
             return Err("CLIC level bits must fit the implemented control bits (at most 8)".into());
         }
         let harts: alloc::collections::BTreeSet<_> = self.harts.iter().copied().collect();
-        if !self.harts.iter().copied().eq(0..self.harts.len() as u32)
+        if !(0_u32..)
+            .zip(&self.harts)
+            .all(|(number, hart)| number == *hart)
             || !harts.contains(&self.boot_hart)
             || harts.len() != self.harts.len()
             || harts.is_empty()
@@ -644,7 +671,6 @@ pub struct StagedBoot {
 pub struct BootChain {
     /// Number of mapped ESP application segments required by this loader.
     /// These are image records, not MMU pages or ELF executable sections.
-    #[serde(default)]
     pub mapped_segments: Option<NonZeroU8>,
     /// The end of the application memory map of the pinned ESP-IDF: the
     /// internal SRAM from here up the boot chain keeps for itself (the
@@ -687,20 +713,16 @@ pub struct Rom {
     pub elf: String,
     /// The reviewed ROM function summaries of the stack analyses, relative
     /// to the repository root; `None` for a chip with none reviewed yet.
-    #[serde(default)]
     pub summaries: Option<String>,
     /// ROM code no shipped image may call into.
-    #[serde(default)]
     pub forbidden: Vec<RomRange>,
     /// The ROM symbol script the images link with, relative to the chip
     /// layout's linker input directory (the generated build output on S31).
     pub linker_script: String,
     /// ROM entry points called by our code, with their pinned provenance.
-    #[serde(default)]
     pub functions: Vec<RomFunction>,
     /// What the ROM uses of the internal SRAM, `start..end`, and while it
     /// keeps each range.
-    #[serde(default)]
     pub sram: Vec<RomSram>,
 }
 
@@ -758,27 +780,20 @@ pub struct Placement {
     pub name: String,
     /// The flattened image: it spans these symbols from the origin of a
     /// region, and the flat file holds exactly them.
-    #[serde(default)]
     pub image: Option<FlatImage>,
     /// The entry point and the `[start, end]` symbols of the text it lies in.
-    #[serde(default)]
     pub entry: Option<Entry>,
     /// Symbol ranges that lie in a region, some of an exact size.
-    #[serde(default)]
     pub range: Vec<RangeRule>,
     /// Symbols whose `bytes` from their address lie in a region.
-    #[serde(default)]
     pub symbol: Vec<SymbolRule>,
     /// The regions every handler of the `[interrupts]` table lies in;
     /// `rom` names the mask ROM's code, as the `[rom]` ELF holds it.
-    #[serde(default)]
     pub interrupt_handlers: Vec<String>,
     /// Allocated sections, by name prefix, that lie in a region.
-    #[serde(default)]
     pub section: Vec<SectionRule>,
     /// Entries whose first instruction swaps `sp` with `mscratch` before
     /// anything touches the interrupted stack.
-    #[serde(default)]
     pub stack_swap: Vec<Symbols>,
 }
 
@@ -806,10 +821,6 @@ pub struct Entry {
 pub struct RangeRule {
     pub range: [String; 2],
     pub region: String,
-    /// The range's exact size, where the contract fixes one; a range sized
-    /// at link time has none, and its region limits it.
-    #[serde(default)]
-    pub bytes: Option<u64>,
 }
 
 /// Symbols whose `bytes` from their address lie in `region`.
@@ -818,13 +829,18 @@ pub struct RangeRule {
 pub struct SymbolRule {
     /// A symbol, or with `numbers` a family as [`Symbols`] names it.
     pub name: String,
-    #[serde(default)]
     pub numbers: Option<[u32; 2]>,
     pub bytes: u64,
     pub region: String,
-    /// Whether an image may lack the symbol.
-    #[serde(default)]
-    pub optional: bool,
+    pub presence: Presence,
+}
+
+/// Whether an image may lack a symbol.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Presence {
+    Required,
+    Optional,
 }
 
 /// Allocated sections whose name starts with `prefix`, each wholly in
@@ -852,7 +868,6 @@ impl SymbolRule {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Symbols {
     pub name: String,
-    #[serde(default)]
     pub numbers: Option<[u32; 2]>,
 }
 
@@ -968,7 +983,6 @@ pub struct Module {
     pub name: String,
     pub flash: ModuleFlash,
     /// `None` for a module without PSRAM.
-    #[serde(default)]
     pub psram: Option<ModulePsram>,
 }
 

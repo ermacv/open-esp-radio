@@ -1,5 +1,3 @@
-#![expect(clippy::struct_excessive_bools, reason = "the final crates cleaned")]
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
 #![expect(clippy::let_underscore_must_use, reason = "the final crates cleaned")]
 //! The facts of the Espressif chips, in one layered model.
 //!
@@ -212,37 +210,21 @@ struct Stated {
     espflash_chip: String,
     revisions: Vec<String>,
     properties: Properties,
-    #[serde(default)]
     lp_fast_source: Option<LpFastSource>,
-    #[serde(default)]
     flash: Option<StatedFlash>,
-    #[serde(default)]
     memory: Option<StatedMemory>,
-    #[serde(default)]
     interrupts: Option<InterruptContract>,
-    #[serde(default)]
     interrupt_layout: Option<InterruptLayout>,
-    #[serde(default)]
     rom: Option<Rom>,
-    #[serde(default)]
     placement: Option<Placement>,
-    #[serde(default)]
     core_start: Option<CoreStart>,
-    #[serde(default)]
     pma: Option<PmaCsrs>,
-    #[serde(default)]
     hart_entry: Option<HartEntry>,
-    #[serde(default)]
     staged: Option<StagedBoot>,
-    #[serde(default)]
     boot_chain: Option<BootChain>,
-    #[serde(default)]
     reset_cause: Option<ResetCause>,
-    #[serde(default)]
     observed_functions: Vec<String>,
-    #[serde(default)]
     module: Option<Module>,
-    #[serde(default)]
     board: Option<Board>,
 }
 
@@ -273,12 +255,8 @@ struct StatedEncoding {
 struct StatedMemory {
     internal_sram: Region,
     flash_xip: Region,
-    #[serde(default)]
     psram_origin: Option<u32>,
-    #[serde(default)]
     retained: Option<Region>,
-    #[serde(default)]
-    cache_window: Option<Region>,
     task_stacks: String,
     attributes: alloc::collections::BTreeMap<String, Attributes>,
 }
@@ -430,7 +408,6 @@ impl Facts {
                     psram,
                     runtime_psram,
                     retained: memory.retained,
-                    cache_window: memory.cache_window,
                     task_stacks: memory.task_stacks,
                     attributes: memory.attributes,
                 })
@@ -666,7 +643,7 @@ pub(crate) mod tests {
         Facts::from_table("chip-x", "chip.toml", table)
     }
 
-    const CHIP: &str = "id = 'chip-x'\nfamily = 'f'\nisa = 'rv32imac'\n\
+    const CHIP: &str = "id = 'chip-x'\nobserved-functions = []\nfamily = 'f'\nisa = 'rv32imac'\n\
         rust-target = 'riscv32imac-unknown-none-elf'\nboot = 'staged'\nespflash-chip = 'x'\n\
         revisions = []\n[properties]\nwifi-bands = []\nbluetooth = []\nieee802154 = false\n\
         cores = 1\n";
@@ -807,9 +784,9 @@ pub(crate) mod tests {
              flash-xip = {{ origin = 0x10000, length = 0x1000 }}\n\
              retained = {{ origin = 0x20000, length = 0x100 }}\ntask-stacks = 'sram'\n\
              [memory.attributes]\n\
-             sram = {{ executable = true, cached = false, dma = true, retained = false, writable = true }}\n\
-             retained = {{ executable = true, cached = false, dma = false, retained = true, writable = true }}\n\
-             flash-xip = {{ executable = true, cached = true, dma = false, retained = false, writable = false }}\n"
+             sram = {{ access = 'rwx', kind = 'dma' }}\n\
+             retained = {{ access = 'rwx', kind = 'retained' }}\n\
+             flash-xip = {{ access = 'rx', kind = 'cached' }}\n"
         );
         let chain = |end: u32| {
             format!(
@@ -835,14 +812,14 @@ pub(crate) mod tests {
         for sram in [whole.sram, whole.bootstrap_sram] {
             assert_eq!(sram, Region::new(0x1000, 0x1000).expect("valid region"));
         }
-        let unattributed = base.replace("flash-xip = { executable", "flash = { executable");
+        let unattributed = base.replace("flash-xip = { access", "flash = { access");
         let error = facts(&unattributed).expect_err("an unmapped region's attributes");
         assert!(error.to_string().contains("memory.attributes"), "{error}");
     }
 
     #[test]
     fn the_rom_is_of_a_revision_the_chip_names() {
-        let rom = "[rom]\nrevision = 'rev1'\nelf = 'rom'\nlinker-script = 'rom.x'\n";
+        let rom = "[rom]\nrevision = 'rev1'\nelf = 'rom'\nlinker-script = 'rom.x'\nforbidden = []\nfunctions = []\nsram = []\n";
         let error = facts(&format!("{CHIP}{rom}")).expect_err("no such revision");
         assert!(error.to_string().contains("`rev1`"), "{error}");
         let named = CHIP.replace("revisions = []", "revisions = ['rev1']");
@@ -856,7 +833,7 @@ pub(crate) mod tests {
         let cached: Vec<_> = memory
             .regions()
             .into_iter()
-            .filter(|mapped| mapped.attributes.cached)
+            .filter(|mapped| mapped.attributes.cached())
             .map(|mapped| mapped.name)
             .collect();
         assert_eq!(cached, ["flash-xip", "runtime-psram", "psram"]);
@@ -865,13 +842,13 @@ pub(crate) mod tests {
             .region_of(u64::from(sram.origin()), u64::from(sram.origin()) + 4)
             .expect("in SRAM");
         assert_eq!(at.name, "sram");
-        assert!(at.attributes.dma && !at.attributes.cached);
+        assert!(at.attributes.kind == RegionKind::Dma);
         let runtime = memory.runtime_psram.expect("runtime PSRAM");
         let at = memory
             .region_of(u64::from(runtime.origin()), u64::from(runtime.origin()) + 4)
             .expect("in PSRAM");
         assert_eq!(at.name, "runtime-psram");
-        assert!(at.attributes.cached && at.attributes.writable);
+        assert!(at.attributes.cached() && at.attributes.writable());
         assert_eq!(memory.region("retained"), memory.retained);
         assert!(
             memory
@@ -936,7 +913,7 @@ pub(crate) mod tests {
                 .range
                 .iter()
                 .filter(|rule| rule.range[1].contains("irq_stack"))
-                .inspect(|rule| assert!(rule.region == "sram" && rule.bytes.is_none()))
+                .inspect(|rule| assert!(rule.region == "sram"))
                 .map(|rule| rule.range[1].clone())
                 .collect()
         };
@@ -951,7 +928,7 @@ pub(crate) mod tests {
 
         let error = facts(&format!(
             "{CHIP}[placement]\nname = 'p'\n\
-             symbol = [{{ name = 's{{hart}}', bytes = 4, region = 'sram', per-hart = true }}]\n"
+             symbol = [{{ name = 's{{hart}}', bytes = 4, region = 'sram', presence = 'required', per-hart = true }}]\n"
         ))
         .expect_err("a per-hart rule needs harts");
         assert!(
@@ -981,7 +958,7 @@ pub(crate) mod tests {
         let rule = |extra: &str| {
             format!(
                 "{CHIP}[interrupts]\nlines = 4\n[placement]\nname = 'p'\n\
-                 symbol = [{{ name = 'e{{n}}', bytes = 4, region = 'sram', per-line = true{extra} }}]\n"
+                 symbol = [{{ name = 'e{{n}}', bytes = 4, region = 'sram', presence = 'required', per-line = true{extra} }}]\n"
             )
         };
         let table: Table = toml::from_str(&rule("")).expect("valid TOML");
@@ -999,16 +976,10 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn flash_and_psram_lie_in_the_shared_cache_window_and_the_loader_in_sram() {
+    fn the_loader_lies_in_sram_and_the_retained_tail_in_the_retained_memory() {
         let s31 = tracked("esp32s31");
         let memory = s31.memory.clone().expect("memory");
         assert!(memory.validate(s31.boot_chain.as_ref(), None).is_ok());
-        let mut narrow = memory.clone();
-        narrow.cache_window = Some(Region::new(0x4200_0000, 0x0100_0000).expect("valid region"));
-        assert!(
-            narrow.validate(None, None).is_err(),
-            "PSRAM outside the window"
-        );
         let mut chain = s31.boot_chain.clone().expect("boot chain");
         chain.second_stage_loader_start = memory.bootstrap_sram.end() + 4;
         assert!(memory.validate(Some(&chain), None).is_err());
