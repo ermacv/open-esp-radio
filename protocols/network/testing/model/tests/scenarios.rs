@@ -33,7 +33,8 @@ use oer_portable_memory::WakingSpscSender;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, Interface, NetEvent, NetworkOwner, Outcome, Remote, claim,
+    Block, Brand, Interface, NetEvent, NetworkClaim, NetworkOwner, Outcome, Remote, claim,
+    with_local_network,
 };
 use oer_protocols_network_port::FrameSource;
 use oer_protocols_network_runtime::{
@@ -70,11 +71,10 @@ const SECOND: u64 = 1_000_000;
 const PASSES: u64 = 50_000_000;
 
 type Stopper = WakingSpscSender<'static, (), 1>;
-type Sock<B> = Socket<'static, 'static, B, SIZE, DEPTH, LANE, CREDITS>;
-type Owner<B, const N: usize> =
-    NetworkOwner<'static, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, N, Medium>;
-type Run<B, const N: usize> =
-    Ended<'static, 'static, B, SIZE, SOCKETS, CREDITS, N, DEPTH, LANE, Medium>;
+type Sock<'n, B> = Socket<'n, 'n, B, SIZE, DEPTH, LANE, CREDITS>;
+type Owner<'n, B, const N: usize> =
+    NetworkOwner<'n, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, N, Medium>;
+type Run<'n, B, const N: usize> = Ended<'n, 'n, B, SIZE, SOCKETS, CREDITS, N, DEPTH, LANE, Medium>;
 
 fn peer(number: u8, micros_per_octet: u32) -> PeerSpec {
     PeerSpec {
@@ -92,9 +92,9 @@ fn medium(peers: &[PeerSpec]) -> Medium {
     Medium::new(LOCAL, OUR_IP, AT_PORT, peers)
 }
 
-fn owner<B: 'static, const N: usize>(medium: &Medium) -> Owner<B, N> {
+fn owner<'n, B: Brand, const N: usize>(right: NetworkClaim<B>, medium: &Medium) -> Owner<'n, B, N> {
     let memory = Box::leak(Box::new([[0; SIZE]; N]));
-    let (pool, brand) = claim::<B, SIZE, N>(memory).unwrap();
+    let (pool, brand) = claim(right, memory);
     NetworkOwner::new(brand, interface(), pool, medium.clone())
 }
 
@@ -191,10 +191,10 @@ fn run_tasks(
 
 /// Send to `flow` for as long as the socket lasts, count what was evicted, and
 /// return all blocks left.
-async fn flood<B>(
-    mut socket: Sock<B>,
+async fn flood<'n, B: 'n>(
+    mut socket: Sock<'n, B>,
     flow: Flow,
-    left: &RefCell<Vec<Block<'static, B, SIZE>>>,
+    left: &RefCell<Vec<Block<'n, B, SIZE>>>,
     evicted: &RefCell<BTreeMap<u16, u64>>,
     clock: &VirtualClock,
 ) {
@@ -209,7 +209,7 @@ async fn flood<B>(
             *evicted.borrow_mut().entry(flow.port).or_default() += 1;
         }
     };
-    let mut pending: VecDeque<Observer<'static>> = VecDeque::new();
+    let mut pending: VecDeque<Observer<'n>> = VecDeque::new();
     while let Ok(mut block) = socket.reserve().await {
         block.fill(&[0; PAYLOAD]).unwrap();
         if pending.len() == CREDITS
@@ -283,8 +283,8 @@ impl EventSink<ServiceEvent> for Turns {
     }
 }
 
-struct Report<B: 'static, const N: usize> {
-    ended: Run<B, N>,
+struct Report<'n, B: 'n, const N: usize> {
+    ended: Run<'n, B, N>,
     /// Each turn of the service.
     turns: Vec<TurnCount>,
 
@@ -321,7 +321,7 @@ fn scenario<'s>(medium: &'s Medium, flows: &'s [Flow], script: Vec<(u64, At)>) -
 }
 
 impl Scenario<'_> {
-    fn run<B: 'static, const N: usize>(self, owner: Owner<B, N>) -> Report<B, N> {
+    fn run<'n, B: 'n, const N: usize>(self, owner: Owner<'n, B, N>) -> Report<'n, B, N> {
         let Self {
             medium,
             clock,
@@ -332,8 +332,8 @@ impl Scenario<'_> {
         } = self;
         let (stop, stopping): (Stopper, _) = Box::leak(Box::new(StopLane::new())).split();
         let mut service: Service<
-            'static,
-            'static,
+            'n,
+            'n,
             B,
             SIZE,
             SOCKETS,
@@ -438,37 +438,40 @@ fn flows(to: &[(u16, PeerSpec)]) -> Vec<Flow> {
 
 #[test]
 fn a_sleeping_peer_holds_only_its_own_credits_of_a_shared_pool() {
-    struct Net;
-    let peers = [peer(1, FAST), peer(2, FAST)];
-    let medium = medium(&peers);
-    let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
-    let script = vec![
-        (1_000, At::Sleep(1)),
-        (SECOND, At::Mark),
-        (SECOND, At::Sleep(1)),
-        (2 * SECOND, At::Mark),
-        (2 * SECOND, At::Stop),
-    ];
-    // Room for one socket's credits and a little: the pool runs out at once
-    // but for what the asleep peer cannot hold.
-    let report = scenario(&medium, &flows, script).run(owner::<Net, { CREDITS + 2 }>(&medium));
-    let [slept, woke] = &report.marks[..] else {
-        panic!();
-    };
-    assert!(slept[0].frames > 100, "the awake peer went on: {slept:?}");
-    assert!(woke[1].frames > 100, "the sleeper's blocks moved: {woke:?}");
-    assert_eq!(report.outstanding, 0);
+    with_local_network(|right| {
+        let peers = [peer(1, FAST), peer(2, FAST)];
+        let medium = medium(&peers);
+        let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
+        let script = vec![
+            (1_000, At::Sleep(1)),
+            (SECOND, At::Mark),
+            (SECOND, At::Sleep(1)),
+            (2 * SECOND, At::Mark),
+            (2 * SECOND, At::Stop),
+        ];
+        // Room for one socket's credits and a little: the pool runs out at once
+        // but for what the asleep peer cannot hold.
+        let report =
+            scenario(&medium, &flows, script).run(owner::<_, { CREDITS + 2 }>(right, &medium));
+        let [slept, woke] = &report.marks[..] else {
+            panic!();
+        };
+        assert!(slept[0].frames > 100, "the awake peer went on: {slept:?}");
+        assert!(woke[1].frames > 100, "the sleeper's blocks moved: {woke:?}");
+        assert_eq!(report.outstanding, 0);
+    });
 }
 
 #[test]
 fn an_exhausted_pool_starves_no_flow() {
-    struct Net;
-    let peers = [peer(1, FAST), peer(2, FAST)];
-    let medium = medium(&peers);
-    let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
-    let script = vec![(SECOND, At::Stop)];
-    let report = scenario(&medium, &flows, script).run(owner::<Net, 2>(&medium));
-    assert_eq!(report.outstanding, 0);
+    with_local_network(|right| {
+        let peers = [peer(1, FAST), peer(2, FAST)];
+        let medium = medium(&peers);
+        let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
+        let script = vec![(SECOND, At::Stop)];
+        let report = scenario(&medium, &flows, script).run(owner::<_, 2>(right, &medium));
+        assert_eq!(report.outstanding, 0);
+    });
 }
 
 /// Two flows to the first peer in one group, and to the other peer a flow that
@@ -501,94 +504,100 @@ fn a_second_asleep() -> Vec<(u64, At)> {
 
 #[test]
 fn a_limit_keeps_a_sleepers_flows_to_their_share_of_the_pool() {
-    struct Net;
-    let peers = [peer(1, FAST), peer(2, FAST)];
-    let medium = medium(&peers);
-    let flows = to_a_sleeper(&peers, CREDITS);
-    let report =
-        scenario(&medium, &flows, a_second_asleep()).run(owner::<Net, { 2 * CREDITS }>(&medium));
-    let [start, end, after] = &report.marks[..] else {
-        panic!();
-    };
-    assert!(
-        end[1].since(start[1]).frames > 100,
-        "the awake peer went on"
-    );
-    assert!(
-        after[0].since(end[0]).frames > 100,
-        "and so did the sleeper"
-    );
-    assert!(report.evicted.is_empty(), "{:?}", report.evicted);
-    assert_eq!(report.outstanding, 0);
+    with_local_network(|right| {
+        let peers = [peer(1, FAST), peer(2, FAST)];
+        let medium = medium(&peers);
+        let flows = to_a_sleeper(&peers, CREDITS);
+        let report = scenario(&medium, &flows, a_second_asleep())
+            .run(owner::<_, { 2 * CREDITS }>(right, &medium));
+        let [start, end, after] = &report.marks[..] else {
+            panic!();
+        };
+        assert!(
+            end[1].since(start[1]).frames > 100,
+            "the awake peer went on"
+        );
+        assert!(
+            after[0].since(end[0]).frames > 100,
+            "and so did the sleeper"
+        );
+        assert!(report.evicted.is_empty(), "{:?}", report.evicted);
+        assert_eq!(report.outstanding, 0);
+    });
 }
 
 #[test]
 fn an_exhausted_pool_evicts_nothing_while_all_can_move() {
-    struct Net;
-    let peers = [peer(1, FAST), peer(2, FAST)];
-    let medium = medium(&peers);
-    let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
-    let mut run = scenario(&medium, &flows, vec![(SECOND, At::Stop)]);
-    run.memory = MemoryPolicy {
-        evict_after: Some(Duration::from_millis(50)),
-    };
-    // Three blocks in two groups leave one group holding more, and a waiter.
-    let report = run.run(owner::<Net, 3>(&medium));
-    assert!(report.evicted.is_empty(), "{:?}", report.evicted);
+    with_local_network(|right| {
+        let peers = [peer(1, FAST), peer(2, FAST)];
+        let medium = medium(&peers);
+        let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
+        let mut run = scenario(&medium, &flows, vec![(SECOND, At::Stop)]);
+        run.memory = MemoryPolicy {
+            evict_after: Some(Duration::from_millis(50)),
+        };
+        // Three blocks in two groups leave one group holding more, and a waiter.
+        let report = run.run(owner::<_, 3>(right, &medium));
+        assert!(report.evicted.is_empty(), "{:?}", report.evicted);
+    });
 }
 
 #[test]
 fn a_group_holding_little_goes_first_when_blocks_are_scarce() {
-    struct Net;
-    let peers = [peer(1, FAST), peer(2, FAST)];
-    let medium = medium(&peers);
-    let list = flows(&[(5000, peers[0]), (5001, peers[0]), (5002, peers[1])]);
-    let script = a_second_asleep();
-    let report = scenario(&medium, &list, script).run(owner::<Net, { 2 * CREDITS }>(&medium));
-    let [start, end, _] = &report.marks[..] else {
-        panic!();
-    };
-    assert!(end[1].since(start[1]).frames > 100, "{end:?}");
-    assert_eq!(report.outstanding, 0);
+    with_local_network(|right| {
+        let peers = [peer(1, FAST), peer(2, FAST)];
+        let medium = medium(&peers);
+        let list = flows(&[(5000, peers[0]), (5001, peers[0]), (5002, peers[1])]);
+        let script = a_second_asleep();
+        let report =
+            scenario(&medium, &list, script).run(owner::<_, { 2 * CREDITS }>(right, &medium));
+        let [start, end, _] = &report.marks[..] else {
+            panic!();
+        };
+        assert!(end[1].since(start[1]).frames > 100, "{end:?}");
+        assert_eq!(report.outstanding, 0);
+    });
 }
 
 #[test]
 fn control_work_keeps_its_turn_under_full_data() {
-    struct Net;
-    let peers = [peer(1, SLOW), peer(2, FAST)];
-    let medium = medium(&peers);
-    let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
-    // A neighbor lasts a minute, so both are asked for again in the middle.
-    let script = vec![
-        (59 * SECOND, At::Mark),
-        (61 * SECOND, At::Mark),
-        (63 * SECOND, At::Mark),
-        (63 * SECOND, At::Stop),
-    ];
-    let report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium));
-    assert_eq!(report.marks.len(), 3);
-    assert!(medium.spent_on_everyone().frames >= 4, "two peers, twice");
+    with_local_network(|right| {
+        let peers = [peer(1, SLOW), peer(2, FAST)];
+        let medium = medium(&peers);
+        let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
+        // A neighbor lasts a minute, so both are asked for again in the middle.
+        let script = vec![
+            (59 * SECOND, At::Mark),
+            (61 * SECOND, At::Mark),
+            (63 * SECOND, At::Mark),
+            (63 * SECOND, At::Stop),
+        ];
+        let report = scenario(&medium, &flows, script).run(owner::<_, BLOCKS>(right, &medium));
+        assert_eq!(report.marks.len(), 3);
+        assert!(medium.spent_on_everyone().frames >= 4, "two peers, twice");
+    });
 }
 
 #[test]
 fn refusals_return_their_reservations() {
-    struct Net;
-    let peers = [peer(1, SLOW), peer(2, FAST)];
-    let medium = medium(&peers);
-    let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
-    let script = (1..20)
-        .map(|step| (step * SECOND / 20, At::Refuse(3)))
-        .chain([(SECOND, At::Stop)])
-        .collect();
-    let mut report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium));
-    assert!(medium.refused() > 0);
-    land_all(&medium, &mut report);
-    assert_eq!(medium.unsettled(), 0);
-    assert_eq!(report.outstanding, 0);
+    with_local_network(|right| {
+        let peers = [peer(1, SLOW), peer(2, FAST)];
+        let medium = medium(&peers);
+        let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
+        let script = (1..20)
+            .map(|step| (step * SECOND / 20, At::Refuse(3)))
+            .chain([(SECOND, At::Stop)])
+            .collect();
+        let mut report = scenario(&medium, &flows, script).run(owner::<_, BLOCKS>(right, &medium));
+        assert!(medium.refused() > 0);
+        land_all(&medium, &mut report);
+        assert_eq!(medium.unsettled(), 0);
+        assert_eq!(report.outstanding, 0);
+    });
 }
 
 /// Everything on the air ends, and the policy hears.
-fn land_all<B, const N: usize>(medium: &Medium, report: &mut Report<B, N>) {
+fn land_all<B, const N: usize>(medium: &Medium, report: &mut Report<'_, B, N>) {
     while let Some(at) = medium.next_landing() {
         medium.advance(at);
     }
@@ -597,44 +606,45 @@ fn land_all<B, const N: usize>(medium: &Medium, report: &mut Report<B, N>) {
 
 #[test]
 fn a_cancelled_run_hands_every_owner_to_the_next_service() {
-    struct Net;
-    let peers = [peer(1, SLOW), peer(2, FAST)];
-    let medium = medium(&peers);
-    let flow_list = flows(&[(5000, peers[0]), (5001, peers[1])]);
-    let clock = clock();
-    let first = Scenario {
-        medium: &medium,
-        clock,
-        flows: &flow_list,
-        script: Vec::new(),
-        cancel_at: Some(SECOND),
-        memory: MemoryPolicy::KEEP,
-    };
-    let report = first.run(owner::<Net, BLOCKS>(&medium));
-    assert_eq!(report.ended.cause, EndCause::Stopped);
-    assert_eq!(report.outstanding, 0, "blocks of unseen commands came back");
-    let on_air = medium.unsettled();
-    assert!(on_air > 0, "frames outlive the service that sent them");
-    let before = medium.spent();
+    with_local_network(|right| {
+        let peers = [peer(1, SLOW), peer(2, FAST)];
+        let medium = medium(&peers);
+        let flow_list = flows(&[(5000, peers[0]), (5001, peers[1])]);
+        let clock = clock();
+        let first = Scenario {
+            medium: &medium,
+            clock,
+            flows: &flow_list,
+            script: Vec::new(),
+            cancel_at: Some(SECOND),
+            memory: MemoryPolicy::KEEP,
+        };
+        let report = first.run(owner::<_, BLOCKS>(right, &medium));
+        assert_eq!(report.ended.cause, EndCause::Stopped);
+        assert_eq!(report.outstanding, 0, "blocks of unseen commands came back");
+        let on_air = medium.unsettled();
+        assert!(on_air > 0, "frames outlive the service that sent them");
+        let before = medium.spent();
 
-    let Ended { retired, .. } = report.ended;
-    let owner = NetworkOwner::new(retired.brand, interface(), retired.pool, retired.port);
-    let flow_list = flows(&[(5100, peers[0]), (5101, peers[1])]);
-    let second = Scenario {
-        medium: &medium,
-        clock,
-        flows: &flow_list,
-        script: vec![(SECOND, At::Stop)],
-        cancel_at: None,
-        memory: MemoryPolicy::KEEP,
-    };
-    let mut report = second.run(owner);
-    assert_eq!(report.ended.cause, EndCause::Stopped);
-    assert_eq!(report.outstanding, 0);
-    let after = medium.spent();
-    assert!(after[0].since(before[0]).frames > 0);
-    land_all(&medium, &mut report);
-    assert_eq!(medium.unsettled(), 0);
+        let Ended { retired, .. } = report.ended;
+        let owner = NetworkOwner::new(retired.brand, interface(), retired.pool, retired.port);
+        let flow_list = flows(&[(5100, peers[0]), (5101, peers[1])]);
+        let second = Scenario {
+            medium: &medium,
+            clock,
+            flows: &flow_list,
+            script: vec![(SECOND, At::Stop)],
+            cancel_at: None,
+            memory: MemoryPolicy::KEEP,
+        };
+        let mut report = second.run(owner);
+        assert_eq!(report.ended.cause, EndCause::Stopped);
+        assert_eq!(report.outstanding, 0);
+        let after = medium.spent();
+        assert!(after[0].since(before[0]).frames > 0);
+        land_all(&medium, &mut report);
+        assert_eq!(medium.unsettled(), 0);
+    });
 }
 
 /// One peer's frames go out in aggregates of 32, whose ends the medium
@@ -643,48 +653,49 @@ fn a_cancelled_run_hands_every_owner_to_the_next_service() {
 /// of an aggregate's ends to the next.
 #[test]
 fn each_block_ack_of_32_settles_in_one_turn_which_publishes_again() {
-    struct Net;
-    const AGGREGATE: usize = 32;
-    let peers = [peer(1, FAST)];
-    let medium = Medium::new(LOCAL, OUR_IP, AGGREGATE, &peers);
-    medium.batch(AGGREGATE);
-    let flows: Vec<Flow> = (0..4)
-        .map(|flow| Flow {
-            port: 5000 + flow,
-            to: peers[0].address,
-            group: (0, usize::MAX),
-            after: 0,
-        })
-        .collect();
-    let script = vec![(SECOND / 4, At::Stop)];
-    let report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium));
-    assert_eq!(report.ended.cause, EndCause::Stopped);
-    let told: Vec<&TurnCount> = report
-        .turns
-        .iter()
-        .filter(|turn| turn.notices != 0)
-        .collect();
-    let whole = told
-        .iter()
-        .filter(|turn| turn.notices == AGGREGATE as u64)
-        .count();
-    let notices_full = report.turns.iter().filter(|turn| turn.notices_full).count();
-    let republished = told
-        .iter()
-        .filter(|turn| turn.notices == AGGREGATE as u64 && turn.accepted != 0)
-        .count();
-    let most = told.iter().map(|turn| turn.notices).max();
-    println!(
-        "turns {}, turns with notices {}, whole aggregates {whole}, notices full {notices_full}, \
+    with_local_network(|right| {
+        const AGGREGATE: usize = 32;
+        let peers = [peer(1, FAST)];
+        let medium = Medium::new(LOCAL, OUR_IP, AGGREGATE, &peers);
+        medium.batch(AGGREGATE);
+        let flows: Vec<Flow> = (0..4)
+            .map(|flow| Flow {
+                port: 5000 + flow,
+                to: peers[0].address,
+                group: (0, usize::MAX),
+                after: 0,
+            })
+            .collect();
+        let script = vec![(SECOND / 4, At::Stop)];
+        let report = scenario(&medium, &flows, script).run(owner::<_, BLOCKS>(right, &medium));
+        assert_eq!(report.ended.cause, EndCause::Stopped);
+        let told: Vec<&TurnCount> = report
+            .turns
+            .iter()
+            .filter(|turn| turn.notices != 0)
+            .collect();
+        let whole = told
+            .iter()
+            .filter(|turn| turn.notices == AGGREGATE as u64)
+            .count();
+        let notices_full = report.turns.iter().filter(|turn| turn.notices_full).count();
+        let republished = told
+            .iter()
+            .filter(|turn| turn.notices == AGGREGATE as u64 && turn.accepted != 0)
+            .count();
+        let most = told.iter().map(|turn| turn.notices).max();
+        println!(
+            "turns {}, turns with notices {}, whole aggregates {whole}, notices full {notices_full}, \
          published in the aggregate's turn {republished}, most notices in a turn {most:?}, \
          frames {}",
-        report.turns.len(),
-        told.len(),
-        medium.spent()[0].frames,
-    );
-    assert!(whole >= 4, "aggregates went whole: {told:?}");
-    assert_eq!(told.len(), whole, "every batch in one turn: {told:?}");
-    assert_eq!(notices_full, 0, "no turn leaves part of an aggregate");
-    assert_eq!(republished, whole, "each such turn publishes again");
-    assert_eq!(report.outstanding, 0);
+            report.turns.len(),
+            told.len(),
+            medium.spent()[0].frames,
+        );
+        assert!(whole >= 4, "aggregates went whole: {told:?}");
+        assert_eq!(told.len(), whole, "every batch in one turn: {told:?}");
+        assert_eq!(notices_full, 0, "no turn leaves part of an aggregate");
+        assert_eq!(republished, whole, "each such turn publishes again");
+        assert_eq!(report.outstanding, 0);
+    });
 }

@@ -13,9 +13,9 @@ and its runtime (`oer-protocols-network-runtime`), over a role's port. A
 network is an instance over one port: the image lends its storage
 (`oer::wifi::NetworkStorage`: the stop's lane, the service's place, the
 watch of its address, its channel socket's lanes), its blocks in a zeroed
-static of their own (`oer::wifi::NetworkMemory`) and names its brand, a
-type of its own, so nothing of the library makes a second network
-impossible. `oer::wifi::Network::start` takes a role's device and its addressing: leased by the
+static of their own (`oer::wifi::NetworkMemory`) and the right to its brand.
+A brand lives as long as its scope (`with_local_network`); the build has no
+source of one for an image. `oer::wifi::Network::start` takes a role's device and its addressing: leased by the
 core's DHCP client (`Addressing::Dhcp`), or given (`Addressing::Given`). The
 networks an image starts run in its task group, together in one task: on
 hart 1 with the `group` feature, otherwise on the application's

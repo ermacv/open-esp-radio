@@ -22,8 +22,7 @@ fn dhcp_interface() -> Interface {
 
 macro_rules! leasing {
     ($test:expr) => {{
-        brand!(Net);
-        run::<Net>(dhcp_interface(), $test);
+        run(dhcp_interface(), $test);
     }};
 }
 
@@ -1239,9 +1238,8 @@ fn times_of<B>(stack: &mut Stack<B>, t1: Option<u32>, t2: Option<u32>) -> (u64, 
 /// Each case on a brand of its own, as a brand claims once.
 macro_rules! times {
     ($t1:expr, $t2:expr) => {{
-        brand!(Net);
         let mut times = (0, 0);
-        run::<Net>(dhcp_interface(), |stack| times = times_of(stack, $t1, $t2));
+        run(dhcp_interface(), |stack| times = times_of(stack, $t1, $t2));
         times
     }};
 }
@@ -1254,9 +1252,8 @@ fn micros_of<B>(stack: &mut Stack<B>, t1: Option<u32>, t2: Option<u32>) -> (u64,
 
 macro_rules! times_micros {
     ($t1:expr, $t2:expr) => {{
-        brand!(Net);
         let mut times = (0, 0);
-        run::<Net>(dhcp_interface(), |stack| times = micros_of(stack, $t1, $t2));
+        run(dhcp_interface(), |stack| times = micros_of(stack, $t1, $t2));
         times
     }};
 }

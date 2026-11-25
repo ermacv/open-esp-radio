@@ -18,9 +18,7 @@ fn arrives<B>(stack: &mut Stack<B>, data: &[u8], holding: Holding) {
 
 macro_rules! lending {
     ($test:expr) => {{
-        #[derive(Debug, Eq, PartialEq)]
-        struct Net;
-        run::<Net>(interface(OUR_IP, 24, None), $test);
+        run(interface(OUR_IP, 24, None), $test);
     }};
 }
 

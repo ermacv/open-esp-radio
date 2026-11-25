@@ -518,38 +518,40 @@ fn a_close_ends_declared_work_and_its_stale_grant_fills_nothing() {
 
 #[test]
 fn a_retired_core_ends_declared_work_retired() {
-    brand!(Net);
-    let (pool, brand) = claimed::<Net>();
-    let mut stack: Stack<Net> =
-        NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
-    let socket = stack.open_local(6000, best_effort()).unwrap();
-    let work = stack.declare(at(0), &socket, broadcast(), 8, 27).unwrap();
-    let mut retired = stack.retire();
-    let results: Vec<_> = retired.results.take_declared(&socket).collect();
-    assert_eq!(results, [(work, 27, Outcome::Retired)]);
-    assert_eq!(retired.results.take_declared(&socket).count(), 0, "once");
-    assert_eq!(retired.pool.outstanding(), 0);
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        let mut stack: Stack<_> =
+            NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let work = stack.declare(at(0), &socket, broadcast(), 8, 27).unwrap();
+        let mut retired = stack.retire();
+        let results: Vec<_> = retired.results.take_declared(&socket).collect();
+        assert_eq!(results, [(work, 27, Outcome::Retired)]);
+        assert_eq!(retired.results.take_declared(&socket).count(), 0, "once");
+        assert_eq!(retired.pool.outstanding(), 0);
+    });
 }
 
 /// A work its port took ended in its publication: a retirement after it
 /// keeps only the works still open, each once.
 #[test]
 fn a_retired_core_keeps_only_the_works_no_publication_ended() {
-    brand!(Net);
-    let (pool, brand) = claimed::<Net>();
-    let mut stack: Stack<Net> =
-        NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
-    let socket = stack.open_local(6000, best_effort()).unwrap();
-    let sent = stack.declare(at(0), &socket, broadcast(), 8, 40).unwrap();
-    let open = stack.declare(at(0), &socket, broadcast(), 8, 41).unwrap();
-    let calls = Cell::new(0);
-    assert_eq!(
-        produce_next(&mut stack, at(0), writes(&calls)).unwrap(),
-        Some((sent, 40))
-    );
-    let mut retired = stack.retire();
-    let results: Vec<_> = retired.results.take_declared(&socket).collect();
-    assert_eq!(results, [(open, 41, Outcome::Retired)]);
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        let mut stack: Stack<_> =
+            NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let sent = stack.declare(at(0), &socket, broadcast(), 8, 40).unwrap();
+        let open = stack.declare(at(0), &socket, broadcast(), 8, 41).unwrap();
+        let calls = Cell::new(0);
+        assert_eq!(
+            produce_next(&mut stack, at(0), writes(&calls)).unwrap(),
+            Some((sent, 40))
+        );
+        let mut retired = stack.retire();
+        let results: Vec<_> = retired.results.take_declared(&socket).collect();
+        assert_eq!(results, [(open, 41, Outcome::Retired)]);
+    });
 }
 
 /// A retired core's results are its own sockets': a socket an earlier core
@@ -557,32 +559,33 @@ fn a_retired_core_keeps_only_the_works_no_publication_ended() {
 /// slot takes its own, once.
 #[test]
 fn a_retired_socket_takes_no_result_of_a_later_socket_in_its_slot() {
-    brand!(Net);
-    let (pool, brand) = claimed::<Net>();
-    let mut first: Stack<Net> =
-        NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
-    let old = first.open_local(6000, best_effort()).unwrap();
-    let _old_work = first.declare(at(0), &old, broadcast(), 8, 50).unwrap();
-    let mut retired = first.retire();
-    assert_eq!(retired.results.take_declared(&old).count(), 1);
-    let mut next: Stack<Net> = NetworkOwner::new(
-        retired.brand,
-        interface(OUR_IP, 24, None),
-        retired.pool,
-        retired.port,
-    );
-    let socket = next.open_local(6000, best_effort()).unwrap();
-    assert_eq!(socket.flow(), old.flow(), "the same slot");
-    let work = next.declare(at(0), &socket, broadcast(), 8, 51).unwrap();
-    let mut retired = next.retire();
-    assert_eq!(
-        retired.results.take_declared(&old).count(),
-        0,
-        "an earlier socket of the slot takes nothing"
-    );
-    let results: Vec<_> = retired.results.take_declared(&socket).collect();
-    assert_eq!(results, [(work, 51, Outcome::Retired)], "its own, kept");
-    assert_eq!(retired.results.take_declared(&socket).count(), 0, "once");
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        let mut first: Stack<_> =
+            NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
+        let old = first.open_local(6000, best_effort()).unwrap();
+        let _old_work = first.declare(at(0), &old, broadcast(), 8, 50).unwrap();
+        let mut retired = first.retire();
+        assert_eq!(retired.results.take_declared(&old).count(), 1);
+        let mut next: Stack<_> = NetworkOwner::new(
+            retired.brand,
+            interface(OUR_IP, 24, None),
+            retired.pool,
+            retired.port,
+        );
+        let socket = next.open_local(6000, best_effort()).unwrap();
+        assert_eq!(socket.flow(), old.flow(), "the same slot");
+        let work = next.declare(at(0), &socket, broadcast(), 8, 51).unwrap();
+        let mut retired = next.retire();
+        assert_eq!(
+            retired.results.take_declared(&old).count(),
+            0,
+            "an earlier socket of the slot takes nothing"
+        );
+        let results: Vec<_> = retired.results.take_declared(&socket).collect();
+        assert_eq!(results, [(work, 51, Outcome::Retired)], "its own, kept");
+        assert_eq!(retired.results.take_declared(&socket).count(), 0, "once");
+    });
 }
 
 #[test]
