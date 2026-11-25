@@ -14,7 +14,7 @@ use oer_protocols_ieee80211_wire::{
     },
     sequence::SequenceNumber,
     status::StatusCode,
-    tsf::time_units_micros,
+    tsf::TimeUnits,
 };
 
 /// IEEE 802.11 ADDBA response status, separate from a local parsing error.
@@ -67,7 +67,7 @@ pub struct RxAddbaRequest {
     policy: BlockAckPolicy,
     amsdu: Amsdu,
     window: u16,
-    timeout_tu: u16,
+    timeout: TimeUnits,
     starting_sequence: SequenceNumber,
 }
 
@@ -77,7 +77,7 @@ impl RxAddbaRequest {
             BlockAckAction::AddbaRequest {
                 dialog_token,
                 parameters,
-                timeout_tu,
+                timeout,
                 starting_sequence,
             } => Some(Self {
                 dialog_token,
@@ -89,7 +89,7 @@ impl RxAddbaRequest {
                     Amsdu::NotPermitted
                 },
                 window: parameters.window(),
-                timeout_tu,
+                timeout,
                 starting_sequence,
             }),
             _ => None,
@@ -115,7 +115,7 @@ pub struct AddbaResponse {
     pub status: AddbaStatus,
     pub tid: Tid,
     pub window: u16,
-    pub timeout_tu: u16,
+    pub timeout: TimeUnits,
     pub amsdu: bool,
 }
 
@@ -126,7 +126,7 @@ impl AddbaResponse {
             self.status.code(),
             self.tid,
             self.window,
-            self.timeout_tu,
+            self.timeout,
             if self.amsdu {
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported
             } else {
@@ -183,7 +183,7 @@ impl RxBlockAckNegotiation {
             policy,
             amsdu,
             window,
-            timeout_tu,
+            timeout,
             starting_sequence,
         } = request;
         let mut response = AddbaResponse {
@@ -191,7 +191,7 @@ impl RxBlockAckNegotiation {
             status: AddbaStatus::RequestDeclined,
             tid,
             window,
-            timeout_tu,
+            timeout,
             amsdu: false,
         };
         if window > 1023 {
@@ -205,11 +205,11 @@ impl RxBlockAckNegotiation {
         {
             return Err(response);
         }
-        let inactivity = if timeout_tu == 0 {
+        let inactivity = if timeout == TimeUnits::ZERO {
             Inactivity::Off
         } else {
             let Some(deadline) = now
-                .checked_add(inactivity_duration(timeout_tu))
+                .checked_add(inactivity_duration(timeout))
                 .and_then(|at| NonZeroU64::new(at.as_micros()))
             else {
                 return Err(response);
@@ -257,7 +257,7 @@ pub struct RxBlockAckSession<A, const WINDOW: usize, const SLOTS: usize> {
     starting_sequence: SequenceNumber,
     requested_window: u16,
     requested_amsdu: Amsdu,
-    timeout_tu: u16,
+    timeout: TimeUnits,
     tid: Tid,
     dialog_token: DialogToken,
     amsdu: bool,
@@ -278,7 +278,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
                 starting_sequence: negotiation.starting_sequence,
                 requested_window: negotiation.requested_window,
                 requested_amsdu: negotiation.requested_amsdu,
-                timeout_tu: negotiation.response.timeout_tu,
+                timeout: negotiation.response.timeout,
                 tid: negotiation.response.tid,
                 dialog_token: negotiation.response.dialog_token,
                 amsdu: negotiation.response.amsdu,
@@ -308,7 +308,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         let identical = request.policy == BlockAckPolicy::Immediate
             && request.amsdu == self.requested_amsdu
             && request.window == self.requested_window
-            && request.timeout_tu == self.timeout_tu
+            && request.timeout == self.timeout
             && request.starting_sequence == self.starting_sequence;
         Some(if identical {
             self.response()
@@ -318,7 +318,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
                 status: AddbaStatus::RequestDeclined,
                 tid: request.tid,
                 window: request.window,
-                timeout_tu: request.timeout_tu,
+                timeout: request.timeout,
                 amsdu: false,
             }
         })
@@ -330,7 +330,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
             status: AddbaStatus::Success,
             tid: self.tid,
             window: self.reorder.window(),
-            timeout_tu: self.timeout_tu,
+            timeout: self.timeout,
             amsdu: self.amsdu,
         }
     }
@@ -463,10 +463,10 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
     }
 
     fn next_inactivity(&self, now: Instant) -> Result<Inactivity, RxBlockAckError> {
-        if self.timeout_tu == 0 {
+        if self.timeout == TimeUnits::ZERO {
             Ok(Inactivity::Off)
         } else {
-            now.checked_add(inactivity_duration(self.timeout_tu))
+            now.checked_add(inactivity_duration(self.timeout))
                 .and_then(|at| NonZeroU64::new(at.as_micros()))
                 .map(Inactivity::At)
                 .ok_or(RxBlockAckError::DeadlineOverflow)
@@ -486,8 +486,10 @@ fn gap_deadline(now: Instant, timeout: Duration) -> Result<NonZeroU64, RxBlockAc
         .ok_or(RxBlockAckError::DeadlineOverflow)
 }
 
-fn inactivity_duration(timeout_tu: u16) -> Duration {
-    Duration::from_micros(time_units_micros(timeout_tu))
+/// The inactivity timeout on the station's own clock: the recipient counts
+/// it on the image's monotonic time (IEEE Std 802.11-2020 10.25.6.4).
+fn inactivity_duration(timeout: TimeUnits) -> Duration {
+    timeout.span::<oer_portable_time::Monotonic>()
 }
 
 #[cfg(test)]

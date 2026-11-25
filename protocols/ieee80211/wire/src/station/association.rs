@@ -165,7 +165,7 @@ pub struct AssociationRequest<'a> {
     pub source: OwnAddress,
     pub access_point: &'a ScanRecord,
     pub sequence_number: SequenceNumber,
-    pub listen_interval: u16,
+    pub listen_interval: crate::management::ListenInterval,
     /// The PHY elements chosen with the access point.
     pub phy: AssociationPhyElements<'a>,
     /// The security elements this station selected for the access point.
@@ -329,10 +329,10 @@ pub struct AssociationResponse {
     /// A WMM vendor element (OUI 00:50:f2, type 2) of at least six octets.
     pub wmm_element: crate::scan::ElementPresence,
     pub wmm_parameters: Option<WmmParameterSet>,
-    /// Association comeback time in TUs from a Timeout Interval element of
-    /// type 3; an access point that refuses a protected association
-    /// temporarily (status 30) names it.
-    pub association_comeback_tu: Option<u32>,
+    /// Association comeback time from a Timeout Interval element of type 3;
+    /// an access point that refuses a protected association temporarily
+    /// (status 30) names it.
+    pub association_comeback: Option<crate::tsf::ComebackTime>,
 }
 
 impl AssociationResponse {
@@ -453,7 +453,7 @@ pub fn parse_association_response(
     let mut he = ResponseHeElements::NONE;
     let mut wmm_element = crate::scan::ElementPresence::Absent;
     let mut wmm_parameters = None;
-    let mut association_comeback_tu = None;
+    let mut association_comeback = None;
     let mut remaining = information_elements;
     while let [id, length, ..] = *remaining {
         let length = usize::from(length);
@@ -477,7 +477,8 @@ pub fn parse_association_response(
         {
             let comeback =
                 crate::management::TimeoutIntervalValue::from_bytes([a, b, c, d]).value();
-            association_comeback_tu = (comeback != 0).then_some(comeback);
+            association_comeback =
+                (comeback != 0).then_some(crate::tsf::ComebackTime::new(comeback));
         }
         remaining = tail;
     }
@@ -490,7 +491,7 @@ pub fn parse_association_response(
         he,
         wmm_element,
         wmm_parameters,
-        association_comeback_tu,
+        association_comeback,
     })
 }
 

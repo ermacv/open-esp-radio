@@ -920,7 +920,7 @@ fn wmm_is_accepted_by_a_wmm_element_ht_or_he_alone() {
         he,
         wmm_element,
         wmm_parameters: None,
-        association_comeback_tu: None,
+        association_comeback: None,
     };
     let he = ResponseHeElements::new(&[255, 4, 35, 0, 0, 0], &[]).unwrap();
     assert!(!response(Absent, Absent, ResponseHeElements::NONE).wmm());
@@ -943,7 +943,7 @@ fn a_response_matches_its_security_by_privacy() {
         he: ResponseHeElements::NONE,
         wmm_element: Absent,
         wmm_parameters: None,
-        association_comeback_tu: None,
+        association_comeback: None,
     };
     assert!(response(true).matches_security(LinkProtection::Ccmp));
     assert!(!response(true).matches_security(LinkProtection::Open));
@@ -982,7 +982,7 @@ fn an_association_request_writes_its_fixed_fields_and_its_length() {
         ),
         access_point: &record,
         sequence_number: seq(2),
-        listen_interval: 10,
+        listen_interval: crate::management::ListenInterval::new(10),
         phy: AssociationPhyElements::NonHt,
         security: &SelectedRsn::OPEN,
     }

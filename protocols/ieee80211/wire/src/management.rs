@@ -455,9 +455,14 @@ oer_portable_wire::bitfield! {
 }
 
 impl BeaconIntervalField {
-    /// The field holding `time_units`.
-    pub const fn of(time_units: u16) -> Self {
-        Self::from_bytes([0; 2]).with_time_units(time_units)
+    /// The field holding `interval`.
+    pub const fn of(interval: crate::tsf::TimeUnits) -> Self {
+        Self::from_bytes([0; 2]).with_time_units(interval.get())
+    }
+
+    /// The interval the field names.
+    pub const fn interval(self) -> crate::tsf::TimeUnits {
+        crate::tsf::TimeUnits::new(self.time_units())
     }
 }
 oer_portable_wire::bitfield! {
@@ -469,9 +474,33 @@ oer_portable_wire::bitfield! {
 }
 
 impl ListenIntervalField {
-    /// The field holding `intervals`.
-    pub const fn of(intervals: u16) -> Self {
-        Self::from_bytes([0; 2]).with_intervals(intervals)
+    /// The field holding `interval`.
+    pub const fn of(interval: ListenInterval) -> Self {
+        Self::from_bytes([0; 2]).with_intervals(interval.get())
+    }
+
+    /// The interval the field names.
+    pub const fn interval(self) -> ListenInterval {
+        ListenInterval::new(self.intervals())
+    }
+}
+
+/// How often a station in power save wakes to listen to beacons, in beacon
+/// intervals: a count of beacons, not a time.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.1.6 (Listen Interval field).
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ListenInterval(u16);
+
+impl ListenInterval {
+    /// `intervals` beacon intervals.
+    pub const fn new(intervals: u16) -> Self {
+        Self(intervals)
+    }
+
+    /// The count of beacon intervals.
+    pub const fn get(self) -> u16 {
+        self.0
     }
 }
 

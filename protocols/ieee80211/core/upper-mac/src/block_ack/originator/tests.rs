@@ -46,7 +46,7 @@ fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckActi
     BlockAckAction::AddbaResponse {
         dialog_token: DialogToken::new(dialog_token),
         status: oer_protocols_ieee80211_wire::status::StatusCode::new(status),
-        timeout_tu: 7,
+        timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(7),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
@@ -83,7 +83,7 @@ fn the_policy_s_tids_share_one_token_sequence_and_route_responses() {
                 response: TxBlockAckResponse::Operational(OperationalTxBlockAck {
                     tid: WmmUserPriority::UP7,
                     window: 16,
-                    timeout_tu: 7,
+                    timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(7),
                     starting_sequence: sequence(0x200),
                     amsdu: false,
                 }),

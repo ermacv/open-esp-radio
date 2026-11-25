@@ -7,7 +7,7 @@ use core::num::NonZeroU32;
 
 use oer_protocols_ieee80211_wire::phy::{HeGiLtf, PhyRate, PpduBandwidth};
 
-use crate::tsf::{Ieee80211Tsf, TsfDuration, TsfInstant};
+use oer_protocols_ieee80211_wire::tsf::{Ieee80211Tsf, TsfDuration, TsfInstant};
 
 use crate::{
     capabilities::PhyFormatSet,

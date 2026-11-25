@@ -29,7 +29,7 @@ pub enum TxBlockAckError {
 pub struct TxBlockAckConfig {
     pub tid: WmmUserPriority,
     pub window: u16,
-    pub timeout_tu: u16,
+    pub timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits,
     /// How long a negotiation waits for the peer's ADDBA response.
     pub negotiation_timeout: Duration,
     pub amsdu: bool,
@@ -67,7 +67,7 @@ pub struct AddbaRequest {
 pub struct OperationalTxBlockAck {
     pub tid: WmmUserPriority,
     pub window: u16,
-    pub timeout_tu: u16,
+    pub timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits,
     /// Current originator-window head, advanced by delivery and expiry.
     pub starting_sequence: SequenceNumber,
     pub amsdu: bool,
@@ -146,7 +146,7 @@ impl TxBlockAckSession {
             dialog_token,
             self.config.tid.tid(),
             self.config.window,
-            self.config.timeout_tu,
+            self.config.timeout,
             if self.config.amsdu {
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported
             } else {
@@ -200,7 +200,7 @@ impl TxBlockAckSession {
             dialog_token: response_dialog_token,
             status,
             parameters,
-            timeout_tu,
+            timeout,
         } = action
         else {
             return Err(TxBlockAckError::MalformedResponse);
@@ -241,7 +241,7 @@ impl TxBlockAckSession {
         let agreement = OperationalTxBlockAck {
             tid: self.config.tid,
             window,
-            timeout_tu,
+            timeout,
             starting_sequence,
             amsdu: self.config.amsdu && amsdu,
         };

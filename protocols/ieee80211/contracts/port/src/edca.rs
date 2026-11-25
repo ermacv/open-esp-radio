@@ -44,15 +44,23 @@ impl EdcaParameterSet {
         }
     }
 
-    /// Convert MIB lifetime values in TUs at the record boundary.
-    pub const fn from_tu(wmm: WmmParameterSet, lifetimes_tu: [u16; 4]) -> Self {
-        let [be, bk, vi, vo] = lifetimes_tu;
-        const fn duration(tu: u16) -> oer_portable_time::Duration {
-            oer_portable_time::Duration::from_micros((tu as u64) << 10)
-        }
+    /// Convert MIB lifetime values in time units
+    /// (`dot11EDCATableMSDULifetime`, IEEE Std 802.11-2020 Annex C) at the
+    /// record boundary: an MSDU's age counts on the image's monotonic time
+    /// from its software admission.
+    pub const fn from_time_units(
+        wmm: WmmParameterSet,
+        lifetimes: [oer_protocols_ieee80211_wire::tsf::TimeUnits; 4],
+    ) -> Self {
+        let [be, bk, vi, vo] = lifetimes;
         Self::new(
             wmm,
-            [duration(be), duration(bk), duration(vi), duration(vo)],
+            [
+                be.span::<oer_portable_time::Monotonic>(),
+                bk.span::<oer_portable_time::Monotonic>(),
+                vi.span::<oer_portable_time::Monotonic>(),
+                vo.span::<oer_portable_time::Monotonic>(),
+            ],
         )
     }
 

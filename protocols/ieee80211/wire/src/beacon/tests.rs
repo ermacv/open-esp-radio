@@ -37,7 +37,7 @@ fn the_access_point_s_tsf_drives_dtim_and_group_indication_and_the_timestamp_sta
     assert_eq!(
         stamp(
             &mut bytes,
-            0,
+            crate::tsf::TsfInstant::from_micros(0),
             crate::station_beacon::BufferedTraffic::Buffered
         ),
         Some((1, 2))
@@ -48,7 +48,7 @@ fn the_access_point_s_tsf_drives_dtim_and_group_indication_and_the_timestamp_sta
     assert_eq!(
         stamp(
             &mut bytes,
-            100 * 1_024,
+            crate::tsf::TsfInstant::from_micros(100 * 1_024),
             crate::station_beacon::BufferedTraffic::Buffered
         ),
         Some((0, 2))
@@ -59,7 +59,7 @@ fn the_access_point_s_tsf_drives_dtim_and_group_indication_and_the_timestamp_sta
     assert_eq!(
         stamp(
             &mut bytes,
-            3 * 100 * 1_024,
+            crate::tsf::TsfInstant::from_micros(3 * 100 * 1_024),
             crate::station_beacon::BufferedTraffic::Clear
         ),
         Some((0, 2))
@@ -83,7 +83,7 @@ fn a_wpa3_beacon_carries_its_rsne_and_rsnxe_to_the_scan_record() {
         Eui48::new(ap),
         &ssid,
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
-        100,
+        crate::tsf::TimeUnits::new(100),
         2,
         seq(1),
         test_elements::WPA3_PERSONAL,
@@ -116,7 +116,7 @@ fn builds_the_bounded_wpa2_ht20_beacon() {
         Eui48::new(ap),
         &ssid,
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
-        100,
+        crate::tsf::TimeUnits::new(100),
         2,
         seq(0x0abc),
         test_elements::WPA2_PERSONAL,
@@ -152,7 +152,7 @@ fn ht40_beacon_advertises_the_validated_secondary_channel() {
         Eui48::new([2; 6]),
         &ssid,
         crate::channel::Channel::from_ghz2_4_channel(channel),
-        100,
+        crate::tsf::TimeUnits::new(100),
         2,
         seq(0),
         test_elements::WPA2_PERSONAL,
@@ -197,7 +197,7 @@ fn rejects_unrepresentable_beacon_policy_before_mutation() {
             Eui48::new([0; 6]),
             &ssid,
             crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(14).unwrap()),
-            100,
+            crate::tsf::TimeUnits::new(100),
             2,
             seq(0),
             test_elements::WPA2_PERSONAL,
@@ -217,7 +217,7 @@ fn protection_update_rewrites_only_erp_and_ht_operation_after_tim_growth() {
         Eui48::new([2; 6]),
         &Ssid::new(b"ap").unwrap(),
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
-        100,
+        crate::tsf::TimeUnits::new(100),
         2,
         seq(0),
         BssSecurityElements::OPEN,
@@ -298,7 +298,7 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
             Eui48::new(ap),
             &ssid,
             channel,
-            100,
+            crate::tsf::TimeUnits::new(100),
             1,
             seq(0),
             test_elements::WPA2_PERSONAL,
@@ -312,7 +312,7 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
         Eui48::new(ap),
         &ssid,
         channel,
-        100,
+        crate::tsf::TimeUnits::new(100),
         1,
         seq(0),
         test_elements::WPA2_PERSONAL,
@@ -400,7 +400,7 @@ fn template_edits_insert_count_and_remove_elements_after_the_tim() {
         Eui48::new([0x02, 0, 0, 0, 0, 1]),
         &Ssid::new(b"ap").unwrap(),
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
-        100,
+        crate::tsf::TimeUnits::new(100),
         2,
         seq(1),
         BssSecurityElements::OPEN,

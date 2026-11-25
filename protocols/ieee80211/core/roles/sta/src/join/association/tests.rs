@@ -144,7 +144,7 @@ fn association_runtime_accepts_only_selected_peer_response() {
             he: oer_protocols_ieee80211_wire::station::ResponseHeElements::NONE,
             wmm_element: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
             wmm_parameters: None,
-            association_comeback_tu: None,
+            association_comeback: None,
         }
     );
 }
@@ -198,7 +198,9 @@ fn a_temporary_refusal_comes_back_once_after_its_comeback_time() {
     assert_eq!(again.sequence_number, first.sequence_number.wrapping_add(1));
     failed(
         runtime.observe_management_frame(&refused_temporarily(1_000), at(1_127)),
-        StaAssociationFailure::ComebackRefused { comeback_tu: 1_000 },
+        StaAssociationFailure::ComebackRefused {
+            comeback: oer_protocols_ieee80211_wire::tsf::ComebackTime::new(1_000),
+        },
     );
 }
 
@@ -208,7 +210,9 @@ fn a_long_or_unnamed_temporary_refusal_ends_the_association() {
     let (long, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     failed(
         long.observe_management_frame(&refused_temporarily(5_001), at(0)),
-        StaAssociationFailure::ComebackRefused { comeback_tu: 5_001 },
+        StaAssociationFailure::ComebackRefused {
+            comeback: oer_protocols_ieee80211_wire::tsf::ComebackTime::new(5_001),
+        },
     );
     let (unnamed, _) = transmit(begin(at(0)).unwrap(), at(0), &mut sequence);
     failed(

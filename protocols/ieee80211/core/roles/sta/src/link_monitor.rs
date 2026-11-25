@@ -9,6 +9,7 @@ use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::station_beacon::{
     StaBeaconFrame, StaBeaconObservation, StaTimObservation,
 };
+use oer_protocols_ieee80211_wire::tsf::TimeUnits;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaBeaconLossConfigError {
@@ -27,18 +28,18 @@ pub enum StaBeaconLossConfigError {
 /// modem sleeps.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaBeaconLossConfig {
-    interval_tu: u16,
+    interval: TimeUnits,
     miss_limit: u8,
     window: Duration,
 }
 
 impl StaBeaconLossConfig {
     pub const fn new(
-        interval_tu: u16,
+        interval: TimeUnits,
         miss_limit: u8,
         timeout: Duration,
     ) -> Result<Self, StaBeaconLossConfigError> {
-        if interval_tu == 0 {
+        if interval.get() == 0 {
             return Err(StaBeaconLossConfigError::ZeroInterval);
         }
         if miss_limit == 0 {
@@ -48,14 +49,15 @@ impl StaBeaconLossConfig {
             return Err(StaBeaconLossConfigError::ZeroTimeout);
         }
         Ok(Self {
-            interval_tu,
+            interval,
             miss_limit,
             window: timeout,
         })
     }
 
-    pub const fn interval_tu(self) -> u16 {
-        self.interval_tu
+    /// The beacon interval the loss counts in.
+    pub const fn interval(self) -> TimeUnits {
+        self.interval
     }
 
     pub const fn miss_limit(self) -> u8 {

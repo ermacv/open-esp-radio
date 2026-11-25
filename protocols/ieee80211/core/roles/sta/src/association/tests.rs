@@ -54,7 +54,7 @@ mod associated_peer {
             .unwrap(),
             wmm_element: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
             wmm_parameters: None,
-            association_comeback_tu: None,
+            association_comeback: None,
         }
     }
 

@@ -98,7 +98,7 @@ impl PendingRxBlockAck {
         let BlockAckAction::AddbaRequest {
             dialog_token,
             parameters,
-            timeout_tu,
+            timeout,
             ..
         } = self.action
         else {
@@ -109,7 +109,7 @@ impl PendingRxBlockAck {
             status: AddbaStatus::RequestDeclined,
             tid: parameters.tid(),
             window: parameters.window(),
-            timeout_tu,
+            timeout,
             amsdu: false,
         })
     }

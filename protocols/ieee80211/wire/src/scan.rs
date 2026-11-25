@@ -128,8 +128,9 @@ pub struct ScanRecord {
     pub information_elements: ElementList,
     pub capability_info: crate::management::CapabilityInformation,
     /// The access point's TSF when it sent this beacon or probe response.
-    pub timestamp: crate::tsf::TsfTimestamp,
-    pub beacon_interval_tu: u16,
+    pub timestamp: crate::tsf::TsfInstant,
+    /// The Beacon Interval field (IEEE Std 802.11-2020 9.4.1.3).
+    pub beacon_interval: crate::tsf::TimeUnits,
     supported_rates: [u8; 8],
     supported_rates_len: oer_portable_wire::PrefixLength<8>,
     extended_supported_rates: [u8; EXTENDED_RATES_CAPACITY],
@@ -172,8 +173,8 @@ impl ScanRecord {
             legacy_wpa: ElementPresence::Absent,
             information_elements: ElementList::Complete,
             capability_info: crate::management::CapabilityInformation::from_bytes([0; 2]),
-            timestamp: crate::tsf::TsfTimestamp::from_micros(0),
-            beacon_interval_tu: 0,
+            timestamp: crate::tsf::TsfInstant::EPOCH,
+            beacon_interval: crate::tsf::TimeUnits::ZERO,
             supported_rates: [0; 8],
             supported_rates_len: oer_portable_wire::PrefixLength::ZERO,
             extended_supported_rates: [0; EXTENDED_RATES_CAPACITY],
@@ -431,9 +432,10 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
 
     let bssid = Bssid::new(IndividualAddress::new(header.address3())?)?;
     let mut record = ScanRecord::new(bssid);
-    record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
-    record.beacon_interval_tu =
-        crate::management::BeaconIntervalField::from_bytes([i0, i1]).time_units();
+    record.timestamp =
+        crate::tsf::TimestampField::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]).instant();
+    record.beacon_interval =
+        crate::management::BeaconIntervalField::from_bytes([i0, i1]).interval();
     record.capability_info = crate::management::CapabilityInformation::from_bytes([c0, c1]);
 
     while let Ok(&element_header) = elements.array::<2>() {

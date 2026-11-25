@@ -157,7 +157,7 @@ pub fn write_ht_beacon(
     access_point: Eui48,
     ssid: &Ssid,
     channel: Channel,
-    beacon_interval_tu: u16,
+    beacon_interval: crate::tsf::TimeUnits,
     dtim_period: u8,
     management_sequence: SequenceNumber,
     security: BssSecurityElements,
@@ -203,7 +203,7 @@ pub fn write_ht_beacon(
     );
     crate::encoding::write_array::<32, _, _>(
         &mut fixed,
-        &crate::management::BeaconIntervalField::of(beacon_interval_tu).to_bytes(),
+        &crate::management::BeaconIntervalField::of(beacon_interval).to_bytes(),
     );
     let capabilities = profile.capabilities(security.link_protection());
     crate::encoding::write_array::<34, _, _>(&mut fixed, &capabilities.to_bytes());
@@ -563,7 +563,7 @@ pub fn write_tim_partial_virtual_bitmap(
 /// that carries them, and `(count, period)`.
 pub fn stamp(
     bytes: &mut [u8],
-    tsf: u64,
+    tsf: crate::tsf::TsfInstant,
     group: crate::station_beacon::BufferedTraffic,
 ) -> Option<(u8, u8)> {
     const FIXED_BEACON_LENGTH: usize = 24 + 8 + 2 + 2;
@@ -571,21 +571,19 @@ pub fn stamp(
         return None;
     }
     oer_portable_wire::Writer::new(bytes.get_mut(24..32)?)
-        .write(&crate::tsf::TsfTimestamp::from_micros(0).to_bytes())
+        .write(&crate::tsf::TimestampField::of(crate::tsf::TsfInstant::EPOCH).to_bytes())
         .ok()?;
-    let timestamp = tsf;
-
     let (tim_offset, _, period) = dtim(bytes)?;
-    let interval_tu = oer_portable_wire::Reader::new(bytes.get(32..)?)
-        .u16_le()
-        .ok()?;
-    if interval_tu == 0 {
-        return None;
-    }
-    let interval_us = u64::from(interval_tu).checked_mul(1_024)?;
+    let interval = crate::management::BeaconIntervalField::from_bytes(
+        *oer_portable_wire::Reader::new(bytes.get(32..)?)
+            .array::<2>()
+            .ok()?,
+    )
+    .interval()
+    .span::<crate::tsf::Ieee80211Tsf>();
     let phase = u8::try_from(
-        timestamp
-            .checked_div(interval_us)?
+        tsf.as_micros()
+            .checked_div(interval.as_micros())?
             .checked_rem(u64::from(period))?,
     )
     .ok()?;

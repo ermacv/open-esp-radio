@@ -86,7 +86,7 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
             Eui48::new(AP),
             &Ssid::new(b"ap").unwrap(),
             crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(13).unwrap()),
-            100,
+            crate::tsf::TimeUnits::new(100),
             2,
             seq(0),
             security,
@@ -98,8 +98,14 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
         assert!(matches_ssid(&beacon[..len], b"ap"));
         assert!(!matches_ssid(&beacon[..len], b"foreign"));
         let mut output = [0; 256];
-        let n =
-            write_response(&beacon[..len], Eui48::new(PEER), seq(7), 12345, &mut output).unwrap();
+        let n = write_response(
+            &beacon[..len],
+            Eui48::new(PEER),
+            seq(7),
+            crate::tsf::TsfInstant::from_micros(12345),
+            &mut output,
+        )
+        .unwrap();
         assert_eq!(beacon, before);
         assert_eq!(output[0], 0x50);
         assert_eq!(&output[4..10], &PEER);
@@ -119,7 +125,13 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
         assert!(dst.is_empty());
         let mut short = std::vec![0xaa; n - 1];
         assert_eq!(
-            write_response(&beacon[..len], Eui48::new(PEER), seq(0), 0, &mut short),
+            write_response(
+                &beacon[..len],
+                Eui48::new(PEER),
+                seq(0),
+                crate::tsf::TsfInstant::from_micros(0),
+                &mut short
+            ),
             Err(ResponseError::OutputTooSmall { required: n })
         );
         assert!(short.iter().all(|byte| *byte == 0xaa));
@@ -137,7 +149,7 @@ fn probe_parsers_never_panic(count: usize) {
         Eui48::new(AP),
         &Ssid::new(b"ap").unwrap(),
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(13).unwrap()),
-        100,
+        crate::tsf::TimeUnits::new(100),
         2,
         seq(0),
         test_elements::WPA2_PERSONAL,
@@ -203,7 +215,7 @@ fn response_refuses_truncated_headers_and_hostile_element_lengths_without_writin
                 &advertisement[..length],
                 Eui48::new(PEER),
                 seq(0),
-                0,
+                crate::tsf::TsfInstant::from_micros(0),
                 &mut output
             ),
             Err(ResponseError::InvalidAdvertisement)

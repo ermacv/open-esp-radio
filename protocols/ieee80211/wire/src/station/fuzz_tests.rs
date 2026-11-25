@@ -155,8 +155,8 @@ fn association_response(count: usize) {
     assert_eq!(
         parse_association_response(&comeback, Eui48::new(LOCAL), Eui48::new(BSSID))
             .unwrap()
-            .association_comeback_tu,
-        Some(1000)
+            .association_comeback,
+        Some(crate::tsf::ComebackTime::new(1000))
     );
     inputs(&[&ht, &wmm, &comeback], count, 128, |bytes| {
         if let Some(response) =
@@ -166,7 +166,7 @@ fn association_response(count: usize) {
                 response.matches_security(crate::security::LinkProtection::Ccmp),
                 response.association_id,
                 response.wmm_parameters.map(|set| set.parameter_set_count),
-                response.association_comeback_tu,
+                response.association_comeback,
             );
         }
     });

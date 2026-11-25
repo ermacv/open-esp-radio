@@ -150,7 +150,7 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
         Eui48::new(address),
         &Ssid::new(b"profile").unwrap(),
         crate::channel::Channel::from_ghz2_4_channel(channel),
-        100,
+        crate::tsf::TimeUnits::new(100),
         2,
         seq(0),
         BssSecurityElements::OPEN,

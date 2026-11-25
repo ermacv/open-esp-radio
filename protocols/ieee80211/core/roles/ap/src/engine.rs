@@ -528,7 +528,9 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                     .map_err(|_| ApEngineError::Probe)?;
                 // The Timestamp of a probe response is the TSF at its
                 // preparation, as the beacon's.
-                let tsf = self.tsf(now).map_or(0, Instant::as_micros);
+                let tsf = oer_protocols_ieee80211_wire::tsf::TsfInstant::from_micros(
+                    self.tsf(now).map_or(0, Instant::as_micros),
+                );
                 let len = probe::write_response(advertisement, peer, sequence, tsf, output)
                     .map_err(|_| ApEngineError::Probe)?;
                 self.probe_after = Some(now.saturating_add(PROBE_RESPONSE_INTERVAL));

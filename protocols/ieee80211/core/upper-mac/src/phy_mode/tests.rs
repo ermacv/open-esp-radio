@@ -123,7 +123,7 @@ fn association_request_contains_selected_rsn() {
         ),
         access_point: &record,
         sequence_number: seq(2),
-        listen_interval: 1,
+        listen_interval: oer_protocols_ieee80211_wire::management::ListenInterval::new(1),
         phy: NegotiatedPhy::NonHt.elements(&TEST_ASSOCIATION_CAPABILITIES),
         security: &wpa2_rsn(),
     }
@@ -156,7 +156,7 @@ fn association_encoder_uses_the_explicit_local_profile() {
         ),
         access_point: &record,
         sequence_number: seq(2),
-        listen_interval: 1,
+        listen_interval: oer_protocols_ieee80211_wire::management::ListenInterval::new(1),
         phy: NegotiatedPhy::Ht {
             width: Width::Mhz20,
         }

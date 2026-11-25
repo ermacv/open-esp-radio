@@ -5,7 +5,7 @@ use crate::seq;
 const CONFIG: TxBlockAckConfig = TxBlockAckConfig {
     tid: WmmUserPriority::UP7,
     window: 32,
-    timeout_tu: 0,
+    timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
     negotiation_timeout: Duration::from_micros(100_000),
     amsdu: true,
 };
@@ -50,7 +50,7 @@ fn matching_response_commits_only_the_static_window() {
     let agreement = OperationalTxBlockAck {
         tid: WmmUserPriority::UP7,
         window: 32,
-        timeout_tu: 0,
+        timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         starting_sequence: seq(0x123),
         amsdu: true,
     };
@@ -125,7 +125,7 @@ fn active(start: u16, window: u16) -> TxBlockAckSession {
         .on_response_action(BlockAckAction::AddbaResponse {
             dialog_token: request.dialog_token,
             status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
-            timeout_tu: 0,
+            timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
             parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
                 oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
@@ -173,7 +173,7 @@ fn terminal_marks_are_idempotent_and_reset_with_the_agreement() {
         .on_response_action(BlockAckAction::AddbaResponse {
             dialog_token: request.dialog_token,
             status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
-            timeout_tu: 0,
+            timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
             parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
                 oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,

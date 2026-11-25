@@ -20,7 +20,7 @@ fn unsupported_addba_receives_an_explicit_decline() {
             DialogToken::new(17),
             Tid::constant::<15>(),
             16,
-            0,
+            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
             SequenceNumber::ZERO,
         )
@@ -69,7 +69,7 @@ fn an_encoder_refusal_returns_the_reply_without_marking_tx_busy() {
                     oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
                 tid: Tid::constant::<0>(),
                 window: 8,
-                timeout_tu: 0,
+                timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
                 amsdu: false,
             },
         )

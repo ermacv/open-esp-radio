@@ -1523,7 +1523,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     let response = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
         status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
-        timeout_tu: 0,
+        timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
@@ -1621,7 +1621,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     let response = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
         status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
-        timeout_tu: 0,
+        timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
@@ -1673,7 +1673,7 @@ fn addba_response_after_the_negotiation_timeout_is_dropped_as_stale() {
     let late = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
         status: oer_protocols_ieee80211_wire::status::StatusCode::SUCCESS,
-        timeout_tu: 0,
+        timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
@@ -1768,7 +1768,7 @@ fn an_unanswered_or_unsent_offer_is_retried_after_the_interval_while_attempts_re
     let declined = BlockAckAction::AddbaResponse {
         dialog_token: third.dialog_token,
         status: oer_protocols_ieee80211_wire::status::StatusCode::REQUEST_DECLINED,
-        timeout_tu: 0,
+        timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
