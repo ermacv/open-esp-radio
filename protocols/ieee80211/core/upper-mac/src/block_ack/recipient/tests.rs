@@ -8,7 +8,7 @@ fn request(tid: u8, timeout_tu: u16) -> RxAddbaRequest {
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
-            tid,
+            Tid::new(tid).unwrap(),
             64,
         )
         .unwrap(),
@@ -24,7 +24,7 @@ struct Bank(u8);
 fn session(clock: &VirtualClock, timeout: u16) -> RxBlockAckSession<Bank, 8, 8> {
     let negotiation = RxBlockAckNegotiation::request(
         request(0, timeout),
-        7,
+        Tid::constant::<7>(),
         AmsduInAmpdu::Delivered,
         8,
         BankRoom::Free,
@@ -50,7 +50,7 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
     let clock = VirtualClock::new();
     let negotiation = RxBlockAckNegotiation::request(
         request(3, 0),
-        7,
+        Tid::constant::<7>(),
         AmsduInAmpdu::Delivered,
         8,
         BankRoom::Free,
@@ -61,7 +61,7 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
     assert_eq!(response.status, AddbaStatus::Success);
     assert_eq!(response.window, 8);
     assert_eq!(response.dialog_token, 17);
-    assert_eq!(response.tid, 3);
+    assert_eq!(response.tid, Tid::constant::<3>());
     assert!(response.amsdu);
     assert!(matches!(
         oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(
@@ -72,7 +72,7 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
             status: 0,
             parameters,
             ..
-        }) if (parameters.tid(), parameters.window(), parameters.amsdu()) == (3, 8, true)
+        }) if (parameters.tid(), parameters.window(), parameters.amsdu()) == (Tid::constant::<3>(), 8, true)
     ));
 }
 
@@ -87,9 +87,15 @@ fn amsdus_are_granted_only_when_requested_and_the_backend_delivers_them() {
         (without, AmsduInAmpdu::Delivered, false),
         (without, AmsduInAmpdu::NotDelivered, false),
     ] {
-        let negotiation =
-            RxBlockAckNegotiation::request(request, 7, delivers, 8, BankRoom::Free, clock.now())
-                .unwrap();
+        let negotiation = RxBlockAckNegotiation::request(
+            request,
+            Tid::constant::<7>(),
+            delivers,
+            8,
+            BankRoom::Free,
+            clock.now(),
+        )
+        .unwrap();
         assert_eq!(negotiation.response().status, AddbaStatus::Success);
         assert_eq!(negotiation.response().amsdu, granted);
         assert!(matches!(
@@ -115,7 +121,7 @@ fn a_zero_request_window_uses_the_ht_default_bounded_by_real_capacity() {
     request.window = 0;
     let accepted = RxBlockAckNegotiation::request(
         request,
-        7,
+        Tid::constant::<7>(),
         AmsduInAmpdu::Delivered,
         7,
         BankRoom::Free,
@@ -138,7 +144,7 @@ fn unavailable_bank_and_unsupported_parameters_have_explicit_responses() {
     ] {
         let response = RxBlockAckNegotiation::request(
             request,
-            7,
+            Tid::constant::<7>(),
             AmsduInAmpdu::Delivered,
             capacity,
             bank,
@@ -181,17 +187,17 @@ fn reorder_wraparound_duplicate_and_delba_return_each_owner_once() {
     let release = receiver.ingest(clock.now(), frame(4094, 3), gap).unwrap();
     assert_eq!(released(&release), [3, 1, 0]);
     assert!(!receiver.peer_delba(BlockAckAction::Delba {
-        tid: 0,
+        tid: Tid::constant::<0>(),
         initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
         reason: 37,
     }));
     assert!(!receiver.peer_delba(BlockAckAction::Delba {
-        tid: 1,
+        tid: Tid::constant::<1>(),
         initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
         reason: 37,
     }));
     assert!(receiver.peer_delba(BlockAckAction::Delba {
-        tid: 0,
+        tid: Tid::constant::<0>(),
         initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
         reason: 37,
     }));
@@ -251,7 +257,7 @@ fn overflowing_deadline_refuses_negotiation_without_creating_a_session() {
     let clock = VirtualClock::starting_at(Instant::from_micros(u64::MAX));
     let response = RxBlockAckNegotiation::request(
         request(0, 1),
-        7,
+        Tid::constant::<7>(),
         AmsduInAmpdu::Delivered,
         8,
         BankRoom::Free,

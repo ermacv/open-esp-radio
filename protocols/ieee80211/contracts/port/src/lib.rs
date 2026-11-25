@@ -115,7 +115,7 @@ pub use owner::{
     InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing, NoAckHeader, PortRate, QosBody,
     QosControl, ReceiverAddress, ResponseHeader, ServicePeriod, SizedFrame, Station,
     StationReceive, StorageTooShort, SupportedBlockAck, SupportedChannel, SupportedEdca,
-    SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
+    SupportedFilter, SupportedNoAck, SupportedPower, TxFrame,
 };
 pub use rx::{
     Aggregation, LinkMetric, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata,

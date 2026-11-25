@@ -136,7 +136,7 @@ impl StaDataHeaderTemplate {
             .header
             .with_address3(fields.destination)
             .with_sequence_control(fields.sequence_number.sequence_control());
-        header.map_qos(|qos| qos.with_tid(fields.priority.wire().widen()))
+        header.map_qos(|qos| qos.with_tid(fields.priority.tid()))
     }
 
     /// The prefix's octets: the MAC header, a zero CCMP header on a

@@ -54,7 +54,7 @@ use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Arena, ArenaOutcome, ArenaSide, DataPort, FrameSet, GateOpen,
     HEADROOM, HeaderLen, IdleArena, Ieee80211Capabilities, MpduLength, MpduStartSpacing, OnAir,
-    PhyRate, Ppdu, RxMetadata, Settled as Kept, SingleEnd, SingleOutcome, SingleResponse, Tid,
+    PhyRate, Ppdu, RxMetadata, Settled as Kept, SingleEnd, SingleOutcome, SingleResponse,
     TxEstimate, TxFacts, TxOutcome,
 };
 use oer_protocols_ieee80211_core_upper_mac::{
@@ -108,28 +108,6 @@ const fn front_of(header: &StaDataHeaderTemplate) -> HeaderLen {
         (PeerQos::Qos, LinkProtection::Ccmp) => front_len::<QOS_CCMP>(),
     }
 }
-
-/// The TID of the user priority `UP`, checked at compile time.
-const fn tid_of<const UP: u8>() -> Tid {
-    const {
-        match Tid::new(UP) {
-            Some(tid) => tid,
-            None => panic!("a user priority is a TID"),
-        }
-    }
-}
-
-/// Each user priority's TID, made once.
-const TIDS: [Tid; 8] = [
-    tid_of::<0>(),
-    tid_of::<1>(),
-    tid_of::<2>(),
-    tid_of::<3>(),
-    tid_of::<4>(),
-    tid_of::<5>(),
-    tid_of::<6>(),
-    tid_of::<7>(),
-];
 
 /// One MSDU from the network: its Ethernet frame, its header the last
 /// [`ETHERNET_HEADER_LEN`] octets of the memory's headroom and its payload
@@ -1115,7 +1093,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
                 None => None,
             };
             if let Some(idle) = idle {
-                book.right = Some(Held::Open(port.open(idle, link, *tid.select(&TIDS))));
+                book.right = Some(Held::Open(port.open(idle, link, tid.tid())));
             }
         }
         // A book names 64 positions: a book that took them all takes no

@@ -6,6 +6,7 @@ use oer_protocols_ieee80211_wire::block_ack::frame::{
     ADDBA_ACTION_BODY_LEN, AddbaRequestError, BlockAckAction, encode_addba_request,
     parse_block_ack_action,
 };
+use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// Largest originator window represented by the delivery/expiry bitmaps.
@@ -13,7 +14,6 @@ pub const MAX_TX_BLOCK_ACK_WINDOW: u16 = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxBlockAckError {
-    InvalidTid(u8),
     InvalidWindow(u16),
     ZeroTimeout,
     DeadlineOverflow,
@@ -25,7 +25,7 @@ pub enum TxBlockAckError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TxBlockAckConfig {
-    pub tid: u8,
+    pub tid: WmmUserPriority,
     pub window: u16,
     pub timeout_tu: u16,
     /// How long a negotiation waits for the peer's ADDBA response.
@@ -35,9 +35,6 @@ pub struct TxBlockAckConfig {
 
 impl TxBlockAckConfig {
     pub const fn validate(self) -> Result<Self, TxBlockAckError> {
-        if self.tid > 15 {
-            return Err(TxBlockAckError::InvalidTid(self.tid));
-        }
         if self.window == 0 || self.window > MAX_TX_BLOCK_ACK_WINDOW {
             return Err(TxBlockAckError::InvalidWindow(self.window));
         }
@@ -87,7 +84,7 @@ pub struct AddbaRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OperationalTxBlockAck {
-    pub tid: u8,
+    pub tid: WmmUserPriority,
     pub window: u16,
     pub timeout_tu: u16,
     /// Current originator-window head, advanced by delivery and expiry.
@@ -115,7 +112,7 @@ enum TxBlockAckPhase {
     },
 }
 
-/// One statically owned TX BlockAck agreement for one QoS TID.
+/// One statically owned TX BlockAck agreement for one user priority's TID.
 ///
 /// Progress processes at most 64 sequence positions. Timer expiry is an
 /// externally delivered edge; this type never reads time, sleeps, or retries.
@@ -167,7 +164,7 @@ impl TxBlockAckSession {
         let dialog_token = dialog_token.value();
         let body = encode_addba_request(
             dialog_token,
-            self.config.tid,
+            self.config.tid.tid(),
             self.config.window,
             self.config.timeout_tu,
             if self.config.amsdu {
@@ -178,7 +175,6 @@ impl TxBlockAckSession {
             starting_sequence,
         )
         .map_err(|error| match error {
-            AddbaRequestError::InvalidTid(tid) => TxBlockAckError::InvalidTid(tid),
             AddbaRequestError::InvalidWindow(window) => TxBlockAckError::InvalidWindow(window),
         })?;
         self.generation = next_generation(self.generation);
@@ -256,14 +252,14 @@ impl TxBlockAckSession {
         if !immediate {
             return Err(TxBlockAckError::DelayedPolicyUnsupported);
         }
-        if tid != self.config.tid {
+        if tid != self.config.tid.tid() {
             return Err(TxBlockAckError::UnexpectedResponse);
         }
         if window == 0 || window > self.config.window {
             return Err(TxBlockAckError::WindowExceedsCapacity(window));
         }
         let agreement = OperationalTxBlockAck {
-            tid,
+            tid: self.config.tid,
             window,
             timeout_tu,
             starting_sequence,

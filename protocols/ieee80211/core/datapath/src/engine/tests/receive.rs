@@ -7,6 +7,7 @@ use super::*;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{RxCryptoStatus, RxEvidence, RxMeta};
 use oer_protocols_ieee80211_wire::channel::{Channel, ChannelWidth};
+use oer_protocols_ieee80211_wire::qos::Tid;
 
 /// A source behind the access point.
 const SOURCE: [u8; 6] = [2, 0, 0, 0, 0, 0x20];
@@ -638,7 +639,7 @@ pub(super) fn addba(starting: u16) -> Vec<u8> {
     frame.extend_from_slice(
         &encode_addba_request(
             5,
-            0,
+            Tid::constant::<0>(),
             8,
             0,
             AmsduSupport::NotSupported,
@@ -654,7 +655,7 @@ fn bar(starting: u16) -> Vec<u8> {
     oer_protocols_ieee80211_wire::block_ack::frame::encode_block_ack_request(
         Eui48::new(STATION),
         Eui48::new(ACCESS_POINT_ADDRESS),
-        0,
+        Tid::constant::<0>(),
         SequenceNumber::new(starting).unwrap(),
     )
     .to_vec()
@@ -1039,11 +1040,10 @@ fn architect_the_end_of_an_agreements_command_is_told() {
         delba.extend_from_slice(&[0, 0]);
         delba.extend_from_slice(
             &oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
-                0,
+                Tid::constant::<0>(),
                 oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
                 1,
-            )
-            .unwrap(),
+            ),
         );
         around.port.land(&delba, meta());
         let _ = engine.received(&mut around.turn());

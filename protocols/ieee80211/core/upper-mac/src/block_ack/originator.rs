@@ -18,6 +18,7 @@
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 
 use super::{
     AddbaRequest, BlockAckAction, OperationalTxBlockAck, TxBlockAckAlarm, TxBlockAckConfig,
@@ -72,8 +73,8 @@ impl DialogTokenSequence {
 #[derive(Clone, Copy, Debug)]
 pub struct TxBlockAckOriginatorPolicy {
     /// The TIDs in the order their negotiations go out; at most the
-    /// originator's `TIDS`, each below [`TX_BLOCK_ACK_MAX_TIDS`].
-    pub tids: &'static [u8],
+    /// originator's `TIDS`.
+    pub tids: &'static [WmmUserPriority],
     /// The Dialog Tokens the agreements share.
     pub dialog_tokens: DialogTokenSequence,
 }
@@ -84,8 +85,8 @@ pub struct TxBlockAckOriginatorConfig {
     pub window: u16,
     /// How long a negotiation waits for the ADDBA Response.
     pub negotiation_timeout: Duration,
-    /// The TIDs whose agreements may carry A-MSDUs, one bit per TID.
-    pub amsdu_tids: u8,
+    /// The TIDs whose agreements may carry A-MSDUs.
+    pub amsdu_tids: &'static [WmmUserPriority],
 }
 
 /// How many attempts a queued negotiation gets and how long a failed one
@@ -100,20 +101,20 @@ pub struct TxBlockAckRetry {
 pub enum TxBlockAckOriginatorError {
     /// The policy names more TIDs than the originator owns.
     TooManyTids,
-    /// The policy names this TID twice, or the TID is outside the originator.
-    UnsupportedTid(u8),
+    /// The policy names this TID twice, or the originator does not own it.
+    UnsupportedTid(WmmUserPriority),
     /// The policy's first Dialog Token lies outside its sequence.
     DialogTokens(DialogTokenSequence),
     MalformedResponse,
     Session {
-        tid: u8,
+        tid: WmmUserPriority,
         error: TxBlockAckError,
     },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TxBlockAckOriginatorResponse {
-    pub tid: u8,
+    pub tid: WmmUserPriority,
     pub response: TxBlockAckResponse,
 }
 
@@ -127,7 +128,7 @@ pub enum TxBlockAckResponseDisposition {
 }
 
 struct Agreement {
-    tid: u8,
+    tid: WmmUserPriority,
     session: TxBlockAckSession,
     negotiation: Negotiation,
     /// Negotiations left; a peer's answer ends them.
@@ -173,9 +174,8 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             ));
         }
         let mut agreements = [const { None }; TIDS];
-        let mut seen = 0_u8;
-        for (place, &tid) in agreements.iter_mut().zip(policy.tids) {
-            if usize::from(tid) >= TX_BLOCK_ACK_MAX_TIDS || seen & (1_u8 << tid) != 0 {
+        for (index, (place, &tid)) in agreements.iter_mut().zip(policy.tids).enumerate() {
+            if policy.tids.iter().take(index).any(|other| *other == tid) {
                 return Err(TxBlockAckOriginatorError::UnsupportedTid(tid));
             }
             let session = TxBlockAckSession::new(TxBlockAckConfig {
@@ -183,10 +183,9 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
                 window: config.window,
                 timeout_tu: 0,
                 negotiation_timeout: config.negotiation_timeout,
-                amsdu: config.amsdu_tids & (1 << tid) != 0,
+                amsdu: config.amsdu_tids.contains(&tid),
             })
             .map_err(|error| TxBlockAckOriginatorError::Session { tid, error })?;
-            seen |= 1_u8 << tid;
             *place = Some(Agreement {
                 tid,
                 session,
@@ -202,14 +201,14 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
         })
     }
 
-    fn agreement(&self, tid: u8) -> Option<&Agreement> {
+    fn agreement(&self, tid: WmmUserPriority) -> Option<&Agreement> {
         self.agreements
             .iter()
             .flatten()
             .find(|agreement| agreement.tid == tid)
     }
 
-    fn agreement_mut(&mut self, tid: u8) -> Option<&mut Agreement> {
+    fn agreement_mut(&mut self, tid: WmmUserPriority) -> Option<&mut Agreement> {
         self.agreements
             .iter_mut()
             .flatten()
@@ -217,7 +216,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     }
 
     /// The TIDs in the policy's order.
-    pub fn tids(&self) -> impl Iterator<Item = u8> + '_ {
+    pub fn tids(&self) -> impl Iterator<Item = WmmUserPriority> + '_ {
         self.agreements
             .iter()
             .flatten()
@@ -245,7 +244,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// attempts and interval, when the TID is idle: no agreement, no
     /// negotiation, none queued and not closed by a refusal or by attempts
     /// that ran out. Whether one was queued.
-    pub fn queue(&mut self, tid: u8, retry: TxBlockAckRetry) -> bool {
+    pub fn queue(&mut self, tid: WmmUserPriority, retry: TxBlockAckRetry) -> bool {
         let Some(agreement) = self.agreement_mut(tid) else {
             return false;
         };
@@ -265,7 +264,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// End the agreement or negotiation of `tid` and offer it no more:
     /// [`Self::queue`] refuses it until [`Self::queue_initial`] or
     /// [`Self::stop_all`]; `false` for a TID the originator does not own.
-    pub fn close(&mut self, tid: u8) -> bool {
+    pub fn close(&mut self, tid: WmmUserPriority) -> bool {
         match self.agreement_mut(tid) {
             Some(agreement) => {
                 agreement.session.stop();
@@ -278,7 +277,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     }
 
     /// Whether `tid` is closed to [`Self::queue`].
-    pub fn is_closed(&self, tid: u8) -> bool {
+    pub fn is_closed(&self, tid: WmmUserPriority) -> bool {
         self.agreement(tid)
             .is_some_and(|agreement| agreement.negotiation == Negotiation::Closed)
     }
@@ -306,7 +305,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// The next TID whose negotiation is due at `now`, in the policy's
     /// order; taking it uses one of its attempts. The caller then
     /// [`Self::begin`]s it.
-    pub fn take_pending(&mut self, now: Instant) -> Option<u8> {
+    pub fn take_pending(&mut self, now: Instant) -> Option<WmmUserPriority> {
         let agreement = self.agreements.iter_mut().flatten().find(
             |agreement| matches!(agreement.negotiation, Negotiation::Due(due) if due <= now),
         )?;
@@ -319,7 +318,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// owns its encoded action body.
     pub fn begin(
         &mut self,
-        tid: u8,
+        tid: WmmUserPriority,
         starting_sequence: SequenceNumber,
         now: Instant,
     ) -> Result<AddbaRequest, TxBlockAckOriginatorError> {
@@ -342,7 +341,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
 
     /// The request of `tid` did not leave at `now`: its negotiation ends,
     /// and the next one is due after the interval while attempts remain.
-    pub fn transmit_failed(&mut self, tid: u8, now: Instant) {
+    pub fn transmit_failed(&mut self, tid: WmmUserPriority, now: Instant) {
         let interval = self.retry_interval;
         if let Some(agreement) = self.agreement_mut(tid) {
             agreement.session.stop();
@@ -398,7 +397,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// Consume at most one negotiation whose response is overdue at `now`
     /// and queue its next attempt after the interval while attempts remain;
     /// its TID.
-    pub fn expire_next(&mut self, now: Instant) -> Option<u8> {
+    pub fn expire_next(&mut self, now: Instant) -> Option<WmmUserPriority> {
         let interval = self.retry_interval;
         for agreement in self.agreements.iter_mut().flatten() {
             let Negotiation::Awaiting(alarm) = agreement.negotiation else {
@@ -418,7 +417,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
 
     /// End the agreement or negotiation of `tid`, queueing nothing; `false`
     /// for a TID the originator does not own.
-    pub fn stop(&mut self, tid: u8) -> bool {
+    pub fn stop(&mut self, tid: WmmUserPriority) -> bool {
         match self.agreement_mut(tid) {
             Some(agreement) => {
                 agreement.session.stop();
@@ -453,7 +452,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// Advancing over deferred expiry produces one BAR at the new head.
     pub fn on_delivered(
         &mut self,
-        tid: u8,
+        tid: WmmUserPriority,
         starting_sequence: SequenceNumber,
         bitmap: u64,
         receiver: Eui48,
@@ -467,7 +466,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
                 receiver,
                 transmitter,
-                tid,
+                tid.tid(),
                 next,
             ),
         )
@@ -481,7 +480,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
     /// Backends report expiry only; the core owns this request.
     pub fn on_expired(
         &mut self,
-        tid: u8,
+        tid: WmmUserPriority,
         starting_sequence: SequenceNumber,
         bitmap: u64,
         receiver: Eui48,
@@ -495,25 +494,25 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             oer_protocols_ieee80211_wire::block_ack::encode_block_ack_request(
                 receiver,
                 transmitter,
-                tid,
+                tid.tid(),
                 next,
             ),
         )
     }
 
-    pub fn operational(&self, tid: u8) -> Option<OperationalTxBlockAck> {
+    pub fn operational(&self, tid: WmmUserPriority) -> Option<OperationalTxBlockAck> {
         self.agreement(tid)?.session.operational()
     }
 
     /// The generation of `tid`'s session: with an operational agreement it
     /// names exactly that agreement; zero for a TID the originator does not
     /// own.
-    pub fn generation(&self, tid: u8) -> u32 {
+    pub fn generation(&self, tid: WmmUserPriority) -> u32 {
         self.agreement(tid)
             .map_or(0, |agreement| agreement.session.generation())
     }
 
-    pub fn alarm(&self, tid: u8) -> Option<TxBlockAckAlarm> {
+    pub fn alarm(&self, tid: WmmUserPriority) -> Option<TxBlockAckAlarm> {
         match self.agreement(tid)?.negotiation {
             Negotiation::Awaiting(alarm) => Some(alarm),
             Negotiation::Idle | Negotiation::Due(_) | Negotiation::Closed => None,

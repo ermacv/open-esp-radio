@@ -460,7 +460,7 @@ pub const fn plan_data_encapsulation(
     ];
     let qos_control = if qos {
         QosControl::from_bytes([0; 2])
-            .with_tid(priority.wire().widen())
+            .with_tid(priority.tid())
             .with_ack_policy(ack_policy.field())
             .to_bytes()
     } else {

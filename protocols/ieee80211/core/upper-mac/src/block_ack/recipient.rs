@@ -6,6 +6,7 @@
 use super::{RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease};
 use core::num::NonZeroU64;
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::{
     block_ack::frame::{
         ADDBA_ACTION_BODY_LEN, BlockAckAction, BlockAckPolicy, encode_addba_response,
@@ -51,7 +52,7 @@ pub enum BankRoom {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxAddbaRequest {
     dialog_token: u8,
-    tid: u8,
+    tid: Tid,
     policy: BlockAckPolicy,
     amsdu: Amsdu,
     window: u16,
@@ -85,7 +86,7 @@ impl RxAddbaRequest {
     }
 
     /// The TID the request names.
-    pub const fn tid(&self) -> u8 {
+    pub const fn tid(&self) -> Tid {
         self.tid
     }
 
@@ -101,7 +102,7 @@ impl RxAddbaRequest {
 pub struct AddbaResponse {
     pub dialog_token: u8,
     pub status: AddbaStatus,
-    pub tid: u8,
+    pub tid: Tid,
     pub window: u16,
     pub timeout_tu: u16,
     pub amsdu: bool,
@@ -159,7 +160,7 @@ impl RxBlockAckNegotiation {
     /// agreement only when the request asks and the backend delivers them.
     pub fn request(
         request: RxAddbaRequest,
-        maximum_tid: u8,
+        maximum_tid: Tid,
         amsdu_in_ampdu: AmsduInAmpdu,
         capacity: u16,
         bank: BankRoom,
@@ -246,7 +247,7 @@ pub struct RxBlockAckSession<A, const WINDOW: usize, const SLOTS: usize> {
     requested_window: u16,
     requested_amsdu: Amsdu,
     timeout_tu: u16,
-    tid: u8,
+    tid: Tid,
     dialog_token: u8,
     amsdu: bool,
 }
@@ -275,7 +276,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         }
     }
 
-    pub const fn tid(&self) -> u8 {
+    pub const fn tid(&self) -> Tid {
         self.tid
     }
 

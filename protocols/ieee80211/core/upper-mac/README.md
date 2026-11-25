@@ -146,8 +146,6 @@ selection stays here and passes its exact control-frame rate to the port.
 
 ## Known defects
 
-- **Untyped TID:** `ccmp.rs::CcmpReplayError::InvalidTid` exists because the
-  TID is a raw value.
 - **Low:** `fragmentation/reassembly.rs::preflight_in_epoch` checks
   `CONTEXTS == 0` at run time (`NoReassemblyContexts`) instead of a const
   assert; `ccmp.rs` has `impl Default for CcmpRxReplayState`.

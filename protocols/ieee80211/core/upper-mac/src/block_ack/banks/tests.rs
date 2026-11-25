@@ -19,6 +19,8 @@ use std::vec::Vec;
 
 const LOCAL: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const AP: [u8; 6] = [2, 0, 0, 0, 0, 2];
+const TID_0: Tid = Tid::constant::<0>();
+const TID_2: Tid = Tid::constant::<2>();
 const GAP: Duration = Duration::from_micros(10_000);
 
 struct Caps;
@@ -50,7 +52,7 @@ impl Ieee80211Capabilities for Caps {
         individual_no_ack: PhyFormatSet::NON_HT,
         station_receive_filters: ReceiveFilter::BSS_MEMBER,
         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
-        rx_block_ack_max_tid: 7,
+        rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<7>(),
         rx_block_ack_max_window: 64,
         rx_amsdu_in_ampdu: true,
         edca_max_aifsn: 15,
@@ -224,7 +226,7 @@ fn bssid() -> Bssid {
 fn addba(tid: u8, timeout_tu: u16) -> BlockAckAction {
     let body = encode_addba_request(
         5,
-        tid,
+        Tid::new(tid).unwrap(),
         8,
         timeout_tu,
         oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
@@ -297,7 +299,10 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
         BlockAckAction::AddbaResponse {
             status, parameters, ..
         } => {
-            assert_eq!((status, parameters.tid()), (status_code::SUCCESS, 3));
+            assert_eq!(
+                (status, parameters.tid()),
+                (status_code::SUCCESS, Tid::constant::<3>())
+            );
         }
         other => panic!("expected an ADDBA Response, got {other:?}"),
     }
@@ -312,7 +317,7 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
     let mut port = Recording::default();
     let body = encode_addba_request(
         5,
-        0,
+        Tid::constant::<0>(),
         64,
         0,
         oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
@@ -452,7 +457,7 @@ fn a_frame_of_another_receiver_or_transmitter_moves_no_window() {
         encode_block_ack_request(
             Eui48::new(receiver),
             Eui48::new(transmitter),
-            0,
+            Tid::constant::<0>(),
             SequenceNumber::new(102).unwrap(),
         )
     };
@@ -513,7 +518,7 @@ fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
     let bar = encode_block_ack_request(
         Eui48::new(LOCAL),
         Eui48::new(AP),
-        0,
+        Tid::constant::<0>(),
         SequenceNumber::new(102).unwrap(),
     );
     assert!(matches!(
@@ -547,7 +552,7 @@ fn inactivity_ends_the_agreement_with_a_delba_and_returns_its_slot() {
     assert!(matches!(
         parse_block_ack_action(&reply.body),
         Some(BlockAckAction::Delba {
-            tid: 2,
+            tid: TID_2,
             initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
             ..
         })
@@ -676,7 +681,13 @@ fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, RxBlockAckEvent::Started { tid: 0, window: 8 }))
+            .filter(|event| matches!(
+                event,
+                RxBlockAckEvent::Started {
+                    tid: TID_0,
+                    window: 8
+                }
+            ))
             .count(),
         1
     );
@@ -686,7 +697,7 @@ fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
             .filter(|event| matches!(
                 event,
                 RxBlockAckEvent::Stopped {
-                    tid: 0,
+                    tid: TID_0,
                     reason: AgreementStop::Clear
                 }
             ))
@@ -894,7 +905,7 @@ fn request_for(dialog_token: u8, tid: u8, window: u16) -> BlockAckAction {
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
-            tid,
+            Tid::new(tid).unwrap(),
             window,
         )
         .unwrap(),
@@ -902,7 +913,7 @@ fn request_for(dialog_token: u8, tid: u8, window: u16) -> BlockAckAction {
 }
 
 /// The ADDBA records of `events`, in order.
-fn requested(events: &[RxBlockAckEvent]) -> Vec<(u8, u16, AddbaOutcome)> {
+fn requested(events: &[RxBlockAckEvent]) -> Vec<(Tid, u16, AddbaOutcome)> {
     events
         .iter()
         .filter_map(|event| match *event {
@@ -937,7 +948,11 @@ fn requests_get_their_window<const WINDOW: usize>() {
         .unwrap();
         assert_eq!(
             requested(&events.0),
-            [(0, asked, AddbaOutcome::Accepted { window })],
+            [(
+                Tid::constant::<0>(),
+                asked,
+                AddbaOutcome::Accepted { window }
+            )],
             "a request for {asked}"
         );
         assert!(
@@ -945,7 +960,7 @@ fn requests_get_their_window<const WINDOW: usize>() {
                 events.0.as_slice(),
                 [
                     RxBlockAckEvent::Requested { .. },
-                    RxBlockAckEvent::Started { tid: 0, window: started },
+                    RxBlockAckEvent::Started { tid: TID_0, window: started },
                 ] if *started == window
             ),
             "the agreement starts at its addition's end, after the request: {:?}",
@@ -983,8 +998,16 @@ fn the_window_binds_below_the_frames() {
     assert_eq!(
         requested(&events.0),
         [
-            (0, 64, AddbaOutcome::Accepted { window: 16 }),
-            (1, 64, AddbaOutcome::Accepted { window: 16 }),
+            (
+                Tid::constant::<0>(),
+                64,
+                AddbaOutcome::Accepted { window: 16 }
+            ),
+            (
+                Tid::constant::<1>(),
+                64,
+                AddbaOutcome::Accepted { window: 16 }
+            ),
         ]
     );
 }
@@ -1010,8 +1033,16 @@ fn a_second_concurrent_tid_records_the_one_frame_left_for_it() {
     assert_eq!(
         requested(&events.0),
         [
-            (0, 64, AddbaOutcome::Accepted { window: 16 }),
-            (1, 64, AddbaOutcome::Accepted { window: 1 }),
+            (
+                Tid::constant::<0>(),
+                64,
+                AddbaOutcome::Accepted { window: 16 }
+            ),
+            (
+                Tid::constant::<1>(),
+                64,
+                AddbaOutcome::Accepted { window: 1 }
+            ),
         ]
     );
     // The first agreement keeps its window: nothing ends it.
@@ -1062,13 +1093,32 @@ fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outc
     assert_eq!(
         records[..4],
         [
-            (0, 8, AddbaOutcome::Accepted { window: 8 }),
-            (0, 8, AddbaOutcome::Repeated { window: 8 }),
-            (0, 4, AddbaOutcome::Refused(AddbaStatus::RequestDeclined)),
-            (9, 8, AddbaOutcome::Refused(AddbaStatus::RequestDeclined)),
+            (
+                Tid::constant::<0>(),
+                8,
+                AddbaOutcome::Accepted { window: 8 }
+            ),
+            (
+                Tid::constant::<0>(),
+                8,
+                AddbaOutcome::Repeated { window: 8 }
+            ),
+            (
+                Tid::constant::<0>(),
+                4,
+                AddbaOutcome::Refused(AddbaStatus::RequestDeclined)
+            ),
+            (
+                Tid::constant::<9>(),
+                8,
+                AddbaOutcome::Refused(AddbaStatus::RequestDeclined)
+            ),
         ]
     );
-    assert_eq!(records.last(), Some(&(3, 0, AddbaOutcome::Unanswered)));
+    assert_eq!(
+        records.last(),
+        Some(&(Tid::constant::<3>(), 0, AddbaOutcome::Unanswered))
+    );
     assert_eq!(records.len(), 4 + PENDING - 2 + 1);
 }
 

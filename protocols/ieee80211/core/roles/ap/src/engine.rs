@@ -1114,7 +1114,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         // apart, so nothing of the region changes before it is whole.
         let sequence = if plan.qos == PeerQos::Qos {
             self.service
-                .next_qos_sequence(plan.peer, plan.tid.value())
+                .next_qos_sequence(plan.peer, plan.tid)
                 .ok_or(ApServiceError::UnknownPeer)?
         } else {
             self.service.next_data_sequence()

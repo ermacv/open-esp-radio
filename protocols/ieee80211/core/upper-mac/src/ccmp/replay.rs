@@ -17,6 +17,7 @@ use super::{
     CcmpHeader, CcmpKeyId, CcmpReplayError, CcmpReplayLane, CcmpRxReplayCandidate,
     CcmpRxReplayState, GroupKeyId,
 };
+use oer_protocols_ieee80211_wire::qos::Tid;
 
 /// Which key a received frame's destination selects.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -126,7 +127,7 @@ impl CcmpRxReplayEpoch {
     pub fn prepare(
         &mut self,
         protection: CcmpRxProtection,
-        tid: Option<u8>,
+        tid: Option<Tid>,
         header: CcmpHeader,
     ) -> Result<CcmpRxReplayCandidate<'_>, CcmpRxReplayError> {
         let lane = match tid {
@@ -168,7 +169,7 @@ impl CcmpRxReplayEpoch {
     pub fn check(
         &mut self,
         protection: CcmpRxProtection,
-        tid: Option<u8>,
+        tid: Option<Tid>,
         header: CcmpHeader,
     ) -> Result<(), CcmpRxReplayError> {
         let candidate = self.prepare(protection, tid, header)?;

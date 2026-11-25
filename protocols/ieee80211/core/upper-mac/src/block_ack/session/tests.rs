@@ -3,7 +3,7 @@ use crate::block_ack::Amsdu;
 use crate::seq;
 
 const CONFIG: TxBlockAckConfig = TxBlockAckConfig {
-    tid: 7,
+    tid: WmmUserPriority::UP7,
     window: 32,
     timeout_tu: 0,
     negotiation_timeout: Duration::from_micros(100_000),
@@ -48,7 +48,7 @@ fn matching_response_commits_only_the_static_window() {
     let request = session.begin(seq(0x123), at(0)).unwrap();
     let response = [3, 1, request.dialog_token, 0, 0, 0x1f, 0x08, 0, 0];
     let agreement = OperationalTxBlockAck {
-        tid: 7,
+        tid: WmmUserPriority::UP7,
         window: 32,
         timeout_tu: 0,
         starting_sequence: seq(0x123),
@@ -129,7 +129,7 @@ fn active(start: u16, window: u16) -> TxBlockAckSession {
             parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
                 oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
-                CONFIG.tid,
+                CONFIG.tid.tid(),
                 window,
             )
             .unwrap(),
@@ -177,7 +177,7 @@ fn terminal_marks_are_idempotent_and_reset_with_the_agreement() {
             parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
                 oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
-                CONFIG.tid,
+                CONFIG.tid.tid(),
                 32,
             )
             .unwrap(),

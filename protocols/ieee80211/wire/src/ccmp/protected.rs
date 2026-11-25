@@ -10,6 +10,7 @@
 
 use super::{CCMP_HEADER_LEN, CcmpHeader, CcmpHeaderError};
 use crate::frame::{DecodedHeader, QosControl};
+use crate::qos::Tid;
 use crate::security::Spp;
 use crate::sequence::SequenceControl;
 
@@ -212,7 +213,7 @@ oer_portable_wire::bitfield! {
     /// Figure 12-18); with SPP the A-MSDU Present bit joins the priority as
     /// Linux v6.12 `ccmp_special_blocks` does.
     pub struct CcmNonceFlags[1] (little) {
-        pub priority, with_priority: (u8) = 0..4;
+        pub priority, with_priority: (Tid) = 0..4;
         pub management, with_management: bool = 4..5;
         pub amsdu, with_amsdu: bool = 7..8;
     }

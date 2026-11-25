@@ -81,7 +81,7 @@ impl<'a> AdmittedData<'a> {
                 CcmpRxProtection::Group
             };
             replay
-                .check(protection, header.qos().map(|qos| qos.tid().get()), ccmp)
+                .check(protection, header.qos().map(|qos| qos.tid()), ccmp)
                 .map_err(|_| RxDropReason::Replay)?;
             payload = rest;
         }
@@ -128,7 +128,7 @@ impl<'a> AdmittedData<'a> {
             replay
                 .check(
                     CcmpRxProtection::Pairwise,
-                    header.qos().map(|qos| qos.tid().get()),
+                    header.qos().map(|qos| qos.tid()),
                     ccmp,
                 )
                 .map_err(|_| RxDropReason::Replay)?;

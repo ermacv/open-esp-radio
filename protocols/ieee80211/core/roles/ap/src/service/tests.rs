@@ -268,30 +268,33 @@ fn qos_sequence_spaces_are_independent_for_each_peer_and_tid() {
         .unwrap();
 
     assert_eq!(
-        service.next_qos_sequence(PEER, 0),
+        service.next_qos_sequence(PEER, WmmUserPriority::UP0),
         Some(SequenceNumber::new(0).unwrap())
     );
     assert_eq!(
-        service.next_qos_sequence(PEER, 0),
+        service.next_qos_sequence(PEER, WmmUserPriority::UP0),
         Some(SequenceNumber::new(1).unwrap())
     );
     assert_eq!(
-        service.current_qos_sequence(PEER, 0),
+        service.current_qos_sequence(PEER, WmmUserPriority::UP0),
         Some(SequenceNumber::new(2).unwrap())
     );
     assert_eq!(
-        service.current_qos_sequence(OTHER, 0),
+        service.current_qos_sequence(OTHER, WmmUserPriority::UP0),
         Some(SequenceNumber::new(0).unwrap())
     );
     assert_eq!(
-        service.next_qos_sequence(OTHER, 0),
+        service.next_qos_sequence(OTHER, WmmUserPriority::UP0),
         Some(SequenceNumber::new(0).unwrap())
     );
     assert_eq!(
-        service.current_qos_sequence(PEER, 1),
+        service.current_qos_sequence(PEER, WmmUserPriority::UP1),
         Some(SequenceNumber::new(0).unwrap())
     );
-    assert_eq!(service.next_qos_sequence([0xff; 6], 0), None);
+    assert_eq!(
+        service.next_qos_sequence([0xff; 6], WmmUserPriority::UP0),
+        None
+    );
 }
 
 #[test]
@@ -1499,7 +1502,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
-            AP_TX_BLOCK_ACK_TID,
+            AP_TX_BLOCK_ACK_TID.tid(),
             AP_TX_BLOCK_ACK_WINDOW,
         )
         .unwrap(),
@@ -1541,7 +1544,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
         .on_tx_block_ack_action(
             PEER,
             BlockAckAction::Delba {
-                tid: AP_TX_BLOCK_ACK_TID,
+                tid: AP_TX_BLOCK_ACK_TID.tid(),
                 initiator:
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
                 reason: 37,
@@ -1563,7 +1566,22 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
         .on_tx_block_ack_action(
             PEER,
             BlockAckAction::Delba {
-                tid: AP_TX_BLOCK_ACK_TID,
+                tid: WmmUserPriority::UP5.tid(),
+                initiator:
+                    oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
+                reason: 37,
+            },
+        )
+        .unwrap();
+    assert!(
+        service.peer_status(PEER).unwrap().tx_block_ack.is_some(),
+        "another TID's DELBA ends nothing"
+    );
+    service
+        .on_tx_block_ack_action(
+            PEER,
+            BlockAckAction::Delba {
+                tid: AP_TX_BLOCK_ACK_TID.tid(),
                 initiator:
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
                 reason: 37,
@@ -1582,7 +1600,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
-            AP_TX_BLOCK_ACK_TID,
+            AP_TX_BLOCK_ACK_TID.tid(),
             AP_TX_BLOCK_ACK_WINDOW,
         )
         .unwrap(),
@@ -1634,7 +1652,7 @@ fn addba_response_after_the_negotiation_timeout_is_dropped_as_stale() {
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
-            AP_TX_BLOCK_ACK_TID,
+            AP_TX_BLOCK_ACK_TID.tid(),
             AP_TX_BLOCK_ACK_WINDOW,
         )
         .unwrap(),
@@ -1729,7 +1747,7 @@ fn an_unanswered_or_unsent_offer_is_retried_after_the_interval_while_attempts_re
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
-            AP_TX_BLOCK_ACK_TID,
+            AP_TX_BLOCK_ACK_TID.tid(),
             0,
         )
         .unwrap(),

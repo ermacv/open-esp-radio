@@ -22,22 +22,38 @@ fn epoch() -> CcmpRxReplayEpoch {
 fn a_frame_sent_again_is_refused_in_its_lane_and_other_lanes_go_on() {
     let mut epoch = epoch();
     assert_eq!(
-        epoch.check(CcmpRxProtection::Pairwise, Some(0), header(5, 0)),
+        epoch.check(
+            CcmpRxProtection::Pairwise,
+            Some(Tid::constant::<0>()),
+            header(5, 0)
+        ),
         Ok(())
     );
     assert!(matches!(
-        epoch.check(CcmpRxProtection::Pairwise, Some(0), header(5, 0)),
+        epoch.check(
+            CcmpRxProtection::Pairwise,
+            Some(Tid::constant::<0>()),
+            header(5, 0)
+        ),
         Err(CcmpRxReplayError::Replay(CcmpReplayError::Replayed { .. }))
     ));
     // A lower number in its lane is refused too; another TID's and the
     // non-QoS lane's go on.
     assert!(
         epoch
-            .check(CcmpRxProtection::Pairwise, Some(0), header(4, 0))
+            .check(
+                CcmpRxProtection::Pairwise,
+                Some(Tid::constant::<0>()),
+                header(4, 0)
+            )
             .is_err()
     );
     assert_eq!(
-        epoch.check(CcmpRxProtection::Pairwise, Some(6), header(1, 0)),
+        epoch.check(
+            CcmpRxProtection::Pairwise,
+            Some(Tid::constant::<6>()),
+            header(1, 0)
+        ),
         Ok(())
     );
     assert_eq!(
@@ -237,7 +253,7 @@ fn check_all(bytes: &[u8]) {
             1 => CcmpRxProtection::Group,
             _ => CcmpRxProtection::Other,
         };
-        let tid = (tid & 0x20 == 0).then_some(tid & 0x1f);
+        let tid = (tid & 0x20 == 0).then_some(tid & 0x1f).and_then(Tid::new);
         match epoch.prepare(protection, tid, header) {
             Ok(candidate) if rsc & 1 == 0 => candidate.commit(),
             Ok(_) | Err(_) => {}

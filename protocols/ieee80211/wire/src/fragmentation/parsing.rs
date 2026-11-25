@@ -194,3 +194,25 @@ fn parse_data_header(
 
 #[cfg(test)]
 mod fuzz_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::qos::Tid;
+
+    #[test]
+    fn an_identity_names_the_tid_of_its_qos_field() {
+        let mut frame = [0; 34];
+        // QoS Data, From DS, of TID 9.
+        frame[..2].copy_from_slice(&[0x88, 0x02]);
+        for at in [4, 10, 16] {
+            frame[at..at + 6].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+        }
+        frame[24] = 9;
+        let identity = parse_open_data_identity(DataInterfaceRole::Station, &frame).unwrap();
+        assert_eq!(identity.tid(), Some(Tid::constant::<9>()));
+        frame[0] = 0x08;
+        let identity = parse_open_data_identity(DataInterfaceRole::Station, &frame).unwrap();
+        assert_eq!(identity.tid(), None);
+    }
+}

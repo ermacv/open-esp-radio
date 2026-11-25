@@ -25,7 +25,7 @@ const fn capabilities(interfaces: MacInterfaceCapabilities) -> MacServiceCapabil
             channel_contexts: 1,
             ordinary_tx_queues: 4,
             rx_block_ack_entries: 8,
-            rx_block_ack_max_tid: 7,
+            rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<7>(),
             rx_block_ack_max_window: 64,
             tx_block_ack_max_window: 32,
             tx_ampdu_max_subframes: 32,

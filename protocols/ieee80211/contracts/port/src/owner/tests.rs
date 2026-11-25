@@ -218,7 +218,7 @@ impl Ieee80211Capabilities for NonHtNoAck {
         individual_no_ack: crate::PhyFormatSet::NON_HT,
         station_receive_filters: crate::ReceiveFilter::BSS_MEMBER,
         access_point_receive_filters: crate::ReceiveFilter::BSS_MEMBER,
-        rx_block_ack_max_tid: 7,
+        rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<7>(),
         rx_block_ack_max_window: 64,
         rx_amsdu_in_ampdu: true,
         edca_max_aifsn: 15,
@@ -253,7 +253,6 @@ fn a_port_rate_carries_no_ack_and_a_block_ack_request_only_where_the_rate_allows
 fn a_tid_is_its_four_bit_field() {
     let highest = Tid::new(15).unwrap();
     assert_eq!(highest.get(), 15);
-    assert_eq!(highest.wire().get(), 15);
     let control = QosControl {
         tid: highest,
         service_period: ServicePeriod::Continues,

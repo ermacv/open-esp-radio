@@ -4,13 +4,9 @@ const A: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const B: [u8; 6] = [2, 0, 0, 0, 0, 2];
 
 fn qos() -> QosControl {
-    QosControl::new(
-        oer_portable_wire::U8::constant::<9>(),
-        QosAckPolicy::NoAck,
-        0x72,
-    )
-    .with_eosp(true)
-    .with_amsdu(true)
+    QosControl::new(crate::qos::Tid::constant::<9>(), QosAckPolicy::NoAck, 0x72)
+        .with_eosp(true)
+        .with_amsdu(true)
 }
 
 /// The octets of a data or management header whose Frame Control is `raw`,
@@ -154,11 +150,7 @@ fn a_short_buffer_is_refused_unwritten_and_a_short_frame_undecoded() {
 
 #[test]
 fn the_qos_field_places_each_subfield() {
-    let field = QosControl::new(
-        oer_portable_wire::U8::constant::<6>(),
-        QosAckPolicy::Normal,
-        0,
-    );
+    let field = QosControl::new(crate::qos::Tid::constant::<6>(), QosAckPolicy::Normal, 0);
     assert_eq!(field.to_bytes(), [0x06, 0x00]);
     assert_eq!(qos().to_bytes(), [0xb9, 0x72]);
     assert_eq!(

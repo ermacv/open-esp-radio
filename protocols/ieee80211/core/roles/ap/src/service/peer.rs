@@ -3,6 +3,7 @@
 
 use super::*;
 use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_ieee80211_wire::status::status_code;
@@ -25,21 +26,23 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// Consume one per-peer/per-TID sequence for protected data or the
     /// bounded Open QoS A-MSDU path. Security mode does not partition the
     /// receiver's IEEE sequence space.
-    pub fn next_qos_sequence(&mut self, peer: [u8; 6], tid: u8) -> Option<SequenceNumber> {
-        self.checked_peer_mut(peer)
-            .ok()?
-            .qos_sequences
-            .get_mut(usize::from(tid))
-            .map(SequenceCounter::take)
+    pub fn next_qos_sequence(
+        &mut self,
+        peer: [u8; 6],
+        tid: WmmUserPriority,
+    ) -> Option<SequenceNumber> {
+        let peer = self.checked_peer_mut(peer).ok()?;
+        Some(tid.select_mut(&mut peer.qos_sequences).take())
     }
 
     /// Inspect a peer/TID sequence without consuming it during preflight.
-    pub fn current_qos_sequence(&self, peer: [u8; 6], tid: u8) -> Option<SequenceNumber> {
-        self.checked_peer(peer)
-            .ok()?
-            .qos_sequences
-            .get(usize::from(tid))
-            .map(SequenceCounter::peek)
+    pub fn current_qos_sequence(
+        &self,
+        peer: [u8; 6],
+        tid: WmmUserPriority,
+    ) -> Option<SequenceNumber> {
+        let peer = self.checked_peer(peer).ok()?;
+        Some(tid.select(&peer.qos_sequences).peek())
     }
 
     pub fn authenticate_open(

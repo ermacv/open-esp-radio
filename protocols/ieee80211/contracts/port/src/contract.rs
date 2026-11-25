@@ -2,6 +2,7 @@
 //! the terminal status of one logical MPDU exchange.
 
 use crate::{Aggregation, HardwareServices, RxCryptoStatus, RxEvidence, TxStatus};
+use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::{channel::Channel, phy::PhyRate};
 
 /// Owner that must perform one indivisible MAC operation.
@@ -58,7 +59,7 @@ pub struct MacResourceLimits {
     /// Receive BlockAck agreement banks exposed by the service.
     pub rx_block_ack_entries: u8,
     /// Highest receive BlockAck TID accepted by the service.
-    pub rx_block_ack_max_tid: u8,
+    pub rx_block_ack_max_tid: Tid,
     /// Maximum receive reorder window retained by the complete service.
     pub rx_block_ack_max_window: u16,
     /// Maximum transmit BlockAck window retained by the complete service.
