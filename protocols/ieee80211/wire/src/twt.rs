@@ -14,11 +14,9 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::action::{ActionCategory, S1gAction};
 use crate::management::DialogToken;
 
-pub const TWT_ACTION_CATEGORY: u8 = 22;
-pub const TWT_SETUP_ACTION: u8 = 6;
-pub const TWT_TEARDOWN_ACTION: u8 = 7;
 pub const TWT_ELEMENT_ID: u8 = 216;
 pub const INDIVIDUAL_TWT_ELEMENT_BODY_LEN: u8 = 15;
 pub const INDIVIDUAL_TWT_SETUP_BODY_LEN: usize = 20;
@@ -30,7 +28,7 @@ pub enum TwtWireError {
     OutputTooSmall { required: usize, available: usize },
     InvalidLength { expected: usize, actual: usize },
     InvalidElement,
-    UnsupportedAction(u8),
+    UnsupportedAction(S1gAction),
     UnsupportedControl(u8),
     UnsupportedNegotiationType(u8),
     InvalidFlowId(u8),
@@ -445,8 +443,8 @@ impl IndividualTwtSetup {
         // with Control, Request Type, Target Wake Time, Nominal Minimum TWT
         // Wake Duration, TWT Wake Interval Mantissa and TWT Channel.
         let body = [
-            TWT_ACTION_CATEGORY,
-            TWT_SETUP_ACTION,
+            ActionCategory::S1G.value(),
+            S1gAction::TWT_SETUP.value(),
             self.dialog_token.value(),
             TWT_ELEMENT_ID,
             INDIVIDUAL_TWT_ELEMENT_BODY_LEN,
@@ -493,8 +491,8 @@ impl IndividualTwtSetup {
                 actual: body.len(),
             }
         })?;
-        if category != TWT_ACTION_CATEGORY
-            || action != TWT_SETUP_ACTION
+        if ActionCategory::new(category) != ActionCategory::S1G
+            || S1gAction::new(action) != S1gAction::TWT_SETUP
             || element_id != TWT_ELEMENT_ID
             || element_length != INDIVIDUAL_TWT_ELEMENT_BODY_LEN
         {
@@ -548,8 +546,8 @@ impl IndividualTwtTeardown {
             });
         };
         let body = [
-            TWT_ACTION_CATEGORY,
-            TWT_TEARDOWN_ACTION,
+            ActionCategory::S1G.value(),
+            S1gAction::TWT_TEARDOWN.value(),
             TwtTeardownFields::from_bytes([self.flow_id.get()])
                 .with_all(self.all_flows)
                 .to_bytes()[0],
@@ -570,7 +568,9 @@ impl IndividualTwtTeardown {
                 expected: INDIVIDUAL_TWT_TEARDOWN_BODY_LEN,
                 actual: body.len(),
             })?;
-        if category != TWT_ACTION_CATEGORY || action != TWT_TEARDOWN_ACTION {
+        if ActionCategory::new(category) != ActionCategory::S1G
+            || S1gAction::new(action) != S1gAction::TWT_TEARDOWN
+        {
             return Err(TwtWireError::InvalidElement);
         }
         let negotiation_type = TwtTeardownFields::from_bytes([flags]).negotiation_type();
@@ -601,10 +601,13 @@ pub enum IndividualTwtAction {
 
 /// True only for the two action codes owned by this codec.
 pub fn is_individual_twt_action_candidate(body: &[u8]) -> bool {
-    body.first() == Some(&TWT_ACTION_CATEGORY)
+    let Some(&[category, action]) = body.first_chunk::<2>() else {
+        return false;
+    };
+    ActionCategory::new(category) == ActionCategory::S1G
         && matches!(
-            body.get(1),
-            Some(&TWT_SETUP_ACTION) | Some(&TWT_TEARDOWN_ACTION)
+            S1gAction::new(action),
+            S1gAction::TWT_SETUP | S1gAction::TWT_TEARDOWN
         )
 }
 
@@ -612,12 +615,12 @@ pub fn parse_individual_twt_action(body: &[u8]) -> Result<IndividualTwtAction, T
     let Some(&[category, action]) = body.first_chunk::<2>() else {
         return Err(TwtWireError::InvalidElement);
     };
-    if category != TWT_ACTION_CATEGORY {
+    if ActionCategory::new(category) != ActionCategory::S1G {
         return Err(TwtWireError::InvalidElement);
     }
-    match action {
-        TWT_SETUP_ACTION => IndividualTwtSetup::parse(body).map(IndividualTwtAction::Setup),
-        TWT_TEARDOWN_ACTION => {
+    match S1gAction::new(action) {
+        S1gAction::TWT_SETUP => IndividualTwtSetup::parse(body).map(IndividualTwtAction::Setup),
+        S1gAction::TWT_TEARDOWN => {
             IndividualTwtTeardown::parse(body).map(IndividualTwtAction::Teardown)
         }
         action => Err(TwtWireError::UnsupportedAction(action)),
@@ -803,14 +806,67 @@ mod tests {
         );
     }
 
+    /// The category and the action each refuse a body alone, for either
+    /// frame and for the parser of both.
+    #[test]
+    fn a_body_of_another_category_or_action_is_refused() {
+        let setup = |category, action| {
+            let mut body = [0_u8; INDIVIDUAL_TWT_SETUP_BODY_LEN];
+            body[..5].copy_from_slice(&[
+                category,
+                action,
+                1,
+                TWT_ELEMENT_ID,
+                INDIVIDUAL_TWT_ELEMENT_BODY_LEN,
+            ]);
+            body
+        };
+        for (category, action) in [(21, 6), (22, 7)] {
+            assert_eq!(
+                IndividualTwtSetup::parse(&setup(category, action)),
+                Err(TwtWireError::InvalidElement)
+            );
+        }
+        for (category, action) in [(21, 7), (22, 6)] {
+            assert_eq!(
+                IndividualTwtTeardown::parse(&[category, action, 0]),
+                Err(TwtWireError::InvalidElement)
+            );
+        }
+        assert!(IndividualTwtTeardown::parse(&[22, 7, 0]).is_ok());
+        assert!(parse_individual_twt_action(&[22, 7, 0]).is_ok());
+        assert_eq!(
+            parse_individual_twt_action(&[21, 7, 0]),
+            Err(TwtWireError::InvalidElement)
+        );
+        assert_eq!(
+            parse_individual_twt_action(&[22, 5, 0]),
+            Err(TwtWireError::UnsupportedAction(S1gAction::new(5)))
+        );
+        for (body, candidate) in [
+            (&[22, 6][..], true),
+            (&[22, 7], true),
+            (&[22, 5], false),
+            (&[21, 6], false),
+            (&[22], false),
+            (&[], false),
+        ] {
+            assert_eq!(is_individual_twt_action_candidate(body), candidate);
+        }
+    }
+
     #[test]
     fn every_prefix_of_an_action_body_is_handled() {
         let mut setup = [0_u8; INDIVIDUAL_TWT_SETUP_BODY_LEN];
-        setup[0] = TWT_ACTION_CATEGORY;
-        setup[1] = TWT_SETUP_ACTION;
+        setup[0] = ActionCategory::S1G.value();
+        setup[1] = S1gAction::TWT_SETUP.value();
         setup[3] = TWT_ELEMENT_ID;
         setup[4] = INDIVIDUAL_TWT_ELEMENT_BODY_LEN;
-        let teardown = [TWT_ACTION_CATEGORY, TWT_TEARDOWN_ACTION, 0];
+        let teardown = [
+            ActionCategory::S1G.value(),
+            S1gAction::TWT_TEARDOWN.value(),
+            0,
+        ];
         for len in 0..=setup.len() {
             let setup = &setup[..len];
             let _ = parse_individual_twt_action(setup);

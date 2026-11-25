@@ -30,8 +30,8 @@ pub(super) struct ManagementProtection {
     // The IGTK becomes usable at the corresponding group-install terminal.
     group: Option<BipReceiver>,
     query: StationSaQuery,
-    request: Option<[u8; 2]>,
-    response: Option<[u8; 2]>,
+    request: Option<oer_protocols_ieee80211_wire::management_protection::SaQueryTransaction>,
+    response: Option<oer_protocols_ieee80211_wire::management_protection::SaQueryTransaction>,
 }
 
 impl ManagementProtection {

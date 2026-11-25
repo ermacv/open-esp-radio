@@ -2315,7 +2315,10 @@ fn management_replay_and_policy_rejections_leave_activity_unchanged() {
     assert_eq!(
         service.receive_management(PEER, Kind::Action, &query, proof(7)),
         ApManagementRx::Accepted(ApManagementAction::SaQueryResponse {
-            transaction: [0x12, 0x34]
+            transaction:
+                oer_protocols_ieee80211_wire::management_protection::SaQueryTransaction::from_bytes(
+                    [0x12, 0x34]
+                )
         })
     );
     assert!(matches!(

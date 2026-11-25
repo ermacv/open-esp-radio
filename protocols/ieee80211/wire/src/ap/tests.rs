@@ -767,7 +767,7 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
     let peer = [2, 0, 0, 0, 0, 2];
     let ccmp = CcmpHeader::new(CcmpPacketNumber::new(7).unwrap(), CcmpKeyId::PAIRWISE).encode();
     let query = SaQuery::Request {
-        transaction: [0x12, 0x34],
+        transaction: crate::management_protection::SaQueryTransaction::from_bytes([0x12, 0x34]),
     }
     .encode();
     let mut frame = [0; 64];
@@ -791,7 +791,9 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
         Some(ApManagementRequest::SaQuery {
             peer: Eui48::new(peer),
             query: SaQuery::Request {
-                transaction: [0x12, 0x34]
+                transaction: crate::management_protection::SaQueryTransaction::from_bytes([
+                    0x12, 0x34
+                ])
             }
         })
     );
@@ -1182,4 +1184,15 @@ fn an_open_authentication_request_is_the_first_frame_with_success() {
             read
         );
     }
+}
+
+/// An Action frame is robust by its category, and without one is not; a
+/// disconnect is robust whatever it carries.
+#[test]
+fn an_action_is_robust_by_its_category() {
+    assert!(ApManagementSubtype::Action.is_robust(&[3]));
+    assert!(!ApManagementSubtype::Action.is_robust(&[4]));
+    assert!(!ApManagementSubtype::Action.is_robust(&[]));
+    assert!(ApManagementSubtype::Disassociation.is_robust(&[]));
+    assert!(ApManagementSubtype::Deauthentication.is_robust(&[]));
 }

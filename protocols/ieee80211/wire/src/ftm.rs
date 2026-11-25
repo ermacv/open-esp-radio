@@ -7,11 +7,9 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::action::{ActionCategory, PublicAction};
 use crate::management::DialogToken;
 
-pub const PUBLIC_ACTION_CATEGORY: u8 = 4;
-pub const FTM_REQUEST_PUBLIC_ACTION: u8 = 32;
-pub const FTM_MEASUREMENT_PUBLIC_ACTION: u8 = 33;
 pub const FTM_PARAMETERS_ELEMENT_ID: u8 = 206;
 pub const FTM_PARAMETERS_FIELD_LEN: usize = 9;
 pub const FTM_PARAMETERS_ELEMENT_LEN: usize = 2 + FTM_PARAMETERS_FIELD_LEN;
@@ -508,7 +506,7 @@ pub struct FtmRequest<'a> {
 impl<'a> FtmRequest<'a> {
     pub fn decode_body(body: &'a [u8]) -> Result<Self, FtmWireError> {
         let (&[_, _, trigger], information_elements) =
-            validate_prefix::<FTM_REQUEST_PREFIX_LEN>(body, FTM_REQUEST_PUBLIC_ACTION)?;
+            validate_prefix::<FTM_REQUEST_PREFIX_LEN>(body, PublicAction::FTM_REQUEST)?;
         let trigger = FtmTrigger::from_wire(trigger)?;
         let parameters =
             find_parameters(information_elements, FtmRequestParameters::decode_element)?;
@@ -540,8 +538,8 @@ pub fn encode_initial_request(
 ) -> [u8; FTM_INITIAL_REQUEST_BODY_LEN] {
     let mut output = [0; FTM_INITIAL_REQUEST_BODY_LEN];
     let [category, action, trigger, element @ ..] = &mut output;
-    *category = PUBLIC_ACTION_CATEGORY;
-    *action = FTM_REQUEST_PUBLIC_ACTION;
+    *category = ActionCategory::PUBLIC.value();
+    *action = PublicAction::FTM_REQUEST.value();
     *trigger = FtmTrigger::StartOrContinue.wire();
     *element = parameters.encode_element();
     output
@@ -563,8 +561,8 @@ pub fn encode_initial_request(
 /// ```
 pub const fn encode_request_trigger(trigger: FtmTrigger) -> [u8; FTM_REQUEST_PREFIX_LEN] {
     [
-        PUBLIC_ACTION_CATEGORY,
-        FTM_REQUEST_PUBLIC_ACTION,
+        ActionCategory::PUBLIC.value(),
+        PublicAction::FTM_REQUEST.value(),
         trigger.wire(),
     ]
 }
@@ -653,7 +651,7 @@ impl<'a> FtmMeasurement<'a> {
                 g1,
             ],
             information_elements,
-        ) = validate_prefix::<FTM_MEASUREMENT_PREFIX_LEN>(body, FTM_MEASUREMENT_PUBLIC_ACTION)?;
+        ) = validate_prefix::<FTM_MEASUREMENT_PREFIX_LEN>(body, PublicAction::FTM)?;
         let tod = FtmTimestampPs::decode([d0, d1, d2, d3, d4, d5]);
         let toa = FtmTimestampPs::decode([a0, a1, a2, a3, a4, a5]);
         let tod_error = FtmTimestampErrorFields::from_bytes([e0, e1]);
@@ -729,8 +727,8 @@ pub fn encode_measurement(
         .map_err(|_| FtmWireError::ReservedTimestampErrorBits)?
         .to_bytes();
     *prefix = [
-        PUBLIC_ACTION_CATEGORY,
-        FTM_MEASUREMENT_PUBLIC_ACTION,
+        ActionCategory::PUBLIC.value(),
+        PublicAction::FTM.value(),
         fields.dialog_token.value(),
         fields.follow_up_dialog_token.value(),
         d0,
@@ -762,7 +760,7 @@ pub fn encode_measurement(
 /// category and action code.
 fn validate_prefix<const N: usize>(
     body: &[u8],
-    action: u8,
+    action: PublicAction,
 ) -> Result<(&[u8; N], &[u8]), FtmWireError> {
     let mut reader = oer_portable_wire::Reader::new(body);
     let prefix = reader
@@ -771,10 +769,10 @@ fn validate_prefix<const N: usize>(
     let rest = reader.remaining();
     let (&category, tail) = prefix.split_first().ok_or(FtmWireError::BodyTooShort)?;
     let &public_action = tail.first().ok_or(FtmWireError::BodyTooShort)?;
-    if category != PUBLIC_ACTION_CATEGORY {
+    if ActionCategory::new(category) != ActionCategory::PUBLIC {
         return Err(FtmWireError::WrongCategory);
     }
-    if public_action != action {
+    if PublicAction::new(public_action) != action {
         return Err(FtmWireError::WrongPublicAction);
     }
     Ok((prefix, rest))

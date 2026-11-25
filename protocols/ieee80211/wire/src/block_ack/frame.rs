@@ -2,6 +2,7 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::action::{ActionCategory, BlockAckActionCode};
 use crate::frame::{ControlSubtype, FrameControlFields};
 use crate::management::DialogToken;
 use crate::qos::Tid;
@@ -9,10 +10,6 @@ use crate::sequence::{SequenceControl, SequenceNumber};
 use crate::status::{ReasonCode, StatusCode};
 use oer_protocols_ieee802_wire::Eui48;
 
-pub const BLOCK_ACK_CATEGORY: u8 = 3;
-pub const ADDBA_REQUEST_ACTION: u8 = 0;
-pub const ADDBA_RESPONSE_ACTION: u8 = 1;
-pub const DELBA_ACTION: u8 = 2;
 pub const ADDBA_ACTION_BODY_LEN: usize = 9;
 /// Category, Block Ack Action, DELBA Parameter Set and Reason Code.
 ///
@@ -75,8 +72,8 @@ pub fn encode_addba_request(
     // Category, Block Ack Action, Dialog Token, Block Ack Parameter Set,
     // Block Ack Timeout Value, Block Ack Starting Sequence Control.
     Ok([
-        BLOCK_ACK_CATEGORY,
-        ADDBA_REQUEST_ACTION,
+        ActionCategory::BLOCK_ACK.value(),
+        BlockAckActionCode::ADDBA_REQUEST.value(),
         dialog_token.value(),
         p0,
         p1,
@@ -113,14 +110,17 @@ pub enum BlockAckAction {
 /// This is a stateless leaf: it only reads the supplied bytes and does not
 /// allocate, wait, access global state or call into the vendor library.
 pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
-    let [BLOCK_ACK_CATEGORY, action, fields @ ..] = body else {
+    let [category, action, fields @ ..] = body else {
         return None;
     };
+    if ActionCategory::new(*category) != ActionCategory::BLOCK_ACK {
+        return None;
+    }
     let mut reader = oer_portable_wire::Reader::new(fields);
-    match *action {
+    match BlockAckActionCode::new(*action) {
         // SOURCE: IEEE Std 802.11-2020, 9.6.5.2 (ADDBA Request frame
         // format).
-        ADDBA_REQUEST_ACTION => Some(BlockAckAction::AddbaRequest {
+        BlockAckActionCode::ADDBA_REQUEST => Some(BlockAckAction::AddbaRequest {
             dialog_token: DialogToken::new(reader.u8().ok()?),
             parameters: AddbaParameters::from_bytes(reader.read().ok()?),
             timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?).time_units(),
@@ -130,14 +130,14 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
         }),
         // SOURCE: IEEE Std 802.11-2020, 9.6.5.3 (ADDBA Response frame
         // format).
-        ADDBA_RESPONSE_ACTION => Some(BlockAckAction::AddbaResponse {
+        BlockAckActionCode::ADDBA_RESPONSE => Some(BlockAckAction::AddbaResponse {
             dialog_token: DialogToken::new(reader.u8().ok()?),
             status: crate::management::StatusCodeField::from_bytes(reader.read().ok()?).code(),
             parameters: AddbaParameters::from_bytes(reader.read().ok()?),
             timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?).time_units(),
         }),
         // SOURCE: IEEE Std 802.11-2020, 9.6.5.5 (DELBA frame format).
-        DELBA_ACTION => {
+        BlockAckActionCode::DELBA => {
             let parameters = DelbaParameters::from_bytes(reader.read().ok()?);
             Some(BlockAckAction::Delba {
                 tid: parameters.tid(),
@@ -284,8 +284,8 @@ pub fn encode_addba_response(
     let [s0, s1] = crate::management::StatusCodeField::of(status).to_bytes();
     let [t0, t1] = BlockAckTimeout::of(timeout_tu).to_bytes();
     Ok([
-        BLOCK_ACK_CATEGORY,
-        ADDBA_RESPONSE_ACTION,
+        ActionCategory::BLOCK_ACK.value(),
+        BlockAckActionCode::ADDBA_RESPONSE.value(),
         dialog_token.value(),
         s0,
         s1,
@@ -309,7 +309,14 @@ pub fn encode_delba(
         .with_initiator(initiator == DelbaInitiator::Originator);
     let [p0, p1] = parameters.to_bytes();
     let [r0, r1] = crate::management::ReasonCodeField::of(reason).to_bytes();
-    [BLOCK_ACK_CATEGORY, DELBA_ACTION, p0, p1, r0, r1]
+    [
+        ActionCategory::BLOCK_ACK.value(),
+        BlockAckActionCode::DELBA.value(),
+        p0,
+        p1,
+        r0,
+        r1,
+    ]
 }
 
 /// One received Compressed BlockAckReq: a single-TID request whose bitmap

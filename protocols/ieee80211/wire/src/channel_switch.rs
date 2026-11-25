@@ -12,6 +12,7 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::action::{ActionCategory, PublicAction, SpectrumManagementAction};
 use crate::channel::{Band, Channel, ChannelError, ChannelWidth};
 
 /// The Channel Switch Announcement element.
@@ -20,15 +21,6 @@ pub const CHANNEL_SWITCH_ELEMENT_ID: u8 = 37;
 pub const SECONDARY_CHANNEL_OFFSET_ELEMENT_ID: u8 = 62;
 /// The Extended Channel Switch Announcement element.
 pub const EXTENDED_CHANNEL_SWITCH_ELEMENT_ID: u8 = 60;
-/// The Spectrum Management action category.
-const SPECTRUM_MANAGEMENT_CATEGORY: u8 = 0;
-/// Its Channel Switch Announcement action.
-const CHANNEL_SWITCH_ACTION: u8 = 4;
-/// The Public action category.
-const PUBLIC_CATEGORY: u8 = 4;
-/// Its Extended Channel Switch Announcement action.
-const EXTENDED_CHANNEL_SWITCH_ACTION: u8 = 4;
-
 /// Whether the BSS's stations may transmit until the switch.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ChannelSwitchMode {
@@ -173,7 +165,10 @@ impl ChannelSwitch {
     /// and the elements; its length, or `None` when `out` is too short.
     pub fn encode_action(self, out: &mut [u8]) -> Option<usize> {
         let (head, rest) = out.split_first_chunk_mut::<2>()?;
-        *head = [SPECTRUM_MANAGEMENT_CATEGORY, CHANNEL_SWITCH_ACTION];
+        *head = [
+            ActionCategory::SPECTRUM_MANAGEMENT.value(),
+            SpectrumManagementAction::CHANNEL_SWITCH_ANNOUNCEMENT.value(),
+        ];
         head.len().checked_add(self.encode_elements(rest)?)
     }
 }
@@ -235,21 +230,19 @@ pub fn parse_channel_switch(elements: &[u8]) -> Result<Option<ChannelSwitch>, Ch
 pub fn parse_channel_switch_action(
     body: &[u8],
 ) -> Result<Option<ChannelSwitch>, ChannelSwitchError> {
-    match body {
-        [
-            SPECTRUM_MANAGEMENT_CATEGORY,
-            CHANNEL_SWITCH_ACTION,
-            elements @ ..,
-        ] => parse_channel_switch(elements),
-        [
-            PUBLIC_CATEGORY,
-            EXTENDED_CHANNEL_SWITCH_ACTION,
-            mode,
-            class,
-            channel,
-            count,
-            elements @ ..,
-        ] => {
+    let [category, action, fields @ ..] = body else {
+        return Ok(None);
+    };
+    match (ActionCategory::new(*category), fields) {
+        (ActionCategory::SPECTRUM_MANAGEMENT, elements)
+            if SpectrumManagementAction::new(*action)
+                == SpectrumManagementAction::CHANNEL_SWITCH_ANNOUNCEMENT =>
+        {
+            parse_channel_switch(elements)
+        }
+        (ActionCategory::PUBLIC, [mode, class, channel, count, elements @ ..])
+            if PublicAction::new(*action) == PublicAction::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT =>
+        {
             let secondary = parse_channel_switch(elements)?
                 .map_or(SecondaryChannelOffset::None, |announcement| {
                     announcement.secondary

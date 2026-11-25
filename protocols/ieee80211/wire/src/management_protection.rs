@@ -10,76 +10,82 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::action::{ActionCategory, SaQueryAction};
+
 /// Management subtype byte (Frame Control byte zero) of Disassociation.
 const DISASSOCIATION: u8 = 0xa0;
 /// Management subtype byte of Deauthentication.
 const DEAUTHENTICATION: u8 = 0xc0;
 /// Management subtype byte of Action.
 const ACTION: u8 = 0xd0;
-/// Highest category the vendor classifies by table.
-const LAST_TABLED_CATEGORY: u8 = 22;
-/// Categories up to 22 the vendor treats as not robust: Public (4), HT (7),
-/// Unprotected WNM (11), Self-protected (15), 20, 21 and 22.
-const UNPROTECTED_CATEGORIES: u32 =
-    (1 << 4) | (1 << 7) | (1 << 11) | (1 << 15) | (1 << 20) | (1 << 21) | (1 << 22);
-/// Vendor-specific, the only category above 22 that is not robust.
-const VENDOR_SPECIFIC_CATEGORY: u8 = 127;
-
-/// SA Query Action category.
-pub const SA_QUERY_CATEGORY: u8 = 8;
-const SA_QUERY_REQUEST: u8 = 0;
-const SA_QUERY_RESPONSE: u8 = 1;
 /// SA Query Action body: category, action and transaction identifier.
 pub const SA_QUERY_BODY_LEN: usize = 4;
 
-/// Whether an Action frame of `category` is robust.
-pub const fn is_robust_action_category(category: u8) -> bool {
-    if category <= 3 {
-        true
-    } else if category <= LAST_TABLED_CATEGORY {
-        UNPROTECTED_CATEGORIES >> category & 1 == 0
-    } else {
-        category != VENDOR_SPECIFIC_CATEGORY
+/// Whether a management frame is robust, from Frame Control byte zero and,
+/// for an Action frame, its category.
+pub const fn is_robust_management_frame(
+    frame_control_type: u8,
+    action_category: ActionCategory,
+) -> bool {
+    match frame_control_type {
+        DISASSOCIATION | DEAUTHENTICATION => true,
+        ACTION => action_category.is_robust(),
+        _ => false,
     }
 }
 
-/// Whether a management frame is robust, from Frame Control byte zero and,
-/// for an Action frame, its category.
-pub const fn is_robust_management_frame(frame_control_type: u8, action_category: u8) -> bool {
-    match frame_control_type {
-        DISASSOCIATION | DEAUTHENTICATION => true,
-        ACTION => is_robust_action_category(action_category),
-        _ => false,
+oer_portable_wire::bitfield! {
+    /// What matches an SA Query's Request with its Response.
+    ///
+    /// SOURCE: IEEE Std 802.11-2016, 9.6.10 (SA Query).
+    ///
+    /// A number is no identifier until it is one's field:
+    ///
+    /// ```compile_fail,E0308
+    /// use oer_protocols_ieee80211_wire::management_protection::SaQueryTransaction;
+    /// let transaction: SaQueryTransaction = [0, 1];
+    /// ```
+    pub struct SaQueryTransaction[2] (little) {
+        pub identifier, with_identifier: {u16} = 0..16;
     }
 }
 
 /// One SA Query Action body.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SaQuery {
-    Request { transaction: [u8; 2] },
-    Response { transaction: [u8; 2] },
+    Request { transaction: SaQueryTransaction },
+    Response { transaction: SaQueryTransaction },
 }
 
 impl SaQuery {
     /// Parse an Action body; `None` for any other Action.
     pub fn parse(body: &[u8]) -> Option<Self> {
-        let [SA_QUERY_CATEGORY, action, first, second, ..] = *body else {
+        let [category, action, first, second, ..] = *body else {
             return None;
         };
-        let transaction = [first, second];
-        match action {
-            SA_QUERY_REQUEST => Some(Self::Request { transaction }),
-            SA_QUERY_RESPONSE => Some(Self::Response { transaction }),
+        if ActionCategory::new(category) != ActionCategory::SA_QUERY {
+            return None;
+        }
+        let transaction = SaQueryTransaction::from_bytes([first, second]);
+        match SaQueryAction::new(action) {
+            SaQueryAction::REQUEST => Some(Self::Request { transaction }),
+            SaQueryAction::RESPONSE => Some(Self::Response { transaction }),
             _ => None,
         }
     }
 
     pub const fn encode(self) -> [u8; SA_QUERY_BODY_LEN] {
         let (action, transaction) = match self {
-            Self::Request { transaction } => (SA_QUERY_REQUEST, transaction),
-            Self::Response { transaction } => (SA_QUERY_RESPONSE, transaction),
+            Self::Request { transaction } => (SaQueryAction::REQUEST, transaction),
+            Self::Response { transaction } => (SaQueryAction::RESPONSE, transaction),
         };
-        [SA_QUERY_CATEGORY, action, transaction[0], transaction[1]]
+        let [first, second] = transaction.to_bytes();
+        [
+            ActionCategory::SA_QUERY.value(),
+            action.value(),
+            first,
+            second,
+        ]
     }
 }
 

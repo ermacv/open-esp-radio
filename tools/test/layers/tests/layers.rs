@@ -7126,11 +7126,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/sa_query.rs",
-        3,
-        BY_CONTROLLER,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/security.rs",
         2,
         BY_CONTROLLER,

@@ -159,8 +159,8 @@ fn duplicate_or_truncated_parameter_elements_are_rejected() {
         Err(FtmWireError::DuplicateParametersElement)
     );
     body[..FTM_MEASUREMENT_PREFIX_LEN].fill(0);
-    body[0] = PUBLIC_ACTION_CATEGORY;
-    body[1] = FTM_MEASUREMENT_PUBLIC_ACTION;
+    body[0] = ActionCategory::PUBLIC.value();
+    body[1] = PublicAction::FTM.value();
     body[2] = fields.dialog_token.value();
     body[FTM_MEASUREMENT_PREFIX_LEN..].copy_from_slice(&information_elements);
     assert_eq!(
@@ -189,8 +189,8 @@ fn every_prefix_of_a_body_is_handled() {
     let mut request = [0_u8; FTM_INITIAL_REQUEST_BODY_LEN];
     request.copy_from_slice(&encode_initial_request(request_parameters()));
     let mut measurement = [0_u8; FTM_MEASUREMENT_PREFIX_LEN + FTM_PARAMETERS_ELEMENT_LEN];
-    measurement[0] = PUBLIC_ACTION_CATEGORY;
-    measurement[1] = FTM_MEASUREMENT_PUBLIC_ACTION;
+    measurement[0] = ActionCategory::PUBLIC.value();
+    measurement[1] = PublicAction::FTM.value();
     measurement[FTM_MEASUREMENT_PREFIX_LEN] = FTM_PARAMETERS_ELEMENT_ID;
     measurement[FTM_MEASUREMENT_PREFIX_LEN + 1] = FTM_PARAMETERS_FIELD_LEN as u8;
     for len in 0..=measurement.len() {

@@ -667,7 +667,8 @@ impl ApManagementSubtype {
             Self::Action => body
                 .first()
                 .copied()
-                .is_some_and(crate::management_protection::is_robust_action_category),
+                .map(crate::action::ActionCategory::new)
+                .is_some_and(crate::action::ActionCategory::is_robust),
             Self::Disassociation | Self::Deauthentication => true,
         }
     }
