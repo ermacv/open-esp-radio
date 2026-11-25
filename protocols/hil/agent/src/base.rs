@@ -482,15 +482,11 @@ macro_rules! __service {
                 observer: &mut O,
                 frame: $crate::serve::Frame<'f>,
             ) -> $crate::serve::Served<'f, $commands> {
-                // Both are used by one kind of arm or the other.
-                let served = (observer, frame);
-                match self {
-                    $(Self::$ov(request) => {
-                        let (observer, frame) = served;
+                match (self, observer, frame) {
+                    $((Self::$ov(request), observer, frame) => {
                         $crate::serve::Served::Observed(frame.write(&observer.$om(request)))
                     })*
-                    $(Self::$cv(request) => {
-                        let _unused = served;
+                    $((Self::$cv(request), _, _) => {
                         $crate::serve::Served::Command($commands::$cv(request))
                     })*
                 }
