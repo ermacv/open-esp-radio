@@ -67,10 +67,9 @@ for waking; otherwise each needs a registration of its own. One task does not
 give this: a combinator may hand each child its own waker. A queue's affine ends
 prove it by type. The cells reached through `&self` keep it by composition.
 
-Direct `embassy-sync` dependencies remain in `portable/cooperate`,
-`protocols/hil/agent` and the three HIL images. The
-layer test checks those exact edges against its shrinking deviation list;
-the absence of priority preemption does not admit a new mutex-backed path.
+No package depends on `embassy-sync`; the layer test refuses a direct normal
+edge, and the absence of priority preemption does not admit a new
+mutex-backed path.
 
 ## Static check
 

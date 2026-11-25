@@ -263,7 +263,7 @@ mod tests {
     fn a_request_behind_a_waiting_one_starts_after_it() {
         // Ticket 1 waits for the board the holder keeps for 900 s more;
         // ticket 2 needs only the fixture software ticket 1 shares.
-        let software = |mode: fn(&str) -> Claim| vec![mode("fixture-software:linux-bluetooth")];
+        let software = |mode: fn(&str) -> Claim| vec![mode("fixture-software:linux-net")];
         let mut first = board("chip-a");
         first.extend(software(|name| Claim::shared(name)));
         let state = State {

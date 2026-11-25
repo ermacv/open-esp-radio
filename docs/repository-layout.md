@@ -42,7 +42,6 @@ tools/vendor/{cli, lineage, provenance, scenario, scenario-cli}/
 portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, settle,
     sync, time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
-protocols/bluetooth/hci/
 protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/
 protocols/ieee802/wire/
@@ -78,7 +77,7 @@ hil/services/{aes, radio-pair, timer-facts}/
 
 Of Bluetooth LE and IEEE 802.15.4 the tree holds the register model's facts
 (`chips/esp32s31/registers/`, what the PAC generates from them, the chip
-knowledge and the vendor facts) and no code, but for `protocols/bluetooth/hci`.
+knowledge and the vendor facts) and no code.
 The last tree in which CI built both radios is the tag
 `legacy-bluetooth-ieee802154-2026-11-15`.
 
@@ -86,9 +85,7 @@ The workspace's `exclude` names the packages that stay as sources and are
 not built. Kept, until a plan takes it up: ESP-NOW
 (`protocols/ieee80211/core/extensions/esp-now/`).
 
-`protocols/bluetooth/hci/` stays built: the stand's Linux fixture helpers
-(`tools/lab/fixture-helpers`) depend on it, the Wi-Fi fixture's programs
-among them. Inside built packages, files stay as sources outside their
+Inside built packages, files stay as sources outside their
 crate's module tree:
 - the family application's observation counters
   (`chips/family/app/src/observe{.rs,/}`), whose one reader is
@@ -136,8 +133,7 @@ and returns to its `tests/` with the station.
   metadata and partitions for ESP-IDF peers; it contains no Rust package.
 - `tools/lab/peers/` and `tools/vendor/references/` contain ESP-IDF projects, whose
   `firmware.toml` entries form the image catalog.
-- `tools/lab/linux-net/` contains the network helper and pinned build inputs;
-  `tools/lab/linux-bluetooth/` documents the Bluetooth helper.
+- `tools/lab/linux-net/` contains the network helper and pinned build inputs.
 - The root `Cargo.toml` and `Cargo.lock` define one Rust workspace.
   `.cargo/config.toml` defines the host command aliases.
   `target/` holds rebuildable output; generated evidence stores and caches
@@ -200,8 +196,6 @@ network codecs carry and stands on `oer-portable-wire` alone.
   `protocols/radio/coex`.
 - HAL production files that wait or poll are listed with exact counts:
   modules of `system::boot`, `radio::ieee80211` and `radio::phy`.
-- A direct normal dependency on `embassy-sync` remains in
-  `protocols/hil/agent`.
 
 The layer tests enforce the normal and build dependency exceptions, the
 source-file inclusions and the HAL files in their own deviation lists. The

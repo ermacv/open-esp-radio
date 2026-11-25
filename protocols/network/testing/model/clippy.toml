@@ -21,8 +21,6 @@ disallowed-methods = [
     { path = "oer_portable_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
     # The catalogue of methods that panic or read past a bound: what a
     # sans-IO crate never calls, and every product crate with it. The
-    # bt-hci constructor asserts; a raw handle is validated before it.
-    "bt_hci::param::ConnHandle::new",
     "slice::split_at",
     "slice::split_at_mut",
     "slice::copy_from_slice",
@@ -435,7 +433,6 @@ disallowed-macros = [
     "core::debug_assert",
     "core::debug_assert_eq",
     "core::debug_assert_ne",
-    "oer_chips_family_radio_ieee802154_engine::engine::vendor_assert",
 ]
 
 # A state is a sum (CLAUDE.md): more than one `bool` field is a state kept

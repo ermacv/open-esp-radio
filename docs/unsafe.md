@@ -58,8 +58,8 @@ it:
   module, allow at their top. `disallowed_methods` is otherwise allowed
   only at a banned method's own home, with its reason, and never
   expected; `SILENCED` counts every such attribute.
-  The root `clippy.toml` is the catalogue: assertion macros (including
-  `vendor_assert!`), panicking core methods and `core::task::Waker::noop`.
+  The root `clippy.toml` is the catalogue: assertion macros, panicking core
+  methods and `core::task::Waker::noop`.
   A sans-IO package (testing packages aside) has no local `clippy.toml`
   (`a_local_clippy_configuration_is_the_exception_and_names_its_step`); the
   layer tests do not replace Clippy or prove transitive absence of panics.
@@ -68,7 +68,7 @@ it:
 
 Sans-IO code contains no `unsafe` and no runtime panic paths, including
 `panic!`, `unreachable!`, `todo!`, `unimplemented!`, assertions and debug
-assertions, `vendor_assert!`, `unwrap`/`expect`, indexing or slicing that can
+assertions, `unwrap`/`expect`, indexing or slicing that can
 panic, arithmetic overflow or invalid division, and panicking core methods.
 Those paths return typed errors. HIL completion receiver exhaustion is a
 terminal-barrier refusal: the image retains the receiver-limit

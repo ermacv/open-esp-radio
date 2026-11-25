@@ -209,7 +209,6 @@ fn panic_macro(name: &str) -> bool {
         "debug_assert",
         "debug_assert_eq",
         "debug_assert_ne",
-        "vendor_assert",
     ]
     .contains(&name)
 }

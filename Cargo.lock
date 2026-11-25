@@ -173,37 +173,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bt-hci"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63b3d6f0ef006d9b87a075705d6c142b03681ad34090659647f0e227c1c667f"
-dependencies = [
- "bt-hci-transport",
- "btuuid",
- "embassy-sync",
- "embedded-io",
- "embedded-io-async",
- "futures-intrusive",
- "heapless 0.9.3",
-]
-
-[[package]]
-name = "bt-hci-transport"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ffb9819c69cf88877f5eebc8c5ade0ab50f2bf9475bbb3eb714d66c55b0cb64"
-dependencies = [
- "embedded-io",
- "embedded-io-async",
-]
-
-[[package]]
-name = "btuuid"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5f48f1e9b0aad0a4f05d17bdeae0fa20ff798e272a03a6940ca27ad9c5a6ae7"
-
-[[package]]
 name = "bytemuck"
 version = "1.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -681,19 +650,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc2d050bdc5c21e0862a89256ed8029ae6c290a93aecefc73084b3002cdebb01"
 
 [[package]]
-name = "embassy-sync"
-version = "0.8.0"
-source = "git+https://github.com/ermacv/embassy?rev=cbeed6a32ba1c3135f1518f046c5a5c60e86945d#cbeed6a32ba1c3135f1518f046c5a5c60e86945d"
-dependencies = [
- "cfg-if",
- "critical-section",
- "embedded-io-async",
- "futures-core",
- "futures-sink",
- "heapless 0.9.3",
-]
-
-[[package]]
 name = "embassy-time"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -894,22 +850,6 @@ name = "futures-core"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
-
-[[package]]
-name = "futures-intrusive"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d930c203dd0b6ff06e0201a4a2fe9149b43c684fd4420555b26d21b1a02956f"
-dependencies = [
- "futures-core",
- "lock_api",
-]
-
-[[package]]
-name = "futures-sink"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d"
 
 [[package]]
 name = "generator"
@@ -2240,14 +2180,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-protocols-bluetooth-hci"
-version = "0.1.0"
-dependencies = [
- "bt-hci",
- "oer-portable-wire",
-]
-
-[[package]]
 name = "oer-protocols-bridges-ieee80211-ethernet"
 version = "0.1.0"
 dependencies = [
@@ -3048,13 +2980,8 @@ dependencies = [
 name = "oer-tools-lab-fixture-helpers"
 version = "0.1.0"
 dependencies = [
- "bt-hci",
- "bt-hci-transport",
  "clap",
- "embedded-io",
- "embedded-io-async",
  "libc",
- "oer-protocols-bluetooth-hci",
  "oer-tools-lab-fixture",
  "oer-tools-os-process",
  "rustix",

@@ -2,8 +2,8 @@
 
 `oer-tools-lab-fixture` is the library of the Linux fixture software of the HIL
 stand: its versioned provisioning (`cargo stand fixture install`), the fixed
-launchers' admission, and the requests and reports of the finite helpers
-`open-radio-bluetooth` and `open-radio-probe`, and the pinned builds of the
+launchers' admission, and the requests and reports of the finite helper
+`open-radio-probe`, and the pinned builds of the
 fixture's `hostapd` and `udhcpc` (`cargo stand fixture build-hostapd|build-udhcpc`).
 
 The programs are packages without a library, so the contract has one

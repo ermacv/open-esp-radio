@@ -1,65 +1,22 @@
-# ESP32-C5 IEEE 802.15.4 reference peer
+# ESP32-S31 IEEE 802.15.4 vendor reference
 
-This ESP-IDF application turns an ESP32-C5 into the reference IEEE 802.15.4
-peer of the HIL cell. The vendor driver (`esp_ieee802154_*`) owns the radio;
-the application only drives it through a line protocol on the console, so
-exchanges with the device under test run against the vendor implementation.
-
-## Build and flash
-
-The peer is an ESP-IDF firmware catalog entry (`cargo fw idf list`)
-(`firmware.toml`). It builds against the ESP-IDF revision and ESP32-C5 archives
-pinned in
-[`chips/esp32c5/vendor/artifacts.toml`](../../../../chips/esp32c5/vendor/artifacts.toml),
-installed below `target/` apart from any user installation:
-
-```console
-cargo fw flash ieee802154-peer --device <MAC|PORT>
-```
-
-This builds the image, flashes it under a lease of that board only and records
-it in the board journal as `ieee802154-peer`. The tracked
-`sdkconfig.defaults` selects the USB Serial/JTAG console the stand uses and a
-reproducible build.
-
-The peer is a board of the stand file's pool with the `peer` role
-(`--peer-board ID` names it when there are several). The board is shared with
-other consumers.
-
-### USB Serial/JTAG resets
-
-ESP-IDF leaves a clock setting in the ESP32-C5's LP domain that makes a
-USB Serial/JTAG reset of rev 1.0 boot into UART/SDIO download with USB dead;
-[Hardware errata](../../../../docs/hardware-errata.md#esp32-c5-rev-10-a-usb-serialjtag-reset-boots-into-uartsdio-download)
-describes it. The peer never enters the PMU MODEM state, so on the ESP32-C5 it
-restores the ROM's ACTIVE-only analog I2C master clock map at start and after
-each radio enable, and USB resets and flashes over it work. The runner still
-takes a running peer over with `SYNC` instead of a reset.
-
-### A wedged USB console
-
-The peer's USB Serial/JTAG console can wedge with the board still
-enumerated: every write and every control request (RTS, DTR) fails with
-`EPIPE` ("Broken pipe"), the hub lists the device without its string
-descriptors (`[303a:1001]` with no product or serial), and neither an RTS
-nor a JTAG reset nor `espflash` reaches it. Before every peer scenario
-the run's preflight sends `SYNC` under the run's lease, so such a console
-fails the scenario's precondition, pointing here, instead of breaking it
-midway. Firmware is not the cause, so reflashing does not help; power-cycling only the peer's own hub
-port does: `cargo stand board reset esp32c5 --via power`, for a board whose reset ladder has
-`power` on a switchable hub port of the stand file. A lease runs no `uhubctl` itself.
-The peer answers `SYNC` with `@OK SYNC` once it is back.
+This ESP-IDF application runs the vendor IEEE 802.15.4 driver
+(`esp_ieee802154_*`) on the ESP32-S31 behind a line protocol on the console,
+for on-air comparison with the open driver and for the IEEE 802.15.4 points
+of the calibration cross-check. Its catalog image is
+`ieee802154-vendor-reference` (`firmware.toml`); the register model's
+evidence cites its build.
 
 ## Line protocol
 
-Lines end with `\n`. Every protocol line from the peer starts with `@`; the
+Lines end with `\n`. Every protocol line from the application starts with `@`; the
 host ignores any other output, such as boot messages. Hexadecimal bytes are
 lowercase on output and accepted in either case on input.
 
-At start the peer prints:
+At start the application prints:
 
 ```text
-@READY protocol=1 target=esp32c5
+@READY protocol=1 target=esp32s31
 ```
 
 Each command is answered by `@OK <command>` or `@ERR <command> <reason>`.
@@ -77,7 +34,7 @@ Each command is answered by `@OK <command>` or `@ERR <command> <reason>`.
 | `PENDING ADD <short>` | Add a short address (big-endian hex) to the pending table. |
 | `PENDING CLEAR` | Clear the short-address pending table. |
 | `ED <symbols>` | Run one energy detection of the given number of 16 µs symbols. |
-| `SYNC` | Stop a burst, disable and enable the driver, clear both pending tables and pending reports, then print `@READY` again: the host takes over a running peer without resetting the chip. |
+| `SYNC` | Stop a burst, disable and enable the driver, clear both pending tables and pending reports, then print `@READY` again: the host takes over a running application without resetting the chip. |
 | `OFF` | Disable the driver (`esp_ieee802154_disable`): the MAC, BTBB and the PHY client are released, and RF closes after the last client. |
 | `ON` | Enable the driver again (`esp_ieee802154_enable`); send `CFG` before the next operation. |
 | `PEEK <address>` | Read the 32-bit word at the word-aligned device address (eight hexadecimal digits) and print `@PEEK <address> <value>`, for register cross-checks. A register whose clock domain is off may reset the chip. |

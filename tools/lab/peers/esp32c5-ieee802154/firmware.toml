@@ -1,5 +1,0 @@
-# Firmware catalog entry: `cargo fw idf build ieee802154-peer`.
-image = "ieee802154-peer"
-chip = "esp32c5"
-# The ESP32-C5 pins: the same ESP-IDF revision with the ESP32-C5 archives.
-pins = "esp32c5"

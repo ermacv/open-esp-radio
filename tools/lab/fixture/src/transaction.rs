@@ -701,11 +701,7 @@ mod linux {
         {
             return Err("prepared bundle identity or provider contract is invalid".into());
         }
-        if validate_adapters(provider, &bundle.allowed_bluetooth_adapters)?
-            != bundle.allowed_bluetooth_adapters
-        {
-            return Err("prepared bundle Bluetooth adapter policy is not canonical".into());
-        }
+        validate_adapters(&bundle.allowed_bluetooth_adapters)?;
         let specs = provider.artifact_specs();
         if bundle.artifacts.len() != specs.len() {
             return Err("prepared bundle artifact set is incomplete".into());
@@ -1170,7 +1166,6 @@ mod linux {
         effects.validate_effective(layout)?;
         let helper_name = match bundle.provider {
             Provider::LinuxNet => "open-radio-net",
-            Provider::LinuxBluetooth => "open-radio-bluetooth",
         };
         effects.verify_capabilities(&generation.join(helper_name), &bundle.runtime_contract)
     }
@@ -1338,22 +1333,6 @@ mod linux {
                     lines.push(format!(
                         "{operator} ALL=(root) NOPASSWD: /usr/local/sbin/open-radio-net {operation}"
                     ));
-                }
-            }
-            Provider::LinuxBluetooth => {
-                for adapter in &bundle.allowed_bluetooth_adapters {
-                    for operation in ["att-parameters", "restore-att-parameters"] {
-                        lines.push(format!(
-                            "{operator} ALL=(root) NOPASSWD: /usr/local/libexec/open-radio-bluetooth {operation} --adapter {adapter}"
-                        ));
-                    }
-                    for version in ["", " --dtm-version v1"] {
-                        for profile in ["receive-transmit", "transmit", "receive-silence"] {
-                            lines.push(format!(
-                                "{operator} ALL=(root) NOPASSWD: /usr/local/libexec/open-radio-bluetooth check --adapter {adapter}{version} --profile {profile}"
-                            ));
-                        }
-                    }
                 }
             }
         }

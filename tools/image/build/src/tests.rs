@@ -266,12 +266,8 @@ pub(crate) fn repository() -> tempfile::TempDir {
                 include_str!("../../../../chips/esp32s31/facts/partitions/applications.csv"),
             ),
             (
-                "tools/lab/peers/esp32c5-ieee802154/firmware.toml",
-                include_str!("../../../lab/peers/esp32c5-ieee802154/firmware.toml"),
-            ),
-            (
-                "tools/lab/peers/esp32c5-openthread/firmware.toml",
-                include_str!("../../../lab/peers/esp32c5-openthread/firmware.toml"),
+                "tools/lab/peers/esp32c5-wifi-injector/firmware.toml",
+                include_str!("../../../lab/peers/esp32c5-wifi-injector/firmware.toml"),
             ),
             (
                 "tools/vendor/references/esp32c5/ble-scan-request-counter/firmware.toml",

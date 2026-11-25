@@ -140,8 +140,7 @@ is gone both fail, so every list only shrinks:
     inserts into, assigns or borrows `&mut` (`file::Struct.field`, the
     field found by its name in the crate).
 
-- `EXTERNAL_ASYNC_CRATES`: the direct normal `embassy-sync` edge of the
-  HIL agent.
+- `EXTERNAL_ASYNC_CRATES`: empty.
 
 ## IEEE 802.11 foreign dependencies
 
@@ -162,11 +161,11 @@ are outside this rule; it does not inspect third-party dependency closures.
 | Package | Allowed home or role |
 | --- | --- |
 | `embassy-futures` | All except wire, cipher, core, core-side policy, facts, PAC and HAL |
-| `embassy-sync` | Development only, with the exact normal-edge deviations above |
+| `embassy-sync` | None |
 | `embassy-time` | `portable/embassy/time`, `oer` (the executors' clock) |
 | `embassy-time-driver` | `chips/family/platform/executor` |
 | `trouble-host` | `portable/embassy/trouble`, `firmware/*` |
-| `bt-hci` | `protocols/bluetooth/hci`, `portable/embassy/trouble`, `tools/*` |
+| `bt-hci` | None |
 
 `protocols_never_use_the_bt_hci_async_controller` scans Rust tokens in all
 protocol sources, including tests, for `bt_hci::controller` paths and grouped

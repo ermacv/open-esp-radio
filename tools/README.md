@@ -20,7 +20,7 @@ tools/
   lab/        the stand: boards, leases, power, router, fixtures; cli/ is `cargo stand`,
               fixture/ the Linux fixture contract (a library), fixture-install/ the
               privileged installer and launchers, fixture-helpers/ the Linux helper
-              programs, linux-net/ and linux-bluetooth/ their providers
+              programs, linux-net/ their provider
   hil/        the host end of the HIL core: link/ the board's serial link, harness/ a
               scenario program's life cycle, cli/ is `cargo hil` (scenarios: hil/scenarios/)
   vendor/     the vendor comparison, lineage, provenance and the PHY archive audit; cli/ is
