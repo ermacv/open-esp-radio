@@ -538,3 +538,20 @@ fn a_prefix_of_items_is_its_admitted_length() {
     prefix.borrow_mut(&mut items)[1] = 21;
     assert_eq!(items, [10, 21, 30, 40]);
 }
+
+#[test]
+fn a_proven_length_and_value_narrow_without_loss_up_to_their_bounds() {
+    for length in [0, 1, 2, 254, 255] {
+        let admitted = crate::PrefixLength::<255>::new(length).unwrap();
+        assert_eq!(usize::from(admitted.to_u8()), length);
+    }
+    assert_eq!(crate::PrefixLength::<3>::constant::<3>().to_u8(), 3);
+    for value in [0, 1, 0x0102_0304, 0xffff_fffe, 0xffff_ffff] {
+        let admitted = crate::U64::<32>::new(value).unwrap();
+        assert_eq!(u64::from(admitted.to_u32()), value);
+    }
+    assert_eq!(
+        crate::U64::<21>::constant::<0x1f_fffe>().to_u32(),
+        0x1f_fffe
+    );
+}

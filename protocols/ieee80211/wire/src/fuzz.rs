@@ -142,3 +142,20 @@ fn mutate(rng: &mut XorShift, buffer: &mut Vec<u8>) {
         _ => buffer.push(rng.byte()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::XorShift;
+
+    #[test]
+    fn a_drawn_value_and_octet_are_those_of_the_sequence() {
+        let (mut drawn, mut sequence) = (XorShift::new(7), XorShift::new(7));
+        for bound in 1..200_usize {
+            let value = usize::try_from(sequence.next() % u64::try_from(bound).unwrap()).unwrap();
+            assert_eq!(drawn.below(bound), value);
+            let [octet, ..] = sequence.next().to_le_bytes();
+            assert_eq!(drawn.byte(), octet);
+        }
+        assert_eq!(drawn.below(0), 0);
+    }
+}

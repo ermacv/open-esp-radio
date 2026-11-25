@@ -77,3 +77,28 @@ fn acknowledged_initial_frame_uses_the_subsequent_response_window() {
         })
     );
 }
+
+/// A window is open from its arming to its cancel, and only the first
+/// transmission's window is deferred by its acknowledgment.
+#[test]
+fn a_window_names_its_message_and_defers_only_the_first_transmission() {
+    let mut retry = RsnRetry::new(RsnRetryConfig {
+        first_interval: Duration::from_micros(100_000),
+        subsequent_interval: Duration::from_micros(1_000_000),
+        attempts: 2,
+    })
+    .unwrap();
+    assert!(!retry.is_armed());
+    assert_eq!(retry.pending_message(), None);
+    assert_eq!(retry.defer_first_after_ack(at(0)), Ok(None));
+    let first = retry.arm(MESSAGE, at(0)).unwrap();
+    assert!(retry.is_armed());
+    assert_eq!(retry.pending_message(), Some(MESSAGE));
+    assert!(retry.defer_first_after_ack(at(1)).unwrap().is_some());
+    let _ = retry.on_alarm(first, first.deadline).unwrap();
+    assert!(retry.is_armed());
+    assert_eq!(retry.defer_first_after_ack(at(2)), Ok(None));
+    retry.cancel();
+    assert!(!retry.is_armed());
+    assert_eq!(retry.pending_message(), None);
+}

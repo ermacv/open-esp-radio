@@ -513,3 +513,16 @@ fn copy_rates(access_point: &ScanRecord, output: &mut [u8]) {
         *destination = rate;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::StaPowerCapability;
+
+    /// IEEE Std 802.11-2020, 9.4.2.14 (Power Capability element): both
+    /// powers are signed, in dBm.
+    #[test]
+    fn a_power_capability_carries_both_powers_in_two_s_complement() {
+        let capability = StaPowerCapability::new(-2, 20).unwrap();
+        assert_eq!(capability.encode(), [33, 2, 0xfe, 20]);
+    }
+}
