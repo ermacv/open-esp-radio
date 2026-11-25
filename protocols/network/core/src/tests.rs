@@ -2054,3 +2054,39 @@ fn a_retired_core_s_handles_reach_nothing_of_the_next_core_s_slot() {
         assert_eq!(finished(results.take(command)), Outcome::Retired);
     });
 }
+
+/// A neighbor's life ends at its end: a send at that instant asks again.
+#[test]
+fn a_neighbor_at_the_end_of_its_life_is_asked_for_again() {
+    world!(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        stack.input(
+            at(0),
+            &arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP),
+            &mut (),
+        );
+        send_next(stack, at(0)).unwrap();
+        let end = Instant::from_micros(60_000_000);
+        let block = filled(stack.pool(), b"late");
+        let _command = stack.send(end, &socket, peer(), block).unwrap();
+        let demand = stack.poll_demand(end).expect("its request is owed");
+        assert_eq!(demand.ready().class, Class::Control);
+    });
+}
+
+/// A close frees a neighbor entry for a new send only if a command held one.
+#[test]
+fn a_close_tells_of_neighbors_only_when_a_command_held_one() {
+    world!(|stack| {
+        let idle = stack.open(5000, best_effort()).unwrap();
+        let before = stack.neighbors_changed();
+        let _closed = stack.close(idle).unwrap();
+        assert_eq!(stack.neighbors_changed(), before);
+        let busy = stack.open(5001, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"waits");
+        let _command = stack.send(at(0), &busy, peer(), block).unwrap();
+        let before = stack.neighbors_changed();
+        let _closed = stack.close(busy).unwrap();
+        assert_ne!(stack.neighbors_changed(), before);
+    });
+}
