@@ -102,7 +102,7 @@ impl<'a> ProtectedMpdu<'a> {
     /// The CCM nonce: Nonce Flags, the transmitter address and the packet
     /// number, most significant octet first.
     pub fn nonce(&self, spp: Spp) -> [u8; CCMP_NONCE_LEN] {
-        let [a0, a1, a2, a3, a4, a5] = self.header.transmitter();
+        let [a0, a1, a2, a3, a4, a5] = self.header.transmitter().octets();
         let [p0, p1, p2, p3, p4, p5] = NoncePacketNumber::from_bytes([0; 6])
             .with_value(self.ccmp.packet_number().wire())
             .to_bytes();
@@ -155,15 +155,15 @@ impl<'a> ProtectedMpdu<'a> {
         let mut writer = oer_portable_wire::Writer::new(&mut bytes);
         for part in [
             fields.to_bytes().as_slice(),
-            &self.header.receiver(),
-            &self.header.transmitter(),
-            &self.header.address3(),
+            self.header.receiver().as_octets(),
+            self.header.transmitter().as_octets(),
+            self.header.address3().as_octets(),
             // The Fragment Number, the Sequence Number masked to zero.
             &SequenceControl::from_bytes([0; 2])
                 .with_fragment(sequence.fragment())
                 .ok()?
                 .to_bytes(),
-            address4.as_ref().map_or(&[], |address| address.as_slice()),
+            address4.as_ref().map_or(&[], |address| address.as_octets()),
             qos.as_ref().map_or(&[], |qos| qos.as_slice()),
         ] {
             writer.write(part).ok()?;

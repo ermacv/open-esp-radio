@@ -3,8 +3,9 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::ccmp::{CcmpRxProtection, CcmpRxReplayEpoch};
+use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
 use oer_protocols_ieee80211_wire::{
-    address::{AddressFlags, Bssid, OwnAddress},
+    address::{Bssid, OwnAddress},
     ccmp::CcmpHeader,
     data::{MsduParts, decapsulate_payload},
     frame::DecodedHeader,
@@ -56,9 +57,8 @@ impl<'a> AdmittedData<'a> {
             return Err(RxDropReason::FrameKind);
         }
         let receiver = header.receiver();
-        let [first, ..] = receiver;
         if header.transmitter() != bssid.get()
-            || (receiver != local.get() && !AddressFlags::from_bytes([first]).group())
+            || (receiver != local.get() && matches!(receiver.kind(), Eui48Kind::Individual(_)))
         {
             return Err(RxDropReason::Address);
         }
@@ -109,7 +109,7 @@ impl<'a> AdmittedData<'a> {
         if !control.is_data() || fields.no_data() || fields.from_ds() || !fields.to_ds() {
             return Err(RxDropReason::FrameKind);
         }
-        if header.receiver() != bssid.get() || header.transmitter() != peer {
+        if header.receiver() != bssid.get() || header.transmitter() != Eui48::new(peer) {
             return Err(RxDropReason::Address);
         }
         if control.more_fragments() || header.sequence_control().fragment() != 0 {
@@ -161,12 +161,10 @@ impl<'a> AdmittedData<'a> {
 mod tests {
     extern crate std;
     use super::*;
+    use oer_protocols_ieee802_wire::IndividualAddress;
+    use oer_protocols_ieee80211_wire::ccmp::{CcmpKeyId, CcmpPacketNumber, GroupKeyId};
     use oer_protocols_ieee80211_wire::data::PeerQos;
     use oer_protocols_ieee80211_wire::security::LinkProtection;
-    use oer_protocols_ieee80211_wire::{
-        address::IndividualAddress,
-        ccmp::{CcmpKeyId, CcmpPacketNumber, GroupKeyId},
-    };
     use std::vec::Vec;
 
     /// Whether a test frame carries an HT Control field.
@@ -214,8 +212,8 @@ mod tests {
     ) -> Result<AdmittedData<'a>, RxDropReason> {
         AdmittedData::admit(
             DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
-            OwnAddress::new(IndividualAddress::new([2; 6]).unwrap()),
-            Bssid::new(IndividualAddress::new([4; 6]).unwrap()).unwrap(),
+            OwnAddress::new(IndividualAddress::new(Eui48::new([2; 6])).unwrap()),
+            Bssid::new(IndividualAddress::new(Eui48::new([4; 6])).unwrap()).unwrap(),
             integrity,
             Some(replay),
         )
@@ -250,7 +248,7 @@ mod tests {
     ) -> Result<AdmittedData<'a>, RxDropReason> {
         AdmittedData::admit_uplink(
             DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
-            Bssid::new(IndividualAddress::new([2; 6]).unwrap()).unwrap(),
+            Bssid::new(IndividualAddress::new(Eui48::new([2; 6])).unwrap()).unwrap(),
             peer,
             integrity,
             replay,
@@ -296,8 +294,8 @@ mod tests {
         let msdu = admitted.msdus().unwrap().next().unwrap().unwrap();
         assert_eq!(msdu.ether_type, 0x0800);
         assert_eq!(msdu.payload, [9, 8]);
-        assert_eq!(msdu.destination, [6; 6]);
-        assert_eq!(msdu.source, [4; 6]);
+        assert_eq!(msdu.destination, Eui48::new([6; 6]));
+        assert_eq!(msdu.source, Eui48::new([4; 6]));
         // The same packet number again is a replay.
         assert!(matches!(
             admit_uplink(
@@ -318,6 +316,21 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn a_downlink_is_the_bss_s_to_this_station_or_to_a_group() {
+        let address = |at: usize, octets: [u8; 6]| {
+            let mut frame = packet(PeerQos::NonQos, HtControl::Absent, LinkProtection::Open);
+            frame[at..at + 6].copy_from_slice(&octets);
+            let mut replay =
+                CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap();
+            admit(&frame, Integrity::Unverified, &mut replay).err()
+        };
+        assert_eq!(address(4, [2; 6]), None);
+        assert_eq!(address(4, [0xff; 6]), None);
+        assert_eq!(address(4, [6; 6]), Some(RxDropReason::Address));
+        assert_eq!(address(10, [6; 6]), Some(RxDropReason::Address));
     }
 
     #[test]
@@ -441,8 +454,8 @@ mod tests {
                 CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap();
             let Ok(admitted) = AdmittedData::admit(
                 header,
-                OwnAddress::new(IndividualAddress::new([2; 6]).unwrap()),
-                Bssid::new(IndividualAddress::new([4; 6]).unwrap()).unwrap(),
+                OwnAddress::new(IndividualAddress::new(Eui48::new([2; 6])).unwrap()),
+                Bssid::new(IndividualAddress::new(Eui48::new([4; 6])).unwrap()).unwrap(),
                 integrity,
                 Some(&mut replay),
             ) else {

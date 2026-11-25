@@ -59,7 +59,7 @@ fn an_encoder_refusal_returns_the_reply_without_marking_tx_busy() {
         world.station.frame.limit = 24;
         let reply = RxBlockAckReply::for_association(
             world.station.epoch.unwrap(),
-            Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
+            Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap(),
             oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaResponse {
                 dialog_token: 17,
                 status:
@@ -103,4 +103,29 @@ fn the_station_s_own_delba_names_it_the_agreement_s_originator() {
             })
         );
     }
+}
+
+/// What the transmit agreements owe after a dropped frame goes out as a
+/// BlockAckReq at the plane's head.
+#[test]
+fn an_owed_block_ack_request_is_transmitted() {
+    installed(|mint| {
+        let mut world = connected_world(mint);
+        let mut tx = crate::machine::tx_block_ack::tests::operational();
+        tx.request(0, SequenceNumber::new(9).unwrap());
+        world.station.config.tx_block_ack = Some(tx);
+        let State::Connected(connected) = &mut world.station.state else {
+            panic!("the world is connected");
+        };
+        connected.tx_block_ack = crate::machine::TxAgreements::Started;
+        world.take();
+        world.run(at(40));
+        assert!(world.seen.iter().any(|seen| matches!(
+            seen,
+            Seen::Transmit {
+                subtype: 0x0084,
+                ..
+            }
+        )));
+    });
 }

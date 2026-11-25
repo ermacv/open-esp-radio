@@ -853,8 +853,8 @@ fn msdus<M>(
             .ok_or(RxRefusal::Undecapsulable)?;
         let msdu = Msdu {
             addresses: EthernetAddresses {
-                destination: frame.destination,
-                source: frame.source,
+                destination: frame.destination.octets(),
+                source: frame.source.octets(),
                 ether_type: u16::try_from(ether_type).map_err(|_| RxRefusal::Undecapsulable)?,
             },
             span: EthernetSpan {

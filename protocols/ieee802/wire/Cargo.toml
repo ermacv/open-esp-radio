@@ -1,0 +1,14 @@
+[package]
+name = "oer-protocols-ieee802-wire"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "IEEE 802 addresses, which every IEEE 802 wire carries"
+
+[dependencies]
+oer-portable-wire = { path = "../../../portable/wire" }
+
+[lints]
+workspace = true

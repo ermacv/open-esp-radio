@@ -557,7 +557,7 @@ mod handshake {
         };
         assert_eq!(peer, PEER);
         let (key, address) = engine.pairwise_key(PEER).unwrap();
-        assert_eq!(address.get(), PEER);
+        assert_eq!(address.get(), Eui48::new(PEER));
         assert_eq!(
             key.as_bytes(),
             oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(ptk().temporal_key())
@@ -630,6 +630,20 @@ mod handshake {
             ApEapol::Authorize { peer: PEER }
         ));
         engine.authorize(PEER, at(16)).unwrap();
+        // Clear data is not the authorized peer's in a protected BSS.
+        assert_eq!(
+            engine
+                .receive(
+                    &uplink(0x0800, &[0x45]),
+                    Integrity::Unverified,
+                    at(17),
+                    None,
+                    0,
+                    &mut output
+                )
+                .unwrap(),
+            ApReceived::Nothing
+        );
         let data = protected_uplink(0x0800, &[0x45], 3);
         assert!(matches!(
             engine
@@ -665,4 +679,88 @@ fn a_frame_s_queue_is_its_authorized_peer_s_or_the_group_s() {
         None,
         "associated, not authorized"
     );
+}
+
+#[test]
+fn the_network_takes_what_is_for_the_access_point_or_a_group() {
+    let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
+    let engine = engine(&mut storage, &mut beacon);
+    for (destination, delivered) in [
+        (AP, true),
+        ([0xff; 6], true),
+        ([1, 0, 0x5e, 0, 0, 1], true),
+        ([2, 0, 0, 0, 0, 3], false),
+    ] {
+        let msdu = ApMsdu {
+            destination,
+            source: PEER,
+            ether_type: 0x0800,
+            payload: &[],
+        };
+        assert_eq!(engine.delivers(&msdu), delivered, "{destination:?}");
+    }
+}
+
+/// An open BSS starts no handshake and passes the clear data of its peer.
+#[test]
+fn an_open_bss_passes_clear_data_without_a_handshake() {
+    let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
+    let service = AccessPointService::<Association>::new_open(
+        AP,
+        AccessPointClientLimit::new(2).unwrap(),
+        AccessPointInactiveTimeout::default(),
+        storage.lend(),
+    )
+    .unwrap();
+    let beacon = ApBeacon::new(
+        &mut beacon,
+        &ADVERTISEMENT,
+        AP,
+        &Ssid::new(SSID).unwrap(),
+        channel(),
+        100,
+        2,
+        SequenceNumber::ZERO,
+        ApSecurityPolicy::Open,
+    )
+    .unwrap();
+    let mut engine = ApEngine::new(
+        service,
+        beacon,
+        ADVERTISEMENT,
+        channel(),
+        GroupKeyId::new(1).unwrap(),
+    );
+    let mut output = [0; 512];
+    let mut open = association_request();
+    // Capability Information without Privacy, and no RSN element.
+    open[24] &= !0x10;
+    open.truncate(open.len() - SUPPLICANT_RSN.len());
+    for request in [authentication(), open] {
+        let received = engine
+            .receive(
+                &request,
+                Integrity::Unverified,
+                at(1),
+                Some([7; 32]),
+                1,
+                &mut output,
+            )
+            .unwrap();
+        assert!(
+            matches!(
+                received,
+                ApReceived::Respond {
+                    after: ApAfter::Nothing,
+                    ..
+                }
+            ),
+            "{received:?}"
+        );
+    }
+    let data = uplink(0x0800, &[0x45]);
+    let received = engine
+        .receive(&data, Integrity::Unverified, at(2), None, 0, &mut output)
+        .unwrap();
+    assert!(matches!(received, ApReceived::Msdu(_)), "{received:?}");
 }

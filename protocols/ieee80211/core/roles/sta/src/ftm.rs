@@ -9,11 +9,11 @@
 //! the protocol's absent-token value and cannot be inserted into that set.
 
 use core::num::NonZeroU8;
+use oer_protocols_ieee802_wire::IndividualAddress;
 use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
 
 use heapless::Vec;
 use oer_portable_time::{Duration, Instant};
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::ftm::{
     FTM_INITIAL_REQUEST_BODY_LEN, FTM_TIMESTAMP_MASK, FtmAsap, FtmAsapCapability, FtmBurstDuration,
     FtmFormatAndBandwidth, FtmMeasurement, FtmRequestParameters, FtmResponseParameters,

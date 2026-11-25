@@ -8,10 +8,7 @@
 //! the runtime must retain the corresponding acknowledged exchange.
 
 use crate::address::{Bssid, OwnAddress};
-use crate::{
-    sequence::SequenceNumber,
-    station::{StationFrameError, validate_peer},
-};
+use crate::{sequence::SequenceNumber, station::StationFrameError};
 
 /// Length of a legacy Null Data MPDU, excluding the hardware-owned FCS.
 pub const STA_NULL_DATA_FRAME_LEN: usize = 24;
@@ -71,13 +68,6 @@ impl StaNullDataFrame {
     /// `ieee80211_nullfunc_get`: Data/NullFunc + ToDS, BSSID/STA/BSSID address
     /// geometry, with the caller selecting the Power Management bit.
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
-        validate_peer(self.bssid.get())?;
-        if output.len() < STA_NULL_DATA_FRAME_LEN {
-            return Err(StationFrameError::OutputTooSmall {
-                required: STA_NULL_DATA_FRAME_LEN,
-            });
-        }
-
         let (frame, _) = output
             .split_first_chunk_mut::<STA_NULL_DATA_FRAME_LEN>()
             .ok_or(StationFrameError::OutputTooSmall {
@@ -89,9 +79,9 @@ impl StaNullDataFrame {
             StaPowerManagement::PowerSave
         ));
         crate::encoding::write_array::<0, _, _>(frame, &frame_control.to_bytes());
-        crate::encoding::write_array::<4, _, _>(frame, &self.bssid.get());
-        crate::encoding::write_array::<10, _, _>(frame, &self.station_address.get());
-        crate::encoding::write_array::<16, _, _>(frame, &self.bssid.get());
+        crate::encoding::write_array::<4, _, _>(frame, &self.bssid.get().octets());
+        crate::encoding::write_array::<10, _, _>(frame, &self.station_address.get().octets());
+        crate::encoding::write_array::<16, _, _>(frame, &self.bssid.get().octets());
         crate::encoding::write_array::<22, _, _>(
             frame,
             &self.sequence_number.sequence_control().to_bytes(),

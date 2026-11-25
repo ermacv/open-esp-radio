@@ -6,6 +6,7 @@
 
 mod parsing;
 
+use oer_protocols_ieee802_wire::Eui48;
 pub use parsing::{
     parse_ccmp_data_fragment, parse_ccmp_data_identity, parse_open_data_fragment,
     parse_open_data_identity,
@@ -27,9 +28,9 @@ pub enum DataFragmentProtection {
 pub struct OpenDataFragmentIdentity {
     role: DataInterfaceRole,
     protection: DataFragmentProtection,
-    receiver_address: [u8; 6],
-    transmitter_address: [u8; 6],
-    address3: [u8; 6],
+    receiver_address: Eui48,
+    transmitter_address: Eui48,
+    address3: Eui48,
     sequence_number: SequenceNumber,
     qos_control: Option<crate::frame::QosControl>,
 }
@@ -43,15 +44,15 @@ impl OpenDataFragmentIdentity {
         self.protection
     }
 
-    pub const fn receiver_address(self) -> [u8; 6] {
+    pub const fn receiver_address(self) -> Eui48 {
         self.receiver_address
     }
 
-    pub const fn transmitter_address(self) -> [u8; 6] {
+    pub const fn transmitter_address(self) -> Eui48 {
         self.transmitter_address
     }
 
-    pub const fn address3(self) -> [u8; 6] {
+    pub const fn address3(self) -> Eui48 {
         self.address3
     }
 
@@ -66,14 +67,14 @@ impl OpenDataFragmentIdentity {
         }
     }
 
-    pub const fn destination(self) -> [u8; 6] {
+    pub const fn destination(self) -> Eui48 {
         match self.role {
             DataInterfaceRole::Station => self.receiver_address,
             DataInterfaceRole::AccessPoint => self.address3,
         }
     }
 
-    pub const fn source(self) -> [u8; 6] {
+    pub const fn source(self) -> Eui48 {
         match self.role {
             DataInterfaceRole::Station => self.address3,
             DataInterfaceRole::AccessPoint => self.transmitter_address,

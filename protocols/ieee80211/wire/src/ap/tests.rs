@@ -20,8 +20,8 @@ fn msdu<'p>(
     payload: &'p [u8],
 ) -> crate::data::MsduParts<'p> {
     crate::data::MsduParts {
-        destination,
-        source,
+        destination: Eui48::new(destination),
+        source: Eui48::new(source),
         ether_type,
         payload,
     }
@@ -33,8 +33,8 @@ fn ap_eapol_data_frame_uses_from_ds_address_mapping() {
     let peer = [2, 0, 0, 0, 0, 2];
     let mut output = [0; 64];
     let len = ApDataFrame {
-        access_point,
-        destination: peer,
+        access_point: Eui48::new(access_point),
+        destination: Eui48::new(peer),
         sequence_number: seq(9),
         ether_type: 0x888e,
         payload: &[1, 2, 3],
@@ -60,8 +60,8 @@ fn protected_ap_frame_owns_from_ds_ccmp_and_plaintext_boundary() {
     let ccmp = [3, 0, 0, 0x20, 0, 0, 0, 0];
     let mut output = [0; 96];
     let len = ApProtectedDataFrame {
-        access_point,
-        peer,
+        access_point: Eui48::new(access_point),
+        peer: Eui48::new(peer),
         sequence_number: seq(7),
         user_priority: 0,
         peer_qos: crate::data::PeerQos::Qos,
@@ -96,8 +96,8 @@ fn an_in_place_prefix_is_the_protected_frame_up_to_its_payload() {
         let payload = [1, 2, 3, 4];
         let mut whole = [0; 96];
         let len = ApProtectedDataFrame {
-            access_point,
-            peer,
+            access_point: Eui48::new(access_point),
+            peer: Eui48::new(peer),
             sequence_number: seq(7),
             user_priority: 0,
             peer_qos: qos,
@@ -108,8 +108,8 @@ fn an_in_place_prefix_is_the_protected_frame_up_to_its_payload() {
         .encode(&mut whole)
         .unwrap();
         let prefix = ApProtectedDataPrefix {
-            access_point,
-            peer,
+            access_point: Eui48::new(access_point),
+            peer: Eui48::new(peer),
             sequence_number: seq(7),
             user_priority: 0,
             peer_qos: qos,
@@ -147,8 +147,8 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
     let ccmp = [9, 0, 0, 0x20, 0, 0, 0, 0];
     let mut protected = [0xa5; 192];
     let protected_len = ApAmsduFrame {
-        access_point,
-        peer,
+        access_point: Eui48::new(access_point),
+        peer: Eui48::new(peer),
         sequence_number: seq(11),
         user_priority: 5,
         more_data: crate::data::MoreData::Buffered,
@@ -189,8 +189,8 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
 
     let mut open = [0; 192];
     let open_len = ApAmsduFrame {
-        access_point,
-        peer,
+        access_point: Eui48::new(access_point),
+        peer: Eui48::new(peer),
         sequence_number: seq(12),
         user_priority: 0,
         more_data: crate::data::MoreData::Clear,
@@ -214,8 +214,8 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
     let mut output = [0xa5; 80];
     assert_eq!(
         ApAmsduFrame {
-            access_point,
-            peer,
+            access_point: Eui48::new(access_point),
+            peer: Eui48::new(peer),
             sequence_number: seq(0),
             user_priority: 0,
             more_data: crate::data::MoreData::Clear,
@@ -233,8 +233,8 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
     assert!(short.len() < required);
     assert_eq!(
         ApAmsduFrame {
-            access_point,
-            peer,
+            access_point: Eui48::new(access_point),
+            peer: Eui48::new(peer),
             sequence_number: seq(0),
             user_priority: 0,
             more_data: crate::data::MoreData::Clear,
@@ -254,8 +254,8 @@ fn protected_ap_frame_rejects_a_destination_outside_pairwise_owner() {
     let mut output = [0; 64];
     assert_eq!(
         ApProtectedDataFrame {
-            access_point,
-            peer,
+            access_point: Eui48::new(access_point),
+            peer: Eui48::new(peer),
             sequence_number: seq(0),
             user_priority: 0,
             peer_qos: crate::data::PeerQos::NonQos,
@@ -276,8 +276,8 @@ fn ap_action_frame_and_parser_preserve_per_peer_addba_identity() {
     let mut frame = [0_u8; 40];
     let length = ApManagementFrame {
         subtype: ApManagementSubtype::Action,
-        access_point,
-        peer,
+        access_point: Eui48::new(access_point),
+        peer: Eui48::new(peer),
         sequence_number: seq(9),
         body: &body,
     }
@@ -287,7 +287,7 @@ fn ap_action_frame_and_parser_preserve_per_peer_addba_identity() {
     frame[4..10].copy_from_slice(&access_point);
     frame[10..16].copy_from_slice(&peer);
     assert!(matches!(
-        parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], access_point),
+        parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], Eui48::new(access_point)),
         Some(ApManagementRequest::BlockAck {
             peer: parsed_peer,
             action: BlockAckAction::AddbaResponse {
@@ -295,7 +295,7 @@ fn ap_action_frame_and_parser_preserve_per_peer_addba_identity() {
                 parameters,
                 ..
             },
-        }) if parsed_peer == peer && (parameters.tid(), parameters.window()) == (0, 32)
+        }) if parsed_peer == Eui48::new(peer) && (parameters.tid(), parameters.window()) == (0, 32)
     ));
 }
 
@@ -411,8 +411,8 @@ fn peer_disconnect_frames_own_subtype_reason_and_sequence() {
     assert_eq!(
         write_ap_peer_disconnect(
             &mut output,
-            access_point,
-            peer,
+            Eui48::new(access_point),
+            Eui48::new(peer),
             ApPeerDisconnectKind::Disassociation,
             4,
             seq(7),
@@ -427,8 +427,8 @@ fn peer_disconnect_frames_own_subtype_reason_and_sequence() {
 
     write_ap_peer_disconnect(
         &mut output,
-        access_point,
-        peer,
+        Eui48::new(access_point),
+        Eui48::new(peer),
         ApPeerDisconnectKind::Deauthentication,
         2,
         seq(8),
@@ -473,12 +473,16 @@ fn observes_only_to_ds_data_power_state() {
     frame[..2].copy_from_slice(&0x1108_u16.to_le_bytes());
     assert_eq!(
         observe_ap_power_save(&frame),
-        Some(ApPowerSaveObservation::Sleeping { peer })
+        Some(ApPowerSaveObservation::Sleeping {
+            peer: Eui48::new(peer)
+        })
     );
     frame[..2].copy_from_slice(&0x0108_u16.to_le_bytes());
     assert_eq!(
         observe_ap_power_save(&frame),
-        Some(ApPowerSaveObservation::Active { peer })
+        Some(ApPowerSaveObservation::Active {
+            peer: Eui48::new(peer)
+        })
     );
     frame[..2].copy_from_slice(&0x0008_u16.to_le_bytes());
     assert_eq!(observe_ap_power_save(&frame), None);
@@ -494,7 +498,7 @@ fn ps_poll_owns_peer_and_association_id() {
     assert_eq!(
         observe_ap_power_save(&frame),
         Some(ApPowerSaveObservation::PsPoll {
-            peer,
+            peer: Eui48::new(peer),
             association_id: 0x123
         })
     );
@@ -510,10 +514,10 @@ fn sae_authentication_frames_cross_between_station_and_access_point() {
     let mut request = [0_u8; 64];
     let len = SaeAuthenticationFrame {
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(peer).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(peer)).unwrap(),
         ),
         bssid: crate::address::Bssid::new(
-            crate::address::IndividualAddress::new(access_point).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(access_point)).unwrap(),
         )
         .unwrap(),
         sequence_number: seq(1),
@@ -524,9 +528,13 @@ fn sae_authentication_frames_cross_between_station_and_access_point() {
     .encode(&mut request)
     .unwrap();
     assert_eq!(
-        parse_ap_management_request(&TEST_ADVERTISEMENT, &request[..len], access_point),
+        parse_ap_management_request(
+            &TEST_ADVERTISEMENT,
+            &request[..len],
+            Eui48::new(access_point)
+        ),
         Some(ApManagementRequest::SaeAuthentication {
-            peer,
+            peer: Eui48::new(peer),
             transaction: 1,
             status: 126,
             body: &commit,
@@ -535,17 +543,27 @@ fn sae_authentication_frames_cross_between_station_and_access_point() {
 
     let confirm = [1, 0, 0xcc];
     let mut response = [0_u8; 64];
-    let len = write_sae_authentication(&mut response, access_point, peer, 2, 0, &confirm, seq(2))
-        .unwrap();
-    let parsed = parse_sae_authentication(&response[..len], peer, access_point).unwrap();
+    let len = write_sae_authentication(
+        &mut response,
+        Eui48::new(access_point),
+        Eui48::new(peer),
+        2,
+        0,
+        &confirm,
+        seq(2),
+    )
+    .unwrap();
+    let parsed =
+        parse_sae_authentication(&response[..len], Eui48::new(peer), Eui48::new(access_point))
+            .unwrap();
     assert_eq!(parsed.transaction, 2);
     assert_eq!(parsed.status_code, 0);
     assert_eq!(parsed.body, confirm);
     assert_eq!(
         write_sae_authentication(
             &mut response[..32],
-            access_point,
-            peer,
+            Eui48::new(access_point),
+            Eui48::new(peer),
             2,
             0,
             &confirm,
@@ -566,12 +584,22 @@ fn parses_only_requests_for_the_owned_bssid() {
     authentication[16..22].copy_from_slice(&access_point);
     authentication[26..28].copy_from_slice(&1_u16.to_le_bytes());
     assert_eq!(
-        parse_ap_management_request(&TEST_ADVERTISEMENT, &authentication, access_point),
-        Some(ApManagementRequest::OpenAuthentication { peer })
+        parse_ap_management_request(
+            &TEST_ADVERTISEMENT,
+            &authentication,
+            Eui48::new(access_point)
+        ),
+        Some(ApManagementRequest::OpenAuthentication {
+            peer: Eui48::new(peer)
+        })
     );
     authentication[4] ^= 1;
     assert_eq!(
-        parse_ap_management_request(&TEST_ADVERTISEMENT, &authentication, access_point),
+        parse_ap_management_request(
+            &TEST_ADVERTISEMENT,
+            &authentication,
+            Eui48::new(access_point)
+        ),
         None
     );
 }
@@ -588,9 +616,9 @@ fn association_retains_the_highest_common_advertised_legacy_rate() {
     association[34..39].copy_from_slice(&[50, 3, 0x48, 0x6c, 0x7f]);
     association[39..42].copy_from_slice(&[48, 1, 0]);
     assert_eq!(
-        parse_ap_management_request(&TEST_ADVERTISEMENT, &association, access_point),
+        parse_ap_management_request(&TEST_ADVERTISEMENT, &association, Eui48::new(access_point)),
         Some(ApManagementRequest::Association {
-            peer,
+            peer: Eui48::new(peer),
             security: ApAssociationSecurityObservation {
                 capability: crate::management::CapabilityInformation::from_bytes([
                     association[24],
@@ -623,7 +651,7 @@ fn association_retains_exact_rsnxe_and_duplicate_count() {
     association[34..38].copy_from_slice(&[244, 2, 0x40, 0x00]);
 
     let Some(ApManagementRequest::Association { security, .. }) =
-        parse_ap_management_request(&TEST_ADVERTISEMENT, &association, access_point)
+        parse_ap_management_request(&TEST_ADVERTISEMENT, &association, Eui48::new(access_point))
     else {
         panic!("association request must parse");
     };
@@ -656,7 +684,7 @@ fn association_retains_the_peers_complete_ht40_receive_facts() {
         ht_capabilities: Some(ht),
         qos,
         ..
-    }) = parse_ap_management_request(&TEST_ADVERTISEMENT, &association, access_point)
+    }) = parse_ap_management_request(&TEST_ADVERTISEMENT, &association, Eui48::new(access_point))
     else {
         panic!("complete HT40 association request must parse");
     };
@@ -672,8 +700,14 @@ fn complete_response_encoders_own_addresses_sequence_and_status() {
     let access_point = [2, 0, 0, 0, 0, 1];
     let peer = [2, 0, 0, 0, 0, 2];
     let mut authentication = [0xaa; AP_AUTHENTICATION_RESPONSE_LEN];
-    write_open_authentication_response(&mut authentication, access_point, peer, 17, seq(7))
-        .unwrap();
+    write_open_authentication_response(
+        &mut authentication,
+        Eui48::new(access_point),
+        Eui48::new(peer),
+        17,
+        seq(7),
+    )
+    .unwrap();
     assert_eq!(&authentication[4..10], &peer);
     assert_eq!(&authentication[10..16], &access_point);
     assert_eq!(&authentication[26..28], &2_u16.to_le_bytes());
@@ -683,8 +717,8 @@ fn complete_response_encoders_own_addresses_sequence_and_status() {
     write_ht_association_response_frame_for_security(
         &TEST_ADVERTISEMENT,
         &mut association,
-        access_point,
-        peer,
+        Eui48::new(access_point),
+        Eui48::new(peer),
         0,
         1,
         seq(8),
@@ -748,8 +782,8 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
     let mut frame = [0; 64];
     let length = ApProtectedManagementFrame {
         subtype: ApManagementSubtype::Action,
-        access_point: ap,
-        peer,
+        access_point: Eui48::new(ap),
+        peer: Eui48::new(peer),
         sequence_number: seq(9),
         ccmp_header: ccmp,
         body: &query,
@@ -762,9 +796,9 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
     frame[4..10].copy_from_slice(&ap);
     frame[10..16].copy_from_slice(&peer);
     assert_eq!(
-        parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], ap),
+        parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], Eui48::new(ap)),
         Some(ApManagementRequest::SaQuery {
-            peer,
+            peer: Eui48::new(peer),
             query: SaQuery::Request {
                 transaction: [0x12, 0x34]
             }
@@ -776,8 +810,8 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
     ] {
         let length = ApProtectedManagementFrame {
             subtype,
-            access_point: ap,
-            peer,
+            access_point: Eui48::new(ap),
+            peer: Eui48::new(peer),
             sequence_number: seq(10),
             ccmp_header: ccmp,
             body: &[3, 0],
@@ -787,13 +821,16 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
         frame[4..10].copy_from_slice(&ap);
         frame[10..16].copy_from_slice(&peer);
         assert!(matches!(
-            parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], ap),
+            parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], Eui48::new(ap)),
             Some(
                 ApManagementRequest::Deauthentication { reason: 3, .. }
                     | ApManagementRequest::Disassociation { reason: 3, .. }
             )
         ));
-        assert!(parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..31], ap).is_none());
+        assert!(
+            parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..31], Eui48::new(ap))
+                .is_none()
+        );
     }
 }
 
@@ -803,15 +840,15 @@ fn ap_management_encoders_admit_complete_capacity_before_writing() {
     let peer = [2, 0, 0, 0, 0, 2];
     let sequence_number = seq(0);
     let plain = ApManagementFrame {
-        access_point,
-        peer,
+        access_point: Eui48::new(access_point),
+        peer: Eui48::new(peer),
         sequence_number,
         subtype: ApManagementSubtype::Action,
         body: &[3, 1, 0],
     };
     let protected = ApProtectedManagementFrame {
-        access_point,
-        peer,
+        access_point: Eui48::new(access_point),
+        peer: Eui48::new(peer),
         sequence_number,
         subtype: ApManagementSubtype::Action,
         ccmp_header: [0; CCMP_HEADER_LEN],
@@ -821,13 +858,31 @@ fn ap_management_encoders_admit_complete_capacity_before_writing() {
     let encoders: [&Encoder<'_>; 5] = [
         &|out| plain.encode(out),
         &|out| protected.encode(out),
-        &|out| write_open_authentication_response(out, access_point, peer, 0, sequence_number),
-        &|out| write_sae_authentication(out, access_point, peer, 1, 0, &[1, 2, 3], sequence_number),
+        &|out| {
+            write_open_authentication_response(
+                out,
+                Eui48::new(access_point),
+                Eui48::new(peer),
+                0,
+                sequence_number,
+            )
+        },
+        &|out| {
+            write_sae_authentication(
+                out,
+                Eui48::new(access_point),
+                Eui48::new(peer),
+                1,
+                0,
+                &[1, 2, 3],
+                sequence_number,
+            )
+        },
         &|out| {
             write_ap_peer_disconnect(
                 out,
-                access_point,
-                peer,
+                Eui48::new(access_point),
+                Eui48::new(peer),
                 ApPeerDisconnectKind::Deauthentication,
                 1,
                 sequence_number,
@@ -863,7 +918,7 @@ fn each_refused_frame_control_bit_refuses_a_management_request() {
     authentication[16..22].copy_from_slice(&access_point);
     authentication[26..28].copy_from_slice(&[1, 0]);
     fn parse(frame: &[u8]) -> Option<ApManagementRequest<'_>> {
-        parse_ap_management_request(&TEST_ADVERTISEMENT, frame, [2, 0, 0, 0, 0, 1])
+        parse_ap_management_request(&TEST_ADVERTISEMENT, frame, Eui48::new([2, 0, 0, 0, 0, 1]))
     }
     assert!(parse(&authentication).is_some());
     // Version (bit 0), To DS (bit 8), From DS (bit 9).
@@ -906,8 +961,8 @@ fn a_robust_subtype_is_read_only_from_its_frame_control() {
     let mut frame = [0_u8; AP_PEER_DISCONNECT_LEN];
     write_ap_peer_disconnect(
         &mut frame,
-        [2, 0, 0, 0, 0, 1],
-        [2, 0, 0, 0, 0, 2],
+        Eui48::new([2, 0, 0, 0, 0, 1]),
+        Eui48::new([2, 0, 0, 0, 0, 2]),
         ApPeerDisconnectKind::Deauthentication,
         2,
         seq(1),
@@ -986,7 +1041,7 @@ fn the_largest_association_id_is_written_and_read_whole() {
     assert_eq!(
         observe_ap_power_save(&frame),
         Some(ApPowerSaveObservation::PsPoll {
-            peer,
+            peer: Eui48::new(peer),
             association_id: 0x3fff
         })
     );
@@ -1003,13 +1058,108 @@ fn null_data_names_the_access_point_in_both_addresses() {
     frame[4..10].copy_from_slice(&ACCESS_POINT);
     frame[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 2]);
     frame[16..22].copy_from_slice(&ACCESS_POINT);
-    assert!(observe_ap_null_data_power_save_for_access_point(&frame, ACCESS_POINT).is_some());
+    assert!(
+        observe_ap_null_data_power_save_for_access_point(&frame, Eui48::new(ACCESS_POINT))
+            .is_some()
+    );
     for address in [4, 16] {
         let mut other = frame;
         other[address + 5] = 9;
         assert!(
-            observe_ap_null_data_power_save_for_access_point(&other, ACCESS_POINT).is_none(),
+            observe_ap_null_data_power_save_for_access_point(&other, Eui48::new(ACCESS_POINT))
+                .is_none(),
             "address at {address}"
+        );
+    }
+}
+
+#[test]
+fn data_goes_only_from_a_nonzero_individual_access_point_to_such_a_peer() {
+    let peer = [2, 0, 0, 0, 0, 2];
+    let access_point = [2, 0, 0, 0, 0, 1];
+    let frames = [msdu(peer, [0; 6], 0, &[])];
+    let amsdu = |access_point, peer| {
+        ApAmsduFrame {
+            access_point: Eui48::new(access_point),
+            peer: Eui48::new(peer),
+            sequence_number: seq(0),
+            user_priority: 0,
+            more_data: crate::data::MoreData::Clear,
+            ccmp_header: None,
+            msdus: &frames,
+        }
+        .encode(&mut [0; 128])
+    };
+    let eapol = |access_point| {
+        ApDataFrame {
+            access_point: Eui48::new(access_point),
+            destination: Eui48::new(peer),
+            sequence_number: seq(0),
+            ether_type: 0x888e,
+            payload: &[1],
+        }
+        .encode(&mut [0; 128])
+    };
+    assert!(amsdu(access_point, peer).is_ok());
+    assert!(eapol(access_point).is_ok());
+    for refused in [[0; 6], [3, 0, 0, 0, 0, 1], [0xff; 6]] {
+        assert_eq!(
+            amsdu(refused, peer),
+            Err(ApDataFrameError::InvalidAccessPoint)
+        );
+        assert_eq!(
+            amsdu(access_point, refused),
+            Err(ApDataFrameError::InvalidPeer)
+        );
+        assert_eq!(eapol(refused), Err(ApDataFrameError::InvalidAccessPoint));
+    }
+}
+
+#[test]
+fn a_management_request_names_the_access_point_in_both_addresses() {
+    let access_point = [2, 0, 0, 0, 0, 1];
+    let peer = [2, 0, 0, 0, 0, 2];
+    let mut frame = [0_u8; 30];
+    frame[..2].copy_from_slice(&0x00b0_u16.to_le_bytes());
+    frame[4..10].copy_from_slice(&access_point);
+    frame[10..16].copy_from_slice(&peer);
+    frame[16..22].copy_from_slice(&access_point);
+    frame[26..28].copy_from_slice(&1_u16.to_le_bytes());
+    let parsed = |frame: &[u8]| {
+        parse_ap_management_request(&TEST_ADVERTISEMENT, frame, Eui48::new(access_point)).is_some()
+    };
+    assert!(parsed(&frame));
+    for other in [4, 16] {
+        let mut frame = frame;
+        frame[other + 5] = 9;
+        assert!(!parsed(&frame), "address at {other}");
+    }
+    for refused in [[0; 6], [3, 0, 0, 0, 0, 2]] {
+        let mut frame = frame;
+        frame[10..16].copy_from_slice(&refused);
+        assert!(!parsed(&frame), "peer {refused:?}");
+    }
+}
+
+#[test]
+fn null_data_of_no_station_moves_no_power_state() {
+    let access_point = [2, 0, 0, 0, 0, 1];
+    let mut frame = [0_u8; STA_NULL_DATA_FRAME_LEN];
+    frame[..2].copy_from_slice(&[0x48, 0x11]);
+    frame[4..10].copy_from_slice(&access_point);
+    frame[16..22].copy_from_slice(&access_point);
+    for (peer, observed) in [
+        ([2, 0, 0, 0, 0, 2], true),
+        ([0; 6], false),
+        ([3, 0, 0, 0, 0, 2], false),
+        ([0xff; 6], false),
+    ] {
+        frame[10..16].copy_from_slice(&peer);
+        assert_eq!(
+            observe_ap_null_data_power_save_for_access_point(&frame, Eui48::new(access_point))
+                .is_some(),
+            observed,
+            "peer {peer:?}"
         );
     }
 }

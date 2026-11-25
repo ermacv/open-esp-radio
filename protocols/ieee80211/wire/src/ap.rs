@@ -8,6 +8,7 @@
 
 use crate::data::{MsduHeader, MsduParts, PeerQos};
 use crate::frame::{FrameControlFields, FrameType, QosAckPolicy};
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 
 use crate::{
     block_ack::{BlockAckAction, parse_block_ack_action},
@@ -80,8 +81,8 @@ pub const AP_AMSDU_BASELINE_MAX_LEN: usize = 3_839;
 /// the chip TX owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApDataFrame<'payload> {
-    pub access_point: [u8; 6],
-    pub destination: [u8; 6],
+    pub access_point: Eui48,
+    pub destination: Eui48,
     pub sequence_number: SequenceNumber,
     pub ether_type: u16,
     pub payload: &'payload [u8],
@@ -89,9 +90,7 @@ pub struct ApDataFrame<'payload> {
 
 impl ApDataFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
-        if crate::address::AddressFlags::from_bytes([self.access_point[0]]).group()
-            || self.access_point == [0; 6]
-        {
+        if IndividualAddress::for_interface(self.access_point).is_err() {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
         let plan = plan_data_encapsulation(
@@ -124,60 +123,6 @@ impl ApDataFrame<'_> {
     }
 }
 
-/// One plaintext MSDU for an explicitly Open AP epoch.
-///
-/// Unlike [`ApDataFrame`], which models an AP-originated EAPOL payload, this
-/// codec carries the MSDU's own source and validates its destination against
-/// the selected unicast/group peer.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ApUnprotectedDataFrame<'frame> {
-    pub access_point: [u8; 6],
-    pub peer: [u8; 6],
-    pub sequence_number: SequenceNumber,
-    pub more_data: crate::data::MoreData,
-    pub msdu: MsduParts<'frame>,
-}
-
-impl ApUnprotectedDataFrame<'_> {
-    pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
-        if crate::address::AddressFlags::from_bytes([self.access_point[0]]).group()
-            || self.access_point == [0; 6]
-        {
-            return Err(ApDataFrameError::InvalidAccessPoint);
-        }
-        let payload = self.msdu.payload;
-        let mut plan = plan_data_encapsulation(
-            DataInterfaceRole::AccessPoint,
-            self.access_point,
-            self.access_point,
-            self.msdu.header(),
-            WmmUserPriority::UP0,
-            PeerQos::NonQos,
-            QosAckPolicy::Normal,
-        );
-        if plan.header[4..10] != self.peer {
-            return Err(ApDataFrameError::InvalidPeer);
-        }
-        if self.more_data == crate::data::MoreData::Buffered {
-            plan.set_more_data();
-        }
-        let mut header = plan.header;
-        crate::encoding::write_array::<22, _, _>(
-            &mut header,
-            &self.sequence_number.sequence_control().to_bytes(),
-        );
-        let mut reader = oer_portable_wire::Reader::new(&header);
-        let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
-            ApDataFrameError::OutputTooSmall {
-                required: usize::from(plan.header_len),
-            }
-        })?;
-        crate::encoding::FrameParts([header, &plan.llc_snap, payload])
-            .write(output)
-            .map_err(|required| ApDataFrameError::OutputTooSmall { required })
-    }
-}
-
 /// One protected MSDU sent from an AP to its authorized peer.
 ///
 /// The caller owns the pairwise packet number. This codec merely places the
@@ -185,8 +130,8 @@ impl ApUnprotectedDataFrame<'_> {
 /// plaintext LLC/SNAP payload and appends the MIC.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApProtectedDataFrame<'frame> {
-    pub access_point: [u8; 6],
-    pub peer: [u8; 6],
+    pub access_point: Eui48,
+    pub peer: Eui48,
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
     pub peer_qos: crate::data::PeerQos,
@@ -227,8 +172,8 @@ impl ApProtectedDataFrame<'_> {
 /// 1042 LLC/SNAP header of the MSDU's EtherType.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApProtectedDataPrefix {
-    pub access_point: [u8; 6],
-    pub peer: [u8; 6],
+    pub access_point: Eui48,
+    pub peer: Eui48,
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
     pub peer_qos: crate::data::PeerQos,
@@ -292,17 +237,15 @@ struct ProtectedDataPlan {
 
 impl ProtectedDataPlan {
     fn new(
-        access_point: [u8; 6],
-        peer: [u8; 6],
+        access_point: Eui48,
+        peer: Eui48,
         sequence_number: SequenceNumber,
         user_priority: u8,
         peer_qos: crate::data::PeerQos,
         more_data: crate::data::MoreData,
         msdu: MsduHeader,
     ) -> Result<Self, ApDataFrameError> {
-        if crate::address::AddressFlags::from_bytes([access_point[0]]).group()
-            || access_point == [0; 6]
-        {
+        if IndividualAddress::for_interface(access_point).is_err() {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
         let priority =
@@ -316,7 +259,7 @@ impl ProtectedDataPlan {
             peer_qos,
             QosAckPolicy::Normal,
         );
-        if plan.header[4..10] != peer {
+        if plan.header[4..10] != peer.octets() {
             return Err(ApDataFrameError::InvalidPeer);
         }
         plan.set_protected();
@@ -350,8 +293,8 @@ impl ProtectedDataPlan {
 /// from coalescing traffic from different AP peer queues.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApAmsduFrame<'a> {
-    pub access_point: [u8; 6],
-    pub peer: [u8; 6],
+    pub access_point: Eui48,
+    pub peer: Eui48,
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
     pub more_data: crate::data::MoreData,
@@ -402,12 +345,10 @@ impl ApAmsduFrame<'_> {
     /// This lets a packet-number owner first encode with a placeholder CCMP
     /// header, then consume and patch the real PN only after full admission.
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
-        if crate::address::AddressFlags::from_bytes([self.access_point[0]]).group()
-            || self.access_point == [0; 6]
-        {
+        if IndividualAddress::for_interface(self.access_point).is_err() {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
-        if crate::address::AddressFlags::from_bytes([self.peer[0]]).group() || self.peer == [0; 6] {
+        if IndividualAddress::for_interface(self.peer).is_err() {
             return Err(ApDataFrameError::InvalidPeer);
         }
         let priority = WmmUserPriority::new(self.user_priority)
@@ -430,7 +371,7 @@ impl ApAmsduFrame<'_> {
             PeerQos::Qos,
             QosAckPolicy::Normal,
         );
-        if plan.header[4..10] != self.peer {
+        if plan.header[4..10] != self.peer.octets() {
             return Err(ApDataFrameError::InvalidPeer);
         }
         if self.ccmp_header.is_some() {
@@ -460,22 +401,22 @@ impl ApAmsduFrame<'_> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApManagementRequest<'a> {
     Probe {
-        peer: [u8; 6],
+        peer: Eui48,
         ssid: &'a [u8],
     },
     OpenAuthentication {
-        peer: [u8; 6],
+        peer: Eui48,
     },
     /// An SAE Authentication frame: a Commit (transaction 1) or a Confirm
     /// (transaction 2) with its status and the body after the status.
     SaeAuthentication {
-        peer: [u8; 6],
+        peer: Eui48,
         transaction: u16,
         status: u16,
         body: &'a [u8],
     },
     Association {
-        peer: [u8; 6],
+        peer: Eui48,
         security: ApAssociationSecurityObservation<'a>,
         /// Highest legacy rate shared with the B/G ERP rate set advertised
         /// by this AP, in 500-kbit/s units. Zero means no common rate.
@@ -491,20 +432,20 @@ pub enum ApManagementRequest<'a> {
         preamble: crate::phy::DsssPreamble,
     },
     Disassociation {
-        peer: [u8; 6],
+        peer: Eui48,
         reason: u16,
     },
     Deauthentication {
-        peer: [u8; 6],
+        peer: Eui48,
         reason: u16,
     },
     BlockAck {
-        peer: [u8; 6],
+        peer: Eui48,
         action: BlockAckAction,
     },
     /// The association check of a peer protecting its management frames.
     SaQuery {
-        peer: [u8; 6],
+        peer: Eui48,
         query: crate::management_protection::SaQuery,
     },
 }
@@ -541,7 +482,7 @@ impl ApAssociationSecurityObservation<'_> {
 pub fn parse_ap_management_request<'a>(
     profile: &Advertisement,
     frame: &'a [u8],
-    access_point: [u8; 6],
+    access_point: Eui48,
 ) -> Option<ApManagementRequest<'a>> {
     let mut reader = oer_portable_wire::Reader::new(frame);
     let header = reader.array::<MANAGEMENT_HEADER_LEN>().ok()?;
@@ -572,9 +513,9 @@ pub fn parse_ap_management_request<'a>(
         sc0,
         sc1,
     ] = *header;
-    let destination = [d0, d1, d2, d3, d4, d5];
-    let peer = [p0, p1, p2, p3, p4, p5];
-    let bssid = [b0, b1, b2, b3, b4, b5];
+    let destination = Eui48::new([d0, d1, d2, d3, d4, d5]);
+    let peer = Eui48::new([p0, p1, p2, p3, p4, p5]);
+    let bssid = Eui48::new([b0, b1, b2, b3, b4, b5]);
     let frame_control = FrameControlFields::from_bytes([fc0, fc1]);
     if frame_control.kind() != FrameType::Management {
         return None;
@@ -587,10 +528,9 @@ pub fn parse_ap_management_request<'a>(
             || frame_control.more_fragments()
             || frame_control.protected())
             || crate::sequence::SequenceControl::from_bytes([sc0, sc1]).fragment() != 0
-            || crate::address::AddressFlags::from_bytes([peer[0]]).group()
-            || peer == [0; 6]
-            || (destination != access_point && destination != [0xff; 6])
-            || (bssid != access_point && bssid != [0xff; 6])
+            || IndividualAddress::for_interface(peer).is_err()
+            || (destination != access_point && destination != Eui48::BROADCAST)
+            || (bssid != access_point && bssid != Eui48::BROADCAST)
         {
             return None;
         }
@@ -602,8 +542,7 @@ pub fn parse_ap_management_request<'a>(
     if (frame_control.version() != 0
         || frame_control.kind() != FrameType::Management
         || frame_control.ds() != 0)
-        || crate::address::AddressFlags::from_bytes([peer[0]]).group()
-        || peer == [0; 6]
+        || IndividualAddress::for_interface(peer).is_err()
         || destination != access_point
         || bssid != access_point
     {
@@ -740,8 +679,8 @@ impl ApManagementSubtype {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApManagementFrame<'a> {
     pub subtype: ApManagementSubtype,
-    pub access_point: [u8; 6],
-    pub peer: [u8; 6],
+    pub access_point: Eui48,
+    pub peer: Eui48,
     pub sequence_number: SequenceNumber,
     pub body: &'a [u8],
 }
@@ -765,8 +704,8 @@ impl ApManagementFrame<'_> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApProtectedManagementFrame<'a> {
     pub subtype: ApManagementSubtype,
-    pub access_point: [u8; 6],
-    pub peer: [u8; 6],
+    pub access_point: Eui48,
+    pub peer: Eui48,
     pub sequence_number: SequenceNumber,
     pub ccmp_header: [u8; CCMP_HEADER_LEN],
     pub body: &'a [u8],
@@ -863,8 +802,8 @@ fn maximum_ap_legacy_rate(profile: &Advertisement, bytes: &[u8]) -> u8 {
 /// Encode the response to one successful or rejected Open System request.
 pub fn write_open_authentication_response(
     output: &mut [u8],
-    access_point: [u8; 6],
-    peer: [u8; 6],
+    access_point: Eui48,
+    peer: Eui48,
     status: u16,
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
@@ -892,8 +831,8 @@ pub fn write_open_authentication_response(
 /// the refusal of one, whose `body` follows the status.
 pub fn write_sae_authentication(
     output: &mut [u8],
-    access_point: [u8; 6],
-    peer: [u8; 6],
+    access_point: Eui48,
+    peer: Eui48,
     transaction: u16,
     status: u16,
     body: &[u8],
@@ -928,8 +867,8 @@ pub fn write_sae_authentication(
 pub fn write_ht_association_response_frame_for_security(
     profile: &Advertisement,
     output: &mut [u8],
-    access_point: [u8; 6],
-    peer: [u8; 6],
+    access_point: Eui48,
+    peer: Eui48,
     status: u16,
     association_id: u16,
     management_sequence: SequenceNumber,
@@ -983,8 +922,8 @@ pub fn write_ht_association_response_frame_for_security(
 /// Encode one AP-originated peer teardown frame.
 pub fn write_ap_peer_disconnect(
     output: &mut [u8],
-    access_point: [u8; 6],
-    peer: [u8; 6],
+    access_point: Eui48,
+    peer: Eui48,
     kind: ApPeerDisconnectKind,
     reason: u16,
     management_sequence: SequenceNumber,
@@ -1012,15 +951,15 @@ const AUTHENTICATION_FRAME_CONTROL: FrameControlFields =
 
 fn management_header(
     frame_control: FrameControlFields,
-    access_point: [u8; 6],
-    peer: [u8; 6],
+    access_point: Eui48,
+    peer: Eui48,
     management_sequence: SequenceNumber,
 ) -> [u8; MANAGEMENT_HEADER_LEN] {
     let mut frame = [0; MANAGEMENT_HEADER_LEN];
     crate::encoding::write_array::<0, _, _>(&mut frame, &frame_control.to_bytes());
-    crate::encoding::write_array::<4, _, _>(&mut frame, &peer);
-    crate::encoding::write_array::<10, _, _>(&mut frame, &access_point);
-    crate::encoding::write_array::<16, _, _>(&mut frame, &access_point);
+    crate::encoding::write_array::<4, _, _>(&mut frame, &peer.octets());
+    crate::encoding::write_array::<10, _, _>(&mut frame, &access_point.octets());
+    crate::encoding::write_array::<16, _, _>(&mut frame, &access_point.octets());
     crate::encoding::write_array::<22, _, _>(
         &mut frame,
         &management_sequence.sequence_control().to_bytes(),
@@ -1079,9 +1018,9 @@ pub fn write_ht_association_response(
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApPowerSaveObservation {
-    Sleeping { peer: [u8; 6] },
-    Active { peer: [u8; 6] },
-    PsPoll { peer: [u8; 6], association_id: u16 },
+    Sleeping { peer: Eui48 },
+    Active { peer: Eui48 },
+    PsPoll { peer: Eui48, association_id: u16 },
 }
 
 /// Parse the RX-derived power-save edge the AP owner uses.
@@ -1093,7 +1032,7 @@ pub fn observe_ap_power_save(frame: &[u8]) -> Option<ApPowerSaveObservation> {
 }
 
 /// A power-save edge and the Receiver Address of the frame that carried it.
-fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])> {
+fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, Eui48)> {
     let mut reader = oer_portable_wire::Reader::new(frame);
     let &[fc0, fc1] = reader.array().ok()?;
     let frame_control = FrameControlFields::from_bytes([fc0, fc1]);
@@ -1113,10 +1052,10 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
         }
         return Some((
             ApPowerSaveObservation::PsPoll {
-                peer: [t0, t1, t2, t3, t4, t5],
+                peer: Eui48::new([t0, t1, t2, t3, t4, t5]),
                 association_id,
             },
-            [r0, r1, r2, r3, r4, r5],
+            Eui48::new([r0, r1, r2, r3, r4, r5]),
         ));
     }
 
@@ -1146,8 +1085,8 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
     if frame_type != FrameType::Data || !to_ds || from_ds {
         return None;
     }
-    let peer = [t0, t1, t2, t3, t4, t5];
-    let receiver = [r0, r1, r2, r3, r4, r5];
+    let peer = Eui48::new([t0, t1, t2, t3, t4, t5]);
+    let receiver = Eui48::new([r0, r1, r2, r3, r4, r5]);
     if frame_control.power_management() {
         Some((ApPowerSaveObservation::Sleeping { peer }, receiver))
     } else {
@@ -1161,7 +1100,7 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
 /// its TA/AID tuple can reserve buffered traffic.
 pub fn observe_ap_power_save_for_access_point(
     frame: &[u8],
-    access_point: [u8; 6],
+    access_point: Eui48,
 ) -> Option<ApPowerSaveObservation> {
     let (observation, receiver) = observe_power_save(frame)?;
     if matches!(observation, ApPowerSaveObservation::PsPoll { .. }) && receiver != access_point {
@@ -1182,7 +1121,7 @@ pub fn observe_ap_power_save_for_access_point(
 /// Power Management flag bits may vary.
 pub fn observe_ap_null_data_power_save_for_access_point(
     frame: &[u8],
-    access_point: [u8; 6],
+    access_point: Eui48,
 ) -> Option<ApPowerSaveObservation> {
     const NULL_DATA_TO_DS_FRAME_CONTROL: FrameControlFields =
         FrameControlFields::from_bytes([0x48, 0x01]);
@@ -1220,17 +1159,14 @@ pub fn observe_ap_null_data_power_save_for_access_point(
     };
     let frame_control = FrameControlFields::from_bytes([c0, c1]);
     if frame_control.with_retry(false).with_power_management(false) != NULL_DATA_TO_DS_FRAME_CONTROL
-        || [r0, r1, r2, r3, r4, r5] != access_point
-        || [b0, b1, b2, b3, b4, b5] != access_point
+        || Eui48::new([r0, r1, r2, r3, r4, r5]) != access_point
+        || Eui48::new([b0, b1, b2, b3, b4, b5]) != access_point
         || crate::sequence::SequenceControl::from_bytes([sequence0, sequence1]).fragment() != 0
     {
         return None;
     }
-    let peer = [t0, t1, t2, t3, t4, t5];
-    if peer == [0; 6]
-        || peer == [0xff; 6]
-        || crate::address::AddressFlags::from_bytes([peer[0]]).group()
-    {
+    let peer = Eui48::new([t0, t1, t2, t3, t4, t5]);
+    if IndividualAddress::for_interface(peer).is_err() {
         return None;
     }
     if frame_control.power_management() {

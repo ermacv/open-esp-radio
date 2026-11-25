@@ -1,9 +1,10 @@
 //! The station's parsers of received frames never panic.
 
 use super::*;
-use crate::address::{Bssid, IndividualAddress, OwnAddress};
+use crate::address::{Bssid, OwnAddress};
 use crate::fuzz::{FULL, QUICK, inputs};
 use crate::sequence::seq;
+use oer_protocols_ieee802_wire::IndividualAddress;
 use std::vec::Vec;
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
@@ -31,8 +32,8 @@ fn sae_seeds() -> Vec<Vec<u8>> {
         let mut frame = [0_u8; 64];
         let length = crate::ap::write_sae_authentication(
             &mut frame,
-            BSSID,
-            LOCAL,
+            Eui48::new(BSSID),
+            Eui48::new(LOCAL),
             transaction,
             status,
             body,
@@ -46,8 +47,14 @@ fn sae_seeds() -> Vec<Vec<u8>> {
 
 fn authentication(count: usize) {
     let mut open = [0_u8; 64];
-    let length =
-        crate::ap::write_open_authentication_response(&mut open, BSSID, LOCAL, 17, seq(3)).unwrap();
+    let length = crate::ap::write_open_authentication_response(
+        &mut open,
+        Eui48::new(BSSID),
+        Eui48::new(LOCAL),
+        17,
+        seq(3),
+    )
+    .unwrap();
     let mut seeds = sae_seeds();
     seeds.push(open[..length].to_vec());
     seeds.push(from_access_point(
@@ -56,16 +63,21 @@ fn authentication(count: usize) {
     ));
     let seeds: Vec<&[u8]> = seeds.iter().map(Vec::as_slice).collect();
     for seed in &seeds[..2] {
-        assert!(parse_sae_authentication(seed, LOCAL, BSSID).is_some());
+        assert!(parse_sae_authentication(seed, Eui48::new(LOCAL), Eui48::new(BSSID)).is_some());
     }
     for seed in &seeds[2..] {
-        assert!(parse_open_authentication_response(seed, LOCAL, BSSID).is_some());
+        assert!(
+            parse_open_authentication_response(seed, Eui48::new(LOCAL), Eui48::new(BSSID))
+                .is_some()
+        );
     }
     inputs(&seeds, count, 96, |bytes| {
-        if let Some(sae) = parse_sae_authentication(bytes, LOCAL, BSSID) {
+        if let Some(sae) = parse_sae_authentication(bytes, Eui48::new(LOCAL), Eui48::new(BSSID)) {
             let _ = (sae.transaction, sae.status_code, sae.body.len());
         }
-        if let Some(response) = parse_open_authentication_response(bytes, LOCAL, BSSID) {
+        if let Some(response) =
+            parse_open_authentication_response(bytes, Eui48::new(LOCAL), Eui48::new(BSSID))
+        {
             let _ = response.status_code;
         }
     });
@@ -83,13 +95,13 @@ fn authentication_parsers_never_panic_full() {
 }
 
 fn disconnect(count: usize) {
-    let local = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
-    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    let local = OwnAddress::new(IndividualAddress::new(Eui48::new(LOCAL)).unwrap());
+    let bssid = Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap();
     let mut deauthentication = [0_u8; 40];
     let length = crate::ap::write_ap_peer_disconnect(
         &mut deauthentication,
-        BSSID,
-        LOCAL,
+        Eui48::new(BSSID),
+        Eui48::new(LOCAL),
         crate::ap::ApPeerDisconnectKind::Deauthentication,
         7,
         seq(4),
@@ -138,16 +150,18 @@ fn association_response(count: usize) {
         from_access_point(ASSOCIATION_RESPONSE_FRAME_CONTROL, &[0x11, 0, 30, 0, 0, 0]);
     comeback.extend_from_slice(&[56, 5, 3, 0xe8, 0x03, 0, 0, 255, 2, 35, 0, 255, 2, 36, 0]);
     for seed in [&ht, &wmm, &comeback] {
-        assert!(parse_association_response(seed, LOCAL, BSSID).is_some());
+        assert!(parse_association_response(seed, Eui48::new(LOCAL), Eui48::new(BSSID)).is_some());
     }
     assert_eq!(
-        parse_association_response(&comeback, LOCAL, BSSID)
+        parse_association_response(&comeback, Eui48::new(LOCAL), Eui48::new(BSSID))
             .unwrap()
             .association_comeback_tu,
         Some(1000)
     );
     inputs(&[&ht, &wmm, &comeback], count, 128, |bytes| {
-        if let Some(response) = parse_association_response(bytes, LOCAL, BSSID) {
+        if let Some(response) =
+            parse_association_response(bytes, Eui48::new(LOCAL), Eui48::new(BSSID))
+        {
             let _ = (
                 response.matches_security(crate::security::LinkProtection::Ccmp),
                 response.association_id,

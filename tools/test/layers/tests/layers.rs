@@ -1709,25 +1709,28 @@ fn portable_or_radio(path: &str) -> bool {
 }
 
 /// The layer table of `docs/repository-layout.md`: the frame cipher takes
-/// only the wire formats, the security contract and portable support; the
+/// only the wire formats (the IEEE 802 and IEEE 802.11 wires), the security contract and portable support; the
 /// port takes the wire formats, the security contract, portable support and
 /// the radio vocabulary; the conformance suite takes the port, the formats,
 /// the security contract (the key a run installs) and portable support; the reference model takes the port, its
 /// conformance suite, the formats, the contract and the cipher beside them.
 fn ieee80211_layer_allows(package: &str, name: &str, path: &str) -> bool {
     const CONTRACT: &str = "oer-protocols-ieee80211-contracts-security";
+    const ADDRESSES: &str = "oer-protocols-ieee802-wire";
     match package {
         "oer-protocols-ieee80211-core-security-cipher" => {
-            ["oer-protocols-ieee80211-wire", CONTRACT].contains(&name)
+            ["oer-protocols-ieee80211-wire", ADDRESSES, CONTRACT].contains(&name)
                 || path.starts_with("portable/")
         }
         "oer-protocols-ieee80211-contracts-port" => {
-            ["oer-protocols-ieee80211-wire", CONTRACT].contains(&name) || portable_or_radio(path)
+            ["oer-protocols-ieee80211-wire", ADDRESSES, CONTRACT].contains(&name)
+                || portable_or_radio(path)
         }
         "oer-protocols-ieee80211-testing-conformance" => {
             [
                 "oer-protocols-ieee80211-contracts-port",
                 "oer-protocols-ieee80211-wire",
+                ADDRESSES,
                 CONTRACT,
             ]
             .contains(&name)
@@ -1738,6 +1741,7 @@ fn ieee80211_layer_allows(package: &str, name: &str, path: &str) -> bool {
                 "oer-protocols-ieee80211-contracts-port",
                 "oer-protocols-ieee80211-testing-conformance",
                 "oer-protocols-ieee80211-wire",
+                ADDRESSES,
                 "oer-protocols-ieee80211-core-security-cipher",
                 CONTRACT,
             ]
@@ -1777,6 +1781,10 @@ fn ieee80211_layer_table_rejects_cores_chips_and_a_cipher_on_the_port() {
             "protocols/ieee80211/wire".into(),
         ),
         (
+            "oer-protocols-ieee802-wire".into(),
+            "protocols/ieee802/wire".into(),
+        ),
+        (
             "oer-protocols-ieee80211-contracts-port".into(),
             "protocols/ieee80211/contracts/port".into(),
         ),
@@ -1799,6 +1807,7 @@ fn ieee80211_layer_table_rejects_cores_chips_and_a_cipher_on_the_port() {
         r#"
 [dependencies]
 format = { package = "oer-protocols-ieee80211-wire", version = "1" }
+addresses = { package = "oer-protocols-ieee802-wire", version = "1" }
 port = { package = "oer-protocols-ieee80211-contracts-port", version = "1" }
 support = { package = "oer-portable-wire", version = "1" }
 aes = "0.8"
@@ -2563,30 +2572,46 @@ fn ieee80211_foreign_edges(members: &[Member]) -> BTreeSet<Edge> {
         .collect()
 }
 
-/// The codecs whose every normal and build dependency is `oer-portable-wire`.
-const STRICT_CODECS: [&str; 2] = ["protocols/ieee80211/wire", "protocols/network/wire"];
+/// The strict codecs, each with its every normal and build dependency: the
+/// IEEE 802 wire stands on `oer-portable-wire`, the two wires that carry its
+/// addresses on both.
+const STRICT_CODECS: [(&str, &[&str]); 3] = [
+    ("protocols/ieee802/wire", &["oer-portable-wire"]),
+    (
+        "protocols/ieee80211/wire",
+        &["oer-portable-wire", "oer-protocols-ieee802-wire"],
+    ),
+    (
+        "protocols/network/wire",
+        &["oer-portable-wire", "oer-protocols-ieee802-wire"],
+    ),
+];
 
-/// A strict codec's dependencies other than `oer-portable-wire`, normal or build,
+/// A strict codec's dependencies other than its own list's, normal or build,
 /// optional or target-specific.
 fn strict_codec_edges(members: &[Member]) -> BTreeSet<Edge> {
-    members
+    STRICT_CODECS
         .iter()
-        .filter(|member| STRICT_CODECS.contains(&member.path.as_str()))
-        .flat_map(|member| {
-            member
-                .dependencies
+        .flat_map(|(path, allowed)| {
+            members
                 .iter()
-                .chain(&member.build_dependencies)
-                .filter(|dependency| *dependency != "oer-portable-wire")
-                .map(|dependency| (member.path.clone(), dependency.clone()))
+                .filter(move |member| member.path == *path)
+                .flat_map(move |member| {
+                    member
+                        .dependencies
+                        .iter()
+                        .chain(&member.build_dependencies)
+                        .filter(|dependency| !allowed.contains(&dependency.as_str()))
+                        .map(|dependency| (member.path.clone(), dependency.clone()))
+                })
         })
         .collect()
 }
 
 #[test]
-fn the_ieee80211_and_network_codecs_depend_on_oer_wire_alone() {
+fn the_strict_codecs_depend_on_oer_wire_and_on_the_ieee802_wire_alone() {
     let members = workspace_members();
-    for path in STRICT_CODECS {
+    for (path, _) in STRICT_CODECS {
         assert!(members.iter().any(|member| member.path == path), "{path}");
     }
     let edges = strict_codec_edges(&members);
@@ -2599,6 +2624,7 @@ fn a_strict_codec_refuses_optional_target_and_build_dependencies() {
         r#"
 [dependencies]
 oer-portable-wire = { path = "../../../portable/wire" }
+oer-protocols-ieee802-wire = { path = "../../ieee802/wire" }
 regulatory = { package = "oer-protocols-radio-regulatory", path = "../../radio/regulatory", optional = true }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 zeroize = "1"
@@ -2630,6 +2656,29 @@ tempfile = "3"
         strict_codec_edges(&[codec, other]),
         ["cc", "oer-protocols-radio-regulatory", "zeroize"]
             .map(|dependency| ("protocols/ieee80211/wire".to_owned(), dependency.to_owned()))
+            .into()
+    );
+    // The addresses' crate stands below both wires and takes neither.
+    let addresses = member(
+        "protocols/ieee802/wire",
+        "oer-protocols-ieee802-wire",
+        Built::Library,
+        &["oer-portable-wire", "oer-protocols-ieee80211-wire"],
+    );
+    let network = member(
+        "protocols/network/wire",
+        "oer-protocols-network-wire",
+        Built::Library,
+        &[
+            "oer-portable-wire",
+            "oer-protocols-ieee802-wire",
+            "oer-protocols-ieee80211-wire",
+        ],
+    );
+    assert_eq!(
+        strict_codec_edges(&[addresses, network]),
+        ["protocols/ieee802/wire", "protocols/network/wire"]
+            .map(|path| (path.to_owned(), "oer-protocols-ieee80211-wire".to_owned()))
             .into()
     );
 }
@@ -5320,9 +5369,13 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
 }
 
 /// Every network package and the workspace packages it may take, normal or
-/// build: the codec stands on `oer-portable-wire` alone and the contract on the codec.
+/// build: the codec stands on `oer-portable-wire` and the IEEE 802 wire alone
+/// and the contract on the codec.
 const NETWORK_LAYERS: [(&str, &[&str]); 5] = [
-    ("protocols/network/wire", &["oer-portable-wire"]),
+    (
+        "protocols/network/wire",
+        &["oer-portable-wire", "oer-protocols-ieee802-wire"],
+    ),
     ("protocols/network/port", &["oer-protocols-network-wire"]),
     (
         "protocols/network/core",

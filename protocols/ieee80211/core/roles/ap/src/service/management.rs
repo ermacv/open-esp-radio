@@ -3,6 +3,7 @@
 //! by the service through the lower-MAC port.
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier;
 use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 use oer_protocols_ieee80211_wire::management::ManagementHeader;
@@ -184,8 +185,8 @@ impl<S: SppScope> AccessPointService<'_, S> {
         if body.len() < 2
             || header.frame_control.protected()
             || !header.group_receiver()
-            || header.transmitter != self.address
-            || header.bssid != self.address
+            || header.transmitter != Eui48::new(self.address)
+            || header.bssid != Eui48::new(self.address)
             || !subtype.is_robust(body)
         {
             return Err(ApGroupManagementError::InvalidFrame);

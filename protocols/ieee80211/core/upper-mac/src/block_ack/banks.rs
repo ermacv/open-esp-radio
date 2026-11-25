@@ -13,6 +13,7 @@
 //! ([`RetainRoom`]).
 
 use oer_portable_events::{EventSink, report};
+use oer_protocols_ieee802_wire::Eui48;
 
 use super::{
     AddbaResponse, AddbaStatus, AmsduInAmpdu, BankRoom, Received, RxAddbaRequest,
@@ -1022,7 +1023,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
             || control.ds() != 2
             || control.more_fragments()
             || fragment != 0
-            || header.transmitter != bssid.get()
+            || Eui48::new(header.transmitter) != bssid.get()
             || header.receiver != local
             || !matches!(control.subtype(), 8..=11)
             || (control.protected()
@@ -1171,7 +1172,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
     fn bar(&self, bytes: &[u8], local: [u8; 6]) -> Option<(u8, SequenceNumber)> {
         let (_, bssid) = self.header.association?;
         let request = parse_compressed_block_ack_request(bytes)?;
-        if request.receiver != local || request.transmitter != bssid.get() {
+        if request.receiver != Eui48::new(local) || request.transmitter != bssid.get() {
             return None;
         }
         Some((request.tid, request.starting_sequence))

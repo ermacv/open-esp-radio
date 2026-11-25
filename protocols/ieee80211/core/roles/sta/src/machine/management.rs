@@ -1,6 +1,7 @@
 //! PMF state owned by one association, separate from data replay frontiers.
 
 use oer_portable_time::Instant;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_security_rsn::{
     bip::BipReceiver, frames::RsnIgtk, management_ccmp::ManagementCcmpReceiver,
@@ -9,7 +10,7 @@ use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, OwnAddress},
     frame::{DecodedHeader, ManagementSubtype},
-    management::{BROADCAST_ADDRESS, MANAGEMENT_HEADER_LEN},
+    management::MANAGEMENT_HEADER_LEN,
     management_protection::SaQuery,
 };
 
@@ -69,13 +70,13 @@ impl ManagementProtection {
             || control.more_fragments()
             || header.sequence_control().fragment() != 0
             || header.ht_control().is_some()
-            || (header.receiver() != local.get() && header.receiver() != BROADCAST_ADDRESS)
+            || (header.receiver() != local.get() && header.receiver() != Eui48::BROADCAST)
             || header.transmitter() != bssid.get()
             || header.address3() != bssid.get()
         {
             return None;
         }
-        let group = header.receiver() == BROADCAST_ADDRESS;
+        let group = header.receiver() == Eui48::BROADCAST;
         // All management events this machine handles fit in this bounded copy:
         // disconnect (26 + protection), SA Query (28 + protection),
         // ADDBA (33 + protection) and DELBA (30 + protection).

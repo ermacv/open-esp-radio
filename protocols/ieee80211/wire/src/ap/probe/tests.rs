@@ -29,9 +29,9 @@ fn accepts_broadcast_and_directed_discovery_without_association() {
         for name in [b"".as_slice(), b"ap"] {
             let frame = request(name, receiver);
             assert_eq!(
-                parse_ap_management_request(&TEST_ADVERTISEMENT, &frame, AP),
+                parse_ap_management_request(&TEST_ADVERTISEMENT, &frame, Eui48::new(AP)),
                 Some(ApManagementRequest::Probe {
-                    peer: PEER,
+                    peer: Eui48::new(PEER),
                     ssid: name
                 })
             );
@@ -62,7 +62,7 @@ fn rejects_foreign_addresses_and_malformed_or_ambiguous_requests() {
         cases.push(frame);
     }
     for frame in cases {
-        assert!(parse_ap_management_request(&TEST_ADVERTISEMENT, &frame, AP).is_none());
+        assert!(parse_ap_management_request(&TEST_ADVERTISEMENT, &frame, Eui48::new(AP)).is_none());
     }
 }
 
@@ -83,7 +83,7 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
         let len = write_ht_beacon(
             &TEST_ADVERTISEMENT,
             &mut beacon,
-            AP,
+            Eui48::new(AP),
             &Ssid::new(b"ap").unwrap(),
             crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(13).unwrap()),
             100,
@@ -98,7 +98,8 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
         assert!(matches_ssid(&beacon[..len], b"ap"));
         assert!(!matches_ssid(&beacon[..len], b"foreign"));
         let mut output = [0; 256];
-        let n = write_response(&beacon[..len], PEER, seq(7), 12345, &mut output).unwrap();
+        let n =
+            write_response(&beacon[..len], Eui48::new(PEER), seq(7), 12345, &mut output).unwrap();
         assert_eq!(beacon, before);
         assert_eq!(output[0], 0x50);
         assert_eq!(&output[4..10], &PEER);
@@ -118,7 +119,7 @@ fn response_preserves_advertisement_without_tim_or_beacon_mutation() {
         assert!(dst.is_empty());
         let mut short = std::vec![0xaa; n - 1];
         assert_eq!(
-            write_response(&beacon[..len], PEER, seq(0), 0, &mut short),
+            write_response(&beacon[..len], Eui48::new(PEER), seq(0), 0, &mut short),
             Err(ResponseError::OutputTooSmall { required: n })
         );
         assert!(short.iter().all(|byte| *byte == 0xaa));
@@ -133,7 +134,7 @@ fn probe_parsers_never_panic(count: usize) {
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut beacon,
-        AP,
+        Eui48::new(AP),
         &Ssid::new(b"ap").unwrap(),
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(13).unwrap()),
         100,
@@ -198,7 +199,13 @@ fn response_refuses_truncated_headers_and_hostile_element_lengths_without_writin
         } // The complete one-byte SSID is valid.
         let mut output = [0xa5; 64];
         assert_eq!(
-            write_response(&advertisement[..length], PEER, seq(0), 0, &mut output),
+            write_response(
+                &advertisement[..length],
+                Eui48::new(PEER),
+                seq(0),
+                0,
+                &mut output
+            ),
             Err(ResponseError::InvalidAdvertisement)
         );
         assert_eq!(output, [0xa5; 64]);

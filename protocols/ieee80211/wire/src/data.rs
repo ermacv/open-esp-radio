@@ -11,6 +11,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::frame::QosControl;
+use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
 
 use crate::qos::{WmmAccessCategory, WmmUserPriority};
 
@@ -168,8 +169,8 @@ impl DataEncapPlan {
 /// EtherType, and where its payload lies in the MPDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DataDecapPlan {
-    pub destination: [u8; 6],
-    pub source: [u8; 6],
+    pub destination: Eui48,
+    pub source: Eui48,
     pub ether_type: u16,
     pub payload_offset: usize,
     pub payload_length: usize,
@@ -182,8 +183,8 @@ pub struct DataDecapPlan {
 /// encapsulation) and 9.3.2.1 (address fields of a data frame).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MsduHeader {
-    pub destination: [u8; 6],
-    pub source: [u8; 6],
+    pub destination: Eui48,
+    pub source: Eui48,
     pub ether_type: u16,
 }
 
@@ -205,8 +206,8 @@ impl MsduHeader {
     /// first), which RFC 1042 encapsulates (IEEE Std 802.11-2020, 5.1.4).
     pub fn parse(frame: &[u8]) -> Result<(Self, &[u8]), MsduTooShort> {
         let mut reader = oer_portable_wire::Reader::new(frame);
-        let destination = reader.read::<6>().map_err(|_| MsduTooShort)?;
-        let source = reader.read::<6>().map_err(|_| MsduTooShort)?;
+        let destination = Eui48::read(&mut reader).map_err(|_| MsduTooShort)?;
+        let source = Eui48::read(&mut reader).map_err(|_| MsduTooShort)?;
         let ether_type = reader.u16_be().map_err(|_| MsduTooShort)?;
         Ok((
             Self {
@@ -226,8 +227,8 @@ impl MsduHeader {
 /// network-queue slot. The view never outlives the bytes it borrows.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MsduParts<'payload> {
-    pub destination: [u8; 6],
-    pub source: [u8; 6],
+    pub destination: Eui48,
+    pub source: Eui48,
     pub ether_type: u16,
     pub payload: &'payload [u8],
 }
@@ -377,8 +378,8 @@ impl<'a> AmsduSubframes<'a> {
         let payload = reader.remaining();
         let ether_type = rfc1042_ether_type(*llc).ok_or(DataDecapError::InvalidLlcSnap)?;
         let subframe = MsduParts {
-            destination: [d0, d1, d2, d3, d4, d5],
-            source: [s0, s1, s2, s3, s4, s5],
+            destination: Eui48::new([d0, d1, d2, d3, d4, d5]),
+            source: Eui48::new([s0, s1, s2, s3, s4, s5]),
             ether_type,
             payload,
         };
@@ -409,31 +410,41 @@ impl<'a> AmsduSubframes<'a> {
 /// A raw priority cannot enter the encoder:
 ///
 /// ```compile_fail,E0308
+/// use oer_protocols_ieee802_wire::Eui48;
 /// use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
 /// use oer_protocols_ieee80211_wire::{data::PeerQos, frame::QosAckPolicy};
-/// let msdu = MsduHeader { destination: [6; 6], source: [4; 6], ether_type: 0x0800 };
+/// let msdu = MsduHeader {
+///     destination: Eui48::new([6; 6]),
+///     source: Eui48::new([4; 6]),
+///     ether_type: 0x0800,
+/// };
 /// let _plan = plan_data_encapsulation(
-///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu, 8, PeerQos::Qos, QosAckPolicy::Normal,
+///     DataInterfaceRole::Station, Eui48::new([2; 6]), Eui48::new([4; 6]), msdu, 8, PeerQos::Qos, QosAckPolicy::Normal,
 /// );
 /// ```
 ///
 /// Fixed protocol priorities need no runtime validation:
 ///
 /// ```
+/// use oer_protocols_ieee802_wire::Eui48;
 /// use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
 /// use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 /// use oer_protocols_ieee80211_wire::{data::PeerQos, frame::QosAckPolicy};
-/// let msdu = MsduHeader { destination: [6; 6], source: [4; 6], ether_type: 0x0800 };
+/// let msdu = MsduHeader {
+///     destination: Eui48::new([6; 6]),
+///     source: Eui48::new([4; 6]),
+///     ether_type: 0x0800,
+/// };
 /// let plan = plan_data_encapsulation(
-///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu,
+///     DataInterfaceRole::Station, Eui48::new([2; 6]), Eui48::new([4; 6]), msdu,
 ///     WmmUserPriority::UP7, PeerQos::Qos, QosAckPolicy::Normal,
 /// );
 /// assert_eq!(plan.access_category, WmmAccessCategory::Voice);
 /// ```
 pub const fn plan_data_encapsulation(
     role: DataInterfaceRole,
-    bssid: [u8; 6],
-    interface_mac: [u8; 6],
+    bssid: Eui48,
+    interface_mac: Eui48,
     msdu: MsduHeader,
     priority: WmmUserPriority,
     peer_qos: PeerQos,
@@ -444,11 +455,10 @@ pub const fn plan_data_encapsulation(
         source,
         ether_type,
     } = msdu;
-    let [d0, ..] = destination;
     let [e0, e1] = EtherTypeField::of(ether_type).to_bytes();
     // An access point's group-addressed data stays non-QoS.
     let group_from_access_point = matches!(role, DataInterfaceRole::AccessPoint)
-        && crate::address::AddressFlags::from_bytes([d0]).group();
+        && matches!(destination.kind(), Eui48Kind::Group(_));
     let qos = matches!(peer_qos, PeerQos::Qos) && !group_from_access_point;
     let (direction, addresses) = match role {
         DataInterfaceRole::Station => (IEEE80211_TO_DS, [bssid, source, destination]),
@@ -490,13 +500,13 @@ pub const fn plan_data_encapsulation(
 /// addresses, a zero sequence control and the QoS control.
 const fn data_header_bytes(
     frame_control: [u8; 2],
-    [address1, address2, address3]: [[u8; 6]; 3],
+    [address1, address2, address3]: [Eui48; 3],
     qos_control: [u8; 2],
 ) -> [u8; IEEE80211_QOS_DATA_HEADER_LEN] {
     let [f0, f1] = frame_control;
-    let [a0, a1, a2, a3, a4, a5] = address1;
-    let [b0, b1, b2, b3, b4, b5] = address2;
-    let [c0, c1, c2, c3, c4, c5] = address3;
+    let [a0, a1, a2, a3, a4, a5] = address1.octets();
+    let [b0, b1, b2, b3, b4, b5] = address2.octets();
+    let [c0, c1, c2, c3, c4, c5] = address3.octets();
     let [q0, q1] = qos_control;
     [
         f0, f1, 0, 0, a0, a1, a2, a3, a4, a5, b0, b1, b2, b3, b4, b5, c0, c1, c2, c3, c4, c5, 0, 0,
@@ -524,8 +534,8 @@ pub struct HeControlRequiresQos;
 #[allow(clippy::too_many_arguments)]
 pub const fn plan_data_encapsulation_with_he_control(
     role: DataInterfaceRole,
-    bssid: [u8; 6],
-    interface_mac: [u8; 6],
+    bssid: Eui48,
+    interface_mac: Eui48,
     msdu: MsduHeader,
     priority: WmmUserPriority,
     peer_qos: PeerQos,

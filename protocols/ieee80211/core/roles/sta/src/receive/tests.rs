@@ -1,6 +1,7 @@
 use super::{Management, Received, classify, observe_scan};
 use crate::scan::{ScanObservation, ScanTable};
 use oer_portable_time::Instant;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, RxEvidence, RxMeta};
 use oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason;
 use oer_protocols_ieee80211_wire::fuzz::{FULL, QUICK, inputs};
@@ -54,7 +55,7 @@ fn classify_sorts_management_from_data() {
     let sorted = classified_management(&beacon);
     assert_eq!(sorted.subtype(), 8);
     assert_eq!(sorted.frame(), beacon.as_slice());
-    assert_eq!(sorted.header().address3(), BSSID);
+    assert_eq!(sorted.header().address3(), Eui48::new(BSSID));
     let probe = management(5, &[]);
     assert_eq!(classified_management(&probe).subtype(), 5);
 

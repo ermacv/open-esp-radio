@@ -157,7 +157,8 @@ Module namespaces do not create independent owners. Tests live beside their
 owner or at the shared protocol boundary. See the
 [architecture](../../docs/architecture.md#layers) for the layering contract.
 
-`ieee80211/wire` depends on `oer-portable-wire` alone; it holds no state, profile or
+`ieee80211/wire` depends on `oer-portable-wire` and the IEEE 802 wire, which
+holds the addresses, alone; it holds no state, profile or
 regulatory decision. A scan record holds what the frame carries, such as the
 DS Parameter Set's channel when present (`scan::ScanRecord::ds_channel`).
 Scan results and connected beacons hand their ERP elements over as one

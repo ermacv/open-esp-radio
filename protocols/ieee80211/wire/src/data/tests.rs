@@ -8,8 +8,8 @@ const AP_MAC: [u8; 6] = [0x40, 0x41, 0x42, 0x43, 0x44, 0x45];
 
 const fn msdu(destination: [u8; 6]) -> MsduHeader {
     MsduHeader {
-        destination,
-        source: SOURCE,
+        destination: Eui48::new(destination),
+        source: Eui48::new(SOURCE),
         ether_type: 0x0800,
     }
 }
@@ -18,8 +18,8 @@ const fn msdu(destination: [u8; 6]) -> MsduHeader {
 fn station_qos_header_matches_the_recovered_plan() {
     let plan = plan_data_encapsulation(
         DataInterfaceRole::Station,
-        BSSID,
-        AP_MAC,
+        Eui48::new(BSSID),
+        Eui48::new(AP_MAC),
         msdu(DESTINATION),
         WmmUserPriority::UP7,
         PeerQos::Qos,
@@ -39,8 +39,8 @@ fn station_qos_header_matches_the_recovered_plan() {
 fn hardware_bsr_sets_order_without_moving_dma_payload() {
     let plan = plan_data_encapsulation_with_he_control(
         DataInterfaceRole::Station,
-        BSSID,
-        AP_MAC,
+        Eui48::new(BSSID),
+        Eui48::new(AP_MAC),
         msdu(DESTINATION),
         WmmUserPriority::UP0,
         PeerQos::Qos,
@@ -58,8 +58,8 @@ fn hardware_bsr_sets_order_without_moving_dma_payload() {
     assert!(
         plan_data_encapsulation_with_he_control(
             DataInterfaceRole::Station,
-            BSSID,
-            AP_MAC,
+            Eui48::new(BSSID),
+            Eui48::new(AP_MAC),
             msdu(DESTINATION),
             WmmUserPriority::UP0,
             PeerQos::NonQos,
@@ -74,8 +74,8 @@ fn hardware_bsr_sets_order_without_moving_dma_payload() {
 fn station_decapsulation_reverses_from_ds_rfc1042_data() {
     let plan = plan_data_encapsulation(
         DataInterfaceRole::AccessPoint,
-        BSSID,
-        BSSID,
+        Eui48::new(BSSID),
+        Eui48::new(BSSID),
         msdu(DESTINATION),
         WmmUserPriority::UP0,
         PeerQos::NonQos,
@@ -97,8 +97,8 @@ fn station_decapsulation_reverses_from_ds_rfc1042_data() {
     )
     .unwrap();
 
-    assert_eq!(decoded.destination, DESTINATION);
-    assert_eq!(decoded.source, SOURCE);
+    assert_eq!(decoded.destination, Eui48::new(DESTINATION));
+    assert_eq!(decoded.source, Eui48::new(SOURCE));
     assert_eq!(decoded.ether_type, 0x0800);
     assert_eq!(decoded.payload_offset, header_length + LLC_SNAP_HEADER_LEN);
     assert_eq!(
@@ -133,8 +133,8 @@ fn protected_station_decapsulation_accepts_a_separate_ccmp_header() {
     .unwrap();
 
     assert_eq!(decoded.ether_type, 0x0806);
-    assert_eq!(decoded.destination, DESTINATION);
-    assert_eq!(decoded.source, SOURCE);
+    assert_eq!(decoded.destination, Eui48::new(DESTINATION));
+    assert_eq!(decoded.source, Eui48::new(SOURCE));
     assert_eq!(
         &mpdu[decoded.payload_offset..][..decoded.payload_length],
         &payload
@@ -149,8 +149,8 @@ fn protected_station_decapsulation_accepts_a_separate_ccmp_header() {
     .unwrap();
     assert!(!frames.is_amsdu());
     let frame = frames.next().unwrap().unwrap();
-    assert_eq!(frame.destination, DESTINATION);
-    assert_eq!(frame.source, SOURCE);
+    assert_eq!(frame.destination, Eui48::new(DESTINATION));
+    assert_eq!(frame.source, Eui48::new(SOURCE));
     assert_eq!(frame.ether_type, 0x0806);
     assert_eq!(frame.payload, payload);
     assert!(frames.next().is_none());
@@ -186,12 +186,12 @@ fn station_amsdu_iterator_removes_subframe_length_llc_and_padding() {
     )
     .unwrap();
     let first = subframes.next().unwrap().unwrap();
-    assert_eq!(first.destination, DESTINATION);
-    assert_eq!(first.source, SOURCE);
+    assert_eq!(first.destination, Eui48::new(DESTINATION));
+    assert_eq!(first.source, Eui48::new(SOURCE));
     assert_eq!(first.ether_type, 0x0800);
     assert_eq!(first.payload, &[1, 2]);
     let second = subframes.next().unwrap().unwrap();
-    assert_eq!(second.destination, [0xff; 6]);
+    assert_eq!(second.destination, Eui48::new([0xff; 6]));
     assert_eq!(second.ether_type, 0x0806);
     assert_eq!(second.payload, &[3, 4, 5]);
     assert!(subframes.next().is_none());
@@ -205,10 +205,10 @@ fn station_amsdu_iterator_removes_subframe_length_llc_and_padding() {
     .unwrap();
     assert!(frames.is_amsdu());
     let unified_first = frames.next().unwrap().unwrap();
-    assert_eq!(unified_first.destination, DESTINATION);
+    assert_eq!(unified_first.destination, Eui48::new(DESTINATION));
     assert_eq!(unified_first.payload, &[1, 2]);
     let unified_second = frames.next().unwrap().unwrap();
-    assert_eq!(unified_second.destination, [0xff; 6]);
+    assert_eq!(unified_second.destination, Eui48::new([0xff; 6]));
     assert_eq!(unified_second.ether_type, 0x0806);
     assert_eq!(unified_second.payload, &[3, 4, 5]);
     assert!(frames.next().is_none());
@@ -228,7 +228,7 @@ fn station_amsdu_iterator_removes_subframe_length_llc_and_padding() {
     assert_eq!(ap_frames.next().unwrap().unwrap().payload, &[3, 4, 5]);
     assert!(ap_frames.next().is_none());
 
-    assert_eq!(second.destination, [0xff; 6]);
+    assert_eq!(second.destination, Eui48::new([0xff; 6]));
     assert_eq!(second.ether_type, 0x0806);
     assert_eq!(second.payload, &[3, 4, 5]);
 }
@@ -320,8 +320,8 @@ fn decapsulation_rejects_role_mismatch_amsdu_and_non_snap_payload() {
 fn ordinary_mpdu() -> std::vec::Vec<u8> {
     let plan = plan_data_encapsulation(
         DataInterfaceRole::AccessPoint,
-        BSSID,
-        BSSID,
+        Eui48::new(BSSID),
+        Eui48::new(BSSID),
         msdu(DESTINATION),
         WmmUserPriority::UP5,
         PeerQos::Qos,
@@ -504,8 +504,8 @@ fn a_malformed_later_amsdu_subframe_exposes_no_valid_prefix() {
 fn malformed_payload_offsets_and_lengths_return_errors() {
     let plan = plan_data_encapsulation(
         DataInterfaceRole::AccessPoint,
-        BSSID,
-        BSSID,
+        Eui48::new(BSSID),
+        Eui48::new(BSSID),
         msdu(DESTINATION),
         WmmUserPriority::UP0,
         PeerQos::NonQos,
@@ -527,8 +527,8 @@ fn an_msdu_header_parses_from_the_networks_ethernet_frame() {
         2, 0, 0, 0, 0, 0x10, 2, 0, 0, 0, 0, 1, 0x88, 0x8e, 0xaa, 0xbb,
     ];
     let (header, payload) = MsduHeader::parse(&frame).unwrap();
-    assert_eq!(header.destination, [2, 0, 0, 0, 0, 0x10]);
-    assert_eq!(header.source, [2, 0, 0, 0, 0, 1]);
+    assert_eq!(header.destination, Eui48::new([2, 0, 0, 0, 0, 0x10]));
+    assert_eq!(header.source, Eui48::new([2, 0, 0, 0, 0, 1]));
     assert_eq!(header.ether_type, 0x888e);
     assert_eq!(payload, [0xaa, 0xbb]);
     assert_eq!(MsduHeader::parse(&frame[..13]), Err(MsduTooShort));

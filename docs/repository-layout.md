@@ -47,6 +47,7 @@ protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/
+protocols/ieee802/wire/
 protocols/ieee80211/{runtime, wire}/
 protocols/ieee80211/contracts/{port, security}/
 protocols/ieee80211/core/{arbiter, upper-mac}/
@@ -197,8 +198,10 @@ backend conformance suite and `testing/model` a reference model, and no
 product package depends on either; and
 `protocols/bridges/*` are bridges, which stand only on the codecs they
 join. Each `protocols/network/*` package has an explicit layer in
-`oer-tools-test-layers`: the network codec stands on `oer-portable-wire` alone and the
-network contract on the codec.
+`oer-tools-test-layers`: the network codec stands on `oer-portable-wire` and the
+IEEE 802 wire (`protocols/ieee802/wire`) alone and the network contract on the
+codec. The IEEE 802 wire holds the addresses both the IEEE 802.11 and the
+network codecs carry and stands on `oer-portable-wire` alone.
 
 ## Known deviations
 

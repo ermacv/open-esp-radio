@@ -1,4 +1,5 @@
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::security::{
     Pmkid,
     rsn::{
@@ -220,7 +221,7 @@ fn truncated_or_trailing_rsn_optional_fields_are_rejected() {
 fn open_ap_needs_no_security_ie() {
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
         )
         .unwrap(),
     );
@@ -249,13 +250,13 @@ fn a_second_pmkid_is_rejected_without_growing_the_selected_elements() {
 fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
         )
         .unwrap(),
     );
     record.set_ssid(b"test").unwrap();
     record.bssid = oer_protocols_ieee80211_wire::address::Bssid::new(
-        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
     )
     .unwrap();
     record.ds_channel = Some(6);

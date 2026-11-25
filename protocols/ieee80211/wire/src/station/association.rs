@@ -3,6 +3,7 @@
 use super::*;
 use crate::address::OwnAddress;
 use oer_portable_wire::PrefixLength;
+use oer_protocols_ieee802_wire::Eui48;
 
 /// Relative HE UL-MU transmit-power capability for MAC rates 16 through 25.
 ///
@@ -174,7 +175,6 @@ impl AssociationRequest<'_> {
         output: &mut [u8],
         capabilities: &AssociationCapabilities,
     ) -> Result<usize, AssociationRequestError> {
-        validate_peer(self.access_point.bssid.get()).map_err(AssociationRequestError::Frame)?;
         let ssid = self.access_point.ssid_bytes();
         let ssid_len = PrefixLength::<MAX_SSID_LEN>::new(ssid.len()).ok_or(
             AssociationRequestError::Frame(StationFrameError::SsidTooLong),
@@ -432,8 +432,8 @@ impl AssociationResponse {
 
 pub fn parse_association_response(
     frame: &[u8],
-    local: [u8; 6],
-    bssid: [u8; 6],
+    local: Eui48,
+    bssid: Eui48,
 ) -> Option<AssociationResponse> {
     let (header, [c0, c1, s0, s1, a0, a1], information_elements) =
         split_received_management(frame)?;

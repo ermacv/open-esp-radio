@@ -469,3 +469,52 @@ fn a_protected_deauthentication_after_the_links_return_draws_the_keys_next_packe
         assert_released(&mut world);
     });
 }
+
+/// A sealed frame that names another receiver or another BSS is not the
+/// link's, though its key is.
+#[test]
+fn a_sealed_disconnect_is_the_link_s_only_by_every_address() {
+    use oer_protocols_ieee80211_wire::{
+        address::{Bssid, OwnAddress},
+        ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber},
+    };
+    const OTHER: [u8; 6] = [2, 0, 0, 0, 0, 0x77];
+    let individual = |octets| IndividualAddress::new(Eui48::new(octets)).unwrap();
+    let key = || Ccmp128Key::new(&[0x11; 16]);
+    let received = |other: Option<usize>, fragment: u8| {
+        let mut frame = plain_disconnect(0xc0, 7);
+        frame.truncate(24);
+        frame[1] = 0x40;
+        frame[22] = fragment;
+        if let Some(at) = other {
+            frame[at..at + 6].copy_from_slice(&OTHER);
+        }
+        frame.extend_from_slice(
+            &CcmpHeader::new(
+                CcmpPacketNumber::new(1).unwrap(),
+                CcmpKeyId::new(0).unwrap(),
+            )
+            .encode(),
+        );
+        frame.extend_from_slice(&7_u16.to_le_bytes());
+        frame.extend_from_slice(&[0; 8]);
+        oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation::new(
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        )
+        .seal(&mut SoftwareAes128, &key(), &mut frame)
+        .unwrap();
+        ManagementProtection::new(key())
+            .receive(
+                &mut SoftwareAes128,
+                &frame,
+                OwnAddress::new(individual(LOCAL)),
+                Bssid::new(individual(BSSID)).unwrap(),
+            )
+            .is_some()
+    };
+    assert!(received(None, 0));
+    assert!(!received(None, 1), "a fragment");
+    for at in [4, 10, 16] {
+        assert!(!received(Some(at), 0), "address at {at}");
+    }
+}

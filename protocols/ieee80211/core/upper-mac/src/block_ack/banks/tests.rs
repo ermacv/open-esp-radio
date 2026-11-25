@@ -4,13 +4,13 @@
 extern crate std;
 
 use super::*;
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 use oer_protocols_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, LowerMacCapabilities, PhyFormatSet,
     RateSupport, ReceiveFilter, RxMeta, WidthSet,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_protocols_ieee80211_wire::{
-    address::IndividualAddress,
     block_ack::frame::{encode_addba_request, encode_block_ack_request, parse_block_ack_action},
     frame::{MacHeader, QosControl},
     status::status_code,
@@ -210,7 +210,7 @@ enum Call {
 struct Recording(Vec<Call>);
 
 fn bssid() -> Bssid {
-    Bssid::new(IndividualAddress::new(AP).unwrap()).unwrap()
+    Bssid::new(IndividualAddress::new(Eui48::new(AP)).unwrap()).unwrap()
 }
 
 fn addba(tid: u8, timeout_tu: u16) -> BlockAckAction {
@@ -425,6 +425,65 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
 }
 
 #[test]
+fn a_frame_of_another_receiver_or_transmitter_moves_no_window() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offered(
+        now(1),
+        7,
+        bssid(),
+        addba(0, 0),
+        RxAgreements::Admitted,
+        &mut port,
+        &mut (),
+    )
+    .unwrap();
+    const OTHER: [u8; 6] = [2, 0, 0, 0, 0, 0x77];
+    let bar = |receiver, transmitter| {
+        encode_block_ack_request(
+            Eui48::new(receiver),
+            Eui48::new(transmitter),
+            0,
+            SequenceNumber::new(102).unwrap(),
+        )
+    };
+    for at in [4, 10] {
+        let mut frame = qos_data(0, 101);
+        frame.0[at..at + 6].copy_from_slice(&OTHER);
+        let bytes = frame.0.clone();
+        assert_eq!(
+            delivered(view.given(now(2), Some(LOCAL), frame, meta(), &mut ())),
+            Some(bytes),
+            "address at {at}"
+        );
+    }
+    // A fragment, the last one, is not reordered either.
+    let mut frame = qos_data(0, 101);
+    frame.0[22] |= 1;
+    let bytes = frame.0.clone();
+    assert_eq!(
+        delivered(view.given(now(2), Some(LOCAL), frame, meta(), &mut ())),
+        Some(bytes)
+    );
+    for request in [bar(OTHER, AP), bar(LOCAL, OTHER)] {
+        view.given(
+            now(3),
+            Some(LOCAL),
+            Frame(request.to_vec()),
+            meta(),
+            &mut (),
+        );
+    }
+    // The window is where it was: the sequence it starts at is in order.
+    assert!(matches!(
+        view.given(now(4), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    assert!(view.pop_ready().is_none());
+}
+
+#[test]
 fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
@@ -443,7 +502,12 @@ fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
         view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
-    let bar = encode_block_ack_request(LOCAL, AP, 0, SequenceNumber::new(102).unwrap());
+    let bar = encode_block_ack_request(
+        Eui48::new(LOCAL),
+        Eui48::new(AP),
+        0,
+        SequenceNumber::new(102).unwrap(),
+    );
     assert!(matches!(
         view.given(now(3), Some(LOCAL), Frame(bar.to_vec()), meta(), &mut ()),
         RxDisposition::Recycle(_)

@@ -3,6 +3,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::sequence::SequenceControl;
+use oer_protocols_ieee802_wire::Eui48;
 
 /// The Frame Control field of a data or management frame of protocol
 /// version 0: never a control frame, whose kinds have their own buffers.
@@ -143,7 +144,7 @@ impl FrameControl {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AddressFields {
     control: FrameControlFields,
-    receiver: [u8; 6],
+    receiver: Eui48,
     rest: AfterReceiver,
 }
 
@@ -153,20 +154,20 @@ pub enum AfterReceiver {
     /// A control frame of Address 1 alone: CTS, Ack, Control Wrapper.
     Nothing,
     /// A control frame that carries a TA.
-    Transmitter([u8; 6]),
+    Transmitter(Eui48),
     /// A management frame, or a data frame without Address 4: Addresses 2
     /// and 3 and Sequence Control.
     Three {
-        transmitter: [u8; 6],
-        address3: [u8; 6],
+        transmitter: Eui48,
+        address3: Eui48,
         sequence_control: SequenceControl,
     },
     /// A data frame with both To DS and From DS set: Address 4 as well.
     Four {
-        transmitter: [u8; 6],
-        address3: [u8; 6],
+        transmitter: Eui48,
+        address3: Eui48,
         sequence_control: SequenceControl,
-        address4: [u8; 6],
+        address4: Eui48,
     },
 }
 
@@ -215,24 +216,24 @@ impl AddressFields {
             FrameType::Extension => return Err(AddressFieldsError::UnknownLayout),
         };
         let _duration: [u8; 2] = reader.read().map_err(truncated)?;
-        let receiver = reader.read().map_err(truncated)?;
+        let receiver = Eui48::read(&mut reader).map_err(truncated)?;
         // A struct expression evaluates its fields in the order written: the
         // order of the fields in the frame.
         let rest = match layout {
             AddressLayout::Receiver => AfterReceiver::Nothing,
             AddressLayout::Transmitter => {
-                AfterReceiver::Transmitter(reader.read().map_err(truncated)?)
+                AfterReceiver::Transmitter(Eui48::read(&mut reader).map_err(truncated)?)
             }
             AddressLayout::Three => AfterReceiver::Three {
-                transmitter: reader.read().map_err(truncated)?,
-                address3: reader.read().map_err(truncated)?,
+                transmitter: Eui48::read(&mut reader).map_err(truncated)?,
+                address3: Eui48::read(&mut reader).map_err(truncated)?,
                 sequence_control: SequenceControl::from_bytes(reader.read().map_err(truncated)?),
             },
             AddressLayout::Four => AfterReceiver::Four {
-                transmitter: reader.read().map_err(truncated)?,
-                address3: reader.read().map_err(truncated)?,
+                transmitter: Eui48::read(&mut reader).map_err(truncated)?,
+                address3: Eui48::read(&mut reader).map_err(truncated)?,
                 sequence_control: SequenceControl::from_bytes(reader.read().map_err(truncated)?),
-                address4: reader.read().map_err(truncated)?,
+                address4: Eui48::read(&mut reader).map_err(truncated)?,
             },
         };
         Ok(Self {
@@ -247,7 +248,7 @@ impl AddressFields {
     }
 
     /// Address 1.
-    pub const fn receiver(&self) -> [u8; 6] {
+    pub const fn receiver(&self) -> Eui48 {
         self.receiver
     }
 
@@ -258,7 +259,7 @@ impl AddressFields {
 
     /// Address 2, in management and data frames and in a control frame
     /// carrying a TA.
-    pub const fn transmitter(&self) -> Option<[u8; 6]> {
+    pub const fn transmitter(&self) -> Option<Eui48> {
         match self.rest {
             AfterReceiver::Nothing => None,
             AfterReceiver::Transmitter(transmitter)
@@ -268,7 +269,7 @@ impl AddressFields {
     }
 
     /// Address 3, in management and data frames.
-    pub const fn address3(&self) -> Option<[u8; 6]> {
+    pub const fn address3(&self) -> Option<Eui48> {
         match self.rest {
             AfterReceiver::Nothing | AfterReceiver::Transmitter(_) => None,
             AfterReceiver::Three { address3, .. } | AfterReceiver::Four { address3, .. } => {
@@ -291,7 +292,7 @@ impl AddressFields {
     }
 
     /// Address 4, in a data frame with both To DS and From DS set.
-    pub const fn address4(&self) -> Option<[u8; 6]> {
+    pub const fn address4(&self) -> Option<Eui48> {
         match self.rest {
             AfterReceiver::Four { address4, .. } => Some(address4),
             _ => None,
@@ -299,7 +300,7 @@ impl AddressFields {
     }
 
     /// Every address the frame holds, in field order.
-    pub fn addresses(&self) -> impl Iterator<Item = [u8; 6]> {
+    pub fn addresses(&self) -> impl Iterator<Item = Eui48> {
         [
             Some(self.receiver),
             self.transmitter(),
@@ -364,7 +365,7 @@ pub enum DataDirection {
     /// From DS alone: a frame from the AP.
     FromDs,
     /// Both bits: a mesh or WDS frame, with its Address 4.
-    Wds([u8; 6]),
+    Wds(Eui48),
 }
 
 /// What a data or management header holds after Sequence Control, as its
@@ -405,16 +406,16 @@ impl<'a> DecodedHeader<'a> {
         let control = FrameControl::new(FrameControlFields::from_bytes(reader.read().ok()?))?;
         let fields = control.fields();
         let duration = DurationId::from_bytes(reader.read().ok()?);
-        let address1 = reader.read().ok()?;
-        let address2 = reader.read().ok()?;
-        let address3 = reader.read().ok()?;
+        let address1 = Eui48::read(&mut reader).ok()?;
+        let address2 = Eui48::read(&mut reader).ok()?;
+        let address3 = Eui48::read(&mut reader).ok()?;
         let sequence_control = SequenceControl::from_bytes(reader.read().ok()?);
         let direction = |reader: &mut oer_portable_wire::Reader<'a>| -> Option<DataDirection> {
             Some(match (fields.to_ds_bit(), fields.from_ds_bit()) {
                 (false, false) => DataDirection::Neither,
                 (true, false) => DataDirection::ToDs,
                 (false, true) => DataDirection::FromDs,
-                (true, true) => DataDirection::Wds(reader.read().ok()?),
+                (true, true) => DataDirection::Wds(Eui48::read(reader).ok()?),
             })
         };
         let ht = |reader: &mut oer_portable_wire::Reader<'a>| -> Option<Option<[u8; 4]>> {
@@ -469,15 +470,15 @@ impl<'a> DecodedHeader<'a> {
         self.header.duration
     }
     /// The decoded `receiver` field.
-    pub const fn receiver(&self) -> [u8; 6] {
+    pub const fn receiver(&self) -> Eui48 {
         self.header.address1
     }
     /// The decoded `transmitter` field.
-    pub const fn transmitter(&self) -> [u8; 6] {
+    pub const fn transmitter(&self) -> Eui48 {
         self.header.address2
     }
     /// The decoded `address3` field.
-    pub const fn address3(&self) -> [u8; 6] {
+    pub const fn address3(&self) -> Eui48 {
         self.header.address3
     }
     /// The decoded `sequence_control` field.
@@ -485,7 +486,7 @@ impl<'a> DecodedHeader<'a> {
         self.header.sequence_control
     }
     /// The decoded `address4` field.
-    pub const fn address4(&self) -> Option<[u8; 6]> {
+    pub const fn address4(&self) -> Option<Eui48> {
         self.header.address4()
     }
     /// The decoded `qos` field.
@@ -553,9 +554,9 @@ pub struct MacHeader {
     /// of a management or QoS data frame are clear here.
     others: FrameControlFields,
     duration: DurationId,
-    address1: [u8; 6],
-    address2: [u8; 6],
-    address3: [u8; 6],
+    address1: Eui48,
+    address2: Eui48,
+    address3: Eui48,
     sequence_control: SequenceControl,
     layout: HeaderLayout,
 }
@@ -624,15 +625,15 @@ impl MacHeader {
         self.duration
     }
     /// Address 1, the receiver.
-    pub const fn address1(&self) -> [u8; 6] {
+    pub const fn address1(&self) -> Eui48 {
         self.address1
     }
     /// Address 2, the transmitter.
-    pub const fn address2(&self) -> [u8; 6] {
+    pub const fn address2(&self) -> Eui48 {
         self.address2
     }
     /// Address 3.
-    pub const fn address3(&self) -> [u8; 6] {
+    pub const fn address3(&self) -> Eui48 {
         self.address3
     }
     /// The Sequence Control field.
@@ -640,7 +641,7 @@ impl MacHeader {
         self.sequence_control
     }
     /// Address 4 of a four-address data frame.
-    pub const fn address4(&self) -> Option<[u8; 6]> {
+    pub const fn address4(&self) -> Option<Eui48> {
         match self.layout {
             HeaderLayout::Data {
                 direction: DataDirection::Wds(address4),
@@ -679,11 +680,11 @@ impl MacHeader {
         }
     }
     /// The same header with Address 1 `address1`.
-    pub const fn with_address1(self, address1: [u8; 6]) -> Self {
+    pub const fn with_address1(self, address1: Eui48) -> Self {
         Self { address1, ..self }
     }
     /// The same header with Address 3 `address3`.
-    pub const fn with_address3(self, address3: [u8; 6]) -> Self {
+    pub const fn with_address3(self, address3: Eui48) -> Self {
         Self { address3, ..self }
     }
     /// The same header with the Sequence Control field `sequence_control`.
@@ -751,11 +752,11 @@ impl MacHeader {
             .to_bytes()
             .into_iter()
             .chain(self.duration.to_bytes())
-            .chain(self.address1)
-            .chain(self.address2)
-            .chain(self.address3)
+            .chain(self.address1.octets())
+            .chain(self.address2.octets())
+            .chain(self.address3.octets())
             .chain(self.sequence_control.to_bytes())
-            .chain(self.address4().into_iter().flatten())
+            .chain(self.address4().into_iter().flat_map(Eui48::octets))
             .chain(self.qos().map(QosControl::to_bytes).into_iter().flatten())
             .chain(self.ht_control().into_iter().flatten())
     }

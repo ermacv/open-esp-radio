@@ -1,6 +1,7 @@
 use super::super::test_support::{BSSID, LOCAL, association_response, deauthentication};
 use super::*;
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::station::StaDisconnectKind;
 
 fn at(millis: u64) -> Instant {
@@ -14,9 +15,9 @@ fn ms(millis: u64) -> Duration {
 fn begin(now: Instant) -> Result<StaAssociationRuntime, StaAssociationFailure> {
     StaAssociationRuntime::new(
         OwnAddress::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        Bssid::new(oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap())
+        Bssid::new(oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap())
             .unwrap(),
         LinkProtection::Ccmp,
         now,

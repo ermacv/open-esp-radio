@@ -18,6 +18,7 @@
 //! it goes out.
 
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee802_wire::{Eui48, Eui48Kind, IndividualAddress};
 use oer_protocols_ieee80211_core_security_rsn::{
     OwnedEapolFrame, RsnInterface, frames::RsnTxFrame,
 };
@@ -29,7 +30,7 @@ use oer_protocols_ieee80211_core_upper_mac::{
 use oer_protocols_ieee80211_wire::data::PeerQos;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::{
-    address::{AddressFlags, Bssid, IndividualAddress},
+    address::Bssid,
     ap::{
         ApAssociationResponseError, ApDataFrame, ApDataFrameError, ApManagementRequest,
         ApProtectedDataPrefix, parse_ap_management_request, probe, profile::Advertisement,
@@ -180,8 +181,8 @@ impl<'f> ApMsdu<'f> {
     /// The MSDU's fields, as the network takes them.
     pub const fn parts(&self) -> MsduParts<'f> {
         MsduParts {
-            destination: self.destination,
-            source: self.source,
+            destination: Eui48::new(self.destination),
+            source: Eui48::new(self.source),
             ether_type: self.ether_type,
             payload: self.payload,
         }
@@ -442,22 +443,26 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         now: Instant,
     ) -> ApReceived<'f> {
         let peer = header.transmitter();
-        let Some(status) = self.service.peer_status(peer) else {
+        let Some(status) = self.service.peer_status(peer.octets()) else {
             return ApReceived::Nothing;
         };
-        let Some(bssid) = IndividualAddress::new(self.address()).and_then(Bssid::new) else {
+        let Some(bssid) = IndividualAddress::new(Eui48::new(self.address())).and_then(Bssid::new)
+        else {
             return ApReceived::Nothing;
         };
         let replay = self
             .replay
             .iter_mut()
             .flatten()
-            .find(|replay| replay.peer == peer)
+            .find(|replay| Eui48::new(replay.peer) == peer)
             .map(|replay| &mut replay.replay);
-        let admitted = match AdmittedData::admit_uplink(header, bssid, peer, integrity, replay) {
-            Ok(admitted) => admitted,
-            Err(RxDropReason::Replay | RxDropReason::Integrity | _) => return ApReceived::Nothing,
-        };
+        let admitted =
+            match AdmittedData::admit_uplink(header, bssid, peer.octets(), integrity, replay) {
+                Ok(admitted) => admitted,
+                Err(RxDropReason::Replay | RxDropReason::Integrity | _) => {
+                    return ApReceived::Nothing;
+                }
+            };
         let Ok(mut msdus) = admitted.msdus() else {
             return ApReceived::Nothing;
         };
@@ -472,18 +477,18 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         };
         match status.phase {
             ApPeerPhase::Securing if ether_type == EAPOL_ETHER_TYPE => ApReceived::Eapol {
-                peer,
+                peer: peer.octets(),
                 body: payload,
             },
             ApPeerPhase::Authorized if admitted.protected() || !self.protects() => {
-                let _ = self.service.observe_activity(peer, now);
+                let _ = self.service.observe_activity(peer.octets(), now);
                 if ether_type == EAPOL_ETHER_TYPE {
                     // A rekey is not served; the frame changes nothing.
                     return ApReceived::Nothing;
                 }
                 ApReceived::Msdu(ApMsdu {
-                    destination,
-                    source,
+                    destination: destination.octets(),
+                    source: source.octets(),
                     ether_type,
                     payload,
                 })
@@ -507,7 +512,8 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         replay_counter: u64,
         output: &mut [u8],
     ) -> Result<ApReceived<'f>, ApEngineError> {
-        let Some(request) = parse_ap_management_request(&self.advertisement, frame, self.address())
+        let Some(request) =
+            parse_ap_management_request(&self.advertisement, frame, Eui48::new(self.address()))
         else {
             return Ok(ApReceived::Nothing);
         };
@@ -538,31 +544,40 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 Ok(ApReceived::Respond {
                     frame: ApFrame {
                         len,
-                        kind: ApFrameKind::Management { peer },
+                        kind: ApFrameKind::Management {
+                            peer: peer.octets(),
+                        },
                     },
                     after: ApAfter::Nothing,
                 })
             }
             ApManagementRequest::OpenAuthentication { peer } => {
-                let status = match self.service.peer_status(peer) {
+                let status = match self.service.peer_status(peer.octets()) {
                     // A retried request whose response was lost: the same
                     // success again, the peer's state kept.
                     Some(status) if retry && status.phase != ApPeerPhase::Authenticated => 0,
                     Some(_) => {
                         // A new authentication ends the peer's earlier
                         // association: its key comes off first.
-                        self.forget_replay(peer);
-                        self.authenticate(peer, now)?
+                        self.forget_replay(peer.octets());
+                        self.authenticate(peer.octets(), now)?
                     }
-                    None => self.authenticate(peer, now)?,
+                    None => self.authenticate(peer.octets(), now)?,
                 };
                 let sequence = self.service.next_management_sequence();
-                let len =
-                    write_open_authentication_response(output, address, peer, status, sequence)?;
+                let len = write_open_authentication_response(
+                    output,
+                    Eui48::new(address),
+                    peer,
+                    status,
+                    sequence,
+                )?;
                 Ok(ApReceived::Respond {
                     frame: ApFrame {
                         len,
-                        kind: ApFrameKind::Management { peer },
+                        kind: ApFrameKind::Management {
+                            peer: peer.octets(),
+                        },
                     },
                     after: ApAfter::Nothing,
                 })
@@ -575,7 +590,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 qos,
                 preamble,
             } => {
-                let Some(status) = self.service.peer_status(peer) else {
+                let Some(status) = self.service.peer_status(peer.octets()) else {
                     return Ok(ApReceived::Nothing);
                 };
                 let (status_code, association_id, after) = if self
@@ -602,7 +617,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                             return Ok(ApReceived::Nothing);
                         };
                         self.service.associate_rsn(
-                            peer,
+                            peer.octets(),
                             security,
                             capabilities,
                             nonce,
@@ -611,7 +626,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                         )?
                     } else {
                         self.service
-                            .associate_open(peer, security, capabilities, now)?
+                            .associate_open(peer.octets(), security, capabilities, now)?
                     };
                     let ApMlmeAction::AssociationResponse {
                         status,
@@ -622,7 +637,9 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                         return Ok(ApReceived::Nothing);
                     };
                     let after = match association_id {
-                        Some(_) if self.protects() => ApAfter::BeginWpa2 { peer },
+                        Some(_) if self.protects() => ApAfter::BeginWpa2 {
+                            peer: peer.octets(),
+                        },
                         _ => ApAfter::Nothing,
                     };
                     (status, association_id.unwrap_or(0), after)
@@ -632,7 +649,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 let len = write_ht_association_response_frame_for_security(
                     &self.advertisement,
                     output,
-                    address,
+                    Eui48::new(address),
                     peer,
                     status_code,
                     association_id,
@@ -645,23 +662,27 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 Ok(ApReceived::Respond {
                     frame: ApFrame {
                         len,
-                        kind: ApFrameKind::Management { peer },
+                        kind: ApFrameKind::Management {
+                            peer: peer.octets(),
+                        },
                     },
                     after,
                 })
             }
             ApManagementRequest::Disassociation { peer, .. }
             | ApManagementRequest::Deauthentication { peer, .. } => {
-                let Some(status) = self.service.peer_status(peer) else {
+                let Some(status) = self.service.peer_status(peer.octets()) else {
                     return Ok(ApReceived::Nothing);
                 };
                 // The AP's own teardown of the peer is in flight: it ends it.
                 if status.phase == ApPeerPhase::Closing {
                     return Ok(ApReceived::Nothing);
                 }
-                self.forget_replay(peer);
-                self.service.remove_peer(peer)?;
-                Ok(ApReceived::PeerLeft { peer })
+                self.forget_replay(peer.octets());
+                self.service.remove_peer(peer.octets())?;
+                Ok(ApReceived::PeerLeft {
+                    peer: peer.octets(),
+                })
             }
             // No SAE, no Block Ack agreement and no management protection
             // is offered: these requests change nothing.
@@ -786,7 +807,8 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         ApEngineError,
     > {
         let ptk = self.service.pending_ptk(peer)?;
-        let address = IndividualAddress::new(peer).ok_or(ApServiceError::UnknownPeer)?;
+        let address =
+            IndividualAddress::new(Eui48::new(peer)).ok_or(ApServiceError::UnknownPeer)?;
         Ok((
             oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(ptk.temporal_key()),
             address,
@@ -796,8 +818,8 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
     /// Whether the network takes `msdu`: addressed to the access point or
     /// to a group. An MSDU of one peer for another is not relayed.
     pub fn delivers(&self, msdu: &ApMsdu<'_>) -> bool {
-        let [first, ..] = msdu.destination;
-        msdu.destination == self.address() || AddressFlags::from_bytes([first]).group()
+        msdu.destination == self.address()
+            || matches!(Eui48::new(msdu.destination).kind(), Eui48Kind::Group(_))
     }
 
     /// Open the controlled port of `peer`, whose pairwise key is installed
@@ -848,8 +870,8 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         let peer = *frame.peer();
         let sequence = self.service.next_data_sequence();
         let len = ApDataFrame {
-            access_point: self.address(),
-            destination: peer,
+            access_point: Eui48::new(self.address()),
+            destination: Eui48::new(peer),
             sequence_number: sequence,
             ether_type: EAPOL_ETHER_TYPE,
             payload: frame.as_bytes(),
@@ -933,8 +955,8 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         let sequence = self.service.next_management_sequence();
         let len = write_ap_peer_disconnect(
             output,
-            self.address(),
-            peer,
+            Eui48::new(self.address()),
+            Eui48::new(peer),
             kind,
             AP_LEAVING_REASON,
             sequence,
@@ -968,7 +990,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         destination: [u8; 6],
         priority: WmmUserPriority,
     ) -> Option<(Option<ApAssociationIdentity>, WmmUserPriority)> {
-        if AddressFlags::from_bytes([destination[0]]).group() {
+        if matches!(Eui48::new(destination).kind(), Eui48Kind::Group(_)) {
             return Some((None, WmmUserPriority::UP0));
         }
         let binding = self.service.bind_peer(destination)?;
@@ -1008,7 +1030,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         ether_type: u16,
         tid: WmmUserPriority,
     ) -> Result<Option<ApMsduPlan>, ApEngineError> {
-        let group = AddressFlags::from_bytes([destination[0]]).group();
+        let group = matches!(Eui48::new(destination).kind(), Eui48Kind::Group(_));
         let (qos, kind) = if group {
             (PeerQos::NonQos, ApFrameKind::Group)
         } else {
@@ -1170,15 +1192,15 @@ impl ApMsduPlan {
         sequence_number: SequenceNumber,
     ) -> ApProtectedDataPrefix {
         ApProtectedDataPrefix {
-            access_point,
-            peer: self.peer,
+            access_point: Eui48::new(access_point),
+            peer: Eui48::new(self.peer),
             sequence_number,
             user_priority: self.tid.value(),
             peer_qos: self.qos,
             more_data: oer_protocols_ieee80211_wire::data::MoreData::Clear,
             msdu: MsduHeader {
-                destination: self.peer,
-                source: self.source,
+                destination: Eui48::new(self.peer),
+                source: Eui48::new(self.source),
                 ether_type: self.ether_type,
             },
         }

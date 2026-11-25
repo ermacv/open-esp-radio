@@ -3,6 +3,7 @@
 //! The tap publishes every frame at its point of the receive path; these
 //! values select which frames a monitor keeps.
 
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{
     MonitorFrame, MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest,
     RxEvidence,
@@ -173,7 +174,8 @@ fn frame_type(control: FrameControlFields) -> MonitorFrameType {
 /// Whether `address` is one of the addresses the frame holds; a frame whose
 /// address fields cannot be read holds none.
 fn frame_contains_address(bytes: &[u8], address: [u8; 6]) -> bool {
-    AddressFields::parse(bytes).is_ok_and(|fields| fields.addresses().any(|held| held == address))
+    AddressFields::parse(bytes)
+        .is_ok_and(|fields| fields.addresses().any(|held| held == Eui48::new(address)))
 }
 
 #[cfg(test)]

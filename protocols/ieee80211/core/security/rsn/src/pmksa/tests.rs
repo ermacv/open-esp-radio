@@ -1,4 +1,5 @@
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::{address::Bssid, management::MAX_SSID_LEN};
 
 type ApCache = PmksaCache<[u8; 6]>;
@@ -180,7 +181,7 @@ fn a_changed_ssid_compacts_the_cache_without_changing_other_entries_ages() {
 }
 
 fn bssid(bytes: [u8; 6]) -> Bssid {
-    Bssid::new(oer_protocols_ieee80211_wire::address::IndividualAddress::new(bytes).unwrap())
+    Bssid::new(oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(bytes)).unwrap())
         .unwrap()
 }
 

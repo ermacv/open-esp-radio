@@ -1,8 +1,8 @@
 use super::*;
+use oer_protocols_ieee802_wire::IndividualAddressError;
 use oer_protocols_ieee80211_contracts_port::{
     MacInterfaceCapabilities, MacOperationOwner, MacOperationOwnership, MacResourceLimits,
 };
-use oer_protocols_ieee80211_wire::address::IndividualAddressError;
 
 const fn capabilities(interfaces: MacInterfaceCapabilities) -> MacServiceCapabilities {
     MacServiceCapabilities {
@@ -51,24 +51,24 @@ const ALL_INTERFACES: MacInterfaceCapabilities = MacInterfaceCapabilities {
 };
 
 fn address(last: u8) -> IndividualAddress {
-    IndividualAddress::for_interface([0x02, 0, 0, 0, 0, last]).unwrap()
+    IndividualAddress::for_interface(Eui48::new([0x02, 0, 0, 0, 0, last])).unwrap()
 }
 
 #[test]
 fn rejects_unspecified_and_multicast_addresses() {
     assert_eq!(
-        IndividualAddress::for_interface([0; 6]),
+        IndividualAddress::for_interface(Eui48::new([0; 6])),
         Err(IndividualAddressError::Unspecified)
     );
     assert_eq!(
-        IndividualAddress::for_interface([1, 0, 0, 0, 0, 1]),
+        IndividualAddress::for_interface(Eui48::new([1, 0, 0, 0, 0, 1])),
         Err(IndividualAddressError::Multicast)
     );
 }
 
 #[test]
 fn a_general_zero_address_cannot_enter_either_interface_plan() {
-    let zero = IndividualAddress::new([0; 6]).unwrap();
+    let zero = IndividualAddress::new(Eui48::new([0; 6])).unwrap();
     for config in [
         WifiConfig::station(WifiStationConfig::new(zero)),
         WifiConfig::access_point(WifiAccessPointConfig::new(zero)),

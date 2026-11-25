@@ -2,6 +2,7 @@
 //! codecs.
 
 use crate::frame::FrameControlFields;
+use oer_protocols_ieee802_wire::Eui48;
 
 use super::*;
 use crate::address::{Bssid, OwnAddress};
@@ -38,7 +39,6 @@ pub struct OpenAuthenticationRequest {
 
 impl OpenAuthenticationRequest {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
-        validate_peer(self.bssid.get())?;
         let header = management_header(
             OPEN_AUTHENTICATION_FRAME_CONTROL,
             self.bssid.get(),
@@ -119,7 +119,6 @@ pub struct StaManagementFrame<'a> {
 
 impl StaManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
-        validate_peer(self.bssid.get())?;
         let header = management_header(
             self.subtype.frame_control(),
             self.bssid.get(),
@@ -153,7 +152,6 @@ pub struct StaProtectedManagementFrame<'a> {
 
 impl StaProtectedManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
-        validate_peer(self.bssid.get())?;
         let header = management_header(
             self.subtype.frame_control().with_protected(true),
             self.bssid.get(),
@@ -187,7 +185,6 @@ pub struct SaeAuthenticationFrame<'a> {
 
 impl SaeAuthenticationFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
-        validate_peer(self.bssid.get())?;
         let header = management_header(
             OPEN_AUTHENTICATION_FRAME_CONTROL,
             self.bssid.get(),
@@ -222,8 +219,8 @@ pub struct SaeAuthentication<'a> {
 /// `None` for any other frame.
 pub fn parse_sae_authentication(
     frame: &[u8],
-    local: [u8; 6],
-    bssid: [u8; 6],
+    local: Eui48,
+    bssid: Eui48,
 ) -> Option<SaeAuthentication<'_>> {
     let (header, fixed, body) = split_received_management(frame)?;
     let fixed = crate::management::AuthenticationFields::from_bytes(fixed);
@@ -252,8 +249,8 @@ pub fn parse_sae_authentication(
 /// without treating them as protocol errors.
 pub fn parse_open_authentication_response(
     frame: &[u8],
-    local: [u8; 6],
-    bssid: [u8; 6],
+    local: Eui48,
+    bssid: Eui48,
 ) -> Option<OpenAuthenticationResponse> {
     let (header, fixed, _) = split_received_management(frame)?;
     let fixed = crate::management::AuthenticationFields::from_bytes(fixed);
@@ -301,7 +298,7 @@ pub fn parse_sta_disconnect(
         || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_bytes())
             .fragment()
             != 0
-        || (header.receiver() != local.get() && header.receiver() != [0xff; 6])
+        || (header.receiver() != local.get() && header.receiver() != Eui48::BROADCAST)
         || header.transmitter() != bssid.get()
         || header.address3() != bssid.get()
     {

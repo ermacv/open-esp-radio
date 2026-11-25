@@ -2,15 +2,29 @@ use super::*;
 use crate::data::MsduParts;
 use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, RsnAssociation, SaePwe, Spp};
 use crate::sequence::seq;
+use oer_protocols_ieee802_wire::IndividualAddress;
 
 const LOCAL: [u8; 6] = [0x02, 0, 0, 0x12, 0x34, 0x56];
 const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
 
+fn own(octets: [u8; 6]) -> crate::address::OwnAddress {
+    crate::address::OwnAddress::new(
+        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(octets)).unwrap(),
+    )
+}
+
+fn bss(octets: [u8; 6]) -> crate::address::Bssid {
+    crate::address::Bssid::new(
+        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(octets)).unwrap(),
+    )
+    .unwrap()
+}
+
 /// The MSDU fields of a fixture written as DA, SA, EtherType and payload.
 fn msdu(frame: &[u8]) -> MsduParts<'_> {
     MsduParts {
-        destination: frame[..6].try_into().unwrap(),
-        source: frame[6..12].try_into().unwrap(),
+        destination: Eui48::new(frame[..6].try_into().unwrap()),
+        source: Eui48::new(frame[6..12].try_into().unwrap()),
         ether_type: u16::from_be_bytes([frame[12], frame[13]]),
         payload: &frame[14..],
     }
@@ -32,10 +46,12 @@ fn encodes_open_authentication_request() {
     let mut output = [0xa5; 32];
     let length = OpenAuthenticationRequest {
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        bssid: crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-            .unwrap(),
+        bssid: crate::address::Bssid::new(
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
+        )
+        .unwrap(),
         sequence_number: seq(0x123),
     }
     .encode(&mut output)
@@ -57,10 +73,12 @@ fn encodes_sta_action_frame_around_owned_body() {
     let length = StaManagementFrame {
         subtype: StaManagementSubtype::Action,
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        bssid: crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-            .unwrap(),
+        bssid: crate::address::Bssid::new(
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
+        )
+        .unwrap(),
         sequence_number: seq(0x123),
         body: &body,
     }
@@ -84,10 +102,12 @@ fn encodes_protected_action_frame_with_its_ccmp_header() {
     let length = StaProtectedManagementFrame {
         subtype: StaManagementSubtype::Action,
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        bssid: crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-            .unwrap(),
+        bssid: crate::address::Bssid::new(
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
+        )
+        .unwrap(),
         sequence_number: seq(0x123),
         ccmp_header,
         body: &body,
@@ -112,10 +132,12 @@ fn a_deauthentication_carries_its_reason_plain_or_protected() {
     let length = StaManagementFrame {
         subtype: StaManagementSubtype::Deauthentication,
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        bssid: crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-            .unwrap(),
+        bssid: crate::address::Bssid::new(
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
+        )
+        .unwrap(),
         sequence_number: seq(0x10),
         body: &reason,
     }
@@ -125,9 +147,13 @@ fn a_deauthentication_carries_its_reason_plain_or_protected() {
     assert_eq!(
         parse_sta_disconnect(
             &output[..length],
-            crate::address::OwnAddress::new(crate::address::IndividualAddress::new(LOCAL).unwrap()),
-            crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-                .unwrap(),
+            crate::address::OwnAddress::new(
+                oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap()
+            ),
+            crate::address::Bssid::new(
+                oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap()
+            )
+            .unwrap(),
         ),
         None,
         "the station's own Deauthentication is not addressed to it"
@@ -140,10 +166,12 @@ fn a_deauthentication_carries_its_reason_plain_or_protected() {
     let length = StaProtectedManagementFrame {
         subtype: StaManagementSubtype::Deauthentication,
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        bssid: crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-            .unwrap(),
+        bssid: crate::address::Bssid::new(
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
+        )
+        .unwrap(),
         sequence_number: seq(0x11),
         ccmp_header,
         body: &reason,
@@ -162,10 +190,12 @@ fn sae_authentication_frames_round_trip() {
     let mut output = [0xa5; 40];
     let length = SaeAuthenticationFrame {
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        bssid: crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap())
-            .unwrap(),
+        bssid: crate::address::Bssid::new(
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
+        )
+        .unwrap(),
         sequence_number: seq(0x123),
         transaction: SAE_COMMIT_TRANSACTION,
         status_code: 126,
@@ -184,7 +214,7 @@ fn sae_authentication_frames_round_trip() {
     reply[10..16].copy_from_slice(&BSSID);
     reply[26] = 2;
     assert_eq!(
-        parse_sae_authentication(&reply[..length], LOCAL, BSSID),
+        parse_sae_authentication(&reply[..length], Eui48::new(LOCAL), Eui48::new(BSSID)),
         Some(SaeAuthentication {
             transaction: SAE_CONFIRM_TRANSACTION,
             status_code: 126,
@@ -193,7 +223,7 @@ fn sae_authentication_frames_round_trip() {
     );
     reply[24] = 0;
     assert_eq!(
-        parse_sae_authentication(&reply[..length], LOCAL, BSSID),
+        parse_sae_authentication(&reply[..length], Eui48::new(LOCAL), Eui48::new(BSSID)),
         None
     );
 }
@@ -202,20 +232,20 @@ fn sae_authentication_frames_round_trip() {
 fn parses_only_matching_open_authentication_response() {
     let frame = authentication_response(17);
     assert_eq!(
-        parse_open_authentication_response(&frame, LOCAL, BSSID),
+        parse_open_authentication_response(&frame, Eui48::new(LOCAL), Eui48::new(BSSID)),
         Some(OpenAuthenticationResponse { status_code: 17 })
     );
     assert_eq!(
-        parse_open_authentication_response(&frame, [0; 6], BSSID),
+        parse_open_authentication_response(&frame, Eui48::new([0; 6]), Eui48::new(BSSID)),
         None
     );
 }
 
 #[test]
 fn disconnect_parser_checks_receiver_bss_geometry_and_protection() {
-    use crate::address::{Bssid, IndividualAddress, OwnAddress};
-    let local = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
-    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    use crate::address::{Bssid, OwnAddress};
+    let local = OwnAddress::new(IndividualAddress::new(Eui48::new(LOCAL)).unwrap());
+    let bssid = Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap();
     for (control, kind) in [
         (
             DEAUTHENTICATION_FRAME_CONTROL,
@@ -270,13 +300,17 @@ fn sta_data_frame_encodes_to_ds_llc_snap() {
     let mut output = [0; 64];
     let len = StaDataFrame {
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new([2, 3, 4, 5, 6, 7]).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 3, 4, 5, 6, 7]))
+                .unwrap(),
         ),
         bssid: crate::address::Bssid::new(
-            crate::address::IndividualAddress::new([0x10, 0x11, 0x12, 0x13, 0x14, 0x15]).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
+            ]))
+            .unwrap(),
         )
         .unwrap(),
-        destination: [0x20, 0x21, 0x22, 0x23, 0x24, 0x25],
+        destination: Eui48::new([0x20, 0x21, 0x22, 0x23, 0x24, 0x25]),
         sequence_number: seq(0x123),
         ether_type: 0x888e,
         payload: &[1, 2, 3],
@@ -297,13 +331,17 @@ fn protected_data_frame_selects_the_recovered_legacy_or_qos_layout() {
     let mut output = [0; 64];
     let frame = StaProtectedDataFrame {
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new([2, 3, 4, 5, 6, 7]).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 3, 4, 5, 6, 7]))
+                .unwrap(),
         ),
         bssid: crate::address::Bssid::new(
-            crate::address::IndividualAddress::new([0x10, 0x11, 0x12, 0x13, 0x14, 0x15]).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
+            ]))
+            .unwrap(),
         )
         .unwrap(),
-        destination: [0x20, 0x21, 0x22, 0x23, 0x24, 0x25],
+        destination: Eui48::new([0x20, 0x21, 0x22, 0x23, 0x24, 0x25]),
         sequence_number: seq(0x123),
         user_priority: 7,
         peer_qos: crate::data::PeerQos::Qos,
@@ -336,13 +374,17 @@ fn protected_data_frame_selects_the_recovered_legacy_or_qos_layout() {
 fn protected_data_frame_fully_overwrites_a_reused_dma_slot() {
     let frame = StaProtectedDataFrame {
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new([2, 3, 4, 5, 6, 7]).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 3, 4, 5, 6, 7]))
+                .unwrap(),
         ),
         bssid: crate::address::Bssid::new(
-            crate::address::IndividualAddress::new([0x10, 0x11, 0x12, 0x13, 0x14, 0x15]).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
+            ]))
+            .unwrap(),
         )
         .unwrap(),
-        destination: [0x20, 0x21, 0x22, 0x23, 0x24, 0x25],
+        destination: Eui48::new([0x20, 0x21, 0x22, 0x23, 0x24, 0x25]),
         sequence_number: seq(0x123),
         user_priority: 7,
         peer_qos: crate::data::PeerQos::Qos,
@@ -365,13 +407,17 @@ fn protected_he_control_keeps_ccmp_immediately_after_qos() {
     let mut output = [0xa5; 64];
     let len = StaProtectedDataFrame {
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new([2, 3, 4, 5, 6, 7]).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 3, 4, 5, 6, 7]))
+                .unwrap(),
         ),
         bssid: crate::address::Bssid::new(
-            crate::address::IndividualAddress::new([0x10, 0x11, 0x12, 0x13, 0x14, 0x15]).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
+            ]))
+            .unwrap(),
         )
         .unwrap(),
-        destination: [0x20, 0x21, 0x22, 0x23, 0x24, 0x25],
+        destination: Eui48::new([0x20, 0x21, 0x22, 0x23, 0x24, 0x25]),
         sequence_number: seq(0x123),
         user_priority: 0,
         peer_qos: crate::data::PeerQos::Qos,
@@ -404,8 +450,8 @@ fn protected_amsdu_encodes_two_msdus_and_round_trips() {
     let mut output = [0_u8; 96];
     assert_eq!(sta_protected_amsdu_frame_length(&msdus), Ok(87));
     let length = StaProtectedAmsduFrame {
-        source: [2, 3, 4, 5, 6, 7],
-        bssid: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15],
+        source: own([2, 3, 4, 5, 6, 7]),
+        bssid: bss([0x10, 0x11, 0x12, 0x13, 0x14, 0x15]),
         sequence_number: seq(0x123),
         user_priority: 7,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
@@ -433,13 +479,13 @@ fn protected_amsdu_encodes_two_msdus_and_round_trips() {
     )
     .unwrap();
     let first_decoded = subframes.next().unwrap().unwrap();
-    assert_eq!(first_decoded.destination, first[..6]);
-    assert_eq!(first_decoded.source, first[6..12]);
+    assert_eq!(first_decoded.destination.octets(), first[..6]);
+    assert_eq!(first_decoded.source.octets(), first[6..12]);
     assert_eq!(first_decoded.ether_type, 0x0800);
     assert_eq!(first_decoded.payload, &[1, 2, 3]);
     let second_decoded = subframes.next().unwrap().unwrap();
-    assert_eq!(second_decoded.destination, second[..6]);
-    assert_eq!(second_decoded.source, second[6..12]);
+    assert_eq!(second_decoded.destination.octets(), second[..6]);
+    assert_eq!(second_decoded.source.octets(), second[6..12]);
     assert_eq!(second_decoded.ether_type, 0x88b5);
     assert_eq!(second_decoded.payload, &[4, 5, 6]);
     assert_eq!(subframes.next(), None);
@@ -455,8 +501,8 @@ fn protected_amsdu_fully_overwrites_a_reused_output_slot() {
     ];
     let msdus = [msdu(&first), msdu(&second)];
     let encoded = StaProtectedAmsduFrame {
-        source: [2, 3, 4, 5, 6, 7],
-        bssid: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15],
+        source: own([2, 3, 4, 5, 6, 7]),
+        bssid: bss([0x10, 0x11, 0x12, 0x13, 0x14, 0x15]),
         sequence_number: seq(0x123),
         user_priority: 7,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
@@ -501,8 +547,8 @@ fn protected_amsdu_fully_overwrites_a_reused_output_slot() {
 fn protected_amsdu_rejects_the_unadvertised_large_class() {
     let payload = [0_u8; 1_986];
     let large = MsduParts {
-        destination: [0; 6],
-        source: [0; 6],
+        destination: Eui48::new([0; 6]),
+        source: Eui48::new([0; 6]),
         ether_type: 0,
         payload: &payload,
     };
@@ -516,8 +562,8 @@ fn protected_amsdu_rejects_the_unadvertised_large_class() {
     );
     assert_eq!(
         StaProtectedAmsduFrame {
-            source: [2, 3, 4, 5, 6, 7],
-            bssid: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15],
+            source: own([2, 3, 4, 5, 6, 7]),
+            bssid: bss([0x10, 0x11, 0x12, 0x13, 0x14, 0x15]),
             sequence_number: seq(1),
             user_priority: 0,
             ccmp_header: [0; CCMP_HEADER_LEN],
@@ -543,7 +589,8 @@ fn parses_association_response_and_masks_aid() {
     frame[30..58].copy_from_slice(&[
         45, 26, 0x20, 0, 0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
     ]);
-    let response = parse_association_response(&frame[..58], LOCAL, BSSID).unwrap();
+    let response =
+        parse_association_response(&frame[..58], Eui48::new(LOCAL), Eui48::new(BSSID)).unwrap();
     assert_eq!(response.status_code, 0);
     assert_eq!(response.association_id, 42);
     assert_eq!(
@@ -566,7 +613,8 @@ fn association_response_retains_complete_wmm_parameters() {
         0x43, 94, 0, 0x62, 0x32, 47, 0,
     ]);
 
-    let response = parse_association_response(&frame, LOCAL, BSSID).unwrap();
+    let response =
+        parse_association_response(&frame, Eui48::new(LOCAL), Eui48::new(BSSID)).unwrap();
     let parameters = response.wmm_parameters.unwrap();
     assert_eq!(parameters.parameter_set_count, 3);
     assert_eq!(
@@ -585,14 +633,14 @@ fn association_response_retains_complete_wmm_parameters() {
 
 #[test]
 fn station_encoders_admit_complete_capacity_before_writing() {
-    use crate::address::{Bssid, IndividualAddress, OwnAddress};
-    let source = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
-    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    use crate::address::{Bssid, OwnAddress};
+    let source = OwnAddress::new(IndividualAddress::new(Eui48::new(LOCAL)).unwrap());
+    let bssid = Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap();
     let sequence_number = seq(0);
     let data = StaDataFrame {
         source,
         bssid,
-        destination: BSSID,
+        destination: Eui48::new(BSSID),
         sequence_number,
         ether_type: 0x888e,
         payload: &[1, 2, 3],
@@ -600,7 +648,7 @@ fn station_encoders_admit_complete_capacity_before_writing() {
     let protected_data = StaProtectedDataFrame {
         source,
         bssid,
-        destination: BSSID,
+        destination: Eui48::new(BSSID),
         sequence_number,
         user_priority: 7,
         peer_qos: crate::data::PeerQos::Qos,
@@ -772,14 +820,17 @@ fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
 
 #[test]
 fn an_open_qos_data_frame_carries_its_tid_and_decodes_back() {
-    let source =
-        crate::address::OwnAddress::new(crate::address::IndividualAddress::new(LOCAL).unwrap());
-    let bssid =
-        crate::address::Bssid::new(crate::address::IndividualAddress::new(BSSID).unwrap()).unwrap();
+    let source = crate::address::OwnAddress::new(
+        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
+    );
+    let bssid = crate::address::Bssid::new(
+        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
+    )
+    .unwrap();
     let frame = StaOpenDataFrame {
         source,
         bssid,
-        destination: [0x30; 6],
+        destination: Eui48::new([0x30; 6]),
         sequence_number: seq(0x12),
         priority: crate::qos::WmmUserPriority::UP5,
         peer_qos: crate::data::PeerQos::Qos,
@@ -886,7 +937,7 @@ fn an_association_request_writes_its_fixed_fields_and_its_length() {
     let mut output = [0xa5_u8; 128];
     let length = AssociationRequest {
         source: crate::address::OwnAddress::new(
-            crate::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
         access_point: &record,
         sequence_number: seq(2),

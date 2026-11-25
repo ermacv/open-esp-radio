@@ -16,8 +16,8 @@ use crate::data::MsduParts;
 /// The smaller standard A-MSDU length used by the current bounded encoder.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaProtectedAmsduFrame<'a> {
-    pub source: [u8; 6],
-    pub bssid: [u8; 6],
+    pub source: OwnAddress,
+    pub bssid: Bssid,
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
     pub ccmp_header: [u8; CCMP_HEADER_LEN],
@@ -67,7 +67,6 @@ impl<'a> StaProtectedAmsduFrame<'a> {
         ),
         StationFrameError,
     > {
-        validate_peer(self.bssid)?;
         let priority = WmmUserPriority::new(self.user_priority)
             .ok_or(StationFrameError::UserPriorityOutOfRange)?;
         let Some(first) = self.msdus.first().copied() else {
@@ -75,8 +74,8 @@ impl<'a> StaProtectedAmsduFrame<'a> {
         };
         let mut plan = plan_data_encapsulation(
             DataInterfaceRole::Station,
-            self.bssid,
-            self.source,
+            self.bssid.get(),
+            self.source.get(),
             first.header(),
             priority,
             PeerQos::Qos,

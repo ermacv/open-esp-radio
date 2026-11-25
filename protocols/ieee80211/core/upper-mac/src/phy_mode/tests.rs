@@ -1,5 +1,6 @@
 use super::NegotiatedPhy;
 use crate::seq;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::Width;
 use oer_protocols_ieee80211_wire::{
     scan::ScanRecord,
@@ -72,13 +73,13 @@ fn wpa2_rsn() -> SelectedRsn {
 fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
         )
         .unwrap(),
     );
     record.set_ssid(b"test").unwrap();
     record.bssid = oer_protocols_ieee80211_wire::address::Bssid::new(
-        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
     )
     .unwrap();
     record.ds_channel = Some(6);
@@ -116,7 +117,7 @@ fn association_request_contains_selected_rsn() {
     let mut output = [0; 96];
     let length = AssociationRequest {
         source: oer_protocols_ieee80211_wire::address::OwnAddress::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
         access_point: &record,
         sequence_number: seq(2),
@@ -149,7 +150,7 @@ fn association_encoder_uses_the_explicit_local_profile() {
     let mut output = [0; 160];
     let length = AssociationRequest {
         source: oer_protocols_ieee80211_wire::address::OwnAddress::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
         access_point: &record,
         sequence_number: seq(2),

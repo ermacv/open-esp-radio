@@ -1,6 +1,7 @@
 extern crate std;
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 
 const DATA: u16 = 0x0008;
 const QOS_DATA: u16 = 0x0088;
@@ -119,7 +120,12 @@ fn station_fragments_reassemble_one_exact_ethernet_view() {
         outcome,
         OpenDataDefragmentation::Complete {
             expired: 0,
-            value: (STA, SOURCE, 0x0800, std::vec![1, 2, 3, 4, 5]),
+            value: (
+                Eui48::new(STA),
+                Eui48::new(SOURCE),
+                0x0800,
+                std::vec![1, 2, 3, 4, 5]
+            ),
         }
     );
     assert_eq!(state.active_contexts(), 0);

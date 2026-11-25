@@ -1,12 +1,12 @@
 use super::super::test_support::{BSSID, LOCAL, authentication_response, deauthentication};
 use super::*;
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 use oer_protocols_ieee80211_wire::station::StaDisconnectKind;
 
 fn runtime() -> StaAuthenticationRuntime {
     StaAuthenticationRuntime::new(
-        OwnAddress::new(IndividualAddress::new(LOCAL).unwrap()),
-        Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
+        OwnAddress::new(IndividualAddress::new(Eui48::new(LOCAL)).unwrap()),
+        Bssid::new(IndividualAddress::new(Eui48::new(BSSID)).unwrap()).unwrap(),
     )
 }
 

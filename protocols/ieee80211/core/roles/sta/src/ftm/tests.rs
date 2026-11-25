@@ -1,4 +1,5 @@
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::ftm::{
     FTM_MEASUREMENT_PREFIX_LEN, FTM_PARAMETERS_ELEMENT_LEN, FtmMeasurementFields,
     encode_measurement,
@@ -895,5 +896,5 @@ fn local_timing_proves_a_nonzero_token_through_the_bitmap_boundary() {
 }
 
 fn individual(octet: u8) -> IndividualAddress {
-    IndividualAddress::new([2, octet, octet, octet, octet, octet]).unwrap()
+    IndividualAddress::new(Eui48::new([2, octet, octet, octet, octet, octet])).unwrap()
 }

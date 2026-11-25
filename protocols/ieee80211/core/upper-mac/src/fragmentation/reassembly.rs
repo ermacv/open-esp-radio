@@ -4,6 +4,7 @@
 
 use super::FragmentAdmissionEpoch;
 use crate::duplicate::RetrySubfield;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::data::{LLC_SNAP_HEADER_LEN, MsduParts, rfc1042_ether_type};
 
 use super::{
@@ -263,7 +264,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         for slot in &mut self.slots {
             if slot
                 .identity()
-                .is_some_and(|identity| identity.transmitter_address() == transmitter)
+                .is_some_and(|identity| identity.transmitter_address() == Eui48::new(transmitter))
             {
                 // At most one per slot, so at most CONTEXTS.
                 discarded = discarded.saturating_add(usize::from(slot.is_active()));

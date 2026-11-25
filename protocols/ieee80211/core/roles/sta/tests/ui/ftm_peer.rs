@@ -1,5 +1,5 @@
 #![no_std]
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee802_wire::IndividualAddress;
 use oer_protocols_ieee80211_core_roles_sta::ftm::{FtmRefusal, FtmRequester, FtmSession};
 use oer_portable_time::Instant;
 

@@ -1,4 +1,5 @@
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::security::SaePwe;
 
 use oer_protocols_ieee80211_core_security_rsn::sae::SaePasswordElement;
@@ -47,9 +48,9 @@ fn access_point_commit(access_point: &SaeCommit) -> Vec<u8> {
 fn start(now: Instant) -> (StaSaeAuthentication, StaSaeTransmission) {
     StaSaeAuthentication::new(
         OwnAddress::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        Bssid::new(oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap())
+        Bssid::new(oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap())
             .unwrap(),
         commit(LOCAL, BSSID, 0x20),
         SaePwe::HuntingAndPecking,
@@ -189,9 +190,9 @@ fn a_wrong_password_or_a_refusal_fails() {
 fn deadline_overflow_refuses_before_issuing_a_commit() {
     let result = StaSaeAuthentication::new(
         OwnAddress::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
         ),
-        Bssid::new(oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap())
+        Bssid::new(oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap())
             .unwrap(),
         commit(LOCAL, BSSID, 0x20),
         SaePwe::HuntingAndPecking,

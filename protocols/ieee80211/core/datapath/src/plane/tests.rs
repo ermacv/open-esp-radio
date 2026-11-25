@@ -5,6 +5,7 @@ use crate::cost::{Response, transmission_micros};
 use crate::model::{Installed, SINGLES, installed};
 use core::num::{NonZeroU8, NonZeroU16};
 use oer_portable_time::Duration;
+use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
 use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, PortRate, Protection, RetryPlan, RetryStage, RxMeta,
 };
@@ -17,7 +18,7 @@ use oer_protocols_ieee80211_testing_model::{
 };
 use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 use oer_protocols_ieee80211_wire::{
-    address::{Bssid, IndividualAddress, OwnAddress},
+    address::{Bssid, OwnAddress},
     frame::{FrameControlFields, sequence_control},
     phy::{HtMcs, HtRate, LegacyRate, PpduBandwidth},
 };
@@ -50,8 +51,8 @@ fn ht() -> PhyRate {
 fn link(protection: LinkProtection) -> DataLink {
     DataLink {
         header: StaDataHeaderTemplate::new(
-            OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
-            Bssid::new(IndividualAddress::new(ACCESS_POINT).unwrap()).unwrap(),
+            OwnAddress::new(IndividualAddress::new(Eui48::new(STATION)).unwrap()),
+            Bssid::new(IndividualAddress::new(Eui48::new(ACCESS_POINT)).unwrap()).unwrap(),
             PeerQos::Qos,
             protection,
         )
@@ -1238,8 +1239,8 @@ fn without_a_threshold_or_at_an_ht_rate_nothing_is_protected() {
 fn a_front_is_its_mac_header_its_ccmp_header_and_its_llc_snap_header() {
     let front = |qos, protection| {
         let header = StaDataHeaderTemplate::new(
-            OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
-            Bssid::new(IndividualAddress::new(ACCESS_POINT).unwrap()).unwrap(),
+            OwnAddress::new(IndividualAddress::new(Eui48::new(STATION)).unwrap()),
+            Bssid::new(IndividualAddress::new(Eui48::new(ACCESS_POINT)).unwrap()).unwrap(),
             qos,
             protection,
         )

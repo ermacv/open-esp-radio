@@ -67,6 +67,7 @@
 //! awaits its end: there is no queue of actions to overflow.
 
 use core::marker::PhantomData;
+use oer_protocols_ieee802_wire::{Eui48, GroupAddress, IndividualAddress};
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 /// Why an EAPOL-Key packet is not one, as [`StaDisconnectReason::InvalidEapol`]
 /// carries it.
@@ -77,9 +78,9 @@ use oer_protocols_ieee80211_wire::status::reason_code;
 use crate::events::{ConnectStep, RsnDrop, ScanOutcome, StaEvent};
 use oer_portable_events::{EventSink, report};
 use oer_protocols_ieee80211_contracts_port::{
-    AckHeader, ConnectionFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength,
-    ReceiveFilter, RxMetadata, SingleEnd, SingleOutcome, SizedFrame, Station as StationRole,
-    StationReceive, SupportedChannel, SupportedEdca, SupportedFilter, TxOutcome,
+    AckHeader, ConnectionFrame, HeaderSpec, Ieee80211Capabilities, MpduLength, ReceiveFilter,
+    RxMetadata, SingleEnd, SingleOutcome, SizedFrame, Station as StationRole, StationReceive,
+    SupportedChannel, SupportedEdca, SupportedFilter, TxOutcome,
 };
 use oer_protocols_ieee80211_core_arbiter::{
     AbsenceAnswer, AbsencePlace, Answer, ChannelRequest, Lease, LeaseId, LeasePlace, LeaveReason,
@@ -100,7 +101,7 @@ use oer_protocols_ieee80211_core_security_rsn::{
 use oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding;
 use oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission;
 use oer_protocols_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
-use oer_protocols_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress};
+use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use {
     crate::{
@@ -109,7 +110,7 @@ use {
     },
     oer_protocols_ieee80211_core_upper_mac::{phy_mode::NegotiatedPhy, sequence::SequenceCounter},
     oer_protocols_ieee80211_wire::{
-        management::{BROADCAST_ADDRESS, MAX_SSID_LEN, ProbeRequest},
+        management::{MAX_SSID_LEN, ProbeRequest},
         scan::ScanRecord,
         security::{AssociationAkm, AssociationSecurity, RsnAssociation},
         sequence::SequenceNumber,
@@ -3039,11 +3040,12 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                         .into(),
                 );
             };
-            let eapol =
-                OwnedEapolFrame::try_copy(RsnInterface::Station, connected.bssid.get(), payload)
-                    .map_err(|_| {
-                        oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Payload
-                    })?;
+            let eapol = OwnedEapolFrame::try_copy(
+                RsnInterface::Station,
+                connected.bssid.get().octets(),
+                payload,
+            )
+            .map_err(|_| oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Payload)?;
             let Some(rsn) = connected.rsn.as_mut() else {
                 return Err(
                     oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::Protection
@@ -4722,17 +4724,22 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                             oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking => {
                                 SaePasswordElement::hunting_and_pecking(
                                     password.as_bytes(),
-                                    self.config.address.get(),
-                                    bssid.get(),
+                                    self.config.address.get().octets(),
+                                    bssid.get().octets(),
                                 )
-                                .map_err(|error| sae_derivation_failure(error, bssid.get(), pwe))?
+                                .map_err(|error| {
+                                    sae_derivation_failure(error, bssid.get().octets(), pwe)
+                                })?
                             }
                             oer_protocols_ieee80211_wire::security::SaePwe::HashToElement => {
                                 SaePasswordToken::derive(&profile.ssid, password.as_bytes(), None)
                                     .map_err(|error| {
-                                        sae_derivation_failure(error, bssid.get(), pwe)
+                                        sae_derivation_failure(error, bssid.get().octets(), pwe)
                                     })?
-                                    .password_element(self.config.address.get(), bssid.get())
+                                    .password_element(
+                                        self.config.address.get().octets(),
+                                        bssid.get().octets(),
+                                    )
                             }
                         };
                         let commit = SaeCommit::new(
@@ -4740,7 +4747,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                             self.config.callbacks.nonce(),
                             self.config.callbacks.nonce(),
                         )
-                        .map_err(|error| sae_derivation_failure(error, bssid.get(), pwe))?;
+                        .map_err(|error| {
+                            sae_derivation_failure(error, bssid.get().octets(), pwe)
+                        })?;
                         let (authentication, transmission) =
                             StaSaeAuthentication::new(self.config.address, bssid, commit, pwe, now)
                                 .map_err(StaDisconnectReason::Sae)?;
@@ -4934,9 +4943,12 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     payload,
                     protection,
                 }) => {
-                    let eapol =
-                        OwnedEapolFrame::try_copy(RsnInterface::Station, bssid.get(), payload)
-                            .map_err(|_| RxDropReason::Payload)?;
+                    let eapol = OwnedEapolFrame::try_copy(
+                        RsnInterface::Station,
+                        bssid.get().octets(),
+                        payload,
+                    )
+                    .map_err(|_| RxDropReason::Payload)?;
                     let change = match &mut *state {
                         State::Handshake(handshake) => {
                             self.handshake_eapol(handshake, now, eapol, protection)
@@ -5990,7 +6002,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             tag: StaTxTag { epoch, purpose },
             frame: StaFrame::BlockAckRequest {
                 receiver,
-                transmitter: self.config.address.get(),
+                transmitter: self.config.address.get().octets(),
                 tid: port_tid,
                 starting_sequence: start,
             },
@@ -6817,8 +6829,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         // The checked handshake is built straight into the role's slot; the
         // language moves it there by value.
         let supplicant = RsnStaHandshake::new(
-            self.config.address.get(),
-            bssid.get(),
+            self.config.address.get().octets(),
+            bssid.get().octets(),
             self.config.callbacks.nonce(),
             join.rsn.as_bytes(),
             join.access_point.rsn_ie_bytes(),
@@ -7004,9 +7016,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 epoch,
                 |output| {
                     ProbeRequest {
-                        destination: BROADCAST_ADDRESS,
+                        destination: Eui48::BROADCAST,
                         source: address,
-                        bssid: BROADCAST_ADDRESS,
+                        bssid: Eui48::BROADCAST,
                         sequence_number,
                         ssid: &ssid,
                         supported_rates: &rates,

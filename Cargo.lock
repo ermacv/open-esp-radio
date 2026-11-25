@@ -2284,6 +2284,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-protocols-ieee802-wire"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-wire",
+]
+
+[[package]]
 name = "oer-protocols-ieee80211-contracts-port"
 version = "0.1.0"
 dependencies = [
@@ -2292,6 +2299,7 @@ dependencies = [
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-portable-wire",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-wire",
  "oer-protocols-radio-coex",
@@ -2314,6 +2322,7 @@ name = "oer-protocols-ieee80211-core-arbiter"
 version = "0.1.0"
 dependencies = [
  "oer-portable-time",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-core-upper-mac",
  "oer-protocols-ieee80211-wire",
@@ -2329,6 +2338,7 @@ dependencies = [
  "heapless 0.9.3",
  "oer-portable-events",
  "oer-portable-time",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-core-installation",
@@ -2357,6 +2367,7 @@ dependencies = [
  "oer-portable-crypto",
  "oer-portable-time",
  "oer-portable-wire",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-core-security-cipher",
  "oer-protocols-ieee80211-core-security-rsn",
@@ -2374,6 +2385,7 @@ dependencies = [
  "oer-portable-memory",
  "oer-portable-time",
  "oer-portable-time-virtual",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-core-arbiter",
@@ -2396,6 +2408,7 @@ dependencies = [
  "aes",
  "oer-portable-crypto",
  "oer-portable-wire",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-wire",
  "oer-tools-test-ui-cases",
@@ -2413,6 +2426,7 @@ dependencies = [
  "oer-portable-crypto",
  "oer-portable-time",
  "oer-portable-wire",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-core-security-cipher",
  "oer-protocols-ieee80211-core-upper-mac",
@@ -2435,6 +2449,7 @@ dependencies = [
  "oer-portable-events",
  "oer-portable-time",
  "oer-portable-time-virtual",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-wire",
@@ -2455,6 +2470,7 @@ name = "oer-protocols-ieee80211-testing-conformance"
 version = "0.1.0"
 dependencies = [
  "oer-portable-time",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-wire",
@@ -2465,6 +2481,7 @@ name = "oer-protocols-ieee80211-testing-model"
 version = "0.1.0"
 dependencies = [
  "oer-portable-time",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-testing-conformance",
  "oer-protocols-ieee80211-wire",
@@ -2478,6 +2495,7 @@ name = "oer-protocols-ieee80211-wire"
 version = "0.1.0"
 dependencies = [
  "oer-portable-wire",
+ "oer-protocols-ieee802-wire",
  "tempfile",
 ]
 
@@ -3011,6 +3029,7 @@ dependencies = [
  "libc",
  "oer-portable-time",
  "oer-portable-time-virtual",
+ "oer-protocols-ieee802-wire",
  "oer-protocols-ieee80211-wire",
  "oer-tools-os-durable",
  "oer-tools-os-process",

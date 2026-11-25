@@ -1,5 +1,6 @@
 use crate::ap::profile::tests::TEST_ADVERTISEMENT;
 use crate::sequence::seq;
+use oer_protocols_ieee802_wire::Eui48;
 
 use super::{
     AP_BEACON_CAPACITY, ApBeaconBuildError, ApBeaconProtectionError, dtim, stamp,
@@ -79,7 +80,7 @@ fn a_wpa3_beacon_carries_its_rsne_and_rsnxe_to_the_scan_record() {
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut bytes,
-        ap,
+        Eui48::new(ap),
         &ssid,
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
         100,
@@ -112,7 +113,7 @@ fn builds_the_bounded_wpa2_ht20_beacon() {
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut bytes,
-        ap,
+        Eui48::new(ap),
         &ssid,
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
         100,
@@ -148,7 +149,7 @@ fn ht40_beacon_advertises_the_validated_secondary_channel() {
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut bytes,
-        [2; 6],
+        Eui48::new([2; 6]),
         &ssid,
         crate::channel::Channel::from_ghz2_4_channel(channel),
         100,
@@ -193,7 +194,7 @@ fn rejects_unrepresentable_beacon_policy_before_mutation() {
         write_ht_beacon(
             &TEST_ADVERTISEMENT,
             &mut bytes,
-            [0; 6],
+            Eui48::new([0; 6]),
             &ssid,
             crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(14).unwrap()),
             100,
@@ -213,7 +214,7 @@ fn protection_update_rewrites_only_erp_and_ht_operation_after_tim_growth() {
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut bytes,
-        [2; 6],
+        Eui48::new([2; 6]),
         &Ssid::new(b"ap").unwrap(),
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
         100,
@@ -294,7 +295,7 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
         write_ht_beacon(
             &TEST_ADVERTISEMENT,
             &mut bytes,
-            ap,
+            Eui48::new(ap),
             &ssid,
             channel,
             100,
@@ -308,7 +309,7 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
     let len = write_ht_beacon(
         &OFDM_ADVERTISEMENT,
         &mut bytes,
-        ap,
+        Eui48::new(ap),
         &ssid,
         channel,
         100,
@@ -396,7 +397,7 @@ fn template_edits_insert_count_and_remove_elements_after_the_tim() {
     let len = write_ht_beacon(
         &TEST_ADVERTISEMENT,
         &mut bytes,
-        [0x02, 0, 0, 0, 0, 1],
+        Eui48::new([0x02, 0, 0, 0, 0, 1]),
         &Ssid::new(b"ap").unwrap(),
         crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
         100,

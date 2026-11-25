@@ -1,5 +1,6 @@
 use super::*;
 use crate::sequence::seq;
+use oer_protocols_ieee802_wire::Eui48;
 
 const SOURCE: [u8; 6] = [0x02, 0x00, 0x00, 0x12, 0x34, 0x56];
 
@@ -7,9 +8,9 @@ const SOURCE: [u8; 6] = [0x02, 0x00, 0x00, 0x12, 0x34, 0x56];
 fn encodes_wildcard_probe_request() {
     let mut output = [0xa5; 64];
     let length = ProbeRequest {
-        destination: BROADCAST_ADDRESS,
-        source: SOURCE,
-        bssid: BROADCAST_ADDRESS,
+        destination: Eui48::BROADCAST,
+        source: Eui48::new(SOURCE),
+        bssid: Eui48::BROADCAST,
         sequence_number: seq(0x123),
         ssid: b"",
         supported_rates: &[0x82, 0x84, 0x8b, 0x96],
@@ -35,9 +36,9 @@ fn encodes_directed_request_and_extended_rates() {
     ];
     let mut output = [0; 64];
     let length = ProbeRequest {
-        destination: BROADCAST_ADDRESS,
-        source: SOURCE,
-        bssid: BROADCAST_ADDRESS,
+        destination: Eui48::BROADCAST,
+        source: Eui48::new(SOURCE),
+        bssid: Eui48::BROADCAST,
         sequence_number: seq(0),
         ssid: b"open",
         supported_rates: &rates,
@@ -58,9 +59,9 @@ fn encodes_directed_request_and_extended_rates() {
 fn rejects_invalid_inputs_before_touching_output() {
     let mut output = [0xa5; 31];
     let error = ProbeRequest {
-        destination: BROADCAST_ADDRESS,
-        source: SOURCE,
-        bssid: BROADCAST_ADDRESS,
+        destination: Eui48::BROADCAST,
+        source: Eui48::new(SOURCE),
+        bssid: Eui48::BROADCAST,
         sequence_number: seq(0),
         ssid: b"",
         supported_rates: &[0x82, 0x84, 0x8b, 0x96],
@@ -72,9 +73,9 @@ fn rejects_invalid_inputs_before_touching_output() {
 
     assert_eq!(
         ProbeRequest {
-            destination: BROADCAST_ADDRESS,
-            source: SOURCE,
-            bssid: BROADCAST_ADDRESS,
+            destination: Eui48::BROADCAST,
+            source: Eui48::new(SOURCE),
+            bssid: Eui48::BROADCAST,
             sequence_number: seq(0),
             ssid: &[0; MAX_SSID_LEN + 1],
             supported_rates: &[0x82],
@@ -84,9 +85,9 @@ fn rejects_invalid_inputs_before_touching_output() {
     );
     assert_eq!(
         ProbeRequest {
-            destination: BROADCAST_ADDRESS,
-            source: SOURCE,
-            bssid: BROADCAST_ADDRESS,
+            destination: Eui48::BROADCAST,
+            source: Eui48::new(SOURCE),
+            bssid: Eui48::BROADCAST,
             sequence_number: seq(0),
             ssid: b"",
             supported_rates: &[],
@@ -110,10 +111,13 @@ fn a_management_header_round_trips_and_a_short_frame_is_refused() {
     assert!(header.frame_control.protected());
     assert_eq!(header.duration.value(), 0x013a);
     assert!(header.group_receiver());
-    assert_eq!(header.transmitter, [2; 6]);
-    assert_eq!(header.bssid, [4; 6]);
+    assert_eq!(header.transmitter, Eui48::new([2; 6]));
+    assert_eq!(header.bssid, Eui48::new([4; 6]));
     assert_eq!(header.sequence_control.sequence().get(), 0x123);
     assert_eq!(body, &[7, 8]);
     assert_eq!(header.to_bytes(), frame[..24]);
     assert_eq!(ManagementHeader::split(&frame[..23]), None);
+    frame[4] = 2;
+    let (header, _) = ManagementHeader::split(&frame).unwrap();
+    assert!(!header.group_receiver());
 }

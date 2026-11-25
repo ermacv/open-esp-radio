@@ -508,7 +508,7 @@ impl<'id> World<'id> {
         );
         let config = StaConfig {
             address: oer_protocols_ieee80211_wire::address::OwnAddress::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+                oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
             ),
             channels,
             wide_channels: heapless::Vec::new(),
@@ -1361,7 +1361,7 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
                 Seen::Edca(WmmParameterSet::DCF),
                 Seen::Notify(StaNotice::Connected {
                     bssid: oer_protocols_ieee80211_wire::address::Bssid::new(
-                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
+                        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID))
                             .unwrap()
                     )
                     .unwrap(),
@@ -2106,7 +2106,7 @@ fn scan_without_a_ds_element_uses_the_received_channel_configuration() {
             .station
             .scan
             .observations()
-            .find(|observation| observation.record.bssid.get() == other_bssid)
+            .find(|observation| observation.record.bssid.get() == Eui48::new(other_bssid))
             .unwrap();
         assert_eq!(observation.channel, received_channel);
     }
@@ -2168,7 +2168,7 @@ fn a_frame_of_the_previous_connection_holds_its_place_until_its_end_which_change
             .0
             .encode_null(
                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+                    oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
                 )
                 .unwrap(),
                 StaPowerManagement::Active,
@@ -2514,7 +2514,7 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
                     },
                     Seen::Notify(StaNotice::Connected {
                         bssid: oer_protocols_ieee80211_wire::address::Bssid::new(
-                            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
+                            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID))
                                 .unwrap()
                         )
                         .unwrap(),
@@ -2861,10 +2861,10 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
         // The frames' protection plays no part in their numbering.
         let header = oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate::new(
             oer_protocols_ieee80211_wire::address::OwnAddress::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
+                oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL)).unwrap(),
             ),
             oer_protocols_ieee80211_wire::address::Bssid::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+                oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
             )
             .unwrap(),
             oer_protocols_ieee80211_wire::data::PeerQos::Qos,
@@ -3516,7 +3516,7 @@ fn deauthentication_goes_while_a_frame_of_another_purpose_is_out() {
             .0
             .encode_null(
                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+                    oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
                 )
                 .unwrap(),
                 StaPowerManagement::Active,
@@ -3709,11 +3709,11 @@ fn association_waits_for_its_frame_without_consuming_a_request_and_still_expires
             step: JoinStep::Associate(
                 StaAssociationRuntime::new(
                     oer_protocols_ieee80211_wire::address::OwnAddress::new(
-                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL)
+                        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(LOCAL))
                             .unwrap(),
                     ),
                     oer_protocols_ieee80211_wire::address::Bssid::new(
-                        oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID)
+                        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID))
                             .unwrap(),
                     )
                     .unwrap(),
@@ -3943,8 +3943,8 @@ fn every_control_encoder_takes_its_place_before_consuming_its_sequence() {
                             .0
                             .encode_eapol(
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
-                                        BSSID,
+                                    oer_protocols_ieee802_wire::IndividualAddress::new(
+                                        Eui48::new(BSSID),
                                     )
                                     .unwrap(),
                                 )
@@ -3959,8 +3959,8 @@ fn every_control_encoder_takes_its_place_before_consuming_its_sequence() {
                             .0
                             .encode_null(
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
-                                        BSSID,
+                                    oer_protocols_ieee802_wire::IndividualAddress::new(
+                                        Eui48::new(BSSID),
                                     )
                                     .unwrap(),
                                 )
@@ -3973,8 +3973,8 @@ fn every_control_encoder_takes_its_place_before_consuming_its_sequence() {
                             .0
                             .encode_protected_eapol(
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
-                                        BSSID,
+                                    oer_protocols_ieee802_wire::IndividualAddress::new(
+                                        Eui48::new(BSSID),
                                     )
                                     .unwrap(),
                                 )
@@ -3990,8 +3990,8 @@ fn every_control_encoder_takes_its_place_before_consuming_its_sequence() {
                             .0
                             .encode_protected_eapol(
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
-                                        BSSID,
+                                    oer_protocols_ieee802_wire::IndividualAddress::new(
+                                        Eui48::new(BSSID),
                                     )
                                     .unwrap(),
                                 )
@@ -4009,8 +4009,8 @@ fn every_control_encoder_takes_its_place_before_consuming_its_sequence() {
                             .encode_management(
                                 StaManagementSubtype::Deauthentication,
                                 oer_protocols_ieee80211_wire::address::Bssid::new(
-                                    oer_protocols_ieee80211_wire::address::IndividualAddress::new(
-                                        BSSID,
+                                    oer_protocols_ieee802_wire::IndividualAddress::new(
+                                        Eui48::new(BSSID),
                                     )
                                     .unwrap(),
                                 )
@@ -5396,7 +5396,7 @@ fn eapol_under_a_closed_voice_category_contends_as_video_in_tid_five() {
         // The station numbers its own frames while it holds its link.
         world.return_link();
         let bssid = oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
         )
         .unwrap();
         let voice = closed(&[WmmAccessCategory::Voice]);
@@ -5495,7 +5495,7 @@ fn ht_access_point(operation_width: Option<ChannelWidth>) -> ScanRecord {
     };
     let mut record = ScanRecord::new(
         oer_protocols_ieee80211_wire::address::Bssid::new(
-            oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new(BSSID)).unwrap(),
         )
         .unwrap(),
     );

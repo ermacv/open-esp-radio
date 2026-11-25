@@ -4,6 +4,7 @@
 //! reorder's (C2).
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{RxCryptoStatus, RxEvidence, RxMeta};
 use oer_protocols_ieee80211_wire::channel::{Channel, ChannelWidth};
 
@@ -528,8 +529,8 @@ fn a_protected_link_takes_unprotected_eapol_alone() {
         }
         let mut link = station_link(2, HOUR);
         link.data.header = StaDataHeaderTemplate::new(
-            OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
-            Bssid::new(IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap()).unwrap(),
+            OwnAddress::new(IndividualAddress::new(Eui48::new(STATION)).unwrap()),
+            Bssid::new(IndividualAddress::new(Eui48::new(ACCESS_POINT_ADDRESS)).unwrap()).unwrap(),
             PeerQos::Qos,
             LinkProtection::Ccmp,
         )
@@ -659,8 +660,8 @@ pub(super) fn addba(starting: u16) -> Vec<u8> {
 /// The access point's BlockAckReq for TID 0 from `starting`.
 fn bar(starting: u16) -> Vec<u8> {
     oer_protocols_ieee80211_wire::block_ack::frame::encode_block_ack_request(
-        STATION,
-        ACCESS_POINT_ADDRESS,
+        Eui48::new(STATION),
+        Eui48::new(ACCESS_POINT_ADDRESS),
         0,
         SequenceNumber::new(starting).unwrap(),
     )

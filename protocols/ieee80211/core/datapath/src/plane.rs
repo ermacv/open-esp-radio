@@ -50,6 +50,7 @@ use crate::events::{AggregateSettled, DataEvent, DataLoss};
 use crate::numbers::{TxKey, TxNumbers};
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Arena, ArenaOutcome, ArenaSide, DataPort, FrameSet, GateOpen,
     HEADROOM, HeaderLen, IdleArena, Ieee80211Capabilities, MpduLength, MpduStartSpacing, OnAir,
@@ -1601,7 +1602,7 @@ fn write_front(
     // The Ethernet header: destination, source, EtherType.
     let [.., d0, d1, d2, d3, d4, d5, _, _, _, _, _, _, e0, e1] = *headroom;
     let fields = StaDataHeaderFields {
-        destination: [d0, d1, d2, d3, d4, d5],
+        destination: Eui48::new([d0, d1, d2, d3, d4, d5]),
         sequence_number,
         priority,
         ether_type: u16::from_be_bytes([e0, e1]),

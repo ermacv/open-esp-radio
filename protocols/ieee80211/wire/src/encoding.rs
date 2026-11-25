@@ -192,8 +192,8 @@ impl<'a> AmsduBody<'a> {
                     }
                 };
                 [
-                    Fragment::Borrowed(&frame.destination),
-                    Fragment::Borrowed(&frame.source),
+                    Fragment::Borrowed(frame.destination.as_octets()),
+                    Fragment::Borrowed(frame.source.as_octets()),
                     Fragment::Word(
                         crate::data::AmsduLength::of(
                             // Nor does this: admission proves the sum.
@@ -213,6 +213,7 @@ impl<'a> AmsduBody<'a> {
 #[cfg(test)]
 mod tests {
     use super::FrameParts;
+    use oer_protocols_ieee802_wire::Eui48;
 
     #[test]
     fn overlapping_moves_match_memmove_and_refuse_invalid_ranges_without_writes() {
@@ -280,8 +281,8 @@ mod tests {
 
     fn msdu(destination: [u8; 6], source: [u8; 6], payload: &[u8]) -> super::MsduParts<'_> {
         super::MsduParts {
-            destination,
-            source,
+            destination: Eui48::new(destination),
+            source: Eui48::new(source),
             ether_type: 0x0800,
             payload,
         }
@@ -316,8 +317,8 @@ mod tests {
             let frames = [
                 msdu([0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11], &payload),
                 super::MsduParts {
-                    destination: [0xa5; 6],
-                    source: [0xa5; 6],
+                    destination: Eui48::new([0xa5; 6]),
+                    source: Eui48::new([0xa5; 6]),
                     ether_type: 0xa5a5,
                     payload: &[],
                 },
