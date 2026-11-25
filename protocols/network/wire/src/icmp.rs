@@ -6,7 +6,7 @@
 use oer_portable_wire::Reader;
 
 use crate::checksum::Checksum;
-use crate::code::octet_code;
+use oer_portable_wire::octet_code;
 
 /// RFC 792: Type, Code, Checksum, Identifier and Sequence Number.
 pub const ECHO_HEADER_LEN: usize = 8;
@@ -20,7 +20,7 @@ oer_portable_wire::bitfield! {
     }
 }
 
-octet_code! { icmp;
+octet_code! { "oer_protocols_network_wire::icmp";
     /// The Code of an ICMP message: any octet. What it says is its Type's.
     ///
     /// SOURCE: RFC 792 (Echo or Echo Reply Message, Code).

@@ -17,6 +17,7 @@
 //! integer represented in the declared byte order. Setters reject values that
 //! do not fit and retain every other bit, including reserved bits.
 
+mod code;
 mod value;
 pub use value::{PrefixLength, U8, U16, U32, U64};
 
