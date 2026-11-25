@@ -71,11 +71,19 @@ the first missed (`--iterate` keeps the mutants already caught):
 ```sh
 mkdir -p target/mutants/tmp
 git diff origin/<base>... > target/mutants/pr.diff
-TMPDIR=$PWD/target/mutants/tmp cargo mutants -p <package> \
-  --in-diff target/mutants/pr.diff --output target/mutants --jobs 4
-TMPDIR=$PWD/target/mutants/tmp cargo mutants -p <package> --no-config \
-  --in-diff target/mutants/pr.diff --output target/mutants --jobs 4 --iterate
+(ulimit -v 4194304
+ export CARGO_BUILD_JOBS=4 TMPDIR=$PWD/target/mutants/tmp
+ cargo mutants -p <package> \
+   --in-diff target/mutants/pr.diff --output target/mutants --jobs 1
+ cargo mutants -p <package> --no-config \
+   --in-diff target/mutants/pr.diff --output target/mutants --jobs 1 --iterate)
 ```
+
+A mutant can make a test that collects endless, and the machine's memory is
+gone long before the mutant's time is: 4 GiB a process and one job bound the
+run, and an allocation past the limit aborts the test, which catches the
+mutant. An allocation failure of the compiler, in an `unviable` log, is a
+mutant not tested: it is run again.
 
 A search's binaries are built with `opt-level = 1` and the overflow checks
 kept, by the environment, never by a profile in the tree:
@@ -92,10 +100,10 @@ memory in it, under `ulimit -v`. A check that will not end is stopped and
 reported (what ran, for how long, at what memory), never left to run behind
 another.
 
-Four jobs: over the whole engine crate (582 mutants), four took 11 min
-19 s with 25 missed and 10 timed out, eight 9 min 34 s with 22 missed and
-13 timed out. More jobs gained little, and the load turned missed mutants
-into timeouts, whose limit is set from the unmutated baseline. Run it
+More jobs gain little besides: over the whole engine crate (582 mutants) four
+took 11 min 19 s with 25 missed and 10 timed out, eight 9 min 34 s with 22
+missed and 13 timed out, and the load turned missed mutants into timeouts,
+whose limit is set from the unmutated baseline. Run it
 without a
 `CARGO_TARGET_DIR` inside the clone: with one, the compile-fail cases of the
 unmutated baseline keep the copy's absolute path in their output and fail.

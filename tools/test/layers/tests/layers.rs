@@ -8346,26 +8346,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_FINAL_CRATES,
     ),
     (
-        "protocols/network/core/src/places.rs::Line.head",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/places.rs::Line.tail",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/places.rs::Place.next",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/places.rs::Place.on",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/network/core/src/places.rs::Place.previous",
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/network/port/src/slot.rs::Slot.held",
         BY_FINAL_CRATES,
     ),

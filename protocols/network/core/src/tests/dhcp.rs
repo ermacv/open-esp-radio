@@ -598,7 +598,9 @@ fn a_lease_counts_from_the_first_request_the_port_took_not_from_a_refused_one() 
         let xid = assert_discover(&one(stack, at(0)));
         give(stack, at(0), &Reply::new(MessageType::Offer, xid).frame());
         let mut now = at(0);
+        let mut passes = Passes::default();
         while now < at(4000) {
+            passes.one();
             assert_eq!(refused_turn(stack, now), 1);
             now = stack.poll_deadline().unwrap();
         }
@@ -1064,7 +1066,9 @@ fn an_unanswered_init_reboot_repeats_on_the_discover_schedule_until_the_lease_en
         // goes and discovery starts over.
         let version = stack.address_version();
         let mut now = last;
+        let mut passes = Passes::default();
         while now < secs(1000) {
+            passes.one();
             now = stack.poll_deadline().unwrap();
             let sent = one(stack, now);
             if now < secs(1000) {
@@ -1367,7 +1371,9 @@ fn secs_counts_from_the_start_of_the_acquisition() {
         link_up(stack, 1);
         one(stack, at(0));
         let mut late = None;
+        let mut passes = Passes::default();
         while late.is_none() {
+            passes.one();
             let due = stack.poll_deadline().unwrap();
             let sent = one(stack, due);
             if due >= secs(3) {
@@ -1630,7 +1636,9 @@ fn a_prepared_remote_is_prepared_once_under_the_dhcp_reserve() {
                 tag += 1;
                 stack.declare(now, &socket, peer(), 16, tag).unwrap();
             }
+            let mut passes = Passes::default();
             while let Some(demand) = stack.poll_demand(now) {
+                passes.one();
                 let _sent = stack.transmit(
                     now,
                     demand.grant(),
@@ -1687,7 +1695,7 @@ fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
             stack.configuration().address,
             AddressState::Dhcp(DhcpState::Renewing(_))
         ));
-        let ready: Vec<_> = stack.demands(secs(500), &()).collect();
+        let ready: Vec<_> = finite(stack.demands(secs(500), &())).collect();
         assert!(
             ready
                 .iter()

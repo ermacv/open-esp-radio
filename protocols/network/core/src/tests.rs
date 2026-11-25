@@ -306,6 +306,28 @@ macro_rules! small {
     }};
 }
 
+/// More pieces of work than any core of these tests holds at once, and more
+/// passes than any of them takes to have none left.
+const MANY: usize = 256;
+
+/// `walk`, which ends: past [`MANY`] items the test fails at once, before
+/// what collects them takes the machine's memory.
+fn finite<T>(walk: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
+    let mut passes = Passes::default();
+    walk.inspect(move |_| passes.one())
+}
+
+/// The passes of a loop that ends: past [`MANY`] the test fails.
+#[derive(Default)]
+struct Passes(usize);
+
+impl Passes {
+    fn one(&mut self) {
+        self.0 += 1;
+        assert!(self.0 <= MANY, "the core never runs out of work");
+    }
+}
+
 fn peer() -> Remote {
     Remote {
         address: PEER_IP,
@@ -813,7 +835,9 @@ fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
         );
         let command = running(stack.take_result(command));
         let mut now = later;
+        let mut passes = Passes::default();
         while let Some(demand) = stack.poll_demand(now) {
+            passes.one();
             stack
                 .transmit(now, demand.grant(), unproduced, &())
                 .unwrap();
@@ -835,8 +859,7 @@ fn every_ready_piece_of_work_is_listed_with_who_it_is_for() {
             let block = filled(stack.pool(), b"x");
             let _command = stack.send(at(1), socket, peer(), block).unwrap();
         }
-        let listed: Vec<_> = stack
-            .demands(at(1), &())
+        let listed: Vec<_> = finite(stack.demands(at(1), &()))
             .map(|demand| {
                 (
                     demand.ready().flow,
@@ -963,7 +986,9 @@ fn a_grant_of_a_request_cannot_serve_a_later_resolution() {
         let first = stack.send(at(0), &socket, peer(), block).unwrap();
         let stale = stack.demands(at(0), &()).next().unwrap().grant();
         let mut now = at(0);
+        let mut passes = Passes::default();
         while let Some(demand) = stack.poll_demand(now) {
+            passes.one();
             stack
                 .transmit(now, demand.grant(), unproduced, &())
                 .unwrap();
@@ -1031,8 +1056,7 @@ fn every_reply_owed_is_listed_and_any_can_be_chosen() {
         stack
             .transmit(at(0), chosen.grant(), unproduced, &())
             .unwrap();
-        let left: Vec<_> = stack
-            .demands(at(0), &())
+        let left: Vec<_> = finite(stack.demands(at(0), &()))
             .map(|demand| demand.ready().peer)
             .collect();
         assert_eq!(left, [PEER]);
@@ -1197,7 +1221,9 @@ fn a_neighbor_that_never_answers_ends_its_datagrams_after_its_requests() {
         let mut command = stack.send(at(0), &socket, peer(), block).unwrap();
         let mut now = at(0);
         let mut requests = 0;
+        let mut passes = Passes::default();
         while let Some(demand) = stack.poll_demand(now) {
+            passes.one();
             stack
                 .transmit(now, demand.grant(), unproduced, &())
                 .unwrap();
@@ -1420,7 +1446,9 @@ fn sockets_take_turns() {
             let block = filled(stack.pool(), b"x");
             let _command = stack.send(at(1), socket, peer(), block).unwrap();
         }
+        let mut passes = Passes::default();
         while stack.demands(at(1), &()).next().is_some() {
+            passes.one();
             send_next(stack, at(1)).unwrap();
         }
         assert_eq!(senders(stack), [5000, 5001, 5000, 5001]);
@@ -1504,7 +1532,9 @@ fn refused_first<B: core::fmt::Debug>(stack: &mut Stack<B>, refusal: Refusal) {
     assert_eq!(send_next(stack, at(1)), Err(expected));
     stack.port_mut().faults.clear(PortFault::Rejects);
     stack.port_mut().room = None;
+    let mut passes = Passes::default();
     while stack.demands(at(1), &()).next().is_some() {
+        passes.one();
         send_next(stack, at(1)).unwrap();
     }
     assert_eq!(senders(stack), [5001, 5000], "the second socket's turn");
@@ -1762,7 +1792,7 @@ fn walk_blocks<B: Brand>(right: NetworkClaim<B>, seed: u64) {
                 }
             }
             6 => {
-                let queued: Vec<_> = stack.queued().collect();
+                let queued: Vec<_> = finite(stack.queued()).collect();
                 let count = queued.len();
                 if count != 0 {
                     let chosen = walk.below(count);

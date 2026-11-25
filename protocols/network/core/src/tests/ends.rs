@@ -30,7 +30,11 @@ fn told<B, P: FramePort, const S: usize, const C: usize>(
     stack: &mut NetworkOwner<'static, B, SIZE, S, C, 2, 2, BLOCKS, P>,
     ends: &Ends<B>,
 ) -> Vec<WorkId> {
-    core::iter::from_fn(|| stack.next_end(ends, &())).collect()
+    // One more than the ends there can be, so that a core that tells one for
+    // ever fails the test and does not fill the memory.
+    core::iter::from_fn(|| stack.next_end(ends, &()))
+        .take(S * C + 1)
+        .collect()
 }
 
 fn send_wide<B: core::fmt::Debug>(
@@ -146,7 +150,10 @@ fn the_ends_of_a_closed_socket_tell_nothing_of_the_next_in_its_place() {
         let first = stack.open(5000, best_effort()).unwrap();
         let old = first.ends();
         let close = stack.close(first).unwrap();
-        assert_eq!(core::iter::from_fn(|| stack.next_end(&old, &())).count(), 1);
+        assert_eq!(
+            finite(core::iter::from_fn(|| stack.next_end(&old, &()))).count(),
+            1
+        );
         assert_eq!(finished(stack.take_result(close)), Outcome::SocketClosed);
         let second = stack.open(5001, best_effort()).unwrap();
         let block = stack.pool().take().unwrap();
@@ -175,8 +182,7 @@ fn running_work_is_offered_in_the_order_it_was_accepted() {
         // The third takes the first's place, and goes after the second.
         let third = send_wide(stack, &socket, b"third");
         assert_eq!(third.work().place(), 0);
-        let order: Vec<_> = stack
-            .demands(at(1), &())
+        let order: Vec<_> = finite(stack.demands(at(1), &()))
             .map(|demand| demand.ready().length)
             .collect();
         assert_eq!(order, [14 + 20 + 8 + 6, 14 + 20 + 8 + 5]);
@@ -219,8 +225,7 @@ fn acceptance_order_is_no_send_order_a_ready_datagram_goes_before_one_waiting_fo
         let ready = send_wide(stack, &socket, b"ready");
         // The ARP request for the unknown neighbor, then the ready datagram:
         // the earlier one is not ready, so it is not offered.
-        let order: Vec<_> = stack
-            .demands(at(1), &())
+        let order: Vec<_> = finite(stack.demands(at(1), &()))
             .map(|demand| demand.ready().class)
             .collect();
         assert_eq!(order, [Class::Control, Class::Data]);
@@ -231,5 +236,18 @@ fn acceptance_order_is_no_send_order_a_ready_datagram_goes_before_one_waiting_fo
             stack.take_result(waiting),
             CommandState::Running(_)
         ));
+    });
+}
+
+/// A close's result read before its end was told frees its place: no end of
+/// it is told after.
+#[test]
+fn a_close_read_before_its_end_is_told_is_told_no_more() {
+    wide(|stack| {
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let ends = socket.ends();
+        let close = stack.close(socket).unwrap();
+        assert_eq!(finished(stack.take_result(close)), Outcome::SocketClosed);
+        assert!(told(stack, &ends).is_empty());
     });
 }
