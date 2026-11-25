@@ -180,6 +180,7 @@ fn a_penalty_is_the_vendor_s_octet() {
     for (limit, retries, penalty) in [
         (7, 7, 8),
         (7, 8, 9),
+        (7, 20, 9),
         (255, 255, 0),
         (255, 256, 1),
         (7, u32::MAX, 9),
@@ -1021,3 +1022,68 @@ fn the_last_record_of_every_table_is_the_slowest() {
 
 use crate::rate_record::RateScheduleRef;
 use oer_protocols_ieee80211_contracts_port::backend::RateScheduleKind;
+
+#[test]
+fn a_dot11g_link_begins_at_its_metric_s_record() {
+    for (metric, index) in [
+        (11, 10),
+        (12, 5),
+        (16, 5),
+        (17, 3),
+        (21, 3),
+        (22, 2),
+        (29, 2),
+        (30, 0),
+    ] {
+        let mut input = selection_input(1);
+        input.metric = metric;
+        let selection = select_phy_mode(input);
+        assert_eq!(selection.current.kind(), RateScheduleKind::Dot11G);
+        assert_eq!(selection.current.index(), index, "metric {metric}");
+    }
+}
+
+#[test]
+fn a_peer_to_peer_ht_link_begins_no_later_than_record_seven() {
+    for (metric, index) in [(8, 7), (11, 7), (13, 7), (16, 6), (21, 5)] {
+        let mut input = selection_input(2);
+        input.metric = metric;
+        input.p2p = Peering::PeerToPeer;
+        assert_eq!(
+            select_phy_mode(input).current,
+            crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, index).unwrap(),
+            "metric {metric}"
+        );
+    }
+}
+
+#[test]
+fn a_dot11b_link_begins_at_the_peer_s_highest_record_when_it_is_known() {
+    let mut input = selection_input(0);
+    input.use_supplied_highest_rate = true;
+    input.supplied_highest_rate = 11;
+    assert_eq!(
+        select_phy_mode(input).current,
+        literal_schedule!(RateScheduleKind::Dot11B, 1)
+    );
+}
+
+/// `rssi_margin`: three halves of what the SNR has over the rate's reference,
+/// in an octet, at most 32.
+#[test]
+fn a_margin_is_three_halves_of_the_snr_over_its_reference() {
+    // MCS 0 of HT, whose reference is 8.
+    for (snr, margin) in [
+        (8, 0),
+        (9, 0),
+        (10, 3),
+        (11, 3),
+        (28, 30),
+        (30, 32),
+        (127, 0),
+    ] {
+        assert_eq!(ampdu_rssi_margin(0x10, snr), margin, "SNR {snr}");
+    }
+    // The product's octet wraps before the limit: (182 >> 1) * 3 is 273.
+    assert_eq!(ampdu_rssi_margin(0x10, 190), 17);
+}
