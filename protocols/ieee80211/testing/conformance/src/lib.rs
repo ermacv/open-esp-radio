@@ -725,7 +725,7 @@ where
     let mut data = rights.data.take().expect("the data's rights are home");
     let [idle, other] = data.arenas;
     let link = harness.link();
-    let tid = oer_protocols_ieee80211_contracts_port::Tid::new(0).unwrap();
+    let tid = oer_protocols_ieee80211_wire::qos::Tid::constant::<0>();
     let mut arena = harness.port().open(idle, &link, tid);
     for _ in 0..frames {
         let memory = harness.memory(body);
@@ -1020,6 +1020,6 @@ pub fn no_call_returns_an_error<'id, P: DataPort<'id>>() {
         &mut P,
         IdleArena<'id>,
         &P::Link,
-        oer_protocols_ieee80211_contracts_port::Tid,
+        oer_protocols_ieee80211_wire::qos::Tid,
     ) -> oer_protocols_ieee80211_contracts_port::Arena<'id> = P::open;
 }

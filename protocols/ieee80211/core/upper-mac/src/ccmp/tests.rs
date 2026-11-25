@@ -53,8 +53,11 @@ fn a_new_key_epoch_starts_its_own_frontier_from_its_receive_sequence() {
     assert_eq!(old.highest(), pn(200));
     assert!(old.commit_immediate(pn(150)).is_err());
     let lanes = CcmpRxReplayState::from_receive_sequence([10, 0, 0, 0, 0, 0, 0, 0]).unwrap();
-    assert_eq!(lanes.highest(CcmpReplayLane::NonQos), Some(pn(10)));
-    assert_eq!(lanes.highest(CcmpReplayLane::Tid(15)), Some(pn(10)));
+    assert_eq!(lanes.highest(CcmpReplayLane::NonQos), pn(10));
+    assert_eq!(
+        lanes.highest(CcmpReplayLane::Tid(Tid::constant::<15>())),
+        pn(10)
+    );
 }
 
 #[test]
@@ -71,28 +74,28 @@ fn a_dropped_frontier_candidate_does_not_advance_it() {
 fn replay_admission_borrows_one_owner_and_cancel_does_not_advance_it() {
     let initial = CcmpPacketNumber::new(7).unwrap();
     let mut replay = CcmpRxReplayState::new(initial);
-    let tid0 = CcmpReplayLane::Tid(0);
-    let tid7 = CcmpReplayLane::Tid(7);
+    let tid0 = CcmpReplayLane::Tid(Tid::constant::<0>());
+    let tid7 = CcmpReplayLane::Tid(Tid::constant::<7>());
     let pn8 = CcmpPacketNumber::new(8).unwrap();
     let pn9 = CcmpPacketNumber::new(9).unwrap();
     let admission = replay.prepare(tid0, pn8).unwrap();
     assert_eq!(admission.lane(), tid0);
     assert_eq!(admission.packet_number(), pn8);
     admission.commit();
-    assert_eq!(replay.highest(tid0), Some(pn8));
+    assert_eq!(replay.highest(tid0), pn8);
     {
         let _cancelled = replay.prepare(tid0, pn9).unwrap();
     }
-    assert_eq!(replay.highest(tid0), Some(pn8));
+    assert_eq!(replay.highest(tid0), pn8);
     assert!(matches!(
         replay.prepare(tid0, pn8),
         Err(CcmpReplayError::Replayed { .. })
     ));
     replay.prepare(tid7, pn8).unwrap().commit();
-    assert_eq!(replay.highest(tid7), Some(pn8));
-    assert_eq!(replay.highest(CcmpReplayLane::NonQos), Some(initial));
+    assert_eq!(replay.highest(tid7), pn8);
+    assert_eq!(replay.highest(CcmpReplayLane::NonQos), initial);
     replay.commit_immediate(tid7, pn9).unwrap();
-    assert_eq!(replay.highest(tid7), Some(pn9));
+    assert_eq!(replay.highest(tid7), pn9);
     assert_eq!(
         replay.commit_immediate(tid7, pn9),
         Err(CcmpReplayError::Replayed {
@@ -100,15 +103,7 @@ fn replay_admission_borrows_one_owner_and_cancel_does_not_advance_it() {
             highest: pn9
         })
     );
-    assert_eq!(replay.highest(tid0), Some(pn8));
-    assert!(matches!(
-        replay.prepare(CcmpReplayLane::Tid(16), pn9),
-        Err(CcmpReplayError::InvalidTid)
-    ));
-    assert_eq!(
-        replay.commit_immediate(CcmpReplayLane::Tid(16), pn9),
-        Err(CcmpReplayError::InvalidTid)
-    );
+    assert_eq!(replay.highest(tid0), pn8);
 }
 
 #[test]
@@ -192,10 +187,9 @@ fn parse_and_check(bytes: &[u8]) {
         return;
     };
     for &[lane, low] in rest.as_chunks::<2>().0 {
-        let lane = if lane == 0xff {
-            CcmpReplayLane::NonQos
-        } else {
-            CcmpReplayLane::Tid(lane)
+        let lane = match Tid::new(lane) {
+            None => CcmpReplayLane::NonQos,
+            Some(tid) => CcmpReplayLane::Tid(tid),
         };
         let packet_number = CcmpPacketNumber::from_header_bytes([low, 0, 0, 0, 0, 0, 0, 0]);
         let _ = state.highest(lane);

@@ -1,5 +1,6 @@
 //! What a lower-MAC backend supports and what it performs autonomously.
 
+use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::{
     channel::{Band, Channel, ChannelWidth},
     he::HeChannelWidthSet,
@@ -377,7 +378,7 @@ pub struct LowerMacCapabilities {
     /// The receive rules an access-point interface may request.
     pub access_point_receive_filters: ReceiveFilter,
     /// Highest TID of a receive Block Ack agreement.
-    pub rx_block_ack_max_tid: u8,
+    pub rx_block_ack_max_tid: Tid,
     /// Largest receive Block Ack window.
     pub rx_block_ack_max_window: u16,
     /// Whether the backend delivers a received MPDU carrying an A-MSDU
@@ -465,7 +466,7 @@ mod tests {
             individual_no_ack: PhyFormatSet::NON_HT,
             station_receive_filters: ReceiveFilter::BSS_MEMBER,
             access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
-            rx_block_ack_max_tid: 7,
+            rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<7>(),
             rx_block_ack_max_window: 64,
             rx_amsdu_in_ampdu: true,
             edca_max_aifsn: 15,

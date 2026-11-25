@@ -2,6 +2,7 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::qos::Tid;
 use crate::sequence::SequenceControl;
 use oer_protocols_ieee802_wire::Eui48;
 
@@ -531,7 +532,7 @@ impl QosAckPolicy {
 impl QosControl {
     /// The QoS Control field of a QoS data frame, its EOSP and A-MSDU
     /// Present bits clear: a caller sets them with their fields' setters.
-    pub const fn new(tid: oer_portable_wire::U8<4>, ack_policy: QosAckPolicy, high: u8) -> Self {
+    pub const fn new(tid: crate::qos::Tid, ack_policy: QosAckPolicy, high: u8) -> Self {
         Self::from_bytes([0, high])
             .with_tid(tid)
             .with_ack_policy(ack_policy.field())
@@ -835,7 +836,7 @@ impl DurationId {
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5 (QoS Control field).
     pub struct QosControl[2] (little) {
-        pub tid, with_tid: (u8) = 0..4;
+        pub tid, with_tid: (Tid) = 0..4;
         pub eosp, with_eosp: bool = 4..5;
         pub ack_policy, with_ack_policy: (u8) = 5..7;
         pub amsdu, with_amsdu: bool = 7..8;

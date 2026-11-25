@@ -16,7 +16,7 @@ use oer_portable_bounded::Index;
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
-use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
+use oer_protocols_ieee80211_wire::qos::{Tid, WmmAccessCategory};
 use oer_protocols_ieee80211_wire::security::Spp;
 use oer_protocols_radio_port::ClockError;
 
@@ -24,7 +24,7 @@ use crate::life::{MintData, PortKey, RadioPort};
 use crate::{
     AggregateOutcome, AmpduRate, BssColor, GateClosed, GateOpen, Ieee80211Instant, MpduLength,
     MpduStartSpacing, PortRate, Protection, RetryPlan, SingleOutcome, StationHe, StationReceive,
-    SupportedBlockAck, SupportedEdca, TbttEvent, Tid, TxFrame,
+    SupportedBlockAck, SupportedEdca, TbttEvent, TxFrame,
 };
 
 /// The brand of one installation, invariant in `'id`.

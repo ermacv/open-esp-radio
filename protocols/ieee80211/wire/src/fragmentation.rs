@@ -6,6 +6,7 @@
 
 mod parsing;
 
+use crate::qos::Tid;
 use oer_protocols_ieee802_wire::Eui48;
 pub use parsing::{
     parse_ccmp_data_fragment, parse_ccmp_data_identity, parse_open_data_fragment,
@@ -60,9 +61,9 @@ impl OpenDataFragmentIdentity {
         self.sequence_number
     }
 
-    pub const fn tid(self) -> Option<u8> {
+    pub const fn tid(self) -> Option<Tid> {
         match self.qos_control {
-            Some(control) => Some(control.tid().get()),
+            Some(control) => Some(control.tid()),
             None => None,
         }
     }

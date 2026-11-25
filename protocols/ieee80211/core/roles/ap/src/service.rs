@@ -6,6 +6,7 @@ use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_wire::channel::ChannelWidth;
 use oer_protocols_ieee80211_wire::data::PeerQos;
 use oer_protocols_ieee80211_wire::phy::DsssPreamble;
+use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_protocols_ieee80211_wire::security::spp::SppScope;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -79,7 +80,7 @@ pub const AP_WPA2_SUBSEQUENT_RETRY_INTERVAL: oer_portable_time::Duration =
     oer_portable_time::Duration::from_secs(1);
 /// Retransmissions after the original M1 or M3 publication.
 pub const AP_WPA2_RETRY_ATTEMPTS: u8 = 3;
-pub const AP_TX_BLOCK_ACK_TID: u8 = 0;
+pub const AP_TX_BLOCK_ACK_TID: WmmUserPriority = WmmUserPriority::UP0;
 /// Bounded AP downlink window used for both negotiation and aggregate
 /// admission. AP and STA use the same 32-MPDU production aggregate contract;
 /// duplex fairness must be provided by the common MAC transaction scheduler,
@@ -722,7 +723,7 @@ fn new_ap_tx_block_ack() -> Result<TxBlockAckOriginator<1>, ApServiceError> {
             // are both source-owned. The operational agreement still keeps
             // this bit false unless the peer echoes support in its ADDBA
             // response.
-            amsdu_tids: 1 << AP_TX_BLOCK_ACK_TID,
+            amsdu_tids: &[AP_TX_BLOCK_ACK_TID],
         },
     )
     .map_err(ApServiceError::BlockAck)

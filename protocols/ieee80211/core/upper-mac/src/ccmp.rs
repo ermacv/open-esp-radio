@@ -2,6 +2,7 @@
 
 #[cfg(test)]
 use oer_protocols_ieee80211_wire::ccmp::CCMP_PACKET_NUMBER_MAX;
+use oer_protocols_ieee80211_wire::qos::Tid;
 
 use core::num::NonZeroU8;
 
@@ -169,29 +170,25 @@ impl CcmpTxPacketNumber {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CcmpReplayLane {
     NonQos,
-    Tid(u8),
+    Tid(Tid),
 }
 
 impl CcmpReplayLane {
-    /// This lane's entry among the non-QoS lane and the 16 TID lanes; `None`
-    /// for a TID above 15.
-    const fn select<T>(self, lanes: &[T; CCMP_REPLAY_LANE_COUNT]) -> Option<&T> {
+    /// This lane's entry among the non-QoS lane and the 16 TID lanes.
+    const fn select<T>(self, lanes: &[T; CCMP_REPLAY_LANE_COUNT]) -> &T {
         let [non_qos, tids @ ..] = lanes;
         match self {
-            Self::NonQos => Some(non_qos),
-            Self::Tid(tid) => match tids.split_at_checked(tid as usize) {
-                Some((_, [lane, ..])) => Some(lane),
-                _ => None,
-            },
+            Self::NonQos => non_qos,
+            Self::Tid(tid) => tid.select(tids),
         }
     }
 
     /// The mutable entry of [`Self::select`].
-    fn select_mut<T>(self, lanes: &mut [T; CCMP_REPLAY_LANE_COUNT]) -> Option<&mut T> {
+    const fn select_mut<T>(self, lanes: &mut [T; CCMP_REPLAY_LANE_COUNT]) -> &mut T {
         let [non_qos, tids @ ..] = lanes;
         match self {
-            Self::NonQos => Some(non_qos),
-            Self::Tid(tid) => tids.get_mut(usize::from(tid)),
+            Self::NonQos => non_qos,
+            Self::Tid(tid) => tid.select_mut(tids),
         }
     }
 }
@@ -356,10 +353,7 @@ impl CcmpRxReplayState {
         lane: CcmpReplayLane,
         packet_number: CcmpPacketNumber,
     ) -> Result<CcmpRxReplayCandidate<'_>, CcmpReplayError> {
-        let candidate = lane
-            .select_mut(&mut self.lanes)
-            .ok_or(CcmpReplayError::InvalidTid)?
-            .prepare(packet_number)?;
+        let candidate = lane.select_mut(&mut self.lanes).prepare(packet_number)?;
         Ok(CcmpRxReplayCandidate { candidate, lane })
     }
 
@@ -375,11 +369,8 @@ impl CcmpRxReplayState {
         Ok(())
     }
 
-    pub const fn highest(&self, lane: CcmpReplayLane) -> Option<CcmpPacketNumber> {
-        match lane.select(&self.lanes) {
-            Some(frontier) => Some(frontier.highest()),
-            None => None,
-        }
+    pub const fn highest(&self, lane: CcmpReplayLane) -> CcmpPacketNumber {
+        lane.select(&self.lanes).highest()
     }
 }
 
@@ -391,7 +382,6 @@ impl Default for CcmpRxReplayState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CcmpReplayError {
-    InvalidTid,
     Replayed {
         packet_number: CcmpPacketNumber,
         highest: CcmpPacketNumber,

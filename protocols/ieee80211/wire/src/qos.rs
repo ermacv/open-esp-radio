@@ -54,6 +54,129 @@ impl WmmAccessCategory {
     }
 }
 
+/// A traffic identifier, 0 to 15: a user priority's, or a traffic stream's
+/// from 8 on.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.2.4.5.2 (TID subfield).
+///
+/// A number is no identifier until it is checked:
+///
+/// ```compile_fail,E0308
+/// use oer_protocols_ieee80211_wire::qos::Tid;
+/// let tid: Tid = 16;
+/// ```
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub struct Tid(oer_portable_wire::U8<4>);
+
+impl Tid {
+    /// The width of its field.
+    pub const BITS: u32 = 4;
+
+    /// `tid`, when it is at most 15.
+    pub const fn new(tid: u8) -> Option<Self> {
+        match oer_portable_wire::U8::new(tid) {
+            Some(tid) => Some(Self(tid)),
+            None => None,
+        }
+    }
+
+    /// The identifier `VALUE`, checked at compile time.
+    pub const fn constant<const VALUE: u8>() -> Self {
+        Self(oer_portable_wire::U8::constant::<VALUE>())
+    }
+
+    /// The identifier.
+    pub const fn get(self) -> u8 {
+        self.0.get()
+    }
+
+    /// The user priority this identifier names; `None` for a traffic
+    /// stream's.
+    pub const fn user_priority(self) -> Option<WmmUserPriority> {
+        WmmUserPriority::new(self.0.get())
+    }
+
+    /// Select the cell of this identifier among the exact sixteen,
+    /// without a numeric index.
+    pub const fn select<T>(self, entries: &[T; 16]) -> &T {
+        let [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p] = entries;
+        match self.0.get() {
+            0 => a,
+            1 => b,
+            2 => c,
+            3 => d,
+            4 => e,
+            5 => f,
+            6 => g,
+            7 => h,
+            8 => i,
+            9 => j,
+            10 => k,
+            11 => l,
+            12 => m,
+            13 => n,
+            14 => o,
+            // A value of four bits that is none of the above is the last.
+            _ => p,
+        }
+    }
+
+    /// Select the mutable cell of this identifier among the exact sixteen,
+    /// without a numeric index.
+    pub const fn select_mut<T>(self, entries: &mut [T; 16]) -> &mut T {
+        let [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p] = entries;
+        match self.0.get() {
+            0 => a,
+            1 => b,
+            2 => c,
+            3 => d,
+            4 => e,
+            5 => f,
+            6 => g,
+            7 => h,
+            8 => i,
+            9 => j,
+            10 => k,
+            11 => l,
+            12 => m,
+            13 => n,
+            14 => o,
+            // A value of four bits that is none of the above is the last.
+            _ => p,
+        }
+    }
+
+    /// Decode a field of exactly an identifier's width.
+    #[doc(hidden)]
+    pub const fn from_field<
+        const START: usize,
+        const END: usize,
+        const LITTLE: bool,
+        const N: usize,
+    >(
+        bytes: &[u8; N],
+    ) -> Self {
+        Self(oer_portable_wire::U8::from_field::<START, END, LITTLE, N>(
+            bytes,
+        ))
+    }
+
+    /// Encode into a field of exactly an identifier's width.
+    #[doc(hidden)]
+    pub const fn to_field<
+        const START: usize,
+        const END: usize,
+        const LITTLE: bool,
+        const N: usize,
+    >(
+        self,
+        bytes: &mut [u8; N],
+    ) {
+        self.0.to_field::<START, END, LITTLE, N>(bytes);
+    }
+}
+
 /// Valid IEEE 802.1D / IEEE 802.11 user priority and QoS TID.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(transparent)]
@@ -122,6 +245,12 @@ impl WmmUserPriority {
             UserPriority::Up6 => oer_portable_wire::U8::constant::<6>(),
             UserPriority::Up7 => oer_portable_wire::U8::constant::<7>(),
         }
+    }
+    /// The traffic identifier of this priority's frames.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5.2 (TID subfield: the UP).
+    pub const fn tid(self) -> Tid {
+        Tid(self.wire().widen())
     }
     /// Select a cell of the exact eight-entry array by the closed identifier.
     pub const fn select<T>(self, entries: &[T; 8]) -> &T {

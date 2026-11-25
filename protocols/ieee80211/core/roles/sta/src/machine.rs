@@ -590,7 +590,7 @@ impl StaTxTag {
     /// ([`LinkAction::Sequence`]).
     pub const fn names_sequence(&self) -> Option<WmmUserPriority> {
         match self.purpose {
-            TxPurpose::Connected(Sending::AddbaRequest { tid }) => WmmUserPriority::new(tid),
+            TxPurpose::Connected(Sending::AddbaRequest { tid }) => Some(tid),
             _ => None,
         }
     }
@@ -676,7 +676,7 @@ pub enum StaFrame<K> {
         /// The station's address.
         transmitter: Eui48,
         /// The agreement's TID.
-        tid: oer_protocols_ieee80211_contracts_port::Tid,
+        tid: oer_protocols_ieee80211_wire::qos::Tid,
         /// Where the recipient's window moves.
         starting_sequence: SequenceNumber,
     },
@@ -1899,24 +1899,21 @@ enum Sending {
     /// A response to the AP's receive Block Ack negotiation.
     BlockAck,
     /// An ADDBA Request negotiating the station's transmit agreement of `tid`.
-    AddbaRequest { tid: u8 },
+    AddbaRequest { tid: WmmUserPriority },
     /// A DELBA ending one of the station's transmit agreements.
     Delba,
     /// A BlockAckReq moving the recipient's window of `tid`.
-    BlockAckRequest { tid: u8 },
+    BlockAckRequest { tid: WmmUserPriority },
 }
 
 /// The DELBA body that ends the station's own transmit agreement of `tid`
 /// after its inactivity: the station is its originator (IEEE Std
 /// 802.11-2020, 9.6.5.5, 10.25.5).
 fn own_delba(
-    tid: u8,
-) -> Result<
-    [u8; oer_protocols_ieee80211_wire::block_ack::frame::DELBA_ACTION_BODY_LEN],
-    oer_protocols_ieee80211_wire::block_ack::frame::AddbaRequestError,
-> {
+    tid: WmmUserPriority,
+) -> [u8; oer_protocols_ieee80211_wire::block_ack::frame::DELBA_ACTION_BODY_LEN] {
     oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
-        tid,
+        tid.tid(),
         oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
         reason_code::TIMEOUT,
     )
@@ -2051,7 +2048,7 @@ fn agreement_change<T: StaTypes, K>(
         return None;
     }
     for tid in WmmUserPriority::ALL {
-        let window = tx.operational(tid.value()).map(|agreement| {
+        let window = tx.operational(tid).map(|agreement| {
             oer_protocols_ieee80211_core_datapath::plane::TxWindow {
                 head: agreement.starting_sequence,
                 size: agreement.window,
@@ -3439,7 +3436,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             *tid.select_mut(&mut connected.qos_sequences) = SequenceCounter::new(next);
         }
         if tx_agreements(&mut self.config.tx_block_ack, connected)
-            .is_some_and(|tx| tx.traffic(tid.value(), now))
+            .is_some_and(|tx| tx.traffic(tid, now))
         {
             StaTraffic::Input
         } else {
@@ -3459,7 +3456,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             return;
         };
         if let Some(tx) = tx_agreements(&mut self.config.tx_block_ack, connected) {
-            tx.request(tid.value(), head);
+            tx.request(tid, head);
         }
     }
 
@@ -5871,38 +5868,32 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         }
         enum Body {
             Delba(
-                u8,
+                WmmUserPriority,
                 [u8; oer_protocols_ieee80211_wire::block_ack::frame::DELBA_ACTION_BODY_LEN],
             ),
             Addba(
-                u8,
+                WmmUserPriority,
                 [u8; oer_protocols_ieee80211_wire::block_ack::frame::ADDBA_ACTION_BODY_LEN],
             ),
         }
         let owed = match fresh {
-            Some(tid) => TxBlockAckOwed::Negotiate { tid: tid.value() },
+            Some(tid) => TxBlockAckOwed::Negotiate { tid },
             None => tx.poll(now, room)?,
         };
         let body = match owed {
             TxBlockAckOwed::Request { tid, start } => {
                 return self.owe_block_ack_request(connected, tid, start, events);
             }
-            TxBlockAckOwed::Delba { tid } => {
-                let Ok(delba) = own_delba(tid) else {
-                    return Some(Err(StaDisconnectReason::Encode));
-                };
-                Body::Delba(tid, delba)
-            }
+            TxBlockAckOwed::Delba { tid } => Body::Delba(tid, own_delba(tid)),
             TxBlockAckOwed::Negotiate { tid } => {
                 // While the link's holder numbers the TID, it tells the
                 // TID's next number first and holds the TID's data until
                 // the request goes.
                 if lent && fresh.is_none() {
-                    let priority = WmmUserPriority::new(tid)?;
-                    connected.sequence = TidSequence::Asked(priority);
-                    return Some(Ok(Owed::LinkSequence(priority)));
+                    connected.sequence = TidSequence::Asked(tid);
+                    return Some(Ok(Owed::LinkSequence(tid)));
                 }
-                let starting_sequence = connected.qos_sequences.get(usize::from(tid))?.peek();
+                let starting_sequence = tid.select(&connected.qos_sequences).peek();
                 match tx.begin(tid, starting_sequence, now) {
                     Ok(request) => Body::Addba(tid, request.body),
                     Err(_) => {
@@ -5962,17 +5953,11 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     fn owe_block_ack_request(
         &mut self,
         connected: &mut Connected<T, K>,
-        tid: u8,
+        tid: WmmUserPriority,
         start: SequenceNumber,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        let (Some(receiver), Some(port_tid), Some(priority)) = (
-            IndividualAddress::new(connected.bssid.get()),
-            oer_protocols_ieee80211_contracts_port::Tid::new(tid),
-            WmmUserPriority::new(tid),
-        ) else {
-            return Some(Err(StaDisconnectReason::Encode));
-        };
+        let receiver = connected.bssid.individual();
         let purpose = TxPurpose::Connected(Sending::BlockAckRequest { tid });
         let epoch = match self.reserve_transmit(purpose) {
             Ok(epoch) => epoch,
@@ -5995,13 +5980,13 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             frame: StaFrame::BlockAckRequest {
                 receiver,
                 transmitter: self.config.address.get(),
-                tid: port_tid,
+                tid: tid.tid(),
                 starting_sequence: start,
             },
             class: StaFrameClass::Normal,
             plan: StaRatePlan::Management,
             // The request contends with the data whose window it moves.
-            access_category: priority.access_category(),
+            access_category: tid.access_category(),
             // A control frame has no Sequence Control.
             number: FrameNumber::Open,
         })))

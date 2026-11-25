@@ -2,7 +2,8 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-use crate::frame::{ControlSubtype, FrameControlFields, QosControl};
+use crate::frame::{ControlSubtype, FrameControlFields};
+use crate::qos::Tid;
 use crate::sequence::{SequenceControl, SequenceNumber};
 use oer_protocols_ieee802_wire::Eui48;
 
@@ -37,14 +38,12 @@ pub enum DelbaInitiator {
 /// A field that cannot be represented by an immediate ADDBA request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AddbaRequestError {
-    InvalidTid(u8),
     InvalidWindow(u16),
 }
 
 impl From<AddbaParametersError> for AddbaRequestError {
     fn from(error: AddbaParametersError) -> Self {
         match error {
-            AddbaParametersError::TidOutOfRange(tid) => Self::InvalidTid(tid),
             AddbaParametersError::WindowOutOfRange(window) => Self::InvalidWindow(window),
         }
     }
@@ -56,7 +55,7 @@ impl From<AddbaParametersError> for AddbaRequestError {
 /// the wire encoder owns the BA Parameter Set and field order.
 pub fn encode_addba_request(
     dialog_token: u8,
-    tid: u8,
+    tid: Tid,
     window: u16,
     timeout_tu: u16,
     amsdu: AmsduSupport,
@@ -101,7 +100,7 @@ pub enum BlockAckAction {
         timeout_tu: u16,
     },
     Delba {
-        tid: u8,
+        tid: Tid,
         initiator: DelbaInitiator,
         reason: u16,
     },
@@ -173,7 +172,7 @@ pub const BLOCK_ACK_REQUEST_LEN: usize = 20;
 pub fn encode_block_ack_request(
     receiver: Eui48,
     transmitter: Eui48,
-    tid: u8,
+    tid: Tid,
     starting_sequence: SequenceNumber,
 ) -> [u8; BLOCK_ACK_REQUEST_LEN] {
     let mut frame = [0_u8; BLOCK_ACK_REQUEST_LEN];
@@ -183,7 +182,6 @@ pub fn encode_block_ack_request(
     );
     crate::encoding::write_array::<4, _, _>(&mut frame, &receiver.octets());
     crate::encoding::write_array::<10, _, _>(&mut frame, &transmitter.octets());
-    let tid = QosControl::from_bytes([tid, 0]).tid();
     let control = BarControlFields::from_bytes([4, 0]).with_tid(tid);
     crate::encoding::write_array::<16, _, _>(&mut frame, &control.to_bytes());
     crate::encoding::write_array::<18, _, _>(
@@ -197,14 +195,12 @@ pub fn encode_block_ack_request(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxAddbaResponseError {
     InvalidBodyLength(usize),
-    InvalidTid(u8),
     InvalidWindow(u16),
 }
 
 impl From<AddbaParametersError> for RxAddbaResponseError {
     fn from(error: AddbaParametersError) -> Self {
         match error {
-            AddbaParametersError::TidOutOfRange(tid) => Self::InvalidTid(tid),
             AddbaParametersError::WindowOutOfRange(window) => Self::InvalidWindow(window),
         }
     }
@@ -216,7 +212,7 @@ impl From<AddbaParametersError> for RxAddbaResponseError {
 pub fn write_successful_addba_response(
     body: &mut [u8],
     dialog_token: u8,
-    tid: u8,
+    tid: Tid,
     window: u16,
 ) -> Result<(), RxAddbaResponseError> {
     let length = body.len();
@@ -244,7 +240,7 @@ pub const ADDBA_STATUS_REQUEST_DECLINED: u16 = crate::status::status_code::REQUE
 pub fn write_declined_addba_response(
     body: &mut [u8],
     dialog_token: u8,
-    tid: u8,
+    tid: Tid,
     requested_window: u16,
 ) -> Result<(), RxAddbaResponseError> {
     let length = body.len();
@@ -270,11 +266,11 @@ pub fn write_declined_addba_response(
 ///
 /// # Errors
 ///
-/// A TID wider than four bits or a window wider than ten bits.
+/// A window wider than ten bits.
 pub fn encode_addba_response(
     dialog_token: u8,
     status: u16,
-    tid: u8,
+    tid: Tid,
     window: u16,
     timeout_tu: u16,
     amsdu: AmsduSupport,
@@ -298,22 +294,17 @@ pub fn encode_addba_response(
 /// Encode one DELBA action body tearing down `tid`'s agreement.
 ///
 /// SOURCE: IEEE Std 802.11-2020, 9.6.5.5 (DELBA frame format).
-///
-/// # Errors
-///
-/// A TID wider than four bits.
 pub fn encode_delba(
-    tid: u8,
+    tid: Tid,
     initiator: DelbaInitiator,
     reason: u16,
-) -> Result<[u8; DELBA_ACTION_BODY_LEN], AddbaRequestError> {
+) -> [u8; DELBA_ACTION_BODY_LEN] {
     let parameters = DelbaParameters::from_bytes([0; 2])
         .with_tid(tid)
-        .map_err(|_| AddbaRequestError::InvalidTid(tid))?
         .with_initiator(initiator == DelbaInitiator::Originator);
     let [p0, p1] = parameters.to_bytes();
     let [r0, r1] = crate::management::ReasonCodeField::of(reason).to_bytes();
-    Ok([BLOCK_ACK_CATEGORY, DELBA_ACTION, p0, p1, r0, r1])
+    [BLOCK_ACK_CATEGORY, DELBA_ACTION, p0, p1, r0, r1]
 }
 
 /// One received Compressed BlockAckReq: a single-TID request whose bitmap
@@ -322,7 +313,7 @@ pub fn encode_delba(
 pub struct CompressedBlockAckRequest {
     pub receiver: Eui48,
     pub transmitter: Eui48,
-    pub tid: u8,
+    pub tid: Tid,
     pub starting_sequence: SequenceNumber,
 }
 
@@ -366,7 +357,7 @@ pub fn parse_compressed_block_ack_request(frame: &[u8]) -> Option<CompressedBloc
     Some(CompressedBlockAckRequest {
         receiver: Eui48::new(receiver),
         transmitter: Eui48::new(transmitter),
-        tid: parameters.tid().get(),
+        tid: parameters.tid(),
         starting_sequence: SequenceNumber::from_sequence_control(
             crate::sequence::SequenceControl::from_bytes([s0, s1]),
         ),
@@ -385,16 +376,15 @@ oer_portable_wire::bitfield! {
     pub struct AddbaParameters[2] (little) {
         pub amsdu, with_amsdu: bool = 0..1;
         pub policy, with_policy: (BlockAckPolicy) = 1..2;
-        pub tid, with_tid: u8 = 2..6;
+        pub tid, with_tid: (Tid) = 2..6;
         pub window, with_window: u16 = 6..16;
     }
 }
 
 /// Why a Block Ack Parameter Set cannot hold a value (IEEE Std
-/// 802.11-2020, 9.4.1.14: a four-bit TID, a ten-bit Buffer Size).
+/// 802.11-2020, 9.4.1.14: a ten-bit Buffer Size).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AddbaParametersError {
-    TidOutOfRange(u8),
     WindowOutOfRange(u16),
 }
 
@@ -404,19 +394,17 @@ impl AddbaParameters {
     ///
     /// # Errors
     ///
-    /// A TID wider than four bits or a window wider than ten.
+    /// A window wider than ten.
     pub const fn new(
         policy: BlockAckPolicy,
         amsdu: AmsduSupport,
-        tid: u8,
+        tid: Tid,
         window: u16,
     ) -> Result<Self, AddbaParametersError> {
         let parameters = Self::from_bytes([0; 2])
             .with_amsdu(matches!(amsdu, AmsduSupport::Supported))
-            .with_policy(policy);
-        let Ok(parameters) = parameters.with_tid(tid) else {
-            return Err(AddbaParametersError::TidOutOfRange(tid));
-        };
+            .with_policy(policy)
+            .with_tid(tid);
         match parameters.with_window(window) {
             Ok(parameters) => Ok(parameters),
             Err(_) => Err(AddbaParametersError::WindowOutOfRange(window)),
@@ -430,7 +418,7 @@ impl AddbaParameters {
     /// As [`Self::new`].
     pub const fn immediate(
         amsdu: AmsduSupport,
-        tid: u8,
+        tid: Tid,
         window: u16,
     ) -> Result<Self, AddbaParametersError> {
         Self::new(BlockAckPolicy::Immediate, amsdu, tid, window)
@@ -455,7 +443,7 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (DELBA frame format).
     pub struct DelbaParameters[2] (little) {
         pub initiator, with_initiator: bool = 11..12;
-        pub tid, with_tid: u8 = 12..16;
+        pub tid, with_tid: (Tid) = 12..16;
     }
 }
 
@@ -464,7 +452,7 @@ oer_portable_wire::bitfield! {
     pub struct BarControlFields[2] (little) {
         pub ack_policy, with_ack_policy: bool = 0..1;
         pub bar_type, with_bar_type: u8 = 1..5;
-        pub tid, with_tid: (u8) = 12..16;
+        pub tid, with_tid: (Tid) = 12..16;
     }
 }
 

@@ -2,6 +2,7 @@
 use super::*;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_security_rsn::{Ptk, frames::RsnTxFrame};
+use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::security::rsn::Akm;
 
 #[test]
@@ -273,7 +274,7 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
         world.frames.clear();
         let body = encode_addba_request(
             17,
-            15,
+            Tid::constant::<15>(),
             16,
             0,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
@@ -324,7 +325,7 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
                 status: 37,
                 parameters,
                 ..
-            }) if parameters.tid() == 15
+            }) if parameters.tid() == Tid::constant::<15>()
         ));
         world.receive(clock.now(), &request);
         assert_eq!(

@@ -20,9 +20,10 @@ use oer_protocols_ieee80211_core_upper_mac::block_ack::{
     TxBlockAckOriginatorPolicy, TxBlockAckResponse, TxBlockAckResponseDisposition, TxBlockAckRetry,
 };
 use oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction;
+use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 
 /// Every QoS TID, in the order their negotiations go out.
-const ALL_TIDS: [u8; TX_BLOCK_ACK_MAX_TIDS] = [0, 1, 2, 3, 4, 5, 6, 7];
+const ALL_TIDS: [WmmUserPriority; TX_BLOCK_ACK_MAX_TIDS] = WmmUserPriority::ALL;
 
 /// The composition's policy for the station's transmit agreements.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,12 +58,12 @@ pub enum StaTxBlockAckPolicyError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TxBlockAckOwed {
     /// A DELBA, as the originator, ending `tid`'s agreement.
-    Delba { tid: u8 },
+    Delba { tid: WmmUserPriority },
     /// An ADDBA Request negotiating `tid`, which the caller begins.
-    Negotiate { tid: u8 },
+    Negotiate { tid: WmmUserPriority },
     /// A BlockAckReq moving the recipient's window of `tid` to `start`.
     Request {
-        tid: u8,
+        tid: WmmUserPriority,
         start: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
     },
 }
@@ -117,7 +118,7 @@ impl StaTxBlockAck {
         }
         // Validate before building, so the error names the policy's field.
         TxBlockAckConfig {
-            tid: 0,
+            tid: WmmUserPriority::UP0,
             window: policy.window,
             timeout_tu: 0,
             negotiation_timeout: policy.negotiation_timeout,
@@ -126,7 +127,7 @@ impl StaTxBlockAck {
         .validate()
         .map_err(|error| {
             StaTxBlockAckPolicyError::Agreement(TxBlockAckOriginatorError::Session {
-                tid: 0,
+                tid: WmmUserPriority::UP0,
                 error,
             })
         })?;
@@ -138,7 +139,7 @@ impl StaTxBlockAck {
             TxBlockAckOriginatorConfig {
                 window: policy.window,
                 negotiation_timeout: policy.negotiation_timeout,
-                amsdu_tids: 0,
+                amsdu_tids: &[],
             },
         )
         .map_err(StaTxBlockAckPolicyError::Agreement)?;
@@ -212,7 +213,7 @@ impl StaTxBlockAck {
     /// one that goes unanswered is owed again at that head.
     pub(crate) fn request(
         &mut self,
-        tid: u8,
+        tid: WmmUserPriority,
         head: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
     ) {
         if (self.admitted == BlockAckAdmission::Refused)
@@ -220,46 +221,35 @@ impl StaTxBlockAck {
         {
             return;
         }
-        if let (Some(request), Some(last)) = (
-            self.request.get_mut(usize::from(tid)),
-            self.heads.get_mut(usize::from(tid)),
-        ) {
-            *request = Some(head);
-            *last = Some(head);
-        }
+        *tid.select_mut(&mut self.request) = Some(head);
+        *tid.select_mut(&mut self.heads) = Some(head);
     }
 
     /// The BlockAckReq of `tid` went to the port.
-    pub(crate) fn request_sent(&mut self, tid: u8) {
-        if let Some(request) = self.request.get_mut(usize::from(tid)) {
-            *request = None;
-        }
+    pub(crate) fn request_sent(&mut self, tid: WmmUserPriority) {
+        *tid.select_mut(&mut self.request) = None;
     }
 
     /// The BlockAckReq of `tid` went unanswered: it is owed again at the
     /// last head the data plane named while the agreement lives.
-    pub(crate) fn request_unanswered(&mut self, tid: u8) {
+    pub(crate) fn request_unanswered(&mut self, tid: WmmUserPriority) {
         let head = self
             .originator
             .operational(tid)
-            .and_then(|_| self.heads.get(usize::from(tid)).copied().flatten());
-        if let Some(request) = self.request.get_mut(usize::from(tid))
-            && request.is_none()
-        {
+            .and_then(|_| *tid.select(&self.heads));
+        let request = tid.select_mut(&mut self.request);
+        if request.is_none() {
             *request = head;
         }
     }
 
     /// Data of `tid` came at `now`: an idle TID negotiates, a live one stays
     /// active. Whether that changed what [`Self::poll`] owes or when.
-    pub(crate) fn traffic(&mut self, tid: u8, now: Instant) -> bool {
+    pub(crate) fn traffic(&mut self, tid: WmmUserPriority, now: Instant) -> bool {
         if self.admitted == BlockAckAdmission::Refused {
             return false;
         }
-        let Some(last) = self.traffic.get_mut(usize::from(tid)) else {
-            return false;
-        };
-        *last = Some(now);
+        *tid.select_mut(&mut self.traffic) = Some(now);
         let mut changed = false;
         // An operational agreement's inactivity ends no earlier than this.
         if self.originator.operational(tid).is_some() {
@@ -296,7 +286,7 @@ impl StaTxBlockAck {
     }
 
     /// The operational agreement of `tid`.
-    pub(crate) fn operational(&self, tid: u8) -> Option<OperationalTxBlockAck> {
+    pub(crate) fn operational(&self, tid: WmmUserPriority) -> Option<OperationalTxBlockAck> {
         if self.admitted == BlockAckAdmission::Refused {
             return None;
         }
@@ -319,9 +309,8 @@ impl StaTxBlockAck {
             for tid in ALL_TIDS {
                 if self.idle_until(tid).is_some_and(|until| now >= until)
                     && self.originator.stop(tid)
-                    && let Some(bit) = 1_u8.checked_shl(u32::from(tid))
                 {
-                    self.delba |= bit;
+                    self.delba |= bit(tid);
                 }
             }
             self.retime();
@@ -330,17 +319,14 @@ impl StaTxBlockAck {
             return None;
         }
         for tid in ALL_TIDS {
-            let start = self.request.get(usize::from(tid)).copied().flatten();
-            if let Some(start) = start {
+            if let Some(start) = *tid.select(&self.request) {
                 if self.originator.operational(tid).is_some() {
                     return Some(TxBlockAckOwed::Request { tid, start });
                 }
                 self.request_sent(tid);
             }
         }
-        if self.delba != 0 {
-            // trailing_zeros of a nonzero u8 is below eight.
-            let tid = self.delba.trailing_zeros() as u8;
+        if let Some(tid) = ALL_TIDS.into_iter().find(|tid| self.delba & bit(*tid) != 0) {
             return Some(TxBlockAckOwed::Delba { tid });
         }
         if !self.pending.is_some_and(|at| now >= at) {
@@ -352,16 +338,14 @@ impl StaTxBlockAck {
     }
 
     /// The DELBA of `tid` went to the port.
-    pub(crate) fn delba_sent(&mut self, tid: u8) {
-        if let Some(bit) = 1_u8.checked_shl(u32::from(tid)) {
-            self.delba &= !bit;
-        }
+    pub(crate) fn delba_sent(&mut self, tid: WmmUserPriority) {
+        self.delba &= !bit(tid);
     }
 
     /// Begin `tid`'s negotiation from `starting_sequence`.
     pub(crate) fn begin(
         &mut self,
-        tid: u8,
+        tid: WmmUserPriority,
         starting_sequence: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
         now: Instant,
     ) -> Result<
@@ -375,7 +359,7 @@ impl StaTxBlockAck {
 
     /// `tid`'s request did not leave: its next attempt is due after the
     /// retry interval while attempts remain.
-    pub(crate) fn request_failed(&mut self, tid: u8, now: Instant) {
+    pub(crate) fn request_failed(&mut self, tid: WmmUserPriority, now: Instant) {
         self.originator.transmit_failed(tid, now);
         self.retime();
     }
@@ -398,11 +382,9 @@ impl StaTxBlockAck {
                 let tid = parameters.tid();
                 match self.originator.on_response_action(action) {
                     Ok(TxBlockAckResponseDisposition::Matched(matched)) => {
-                        if let TxBlockAckResponse::Operational(agreement) = matched.response
-                            && let Some(last) = self.traffic.get_mut(usize::from(agreement.tid))
-                        {
+                        if let TxBlockAckResponse::Operational(agreement) = matched.response {
                             // The agreement is idle from its start.
-                            *last = Some(now);
+                            *agreement.tid.select_mut(&mut self.traffic) = Some(now);
                         }
                     }
                     // A token that owns no live negotiation is stale.
@@ -410,7 +392,11 @@ impl StaTxBlockAck {
                     Err(TxBlockAckOriginatorError::Session { tid: session, .. }) => {
                         self.refuse(session);
                     }
-                    Err(_) => self.refuse(tid),
+                    Err(_) => {
+                        if let Some(tid) = tid.user_priority() {
+                            self.refuse(tid);
+                        }
+                    }
                 }
                 true
             }
@@ -419,7 +405,9 @@ impl StaTxBlockAck {
                 initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
                 ..
             } => {
-                self.originator.stop(tid);
+                if let Some(tid) = tid.user_priority() {
+                    self.originator.stop(tid);
+                }
                 true
             }
             BlockAckAction::AddbaRequest { .. } | BlockAckAction::Delba { .. } => false,
@@ -441,20 +429,24 @@ impl StaTxBlockAck {
     }
 
     /// When `tid`'s operational agreement ends for inactivity.
-    fn idle_until(&self, tid: u8) -> Option<Instant> {
+    fn idle_until(&self, tid: WmmUserPriority) -> Option<Instant> {
         self.originator.operational(tid)?;
-        let last = (*self.traffic.get(usize::from(tid))?)?;
+        let last = (*tid.select(&self.traffic))?;
         Some(last.saturating_add(self.inactivity))
     }
 
     /// End and close `tid` after a response the station cannot accept.
-    fn refuse(&mut self, tid: u8) {
-        if self.originator.close(tid)
-            && let Some(bit) = 1_u8.checked_shl(u32::from(tid))
-        {
-            self.delba |= bit;
+    fn refuse(&mut self, tid: WmmUserPriority) {
+        if self.originator.close(tid) {
+            self.delba |= bit(tid);
         }
     }
+}
+
+/// The place of `tid` among the owed DELBAs.
+const fn bit(tid: WmmUserPriority) -> u8 {
+    // A user priority is below eight.
+    1 << tid.value()
 }
 
 #[cfg(test)]

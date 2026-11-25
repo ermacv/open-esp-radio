@@ -20,13 +20,24 @@ fn sta_rx_duplicate_filter_requires_retry_and_matching_sequence_space() {
     assert!(!filter.is_duplicate(RetrySubfield::Clear, 0x1230, None));
     assert!(!filter.is_duplicate(RetrySubfield::Set, 0x1240, None));
 
-    assert!(!filter.is_duplicate(RetrySubfield::Clear, 0x2000, Some(3)));
-    assert!(!filter.is_duplicate(RetrySubfield::Set, 0x2000, Some(4)));
-    assert!(filter.is_duplicate(RetrySubfield::Set, 0x2000, Some(3)));
+    assert!(!filter.is_duplicate(RetrySubfield::Clear, 0x2000, Some(Tid::constant::<3>())));
+    assert!(!filter.is_duplicate(RetrySubfield::Set, 0x2000, Some(Tid::constant::<4>())));
+    assert!(filter.is_duplicate(RetrySubfield::Set, 0x2000, Some(Tid::constant::<3>())));
+}
+
+/// A space with no MPDU yet knows none, whatever another space took.
+#[test]
+fn an_empty_space_knows_no_duplicate() {
+    let mut filter = RxDuplicateFilter::new();
+    assert!(!filter.is_duplicate(RetrySubfield::Clear, 0, Some(Tid::constant::<15>())));
+    assert!(filter.is_known_duplicate(RetrySubfield::Set, 0, Some(Tid::constant::<15>())));
+    for other in (0..15).map(Tid::new).chain([None]) {
+        assert!(!filter.is_known_duplicate(RetrySubfield::Set, 0, other));
+    }
 }
 
 /// Each four octets are one MPDU's Retry, Sequence Control and TID (none
-/// when the fourth octet's top bit is set).
+/// when the fourth octet is no TID).
 fn run_duplicate(count: usize) {
     let seed = [
         0, 0x30, 0x12, 0, 1, 0x30, 0x12, 0, 1, 0x30, 0x12, 0x80, 0, 0x40, 0x12, 17,
@@ -40,7 +51,7 @@ fn run_duplicate(count: usize) {
                 RetrySubfield::Clear
             };
             let sequence_control = u16::from_le_bytes([low, high]);
-            let tid = (tid & 0x80 == 0).then_some(tid);
+            let tid = (tid & 0x80 == 0).then_some(tid).and_then(Tid::new);
             let known = filter.is_known_duplicate(retry, sequence_control, tid);
             let duplicate = filter.is_duplicate(retry, sequence_control, tid);
             assert_eq!(known, duplicate);

@@ -14,6 +14,7 @@
 
 use oer_portable_events::{EventSink, report};
 use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee80211_wire::qos::Tid;
 
 use super::{
     AddbaResponse, AddbaStatus, AmsduInAmpdu, BankRoom, Received, RxAddbaRequest,
@@ -22,7 +23,7 @@ use super::{
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
     Aggregation, Ieee80211Capabilities, RxCryptoStatus, RxEvidence, RxHead, RxHeader, RxMetadata,
-    SupportedBlockAck, Tid,
+    SupportedBlockAck,
 };
 use oer_protocols_ieee80211_wire::{
     address::Bssid,
@@ -55,7 +56,7 @@ pub enum RxBlockAckEvent {
     /// MPDUs the reorder owner released, not application deliveries;
     /// `missing` counts skipped sequences, not dropped buffered MPDUs.
     Reordered {
-        tid: u8,
+        tid: Tid,
         cause: ReorderCause,
         held: u8,
         released: u8,
@@ -63,14 +64,14 @@ pub enum RxBlockAckEvent {
     },
     /// An agreement became active: the logical owner, not a confirmed
     /// hardware register write.
-    Started { tid: u8, window: u16 },
+    Started { tid: Tid, window: u16 },
     /// An agreement ended.
-    Stopped { tid: u8, reason: AgreementStop },
+    Stopped { tid: Tid, reason: AgreementStop },
     /// One ADDBA Request taken: its TID, the Buffer Size it asked for as
     /// received (zero included) and what became of it. A started agreement
     /// reports [`Self::Started`] first.
     Requested {
-        tid: u8,
+        tid: Tid,
         requested: u16,
         outcome: AddbaOutcome,
     },
@@ -203,9 +204,9 @@ enum Bank<T: RxBlockAckTypes, const WINDOW: usize> {
     },
     /// Ended: the agreement of `tid` waits for the command place to be
     /// removed.
-    Ending { running: T::Running, tid: u8 },
+    Ending { running: T::Running, tid: Tid },
     /// The removal of `tid`'s agreement runs in the port.
-    EndCommand { tid: u8 },
+    EndCommand { tid: Tid },
     /// The slot went home with the data's stop ([`RxBlockAckStorage::slots_home`]);
     /// the storage serves nothing until it is built again or the slots come
     /// back ([`RxBlockAckStorage::slots_back`]).
@@ -218,7 +219,7 @@ enum Bank<T: RxBlockAckTypes, const WINDOW: usize> {
 impl<T: RxBlockAckTypes, const WINDOW: usize> Bank<T, WINDOW> {
     /// The TID the bank is not free for: its agreement's, added, running or
     /// ending.
-    fn tid(&self) -> Option<u8> {
+    fn tid(&self) -> Option<Tid> {
         match self {
             Self::Adding { negotiation, .. } | Self::AddCommand { negotiation } => {
                 Some(negotiation.response().tid)
@@ -266,7 +267,7 @@ pub enum BankCommand<T: RxBlockAckTypes> {
 #[derive(Debug, Eq, PartialEq)]
 pub struct BankTicket {
     bank: u8,
-    tid: u8,
+    tid: Tid,
 }
 
 /// Whether the caller has a place for one more retained frame: the reorder
@@ -479,7 +480,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
     fn released<const N: usize>(
         &mut self,
         release: RxReorderRelease<N>,
-        tid: u8,
+        tid: Tid,
         cause: ReorderCause,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) {
@@ -827,14 +828,12 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
             Err(response) => return self.queue_response(response),
         };
         let response = negotiation.response();
-        let Some(agreement) = Tid::new(response.tid).and_then(|tid| {
-            SupportedBlockAck::<T::Caps>::new(
-                bssid.individual(),
-                tid,
-                negotiation.starting_sequence(),
-                response.window,
-            )
-        }) else {
+        let Some(agreement) = SupportedBlockAck::<T::Caps>::new(
+            bssid.individual(),
+            response.tid,
+            negotiation.starting_sequence(),
+            response.window,
+        ) else {
             return self.queue_response(AddbaResponse {
                 status: AddbaStatus::RequestDeclined,
                 ..response
@@ -948,19 +947,18 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
                 }
                 let tid = active.tid();
                 self.stop(index, AgreementStop::Timeout, events);
-                if let Ok(delba) = encode_delba(
+                let delba = encode_delba(
                     tid,
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
                     reason_code::TIMEOUT,
-                ) {
-                    // The reply queue holds ADDBA-sized bodies; the DELBA
-                    // fills its prefix.
-                    let mut body = [0; ADDBA_ACTION_BODY_LEN];
-                    for (target, source) in body.iter_mut().zip(delba) {
-                        *target = source;
-                    }
-                    let _queued = self.queue(body);
+                );
+                // The reply queue holds ADDBA-sized bodies; the DELBA fills
+                // its prefix.
+                let mut body = [0; ADDBA_ACTION_BODY_LEN];
+                for (target, source) in body.iter_mut().zip(delba) {
+                    *target = source;
                 }
+                let _queued = self.queue(body);
             } else if let Some(active) = self.banks.get_mut(index).and_then(Bank::active_mut) {
                 match active.expire_gap(now, self.header.gap_timeout) {
                     Ok(Some(release)) => {
@@ -1037,7 +1035,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
         {
             return None;
         }
-        let tid = header.qos?.tid().get();
+        let tid = header.qos?.tid();
         let index = self
             .banks
             .iter()
@@ -1169,7 +1167,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
         }
     }
 
-    fn bar(&self, bytes: &[u8], local: Eui48) -> Option<(u8, SequenceNumber)> {
+    fn bar(&self, bytes: &[u8], local: Eui48) -> Option<(Tid, SequenceNumber)> {
         let (_, bssid) = self.header.association?;
         let request = parse_compressed_block_ack_request(bytes)?;
         if request.receiver != local || request.transmitter != bssid.get() {

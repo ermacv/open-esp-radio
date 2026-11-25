@@ -49,6 +49,7 @@ extern crate std;
 use core::cell::Cell;
 use core::num::NonZeroU16;
 use core::task::{Context, Poll};
+use oer_protocols_ieee80211_wire::qos::Tid;
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::vec::Vec;
@@ -67,7 +68,7 @@ use oer_protocols_ieee80211_contracts_port::{
     RateSupport, ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead,
     RxMeta, Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged,
     StagedPlaces, StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped,
-    Stopping, SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome, TxSlot, TxSlotOf, UnitsHome,
+    Stopping, SupportedChannel, TxFacts, TxFrame, TxOutcome, TxSlot, TxSlotOf, UnitsHome,
     ValueCommand, ValueEnd, ValueKind, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
@@ -132,7 +133,7 @@ pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
     individual_no_ack: PhyFormatSet::NON_HT,
     station_receive_filters: ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::OTHER_BSS_MANAGEMENT),
     access_point_receive_filters: ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::PROBE_REQUESTS),
-    rx_block_ack_max_tid: 7,
+    rx_block_ack_max_tid: Tid::constant::<7>(),
     rx_block_ack_max_window: 64,
     rx_amsdu_in_ampdu: true,
     edca_max_aifsn: 15,

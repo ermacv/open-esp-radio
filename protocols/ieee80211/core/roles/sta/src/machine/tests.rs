@@ -17,6 +17,7 @@ use oer_protocols_ieee80211_core_arbiter::{
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_protocols_ieee80211_wire::extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element};
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
+use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_radio_port::{Mint, branded};
 use std::vec::Vec;
 
@@ -68,7 +69,7 @@ impl Ieee80211Capabilities for Caps {
         station_receive_filters: ReceiveFilter::BSS_MEMBER
             .union(ReceiveFilter::OTHER_BSS_MANAGEMENT),
         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
-        rx_block_ack_max_tid: 7,
+        rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<7>(),
         rx_block_ack_max_window: 64,
         rx_amsdu_in_ampdu: true,
         edca_max_aifsn: 15,
@@ -800,10 +801,15 @@ impl<'id, const G: usize> World<'id, G> {
     /// Run the loop at `now` until neither machine owes an action; the
     /// port confirms configurations and ends transmissions at once.
     fn run(&mut self, now: Instant) {
+        // The most actions a test's world takes in one run.
+        const ACTIONS: usize = 12;
+        let mut actions = 0;
         loop {
             let mut acted = false;
             while let Some(action) = self.station.poll_action(now, &mut self.losses) {
                 acted = true;
+                actions += 1;
+                assert!(actions <= ACTIONS, "the station settles");
                 match action {
                     StaAction::Link(action) => {
                         let seen = match &action {
@@ -4691,7 +4697,7 @@ fn repeated_m3_selects_retained_material_and_restores_each_live_replay_frontier(
         let id = GroupKeyId::new(1).unwrap();
         let header = |pn| CcmpHeader::new(CcmpPacketNumber::new(pn).unwrap(), id.key_id());
         let lanes = core::iter::once(None)
-            .chain((0..16).map(Some))
+            .chain((0..16).map(Tid::new))
             .collect::<Vec<_>>();
         world.outcomes.push_back((ended(End::AckTimeout), true));
         world.receive(at(33), &retry_message3(&ptk, 2, 0x99));
