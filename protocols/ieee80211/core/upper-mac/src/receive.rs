@@ -100,7 +100,7 @@ impl<'a> AdmittedData<'a> {
     pub fn admit_uplink(
         header: DecodedHeader<'a>,
         bssid: Bssid,
-        peer: [u8; 6],
+        peer: Eui48,
         integrity: Integrity,
         replay: Option<&mut CcmpRxReplayEpoch>,
     ) -> Result<Self, RxDropReason> {
@@ -109,7 +109,7 @@ impl<'a> AdmittedData<'a> {
         if !control.is_data() || fields.no_data() || fields.from_ds() || !fields.to_ds() {
             return Err(RxDropReason::FrameKind);
         }
-        if header.receiver() != bssid.get() || header.transmitter() != Eui48::new(peer) {
+        if header.receiver() != bssid.get() || header.transmitter() != peer {
             return Err(RxDropReason::Address);
         }
         if control.more_fragments() || header.sequence_control().fragment() != 0 {
@@ -249,7 +249,7 @@ mod tests {
         AdmittedData::admit_uplink(
             DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
             Bssid::new(IndividualAddress::new(Eui48::new([2; 6])).unwrap()).unwrap(),
-            peer,
+            Eui48::new(peer),
             integrity,
             replay,
         )

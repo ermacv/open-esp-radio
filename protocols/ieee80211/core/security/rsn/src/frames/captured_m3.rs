@@ -11,6 +11,7 @@
 //! bytes are retained unchanged; SNonce is from Message 2.
 
 use super::*;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::GtkTx;
 
 /// The negotiated group management cipher of an association that protects
@@ -65,8 +66,8 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
     let ptk = pmk.derive_ptk(
         Akm::PskSha256,
         PtkContext {
-            authenticator_address: [0xbe, 0xfc, 0xe7, 0xae, 0xbb, 0xd4],
-            supplicant_address: [0x1c, 0xed, 0x6f, 0xb9, 0xba, 0x3c],
+            authenticator_address: Eui48::new([0xbe, 0xfc, 0xe7, 0xae, 0xbb, 0xd4]),
+            supplicant_address: Eui48::new([0x1c, 0xed, 0x6f, 0xb9, 0xba, 0x3c]),
             authenticator_nonce: *frame.nonce(),
             supplicant_nonce: SNONCE,
         },

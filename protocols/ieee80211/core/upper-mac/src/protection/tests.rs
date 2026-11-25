@@ -1,3 +1,4 @@
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::phy::{FecCoding, HeGiLtf, HeMcs, HtMcs, HtRate, SpatialStreams};
 
 use super::*;
@@ -359,7 +360,10 @@ fn leaving_the_bss_keeps_only_the_local_length_threshold() {
         policy.rts_threshold(),
         RtsThreshold::At(RtsLengthThreshold::new(2346))
     );
-    assert_eq!(TxReceiver::from_address1(&[0xff; 6]), TxReceiver::Group);
+    assert_eq!(
+        TxReceiver::from_address1(Eui48::new(*&[0xff; 6])),
+        TxReceiver::Group
+    );
 }
 
 #[test]

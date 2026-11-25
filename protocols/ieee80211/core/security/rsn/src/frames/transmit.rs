@@ -3,6 +3,7 @@
 use super::*;
 use crate::AkmKeys;
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::{
     EapolEncodeError, EapolKeyBuffer, EapolKeyFields, EapolKeyFixedFields,
 };
@@ -19,7 +20,7 @@ const _: () = {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RsnTxFrame<const N: usize = RSN_TX_EAPOL_CAPACITY> {
     interface: RsnInterface,
-    peer: [u8; 6],
+    peer: Eui48,
     pub(crate) retransmission: bool,
     packet: EapolKeyBuffer<N>,
 }
@@ -27,7 +28,7 @@ pub struct RsnTxFrame<const N: usize = RSN_TX_EAPOL_CAPACITY> {
 impl<const N: usize> RsnTxFrame<N> {
     pub fn message1(
         akm: Akm,
-        peer: [u8; 6],
+        peer: Eui48,
         replay_counter: u64,
         authenticator_nonce: [u8; 32],
     ) -> Result<Self, RsnFrameError> {
@@ -52,7 +53,7 @@ impl<const N: usize> RsnTxFrame<N> {
     /// `N` is chosen.
     pub(crate) fn authenticator_message1(
         akm: Akm,
-        peer: [u8; 6],
+        peer: Eui48,
         replay_counter: u64,
         authenticator_nonce: [u8; 32],
     ) -> Self {
@@ -76,7 +77,7 @@ impl<const N: usize> RsnTxFrame<N> {
 
     pub fn message2<const R: usize>(
         akm: Akm,
-        peer: [u8; 6],
+        peer: Eui48,
         replay_counter: u64,
         supplicant_nonce: [u8; 32],
         rsn_ie: &OwnedRsnIe<R>,
@@ -96,7 +97,7 @@ impl<const N: usize> RsnTxFrame<N> {
     /// `N` and `R` are chosen.
     pub fn message2_with_security_ies<const R: usize>(
         akm: Akm,
-        peer: [u8; 6],
+        peer: Eui48,
         replay_counter: u64,
         supplicant_nonce: [u8; 32],
         security_ies: &OwnedAssociationSecurityIes<R>,
@@ -124,7 +125,7 @@ impl<const N: usize> RsnTxFrame<N> {
 
     pub fn message3(
         akm: Akm,
-        peer: [u8; 6],
+        peer: Eui48,
         replay_counter: u64,
         authenticator_nonce: [u8; 32],
         key_rsc: [u8; 8],
@@ -154,7 +155,7 @@ impl<const N: usize> RsnTxFrame<N> {
     }
 
     /// Message 4. It cannot refuse: it carries no Key Data.
-    pub fn message4(akm: Akm, peer: [u8; 6], replay_counter: u64) -> Self {
+    pub fn message4(akm: Akm, peer: Eui48, replay_counter: u64) -> Self {
         Self::station(
             EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
                 protocol_version: 1,
@@ -174,7 +175,7 @@ impl<const N: usize> RsnTxFrame<N> {
 
     /// The station's response to one connected-state Group Message 1. It
     /// cannot refuse: it carries no Key Data.
-    pub fn group_message2(akm: Akm, peer: [u8; 6], replay_counter: u64) -> Self {
+    pub fn group_message2(akm: Akm, peer: Eui48, replay_counter: u64) -> Self {
         Self::station(
             EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
                 protocol_version: 1,
@@ -192,7 +193,7 @@ impl<const N: usize> RsnTxFrame<N> {
     }
 
     /// A station's frame of `packet` to `peer`.
-    const fn station(packet: EapolKeyBuffer<N>, peer: [u8; 6]) -> Self {
+    const fn station(packet: EapolKeyBuffer<N>, peer: Eui48) -> Self {
         Self {
             interface: RsnInterface::Station,
             peer,
@@ -205,7 +206,7 @@ impl<const N: usize> RsnTxFrame<N> {
     /// future AP authenticator. The caller supplies RFC3394-wrapped GTK data.
     pub fn group_message1(
         akm: Akm,
-        peer: [u8; 6],
+        peer: Eui48,
         replay_counter: u64,
         key_rsc: [u8; 8],
         encrypted_key_data: &[u8],
@@ -234,7 +235,7 @@ impl<const N: usize> RsnTxFrame<N> {
     #[allow(clippy::too_many_arguments)]
     fn build(
         interface: RsnInterface,
-        peer: [u8; 6],
+        peer: Eui48,
         protocol_version: u8,
         key_info: KeyInformation,
         key_length: u16,
@@ -274,8 +275,8 @@ impl<const N: usize> RsnTxFrame<N> {
         self.interface
     }
 
-    pub const fn peer(&self) -> &[u8; 6] {
-        &self.peer
+    pub const fn peer(&self) -> Eui48 {
+        self.peer
     }
 
     /// Semantic retry classification supplied by the WPA state transition.

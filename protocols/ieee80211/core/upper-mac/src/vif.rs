@@ -13,9 +13,9 @@ use oer_protocols_ieee80211_wire::frame::{
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaApRxAddresses {
-    pub station: [u8; 6],
-    pub station_bssid: [u8; 6],
-    pub access_point: [u8; 6],
+    pub station: Eui48,
+    pub station_bssid: Eui48,
+    pub access_point: Eui48,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,8 +61,8 @@ pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRo
     let receiver = fields.receiver();
     match fields.control().kind() {
         FrameType::Control => select(
-            addressee!(receiver == Eui48::new(addresses.station)),
-            addressee!(receiver == Eui48::new(addresses.access_point)),
+            addressee!(receiver == addresses.station),
+            addressee!(receiver == addresses.access_point),
         ),
         FrameType::Management => classify_management(fields, addresses),
         FrameType::Data => classify_data(fields, addresses),
@@ -79,12 +79,11 @@ fn classify_management(fields: AddressFields, addresses: StaApRxAddresses) -> St
     let probe_request = fields
         .control()
         .is_management(ManagementSubtype::ProbeRequest);
-    let station = receiver == Eui48::new(addresses.station)
+    let station = receiver == addresses.station
         || group_receiver
-            && (transmitter == Eui48::new(addresses.station_bssid)
-                || bssid == Eui48::new(addresses.station_bssid));
-    let access_point = receiver == Eui48::new(addresses.access_point)
-        || bssid == Eui48::new(addresses.access_point)
+            && (transmitter == addresses.station_bssid || bssid == addresses.station_bssid);
+    let access_point = receiver == addresses.access_point
+        || bssid == addresses.access_point
         || group_receiver && is_group(bssid) && probe_request;
     select(addressee!(station), addressee!(access_point))
 }
@@ -99,24 +98,23 @@ fn classify_data(fields: AddressFields, addresses: StaApRxAddresses) -> StaApRxR
     match (fields.control().to_ds(), fields.control().from_ds()) {
         (false, true) => select(
             addressee!(
-                receiver == Eui48::new(addresses.station)
-                    || group_receiver && transmitter == Eui48::new(addresses.station_bssid)
+                receiver == addresses.station
+                    || group_receiver && transmitter == addresses.station_bssid
             ),
             Addressee::Other,
         ),
         (true, false) => select(
             Addressee::Other,
-            addressee!(receiver == Eui48::new(addresses.access_point)),
+            addressee!(receiver == addresses.access_point),
         ),
         (false, false) => select(
             addressee!(
-                receiver == Eui48::new(addresses.station)
-                    || group_receiver
-                        && bssid_or_destination == Eui48::new(addresses.station_bssid)
+                receiver == addresses.station
+                    || group_receiver && bssid_or_destination == addresses.station_bssid
             ),
             addressee!(
-                receiver == Eui48::new(addresses.access_point)
-                    || group_receiver && bssid_or_destination == Eui48::new(addresses.access_point)
+                receiver == addresses.access_point
+                    || group_receiver && bssid_or_destination == addresses.access_point
             ),
         ),
         (true, true) => StaApRxRoute::Foreign,

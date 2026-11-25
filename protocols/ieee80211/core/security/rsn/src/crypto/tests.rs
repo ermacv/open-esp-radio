@@ -61,8 +61,8 @@ fn association_security_binding_uses_its_domain_label() {
 fn derives_known_ptk_and_builds_message_2() {
     let pmk = Pmk(core::array::from_fn(|index| index as u8));
     let context = PtkContext {
-        authenticator_address: [0x00, 0x11, 0x22, 0x33, 0x44, 0x55],
-        supplicant_address: [0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb],
+        authenticator_address: Eui48::new([0x00, 0x11, 0x22, 0x33, 0x44, 0x55]),
+        supplicant_address: Eui48::new([0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb]),
         authenticator_nonce: core::array::from_fn(|index| index as u8 + 32),
         supplicant_nonce: core::array::from_fn(|index| index as u8 + 64),
     };

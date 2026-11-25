@@ -19,6 +19,7 @@
 
 use core::ops::{Mul, Neg};
 use hmac::Mac;
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::sae::{
     SAE_CONFIRM_LEN, SAE_ELEMENT_LEN, SAE_PRIME_LEN, SaeBodyError, SaeCommitValues, SaeConfirm,
 };
@@ -171,9 +172,9 @@ fn hmac_sha256(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
 }
 
 /// The larger address first, then the smaller.
-fn max_min(first: [u8; 6], second: [u8; 6]) -> [u8; 12] {
+fn max_min(first: Eui48, second: Eui48) -> [u8; 12] {
     const {
-        if 12 != 2 * core::mem::size_of::<[u8; 6]>() {
+        if 12 != 2 * Eui48::LEN {
             panic!("SAE address context geometry");
         }
     }
@@ -183,7 +184,10 @@ fn max_min(first: [u8; 6], second: [u8; 6]) -> [u8; 12] {
         (second, first)
     };
     let mut addresses = [0; 12];
-    for (target, source) in addresses.iter_mut().zip(high.iter().chain(&low)) {
+    for (target, source) in addresses
+        .iter_mut()
+        .zip(high.octets().iter().chain(low.as_octets()))
+    {
         *target = *source;
     }
     addresses
@@ -218,8 +222,8 @@ impl SaePasswordElement {
     /// iterations. The last bit of the successful seed selects y.
     pub fn hunting_and_pecking(
         password: &[u8],
-        local: [u8; 6],
-        peer: [u8; 6],
+        local: Eui48,
+        peer: Eui48,
     ) -> Result<Self, SaeError> {
         let key = max_min(local, peer);
         let prime = crate::crypto::octets_of_u256(P256_MODULUS);
@@ -345,7 +349,7 @@ impl SaePasswordToken {
 
     /// PWE = val * PT, val = H(0^32, MAX(addresses) || MIN(addresses))
     /// mod (r - 1) + 1.
-    pub fn password_element(&self, local: [u8; 6], peer: [u8; 6]) -> SaePasswordElement {
+    pub fn password_element(&self, local: Eui48, peer: Eui48) -> SaePasswordElement {
         let hash = hmac_sha256(&[0; 32], &[&max_min(local, peer)]);
 
         let value = crate::crypto::u256_of_octets(hash)

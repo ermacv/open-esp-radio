@@ -26,6 +26,7 @@ use oer_portable_crypto::{
     block::{Aes128Engine, BlockError, wrap_now},
     rfc3394::KeyWrapError,
 };
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY;
 use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 
@@ -179,8 +180,8 @@ pub enum RsnApAwaiting {
 /// One station's four-way handshake.
 pub struct RsnApHandshake {
     akm: Akm,
-    authenticator: [u8; 6],
-    supplicant: [u8; 6],
+    authenticator: Eui48,
+    supplicant: Eui48,
     authenticator_nonce: [u8; RSN_NONCE_LEN],
     /// The last replay counter handed out; none is handed out twice.
     last_counter: u64,
@@ -218,8 +219,8 @@ enum KeyedStage {
 /// association's security IEs.
 pub struct RsnApStart {
     akm: Akm,
-    authenticator: [u8; 6],
-    supplicant: [u8; 6],
+    authenticator: Eui48,
+    supplicant: Eui48,
     authenticator_nonce: [u8; RSN_NONCE_LEN],
     initial_replay_counter: u64,
     binding: AssociationSecurityBinding,
@@ -229,8 +230,8 @@ impl RsnApStart {
     /// A refusal, `ZeroNonce` or `ReplayCounterExhausted`, keeps nothing.
     pub fn new(
         akm: Akm,
-        authenticator: [u8; 6],
-        supplicant: [u8; 6],
+        authenticator: Eui48,
+        supplicant: Eui48,
         authenticator_nonce: [u8; RSN_NONCE_LEN],
         initial_replay_counter: u64,
         binding: AssociationSecurityBinding,
@@ -303,8 +304,8 @@ impl RsnApHandshake {
         self.akm
     }
 
-    pub const fn peer(&self) -> &[u8; 6] {
-        &self.supplicant
+    pub const fn peer(&self) -> Eui48 {
+        self.supplicant
     }
 
     /// The latest built transmission, which owns the response window;
@@ -364,7 +365,7 @@ impl RsnApHandshake {
         if frame.interface() != RsnInterface::AccessPoint {
             return Err(RsnApError::Rejected(RsnStateError::WrongInterface));
         }
-        if frame.peer() != &self.supplicant {
+        if frame.peer() != self.supplicant {
             return Err(RsnApError::Rejected(RsnStateError::WrongPeer));
         }
         let key = frame.key_frame()?;
@@ -603,7 +604,7 @@ impl RsnApHandshake {
 /// What Message 3 is built from beside its material.
 struct Message3Facts<'a> {
     akm: Akm,
-    supplicant: [u8; 6],
+    supplicant: Eui48,
     authenticator_nonce: [u8; RSN_NONCE_LEN],
     ptk: &'a Ptk,
     transmit: RsnTransmit,

@@ -980,7 +980,7 @@ pub enum TxFrame<'p, K> {
         /// The peer asked to return its Block Ack state.
         receiver: IndividualAddress,
         /// The address of the requesting transmitter.
-        transmitter: [u8; 6],
+        transmitter: Eui48,
         /// The traffic identifier of the Block Ack agreement.
         tid: Tid,
         /// The first sequence number requested in the Block Ack window.

@@ -11,7 +11,8 @@ const PASSWORD: &[u8] = b"correct horse";
 
 fn commit(local: [u8; 6], peer: [u8; 6], seed: u8) -> SaeCommit {
     SaeCommit::new(
-        &SaePasswordElement::hunting_and_pecking(PASSWORD, local, peer).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(local), Eui48::new(peer))
+            .unwrap(),
         [seed; 32],
         [seed + 1; 32],
     )
@@ -149,7 +150,8 @@ fn the_timer_is_four_seconds_then_two_after_the_confirm() {
 fn a_wrong_password_or_a_refusal_fails() {
     let (station, sent) = start(Instant::EPOCH);
     let impostor = SaeCommit::new(
-        &SaePasswordElement::hunting_and_pecking(b"wrong", BSSID, LOCAL).unwrap(),
+        &SaePasswordElement::hunting_and_pecking(b"wrong", Eui48::new(BSSID), Eui48::new(LOCAL))
+            .unwrap(),
         [0x40; 32],
         [0x41; 32],
     )

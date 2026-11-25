@@ -475,8 +475,8 @@ mod handshake {
         pmk.derive_ptk(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
             PtkContext {
-                authenticator_address: AP,
-                supplicant_address: PEER,
+                authenticator_address: Eui48::new(AP),
+                supplicant_address: Eui48::new(PEER),
                 authenticator_nonce: ANONCE,
                 supplicant_nonce: SNONCE,
             },
@@ -488,7 +488,7 @@ mod handshake {
         let ies = OwnedAssociationSecurityIes::<128>::try_copy(&rsn_ie, &[]).unwrap();
         RsnTxFrame::<512>::message2_with_security_ies(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-            AP,
+            Eui48::new(AP),
             replay,
             SNONCE,
             &ies,
@@ -502,7 +502,7 @@ mod handshake {
     fn message4(replay: u64) -> std::vec::Vec<u8> {
         RsnTxFrame::<512>::message4(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-            AP,
+            Eui48::new(AP),
             replay,
         )
         .authenticate(&ptk(), &mut SoftwareAes128)

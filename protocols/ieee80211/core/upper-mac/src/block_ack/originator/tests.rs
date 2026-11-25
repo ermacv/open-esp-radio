@@ -336,13 +336,16 @@ fn bar(start: u16) -> [u8; oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_RE
 #[test]
 fn expiry_after_deliveries_uses_the_current_originator_head() {
     let mut core = active_originator(100);
-    assert_eq!(core.on_delivered(0, sequence(100), 0b11, PEER, LOCAL), None);
+    assert_eq!(
+        core.on_delivered(0, sequence(100), 0b11, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
     assert_eq!(
         core.operational(0).unwrap().starting_sequence,
         sequence(102)
     );
     assert_eq!(
-        core.on_expired(0, sequence(102), 1, PEER, LOCAL),
+        core.on_expired(0, sequence(102), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
         Some(bar(103))
     );
     assert_eq!(
@@ -354,38 +357,65 @@ fn expiry_after_deliveries_uses_the_current_originator_head() {
 #[test]
 fn a_non_head_expiry_is_remembered_until_delivery_reaches_it() {
     let mut core = active_originator(100);
-    assert_eq!(core.on_expired(0, sequence(102), 1, PEER, LOCAL), None);
-    assert_eq!(core.on_delivered(0, sequence(103), 1, PEER, LOCAL), None);
-    assert_eq!(core.on_delivered(0, sequence(100), 1, PEER, LOCAL), None);
+    assert_eq!(
+        core.on_expired(0, sequence(102), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_delivered(0, sequence(103), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_delivered(0, sequence(100), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
     assert_eq!(
         core.operational(0).unwrap().starting_sequence,
         sequence(101)
     );
     assert_eq!(
-        core.on_delivered(0, sequence(101), 1, PEER, LOCAL),
+        core.on_delivered(0, sequence(101), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
         Some(bar(104))
     );
     assert_eq!(
         core.operational(0).unwrap().starting_sequence,
         sequence(104)
     );
-    assert_eq!(core.on_expired(0, sequence(102), 1, PEER, LOCAL), None);
-    assert_eq!(core.on_delivered(0, sequence(101), 1, PEER, LOCAL), None);
+    assert_eq!(
+        core.on_expired(0, sequence(102), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_delivered(0, sequence(101), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
 }
 
 #[test]
 fn consecutive_expiries_emit_one_bar_at_the_final_window_start() {
     let mut core = active_originator(100);
-    assert_eq!(core.on_expired(0, sequence(101), 0b111, PEER, LOCAL), None);
     assert_eq!(
-        core.on_expired(0, sequence(100), 1, PEER, LOCAL),
+        core.on_expired(0, sequence(101), 0b111, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_expired(0, sequence(100), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
         Some(bar(104))
     );
     assert_eq!(
-        core.on_expired(0, sequence(104), 0b111, PEER, LOCAL),
+        core.on_expired(0, sequence(104), 0b111, Eui48::new(PEER), Eui48::new(LOCAL)),
         Some(bar(107))
     );
-    assert_eq!(core.on_expired(0, sequence(100), 0b1111, PEER, LOCAL), None);
+    assert_eq!(
+        core.on_expired(
+            0,
+            sequence(100),
+            0b1111,
+            Eui48::new(PEER),
+            Eui48::new(LOCAL)
+        ),
+        None
+    );
     assert_eq!(
         core.operational(0).unwrap().starting_sequence,
         sequence(107)
@@ -395,26 +425,47 @@ fn consecutive_expiries_emit_one_bar_at_the_final_window_start() {
 #[test]
 fn delivery_and_deferred_expiry_advance_across_sequence_zero() {
     let mut core = active_originator(4094);
-    assert_eq!(core.on_expired(0, sequence(4095), 0b11, PEER, LOCAL), None);
-    assert_eq!(core.on_delivered(0, sequence(1), 1, PEER, LOCAL), None);
     assert_eq!(
-        core.on_delivered(0, sequence(4094), 1, PEER, LOCAL),
+        core.on_expired(0, sequence(4095), 0b11, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_delivered(0, sequence(1), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_delivered(0, sequence(4094), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
         Some(bar(2))
     );
     assert_eq!(core.operational(0).unwrap().starting_sequence, sequence(2));
-    assert_eq!(core.on_expired(0, sequence(4095), 0b11, PEER, LOCAL), None);
+    assert_eq!(
+        core.on_expired(0, sequence(4095), 0b11, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
 }
 
 #[test]
 fn inactive_or_other_tid_progress_never_emits_a_bar() {
     let mut core = originator(32, 0);
-    assert_eq!(core.on_expired(0, sequence(0), 1, PEER, LOCAL), None);
-    assert_eq!(core.on_delivered(0, sequence(0), 1, PEER, LOCAL), None);
-    core = active_originator(0);
-    assert_eq!(core.on_expired(1, sequence(0), 1, PEER, LOCAL), None);
-    assert_eq!(core.on_expired(7, sequence(0), 1, PEER, LOCAL), None);
     assert_eq!(
-        core.on_expired(0, sequence(0), 1, PEER, LOCAL),
+        core.on_expired(0, sequence(0), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_delivered(0, sequence(0), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    core = active_originator(0);
+    assert_eq!(
+        core.on_expired(1, sequence(0), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_expired(7, sequence(0), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
+        None
+    );
+    assert_eq!(
+        core.on_expired(0, sequence(0), 1, Eui48::new(PEER), Eui48::new(LOCAL)),
         Some(bar(1))
     );
 }

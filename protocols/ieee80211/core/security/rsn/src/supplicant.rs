@@ -29,6 +29,7 @@ use oer_portable_crypto::{
     block::{Aes128Engine, BlockError},
 };
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
 use oer_protocols_ieee80211_wire::security::GroupManagementCipher;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -496,7 +497,7 @@ enum RsnCompletedKeyMessage {
 /// It retains only PTK-derived authentication material and replay state. PMK
 /// and association retry policy remain owned by the outer station lifecycle.
 pub struct RsnConnectedSupplicant {
-    authenticator: [u8; 6],
+    authenticator: Eui48,
     key_confirmation: RsnKeyConfirmationKey,
     key_encryption: RsnKeyEncryptionKey,
     authenticator_security_ies: OwnedAssociationSecurityIes,
@@ -544,7 +545,7 @@ impl RsnConnectedSupplicant {
         if frame.interface() != RsnInterface::Station {
             return Err(RsnConnectedSupplicantError::WrongInterface);
         }
-        if frame.peer() != &self.authenticator {
+        if frame.peer() != self.authenticator {
             return Err(RsnConnectedSupplicantError::WrongPeer);
         }
         let key = frame.key_frame()?;
@@ -591,7 +592,7 @@ impl RsnConnectedSupplicant {
         if frame.interface() != RsnInterface::Station {
             return Err(RsnConnectedSupplicantError::WrongInterface);
         }
-        if frame.peer() != &self.authenticator {
+        if frame.peer() != self.authenticator {
             return Err(RsnConnectedSupplicantError::WrongPeer);
         }
         let key = frame.key_frame()?;
@@ -764,8 +765,8 @@ impl RsnConnectedSupplicant {
 /// place, over the engine each step is lent.
 pub struct RsnStaHandshake {
     akm: Akm,
-    local: [u8; 6],
-    authenticator: [u8; 6],
+    local: Eui48,
+    authenticator: Eui48,
     supplicant_nonce: [u8; RSN_NONCE_LEN],
     /// The station's Association RSN element and RSNXE, which Message 2
     /// echoes.
@@ -811,8 +812,8 @@ impl RsnStaHandshake {
     /// with the access point's RSN element and RSNXE. A refusal keeps
     /// nothing.
     pub fn new(
-        local: [u8; 6],
-        authenticator: [u8; 6],
+        local: Eui48,
+        authenticator: Eui48,
         supplicant_nonce: [u8; RSN_NONCE_LEN],
         association_security_ies: &[u8],
         authenticator_rsn_ie: &[u8],
@@ -881,7 +882,7 @@ impl RsnStaHandshake {
         if frame.interface() != RsnInterface::Station {
             return Err(RsnStaError::Rejected(RsnStateError::WrongInterface));
         }
-        if frame.peer() != &self.authenticator {
+        if frame.peer() != self.authenticator {
             return Err(RsnStaError::Rejected(RsnStateError::WrongPeer));
         }
         let key = frame.key_frame()?;
@@ -1098,7 +1099,7 @@ impl RsnStaHandshake {
 /// What Message 2 is built from beside its PTK.
 struct Message2Facts<'a> {
     akm: Akm,
-    authenticator: [u8; 6],
+    authenticator: Eui48,
     supplicant_nonce: [u8; RSN_NONCE_LEN],
     replay: u64,
     security_ies: &'a OwnedAssociationSecurityIes,

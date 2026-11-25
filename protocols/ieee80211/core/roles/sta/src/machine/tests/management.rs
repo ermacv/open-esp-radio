@@ -95,10 +95,17 @@ fn associated<'id>(mint: Mint<'id, TestPools>) -> (World<'id>, Ptk, Vec<u8>) {
     let (world, ptk) = wpa2_associated_by::<2>(mint, &beacon);
     let plain = key_data(Some(&rsn), 0x99, 0x77);
     let wrapped = software_wrap(ptk.kek(), &plain).unwrap();
-    let m3 = RsnTxFrame::<512>::message3(Akm::Psk, LOCAL, 2, ANONCE, [0; 8], wrapped.as_bytes())
-        .unwrap()
-        .authenticate(&ptk, &mut SoftwareAes128)
-        .unwrap();
+    let m3 = RsnTxFrame::<512>::message3(
+        Akm::Psk,
+        Eui48::new(LOCAL),
+        2,
+        ANONCE,
+        [0; 8],
+        wrapped.as_bytes(),
+    )
+    .unwrap()
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     (world, ptk, eapol_frame(m3.as_bytes()))
 }
 
@@ -112,11 +119,16 @@ fn connected<'id>(mint: Mint<'id, TestPools>) -> (World<'id>, Ptk, Vec<u8>) {
 
 fn rekey(ptk: &Ptk, counter: u64, gtk: u8, igtk: u8) -> Vec<u8> {
     let wrapped = software_wrap(ptk.kek(), &key_data(None, gtk, igtk)).unwrap();
-    let message =
-        RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, counter, [0; 8], wrapped.as_bytes())
-            .unwrap()
-            .authenticate(ptk, &mut SoftwareAes128)
-            .unwrap();
+    let message = RsnTxFrame::<512>::group_message1(
+        Akm::Psk,
+        Eui48::new(LOCAL),
+        counter,
+        [0; 8],
+        wrapped.as_bytes(),
+    )
+    .unwrap()
+    .authenticate(ptk, &mut SoftwareAes128)
+    .unwrap();
     protected_received(eapol_frame(message.as_bytes()), counter)
 }
 

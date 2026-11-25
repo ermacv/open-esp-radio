@@ -60,7 +60,8 @@ fn rejects_ambiguous_lengths_and_non_rsn_descriptors() {
 fn a_damaged_owned_frame_returns_the_parser_error_instead_of_panicking() {
     let packet = key_packet(KEY_INFO_PAIRWISE | KEY_INFO_ACK | 2, 9);
     let mut owned =
-        OwnedEapolFrame::<128>::try_copy(RsnInterface::Station, [1; 6], &packet).unwrap();
+        OwnedEapolFrame::<128>::try_copy(RsnInterface::Station, Eui48::new([1; 6]), &packet)
+            .unwrap();
     owned.bytes[1] = 0;
     assert_eq!(owned.key_frame(), Err(EapolParseError::NotKeyPacket));
     assert_eq!(owned.as_bytes().len(), packet.len());

@@ -4,6 +4,7 @@
 //! mutated real frames) and, `#[ignore]`d, with [`FULL`]. The SAE exchange,
 //! a scalar multiplication per accepted commit, runs a tenth as many.
 
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
 
 /// The negotiated group management cipher of an association that protects
@@ -47,8 +48,8 @@ fn message3() -> (crate::Ptk, Vec<u8>) {
     let ptk = pmk.derive_ptk(
         Akm::PskSha256,
         PtkContext {
-            authenticator_address: [0xbe, 0xfc, 0xe7, 0xae, 0xbb, 0xd4],
-            supplicant_address: [0x1c, 0xed, 0x6f, 0xb9, 0xba, 0x3c],
+            authenticator_address: Eui48::new([0xbe, 0xfc, 0xe7, 0xae, 0xbb, 0xd4]),
+            supplicant_address: Eui48::new([0x1c, 0xed, 0x6f, 0xb9, 0xba, 0x3c]),
             authenticator_nonce: *frame.nonce(),
             supplicant_nonce: SNONCE,
         },
@@ -77,9 +78,11 @@ fn eapol(count: usize) {
             );
             let _ = frame.verify_mic(&ptk, &mut SoftwareAes128);
         }
-        if let Ok(owned) =
-            OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, [2, 0, 0, 0, 0, 1], bytes)
-        {
+        if let Ok(owned) = OwnedEapolFrame::<256>::try_copy(
+            RsnInterface::Station,
+            Eui48::new([2, 0, 0, 0, 0, 1]),
+            bytes,
+        ) {
             let _ = (
                 owned.as_bytes(),
                 owned.key_frame().unwrap().replay_counter(),
@@ -235,7 +238,8 @@ fn ccmp_never_panics_full() {
 fn sae_peers() -> (SaeCommit, SaeCommit) {
     let a = [2, 0, 0, 0, 0, 1];
     let b = [2, 0, 0, 0, 0, 2];
-    let pwe = SaePasswordElement::hunting_and_pecking(b"password", a, b).unwrap();
+    let pwe =
+        SaePasswordElement::hunting_and_pecking(b"password", Eui48::new(a), Eui48::new(b)).unwrap();
     (
         SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]).unwrap(),
         SaeCommit::new(&pwe, [0x33; 32], [0x44; 32]).unwrap(),
@@ -348,15 +352,20 @@ fn constructors_refuse_what_the_views_rely_on() {
     };
     let station = [2, 0, 0, 0, 0, 1];
     assert!(matches!(
-        OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, station, &MESSAGE3[..120]),
+        OwnedEapolFrame::<256>::try_copy(
+            RsnInterface::Station,
+            Eui48::new(station),
+            &MESSAGE3[..120]
+        ),
         Err(EapolCopyError::Invalid(_))
     ));
     assert_eq!(
-        OwnedEapolFrame::<100>::try_copy(RsnInterface::Station, station, &MESSAGE3),
+        OwnedEapolFrame::<100>::try_copy(RsnInterface::Station, Eui48::new(station), &MESSAGE3),
         Err(EapolCopyError::CapacityExceeded)
     );
     let owned =
-        OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, station, &MESSAGE3).unwrap();
+        OwnedEapolFrame::<256>::try_copy(RsnInterface::Station, Eui48::new(station), &MESSAGE3)
+            .unwrap();
     assert_eq!(owned.key_frame().unwrap().bytes(), MESSAGE3.as_slice());
 
     let mut long = Vec::from(RSN_IE);
@@ -375,8 +384,12 @@ fn constructors_refuse_what_the_views_rely_on() {
     );
     assert!(validate_rsn_element(&RSN_IE[..RSN_IE.len() - 1]).is_err());
 
-    let pwe =
-        SaePasswordElement::hunting_and_pecking(b"password", station, [2, 0, 0, 0, 0, 2]).unwrap();
+    let pwe = SaePasswordElement::hunting_and_pecking(
+        b"password",
+        Eui48::new(station),
+        Eui48::new([2, 0, 0, 0, 0, 2]),
+    )
+    .unwrap();
     let one = core::array::from_fn(|index| u8::from(index == 31));
     for rand in [[0; 32], one, [0xff; 32]] {
         assert!(matches!(

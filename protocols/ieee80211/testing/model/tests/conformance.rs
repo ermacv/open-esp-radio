@@ -18,9 +18,10 @@
     reason = "test code: a test may panic"
 )]
 
+use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{
-    Channel, ChannelWidth, MpduLength, PortPools, RadioPort, RegulatedChannel, RxMeta,
-    SupportedChannel,
+    Channel, ChannelWidth, EthernetAddresses, MpduLength, PortPools, RadioPort, RegulatedChannel,
+    Round, RxMeta, SupportedChannel,
 };
 use oer_protocols_ieee80211_testing_conformance as suite;
 use oer_protocols_ieee80211_testing_model::{
@@ -246,4 +247,34 @@ fn a_stop_ends_everything_on_the_air() {
 #[test]
 fn no_call_returns_an_error() {
     suite::no_call_returns_an_error::<ModelPort<'static, SINGLES, DATA>>();
+}
+
+/// The addresses lie in the unit's twelve octets before the EtherType, and
+/// nowhere else; without those octets nothing is written.
+#[test]
+fn a_units_addresses_are_written_before_its_ether_type() {
+    installed(|mut model, _rights| {
+        let mut frame = [0; 40];
+        // Data, From DS.
+        frame[..2].copy_from_slice(&[0x08, 0x02]);
+        model
+            .port
+            .land(&frame, RxMeta::unavailable(channel(1).channel()));
+        let mut round = Round::open(&mut model.port, oer_portable_time::Instant::EPOCH);
+        let handle = round.staged().expect("the ring held a unit").take();
+        let addresses = |ether_type_at| EthernetAddresses {
+            destination: Eui48::new([1, 2, 3, 4, 5, 6]),
+            source: Eui48::new([7, 8, 9, 10, 11, 12]),
+            ether_type_at,
+        };
+        for outside in [11, 41] {
+            assert!(round.write_addresses(&handle, addresses(outside)).is_err());
+        }
+        assert!(round.write_addresses(&handle, addresses(30)).is_ok());
+        let mut expected = frame;
+        expected[18..30].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        assert_eq!(round.unit(&handle).unwrap().bytes, expected);
+        round.release(handle);
+        let _ = round.close();
+    });
 }

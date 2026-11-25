@@ -183,7 +183,7 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
                 world.receive(at(31), &association_response(0));
                 let frame = RsnTxFrame::<512>::message1(
                     oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-                    LOCAL,
+                    Eui48::new(LOCAL),
                     1,
                     ANONCE,
                 )

@@ -1,5 +1,6 @@
 //! Protection inputs and decisions shared by upper-MAC and the family policy.
 use core::num::NonZeroU16;
+use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
 use oer_protocols_ieee80211_contracts_port::Protection;
 use oer_protocols_ieee80211_wire::{
     phy::{LegacyRate, PhyRate},
@@ -159,11 +160,10 @@ pub enum TxReceiver {
 impl TxReceiver {
     /// Classify the receiver address (RA). The Ethernet destination of a
     /// To-DS frame is Address 3 and does not select the exchange.
-    pub const fn from_address1(address1: &[u8; 6]) -> Self {
-        if address1[0] & 1 != 0 {
-            Self::Group
-        } else {
-            Self::Individual
+    pub const fn from_address1(address1: Eui48) -> Self {
+        match address1.kind() {
+            Eui48Kind::Group(_) => Self::Group,
+            Eui48Kind::Individual(_) => Self::Individual,
         }
     }
 }
