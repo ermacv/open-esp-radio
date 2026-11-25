@@ -275,7 +275,7 @@ pub(crate) struct LeaseCli {
 /// recorded in the board journal when the command succeeds.
 #[derive(Clone, Debug, Default, clap::Args)]
 struct FlashedArgs {
-    /// Name of the flashed image, e.g. `ieee802154-peer`.
+    /// Name of the flashed image, e.g. `wifi-injector-peer`.
     #[arg(long = "flashed")]
     image: Option<String>,
     /// The flashed application binary, whose SHA-256 is recorded.
@@ -747,7 +747,7 @@ mod tests {
         use clap::Parser as _;
         let cli = LeaseCli::try_parse_from([
             "--flashed",
-            "ieee802154-peer",
+            "wifi-injector-peer",
             "--sha256",
             &"AB".repeat(32),
             "--device",

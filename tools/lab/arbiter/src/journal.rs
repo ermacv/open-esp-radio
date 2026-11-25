@@ -540,7 +540,7 @@ mod tests {
         let arbiter = Journal::at(directory.path().join("board.jsonl"));
         let mac = oer_tools_lab_model::device_id::DeviceId::parse("02:00:00:00:25:64").unwrap();
         let image = ImageIdentity {
-            name: "ieee802154-peer".into(),
+            name: "wifi-injector-peer".into(),
             sha256: sha('a'),
             commit: Some("c0ffee".into()),
             dirty: Some(false),

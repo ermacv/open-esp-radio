@@ -349,8 +349,7 @@
     "subcommands": [],
     "flags": [
       "--provider",
-      "--dry-run",
-      "--adapter"
+      "--dry-run"
     ],
     "forwards": false
   },

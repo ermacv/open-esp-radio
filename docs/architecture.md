@@ -143,8 +143,7 @@ backend port and the installed-protection contract), the sans-IO cores under
 transmit queues) and `arbiter`, the security transforms and handshakes in
 `security/`, the `roles/` station and access point, and `extensions/`), a
 `runtime`, and `testing/` (the backend conformance suite and the reference
-model), which no product package depends on. Bluetooth's `hci` is the codec the
-stand's fixture helpers use ([repository layout](repository-layout.md)). A backend depends on its
+model), which no product package depends on. A backend depends on its
 protocol's port, wire formats, protocol contracts and implemented `cipher`
 only. A protocol contract (`protocols/<protocol>/contracts/*`) owns what a
 protocol installs and a backend programs, apart from the codecs and the
@@ -255,15 +254,11 @@ including aliases, optional entries and target-specific entries:
 
 - `embassy-futures` is allowed except in wire, cipher, protocol cores,
   core-side policy, facts, PAC and HAL roles.
-- `embassy-sync` is development-only. Its one remaining normal edge is
-  checked against a shrinking [deviation list](repository-layout.md#known-deviations).
-  Transitive uses inside `bt-hci` do not admit direct uses.
+- `embassy-sync` and `bt-hci` have no home: no package of the workspace
+  depends on either.
 - `embassy-time` belongs to `portable/embassy/time` and the application
   entry (`oer`), which re-exports the executors' clock;
   `embassy-time-driver` belongs to `chips/family/platform/executor`.
-- `bt-hci` belongs to `oer-protocols-bluetooth-hci` and `tools/`. The HCI codec exports selected packet, command and event values,
-  without re-exporting the crate. Protocol sources never use
-  `bt_hci::controller`.
 
 The sans-IO safety and panic rules cover all crates under `protocols/` and
 `portable/`, except the unsafe homes `oer-portable-mmio`, `oer-portable-riscv`, `oer-portable-memory` and `oer-portable-waker`.
@@ -1075,7 +1070,7 @@ defines the scan's scope and limits.
   image's executor binding names, and architectural CSR access and waits
   from `oer-portable-riscv`.
   Embassy futures, network and time utilities follow the external-crate
-  homes above; remaining direct `embassy-sync` uses are listed deviations.
+  homes above.
   Tasks run on the static executor (`chips/family/platform/executor`), in static
   slots, polled by direct calls, with one waker vtable, the binding's, whose
   data names the executor and task.

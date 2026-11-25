@@ -1228,10 +1228,6 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
         assert_eq!(role(&format!("{prefix}/hil")), None);
     }
     assert_eq!(
-        protocol_role("protocols/bluetooth/hci"),
-        Some(ProtocolRole::Core)
-    );
-    assert_eq!(
         protocol_role("protocols/ieee80211/core/datapath"),
         Some(ProtocolRole::Core)
     );
@@ -2368,11 +2364,7 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
         }
         "embassy-time-driver" => path == "chips/family/platform/executor",
         "trouble-host" => path == "portable/embassy/trouble" || image_path(path),
-        "bt-hci" => {
-            path == "protocols/bluetooth/hci"
-                || path == "portable/embassy/trouble"
-                || path.starts_with("tools/")
-        }
+        "bt-hci" => false,
         _ => true,
     }
 }
@@ -2755,14 +2747,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
             "trouble-host",
             vec!["portable/embassy/trouble", "hil/probes/esp32s31-radio-root"],
         ),
-        (
-            "bt-hci",
-            vec![
-                "protocols/bluetooth/hci",
-                "portable/embassy/trouble",
-                "tools/lab/fixture-helpers",
-            ],
-        ),
+        ("bt-hci", vec![]),
     ] {
         for path in allowed {
             assert!(
@@ -2774,6 +2759,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
             "portable/embassy/other",
             "protocols/ieee80211/runtime",
             "chips/esp32s31/hal",
+            "tools/lab/fixture-helpers",
         ] {
             assert!(
                 !external_crate_allowed(path, role(path).unwrap(), dependency),
@@ -5898,7 +5884,6 @@ const BY_EXCEPTION_PATH: &str = "the CPU exception path as one module";
 const BY_PHY_PROGRAMS: &str = "the PHY's procedures as programs";
 const BY_PAC_CONVERSIONS: &str = "the PAC's raw conversions closed by the language";
 const BY_UNOWNED_ROWS: &str = "the rows no step rewrites";
-const BY_BLUETOOTH: &str = "Bluetooth LE's own plan, outside this plan";
 const BY_PROBE: &str = "the probe's first change: deleted, or moved onto HIL";
 const CORRECT: &str = "correct code: named in the pull request that deletes the scan (`design/name-keyed-lists-2026-11-23.md`)";
 const IN_ITS_HOME: &str = "a door in its home: stays when S6 becomes the check of doors (`design/name-keyed-lists-2026-11-23.md`, 4.4)";
@@ -5984,7 +5969,6 @@ const STEP_BY_PLACE: &[(&str, &str)] = &[
     ("protocols/ieee80211/core/roles", BY_CONTROLLER),
     ("protocols/ieee80211/core/datapath", BY_CONTROLLER),
     ("protocols/ieee80211/testing", BY_CONFORMANCE),
-    ("protocols/bluetooth", BY_BLUETOOTH),
     ("hil/probes/", BY_PROBE),
     ("portable/memory", BY_TRANSMIT),
     ("portable/time", BY_LEVEL_TASK),
@@ -6031,7 +6015,6 @@ fn remover_name(file: &str) -> &'static str {
         ("BY_PHY_PROGRAMS", BY_PHY_PROGRAMS),
         ("BY_PAC_CONVERSIONS", BY_PAC_CONVERSIONS),
         ("BY_UNOWNED_ROWS", BY_UNOWNED_ROWS),
-        ("BY_BLUETOOTH", BY_BLUETOOTH),
         ("BY_PROBE", BY_PROBE),
         ("CORRECT", CORRECT),
         ("IN_ITS_HOME", IN_ITS_HOME),
@@ -6969,67 +6952,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
 /// `oer-portable-wire` may. It misses an index
 /// of a slice of bytes named otherwise. The list only shrinks.
 const RAW_BYTES: &[(&str, usize, &str)] = &[
-    (
-        "protocols/bluetooth/hci/src/controller/bootstrap/reset.rs",
-        2,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/bootstrap/response.rs",
-        7,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/accept_list.rs",
-        1,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/acl.rs",
-        13,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/advertising.rs",
-        3,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/data_length.rs",
-        14,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/dtm.rs",
-        10,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/peripheral.rs",
-        35,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/scanning.rs",
-        11,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/random.rs",
-        2,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/response.rs",
-        3,
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/transport/packet.rs",
-        2,
-        BY_BLUETOOTH,
-    ),
-    ("protocols/bluetooth/hci/src/wire.rs", 1, BY_BLUETOOTH),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/management.rs",
         1,
@@ -8337,22 +8259,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     (
         "chips/family/radio/ieee80211/policy/src/rate_selection.rs::EspressifRateSelection.control",
         BY_CONTROLLER,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/acl.rs::LeHostAclPacket.in_flight_end",
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/dtm.rs::LeDtmCommandCompleteEvent.packet_count",
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/controller/le/scanning.rs::LeLegacyScanningConfiguration.parameters",
-        BY_BLUETOOTH,
-    ),
-    (
-        "protocols/bluetooth/hci/src/h4.rs::CommandReceiver.expected",
-        BY_BLUETOOTH,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiConfig.access_point",
@@ -10356,12 +10262,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         BY_UNOWNED_ROWS,
     ),
     (
-        "protocols/bluetooth/hci/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_BLUETOOTH,
-    ),
-    (
         "protocols/hil/protocol/src/key.rs",
         "unused_doc_comments",
         1,
@@ -11606,30 +11506,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "tools/lab/client/src/lib.rs",
         "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/dtm.rs",
-        "unexpected_cfgs",
-        1,
-        "unknown, to read",
-    ),
-    (
-        "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/main.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/main.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/main.rs",
-        "clippy::indexing_slicing",
         1,
         "host tool: the ban covers the code an image reaches",
     ),

@@ -100,7 +100,6 @@ members = [
     "chips/family/platform/port",
     "chips/family/drivers/pmu",
     "portable/time-virtual",
-    "protocols/bluetooth/hci",
     "protocols/ieee80211/core/roles/ap",
     "protocols/ieee80211/core/arbiter",
     "protocols/ieee80211/core/installation",
@@ -264,7 +263,6 @@ default-members = [
     "chips/family/platform/port",
     "chips/family/drivers/pmu",
     "portable/time-virtual",
-    "protocols/bluetooth/hci",
     "protocols/ieee80211/core/roles/ap",
     "protocols/ieee80211/core/arbiter",
     "protocols/ieee80211/core/installation",
@@ -426,7 +424,3 @@ debug = 1
 incremental = true
 codegen-units = 16
 
-# `embassy-sync` is the owner's fork of its 0.8.0 release, whose mutex and
-# channel run no foreign code inside their state.
-[patch.crates-io]
-embassy-sync = { git = "https://github.com/ermacv/embassy", rev = "cbeed6a32ba1c3135f1518f046c5a5c60e86945d" }

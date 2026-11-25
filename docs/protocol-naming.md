@@ -17,12 +17,9 @@ complete standard implementation or certification.
 | Wi-Fi | Technology and ecosystem based on IEEE 802.11 | `wifi` is appropriate for user-facing APIs; it does not imply Wi-Fi certification |
 | IEEE 802.15.4 | MAC/PHY family for low-rate wireless networks | `ieee802154`; the register model's facts only |
 | WPAN | Wireless personal area network | A broader category, not a replacement name for the 802.15.4 backend |
-| Bluetooth | Bluetooth SIG family, including BR/EDR and LE | `bluetooth`, `bluetooth/hci` alone in the tree |
-| HCI | Host–Controller commands, events and data transport | `bluetooth/hci`; neither an on-air protocol nor a complete Host stack |
+| Bluetooth | Bluetooth SIG family, including BR/EDR and LE | `bluetooth`; the register model's facts only |
 
-IEEE 802.15.4 does not itself provide Thread or Zigbee. HCI also applies to
-BR/EDR and must not be named as if it were exclusively LE Link Layer.
-`legacy advertising` in this code means legacy LE advertising.
+IEEE 802.15.4 does not itself provide Thread or Zigbee.
 
 The conventions follow the scope described by [IEEE 802.11](https://www.ieee802.org/11/abt80211.html),
 [IEEE 802.15.4](https://standards.ieee.org/ieee/802.15.4/11041/),

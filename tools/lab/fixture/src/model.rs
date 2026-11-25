@@ -6,42 +6,30 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "kebab-case")]
 pub enum Provider {
     LinuxNet,
-    LinuxBluetooth,
 }
 
 impl Provider {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::LinuxNet => "linux-net",
-            Self::LinuxBluetooth => "linux-bluetooth",
         }
     }
 
     pub(crate) fn runtime_contract(self) -> &'static str {
         match self {
             Self::LinuxNet => crate::network_client::CONTRACT,
-            Self::LinuxBluetooth => crate::bluetooth::model::HELPER_CAPABILITIES,
         }
     }
 
     pub(crate) fn artifact_specs(self) -> &'static [ArtifactSpec] {
         match self {
             Self::LinuxNet => &LINUX_NET_ARTIFACTS,
-            Self::LinuxBluetooth => &LINUX_BLUETOOTH_ARTIFACTS,
         }
     }
 
     pub(crate) fn policy_path(self) -> &'static str {
         match self {
             Self::LinuxNet => "/etc/sudoers.d/open-radio-net",
-            Self::LinuxBluetooth => "/etc/sudoers.d/open-radio-bluetooth",
-        }
-    }
-
-    pub(crate) fn default_adapters(self) -> Vec<String> {
-        match self {
-            Self::LinuxNet => Vec::new(),
-            Self::LinuxBluetooth => vec!["hci0".to_owned()],
         }
     }
 }
@@ -58,8 +46,7 @@ impl FromStr for Provider {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "linux-net" => Ok(Self::LinuxNet),
-            "linux-bluetooth" => Ok(Self::LinuxBluetooth),
-            _ => Err("provider must be linux-net or linux-bluetooth".to_owned()),
+            _ => Err("provider must be linux-net".to_owned()),
         }
     }
 }
@@ -76,16 +63,11 @@ pub enum ArtifactRole {
     ProbeHelper,
     Hostapd,
     HostapdProvenance,
-    BluetoothLauncher,
-    BluetoothHelper,
 }
 
 impl ArtifactRole {
     pub(crate) fn is_launcher(self) -> bool {
-        matches!(
-            self,
-            Self::NetworkLauncher | Self::ProbeLauncher | Self::BluetoothLauncher
-        )
+        matches!(self, Self::NetworkLauncher | Self::ProbeLauncher)
     }
 }
 
@@ -164,23 +146,6 @@ const LINUX_NET_ARTIFACTS: [ArtifactSpec; 9] = [
     },
 ];
 
-const LINUX_BLUETOOTH_ARTIFACTS: [ArtifactSpec; 2] = [
-    ArtifactSpec {
-        role: ArtifactRole::BluetoothLauncher,
-        source: "target/debug/open-radio-bluetooth-launcher",
-        name: "open-radio-bluetooth-launcher",
-        target: "/usr/local/libexec/open-radio-bluetooth-launcher",
-        mode: 0o555,
-    },
-    ArtifactSpec {
-        role: ArtifactRole::BluetoothHelper,
-        source: "target/debug/open-radio-bluetooth",
-        name: "open-radio-bluetooth",
-        target: "/usr/local/libexec/open-radio-bluetooth",
-        mode: 0o555,
-    },
-];
-
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ArtifactState {
@@ -208,6 +173,8 @@ pub struct InstallPlan {
     pub activation_boundary: String,
     pub readonly_verification: Vec<String>,
     pub automatic_hardware_checks: bool,
+    /// Always empty: no provider admits a Bluetooth adapter. The field
+    /// stays for the stored format.
     pub allowed_bluetooth_adapters: Vec<String>,
 }
 
@@ -239,6 +206,8 @@ pub struct Bundle {
     pub operator: String,
     pub source: SourceIdentity,
     pub runtime_contract: String,
+    /// Always empty: no provider admits a Bluetooth adapter. The field
+    /// stays for the stored format.
     pub allowed_bluetooth_adapters: Vec<String>,
     pub artifacts: Vec<Artifact>,
 }
@@ -276,36 +245,13 @@ pub struct InstallResult {
     pub recovery_error: Option<String>,
 }
 
-pub(crate) fn validate_adapters(
-    provider: Provider,
-    adapters: &[String],
-) -> Result<Vec<String>, String> {
-    if provider == Provider::LinuxNet {
-        if adapters.is_empty() {
-            return Ok(Vec::new());
-        }
-        return Err("--adapter is valid only for provider linux-bluetooth".to_owned());
-    }
-    let mut adapters = if adapters.is_empty() {
-        provider.default_adapters()
+/// The Bluetooth adapters a bundle admits: none, since the stand installs no
+/// Bluetooth helper. The field stays in the stored bundle and plan format,
+/// always empty.
+pub(crate) fn validate_adapters(adapters: &[String]) -> Result<Vec<String>, String> {
+    if adapters.is_empty() {
+        Ok(Vec::new())
     } else {
-        adapters.to_vec()
-    };
-    adapters.sort();
-    adapters.dedup();
-    if adapters.len() > 16 {
-        return Err("at most 16 Bluetooth adapters may be installed".to_owned());
+        Err("no fixture provider admits a Bluetooth adapter".to_owned())
     }
-    for adapter in &adapters {
-        let Some(number) = adapter.strip_prefix("hci") else {
-            return Err(format!("invalid Bluetooth adapter `{adapter}`"));
-        };
-        let index: u16 = number
-            .parse()
-            .map_err(|_| format!("invalid Bluetooth adapter `{adapter}`"))?;
-        if index == u16::MAX || number != index.to_string() {
-            return Err(format!("invalid Bluetooth adapter `{adapter}`"));
-        }
-    }
-    Ok(adapters)
 }

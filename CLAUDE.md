@@ -147,7 +147,7 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
 - **Sans-IO crates** (the layer in `docs/architecture.md`) start with
   `#![forbid(unsafe_code)]` and contain no runtime panic paths: `panic!`,
   `unreachable!`, `todo!`, `unimplemented!`, `assert*`, `debug_assert*`,
-  `vendor_assert!`, `unwrap`/`expect`, unchecked indexing or slicing,
+  `unwrap`/`expect`, unchecked indexing or slicing,
   overflow, invalid division and panicking core methods return typed errors
   instead. They never depend on fatal, reset or retained-record owners and
   never reset.
@@ -306,8 +306,7 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables
-  ([docs/source-policy.md](docs/source-policy.md)); the Bluetooth LE hardware
-  engine is the one exception. To find something in vendor libraries, ROM or
+  ([docs/source-policy.md](docs/source-policy.md)). To find something in vendor libraries, ROM or
   a vendor image, use Blobray (`cargo blobray`,
   [tools/analysis/blobray-README.md](tools/analysis/blobray-README.md)) first.
 - **Where code goes** ([docs/repository-layout.md](docs/repository-layout.md)):

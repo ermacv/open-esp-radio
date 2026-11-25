@@ -9,13 +9,8 @@ use oer_tools_lab_fixture::{INSTALLER_BINARY, Provider, build_plan, inspect_syst
 
 use crate::Result;
 
-pub(crate) fn run(
-    root: &Path,
-    provider: Provider,
-    dry_run: bool,
-    adapters: &[String],
-) -> Result<()> {
-    let plan = build_plan(root, provider, adapters)?;
+pub(crate) fn run(root: &Path, provider: Provider, dry_run: bool) -> Result<()> {
+    let plan = build_plan(root, provider)?;
     if dry_run {
         let mut preview = serde_json::to_value(&plan)?;
         let fields = preview
@@ -52,7 +47,6 @@ pub(crate) fn run(
                 "open-radio-probe",
                 "open-radio-net-client",
             ],
-            Provider::LinuxBluetooth => &["open-radio-bluetooth-launcher", "open-radio-bluetooth"],
         };
         let mut build = oer_tools_os_process::command(oer_tools_os_toolchain::cargo_program());
         build.current_dir(root).args([
@@ -73,7 +67,7 @@ pub(crate) fn run(
             .env("CARGO_TARGET_DIR", root.join("target"));
         oer_tools_os_process::run(&mut build)?;
         let operator = current_operator()?;
-        let bundle = prepare(root, provider, &operator, &plan.allowed_bluetooth_adapters)?;
+        let bundle = prepare(root, provider, &operator)?;
         eprintln!(
             "stand: queueing for {}",
             oer_tools_lab_fixture::resource(provider)
@@ -97,7 +91,7 @@ pub(crate) fn run(
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (root, provider, adapters, plan);
+        let _ = (root, provider, plan);
         Err("fixture installation requires Linux".into())
     }
 }

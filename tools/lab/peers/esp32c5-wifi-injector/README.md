@@ -43,8 +43,8 @@ needs a power-on reset of its hub port.
 reproducible build and warnings in the log, so a refused vendor call names
 its reason on the console (the host ignores lines without `@`). Power save
 stays off, so the PMU never enters its MODEM state; on the ESP32-C5 the peer
-keeps the ROM's analog I2C master clock map like the
-[IEEE 802.15.4 peer](../esp32c5-ieee802154/README.md#usb-serialjtag-resets).
+keeps the ROM's analog I2C master clock map, at start and after each radio
+enable, so USB resets and flashes over it work.
 
 Commands reach the peer through the LAB service:
 

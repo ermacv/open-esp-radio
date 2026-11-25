@@ -4,8 +4,8 @@
 //! The privileged `open-radio-fixture-install` program and the fixed
 //! launchers (`tools/lab/fixture-install`) install and admit the software; the
 //! unprivileged runner plans and prepares through the same library, and
-//! parses the requests and reports of `open-radio-bluetooth` and
-//! `open-radio-probe` (`tools/lab/fixture-helpers`) with the same types. The programs
+//! parses the requests and reports of `open-radio-probe`
+//! (`tools/lab/fixture-helpers`) with the same types. The programs
 //! are packages without a library.
 #![expect(
     clippy::cast_possible_truncation,
@@ -33,7 +33,6 @@
 )]
 
 mod admission;
-pub mod bluetooth;
 pub mod hostapd;
 pub mod launcher;
 mod model;

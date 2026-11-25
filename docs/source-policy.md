@@ -84,13 +84,10 @@ project may be cited for observed behaviour that a specification also fixes.
 
 ### Sources without a license
 
-Exception: the Bluetooth LE hardware engine (the S31 driver, the HAL's controller-memory
-engine, the PAC's Bluetooth initialization and the HAL's scheduler locks)
-keeps what it takes from `esp32s31-bt-lib` as it is.
-
 The current `esp32s31-bt-lib` pin includes an Apache-2.0 binary distribution
-license. Earlier unlicensed inputs retain their facts-only attribution; a
-new distribution license does not relabel an earlier derivation.
+license. What the tree takes from it, and from its earlier unlicensed
+revisions, is facts; a new distribution license does not relabel an earlier
+derivation.
 
 From a source that has no license, the repository
 records only facts: values, layouts, addresses, order of operations and names.

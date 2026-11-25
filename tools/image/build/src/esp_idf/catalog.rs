@@ -406,8 +406,8 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         project(
             root.path(),
-            "tools/lab/peers/chip-b-ieee802154",
-            "image = \"ieee802154-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\n",
+            "tools/lab/peers/chip-b-injector",
+            "image = \"injector-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\n",
         );
         project(
             root.path(),
@@ -420,11 +420,11 @@ mod tests {
             entries,
             [
                 Entry {
-                    image: "ieee802154-peer".into(),
+                    image: "injector-peer".into(),
                     chip: "chip-b".into(),
                     pins: "chip-a".into(),
                     hold: None,
-                    directory: "tools/lab/peers/chip-b-ieee802154".into(),
+                    directory: "tools/lab/peers/chip-b-injector".into(),
                     shared: vec![],
                 },
                 Entry {
@@ -437,12 +437,12 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(entries[0].project(root.path()).name, "chip-b-ieee802154");
+        assert_eq!(entries[0].project(root.path()).name, "chip-b-injector");
         assert!(entry(&entries, "missing").is_err());
         project(
             root.path(),
             "tools/lab/peers/copy",
-            "image = \"ieee802154-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\n",
+            "image = \"injector-peer\"\nchip = \"chip-b\"\npins = \"chip-a\"\n",
         );
         assert!(
             super::entries(root.path()).is_err(),
@@ -455,7 +455,7 @@ mod tests {
         let repository = crate::tests::repository();
         let root = repository.path();
         let entries = entries(&root).unwrap();
-        for image in ["ieee802154-peer", "phy-tracking-reference"] {
+        for image in ["wifi-injector-peer", "phy-tracking-reference"] {
             assert!(entries.iter().any(|entry| entry.image == image), "{image}");
         }
     }
@@ -687,7 +687,7 @@ mod tests {
                 .unwrap()
                 .contains(&"esp32c5".to_owned())
         );
-        let (entry, build) = built_peer(root, "ieee802154-peer");
+        let (entry, build) = built_peer(root, "wifi-injector-peer");
         let output = tempfile::tempdir().unwrap();
         let bundle = bundle(root, &entry, &build, &output.path().join("bundle")).unwrap();
         assert_eq!(bundle.chip, "esp32c5");

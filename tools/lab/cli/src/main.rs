@@ -125,9 +125,6 @@ enum FixtureCli {
         /// Print the offline plan without executing any installer step.
         #[arg(long)]
         dry_run: bool,
-        /// Bluetooth adapter admitted by the installed policy; defaults to hci0.
-        #[arg(long, value_name = "hciN")]
-        adapter: Vec<String>,
     },
     /// Build the pinned hostapd with explicit HIL coexistence policy support.
     BuildHostapd,
@@ -195,12 +192,8 @@ fn run() -> Result<ExitCode> {
             print!("{}", oer_tools_lab_model::equipment::describe(&local));
             Ok(ExitCode::SUCCESS)
         }
-        Some(StandCommand::Fixture(FixtureCli::Install {
-            provider,
-            dry_run,
-            adapter,
-        })) => {
-            fixture_install::run(&ctx.root, provider, dry_run, &adapter)?;
+        Some(StandCommand::Fixture(FixtureCli::Install { provider, dry_run })) => {
+            fixture_install::run(&ctx.root, provider, dry_run)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(StandCommand::StandFile(StandFileCli::Convert { output, in_place })) => {
