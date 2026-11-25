@@ -9,17 +9,35 @@ fn retirement_returns_the_table_without_secrets_and_preserves_its_frontier() {
             .authenticate_sae(
                 PEER,
                 Pmk::from_bytes(SAE_PMK),
-                SAE_PMKID,
+                oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID),
                 oer_portable_time::Instant::from_micros(1)
             )
             .unwrap(),
         StatusCode::SUCCESS,
     );
     let old = service.peer_status(PEER).unwrap().association_identity();
-    assert!(service.storage().pmksa.find(PEER, SAE_PMKID).is_some());
+    assert!(
+        service
+            .storage()
+            .pmksa
+            .find(
+                PEER,
+                oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID)
+            )
+            .is_some()
+    );
     let peers = service.into_peer_storage();
     assert!(peers.storage.peers.iter().all(Option::is_none));
-    assert!(peers.storage.pmksa.find(PEER, SAE_PMKID).is_none());
+    assert!(
+        peers
+            .storage
+            .pmksa
+            .find(
+                PEER,
+                oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID)
+            )
+            .is_none()
+    );
     assert_eq!(peers.storage.generation, old.association_epoch());
 
     let mut restarted =
@@ -50,17 +68,34 @@ fn dropping_an_active_service_clears_its_caller_placed_secrets() {
                 .authenticate_sae(
                     PEER,
                     Pmk::from_bytes(SAE_PMK),
-                    SAE_PMKID,
+                    oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID),
                     oer_portable_time::Instant::from_micros(1)
                 )
                 .unwrap(),
             StatusCode::SUCCESS,
         );
-        assert!(service.storage().pmksa.find(PEER, SAE_PMKID).is_some());
+        assert!(
+            service
+                .storage()
+                .pmksa
+                .find(
+                    PEER,
+                    oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID)
+                )
+                .is_some()
+        );
         service.storage().generation
     };
     assert!(storage.peers.iter().all(Option::is_none));
-    assert!(storage.pmksa.find(PEER, SAE_PMKID).is_none());
+    assert!(
+        storage
+            .pmksa
+            .find(
+                PEER,
+                oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID)
+            )
+            .is_none()
+    );
     assert_eq!(storage.generation, old_generation);
 }
 
@@ -129,7 +164,12 @@ fn the_last_generation_is_usable_and_exhaustion_preserves_the_live_peer_and_pmks
     let mut service = wpa3_service(&mut storage);
     let now = oer_portable_time::Instant::from_micros(1);
     assert_eq!(
-        service.authenticate_sae(PEER, Pmk::from_bytes(SAE_PMK), SAE_PMKID, now),
+        service.authenticate_sae(
+            PEER,
+            Pmk::from_bytes(SAE_PMK),
+            oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID),
+            now
+        ),
         Ok(StatusCode::SUCCESS)
     );
     let binding = service.bind_peer(PEER).unwrap();
@@ -143,7 +183,12 @@ fn the_last_generation_is_usable_and_exhaustion_preserves_the_live_peer_and_pmks
             Err(ApServiceError::GenerationExhausted)
         );
         assert_eq!(
-            service.authenticate_sae(peer, Pmk::from_bytes([0xaa; 32]), [0xbb; 16], now),
+            service.authenticate_sae(
+                peer,
+                Pmk::from_bytes([0xaa; 32]),
+                oer_protocols_ieee80211_wire::security::Pmkid::from_octets([0xbb; 16]),
+                now
+            ),
             Err(ApServiceError::GenerationExhausted)
         );
     }
@@ -155,8 +200,26 @@ fn the_last_generation_is_usable_and_exhaustion_preserves_the_live_peer_and_pmks
     assert_eq!(service.status_revision(), revision);
     assert_eq!(service.storage().generation, u32::MAX);
     assert!(service.storage().management_replay[0].active());
-    assert!(service.storage().pmksa.find(PEER, SAE_PMKID).is_some());
-    assert!(service.storage().pmksa.find(PEER, [0xbb; 16]).is_none());
+    assert!(
+        service
+            .storage()
+            .pmksa
+            .find(
+                PEER,
+                oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID)
+            )
+            .is_some()
+    );
+    assert!(
+        service
+            .storage()
+            .pmksa
+            .find(
+                PEER,
+                oer_protocols_ieee80211_wire::security::Pmkid::from_octets([0xbb; 16])
+            )
+            .is_none()
+    );
     assert!(service.peer_status(OTHER).is_none());
 }
 

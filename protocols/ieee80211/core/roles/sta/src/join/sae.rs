@@ -20,8 +20,8 @@ use oer_protocols_ieee80211_core_security_rsn::sae::{SaeCommit, SaeError, SaeKey
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::management::AuthenticationTransaction;
 use oer_protocols_ieee80211_wire::sae::{SAE_COMMIT_LEN, SaeCommitValues, anti_clogging_token};
+use oer_protocols_ieee80211_wire::security::Pmkid;
 use oer_protocols_ieee80211_wire::security::SaePwe;
-use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_protocols_ieee80211_wire::station::{parse_sae_authentication, parse_sta_disconnect};
 use oer_protocols_ieee80211_wire::status::{ReasonCode, StatusCode};
 
@@ -49,7 +49,7 @@ impl StaSaeTransmission {
 #[must_use]
 pub struct StaSaePmk {
     pub pmk: Pmk,
-    pub pmkid: [u8; RSN_PMKID_LEN],
+    pub pmkid: Pmkid,
 }
 
 impl core::fmt::Debug for StaSaePmk {
@@ -266,7 +266,7 @@ impl StaSaeAuthentication {
             StaSaePhase::Confirmed(keys) => match keys.verify_peer_confirm(body) {
                 Ok(_) => StaSaeEvent::Authenticated(StaSaePmk {
                     pmk: Pmk::from_bytes(*keys.pmk()),
-                    pmkid: *keys.pmkid(),
+                    pmkid: keys.pmkid(),
                 }),
                 Err(error) => StaSaeEvent::Failed(StaSaeFailure::Protocol(error)),
             },

@@ -31,6 +31,7 @@ use oer_portable_crypto::{
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
+use oer_protocols_ieee80211_wire::eapol::KeyInformation;
 use oer_protocols_ieee80211_wire::security::GroupManagementCipher;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -426,7 +427,8 @@ pub enum RsnConnectedAction<const N: usize> {
 #[derive(Zeroize, ZeroizeOnDrop)]
 struct RsnCompletedMessage3 {
     protocol_version: u8,
-    key_info: u16,
+    #[zeroize(skip)]
+    key_info: KeyInformation,
     replay_counter: u64,
     authenticator_nonce: [u8; 32],
     mic: [u8; 16],
@@ -436,7 +438,7 @@ impl RsnCompletedMessage3 {
     fn capture(frame: EapolKeyFrame<'_>) -> Self {
         Self {
             protocol_version: frame.protocol_version(),
-            key_info: frame.key_info().raw(),
+            key_info: frame.key_info(),
             replay_counter: frame.replay_counter(),
             authenticator_nonce: *frame.nonce(),
             mic: *frame.mic(),
@@ -451,11 +453,11 @@ impl RsnCompletedMessage3 {
         if frame.protocol_version() != self.protocol_version {
             return Err(RsnConnectedSupplicantError::ProtocolVersionMismatch);
         }
-        if frame.key_info().descriptor_version() != akm.key_descriptor_version().get() {
+        if frame.key_info().descriptor_version() != akm.key_descriptor_version() {
             return Err(RsnConnectedSupplicantError::UnsupportedDescriptorVersion);
         }
         if frame.message() != crate::EapolKeyMessage::PairwiseMessage3
-            || frame.key_info().raw() != self.key_info
+            || frame.key_info() != self.key_info
         {
             return Err(RsnConnectedSupplicantError::UnsupportedMessage);
         }
@@ -597,7 +599,7 @@ impl RsnConnectedSupplicant {
         }
         let key = frame.key_frame()?;
         if key.key_info().descriptor_version()
-            != self.key_confirmation.akm().key_descriptor_version().get()
+            != self.key_confirmation.akm().key_descriptor_version()
         {
             return Err(RsnConnectedSupplicantError::UnsupportedDescriptorVersion);
         }
@@ -886,7 +888,7 @@ impl RsnStaHandshake {
             return Err(RsnStaError::Rejected(RsnStateError::WrongPeer));
         }
         let key = frame.key_frame()?;
-        if key.key_info().descriptor_version() != self.akm.key_descriptor_version().get() {
+        if key.key_info().descriptor_version() != self.akm.key_descriptor_version() {
             return Err(RsnStaError::Rejected(
                 RsnStateError::UnsupportedDescriptorVersion,
             ));
@@ -1129,7 +1131,7 @@ fn check_message3_fields(
     key: EapolKeyFrame<'_>,
     authenticator_nonce: &[u8; RSN_NONCE_LEN],
 ) -> Result<(), RsnStateError> {
-    if key.key_info().raw() != crate::state::pairwise_message3_key_info(akm) {
+    if key.key_info() != crate::state::pairwise_message3_key_info(akm) {
         return Err(RsnStateError::InvalidMessage3KeyInfo);
     }
     if key.key_length() != crate::state::RSN_CCMP_TEMPORAL_KEY_LEN {

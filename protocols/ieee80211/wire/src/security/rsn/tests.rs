@@ -1,10 +1,10 @@
 use super::*;
 use crate::element::ElementId;
 
-const CCMP: [u8; 4] = ieee_suite(RSN_CIPHER_CCMP);
-const PSK: [u8; 4] = ieee_suite(RSN_AKM_PSK);
-const SAE: [u8; 4] = ieee_suite(8);
-const BIP: [u8; 4] = ieee_suite(6);
+const CCMP: [u8; 4] = [0x00, 0x0f, 0xac, 4];
+const PSK: [u8; 4] = [0x00, 0x0f, 0xac, 2];
+const SAE: [u8; 4] = [0x00, 0x0f, 0xac, 8];
+const BIP: [u8; 4] = [0x00, 0x0f, 0xac, 6];
 
 /// Frame `body` as an RSN element.
 fn element(body: &[u8]) -> ([u8; 64], usize) {
@@ -45,11 +45,27 @@ fn minimal_element_exposes_suites_without_optional_fields() {
     let (bytes, length) = with_tail(&[SAE, PSK], &[]);
     let parsed = RsnElement::parse(&bytes[..length]).unwrap();
 
-    assert_eq!(parsed.group_data_cipher(), CCMP);
-    assert!(parsed.pairwise_ciphers().contains(CCMP));
+    assert_eq!(
+        parsed.group_data_cipher(),
+        crate::security::rsn::CipherSuite::from_octets(CCMP)
+    );
+    assert!(
+        parsed
+            .pairwise_ciphers()
+            .contains(crate::security::rsn::CipherSuite::from_octets(CCMP))
+    );
     assert_eq!(parsed.akm_suites().len(), 2);
-    assert!(parsed.akm_suites().iter().eq([SAE, PSK]));
-    assert!(parsed.akm_suites().contains(PSK));
+    assert!(
+        parsed
+            .akm_suites()
+            .iter()
+            .eq([AkmSuite::SAE, AkmSuite::PSK])
+    );
+    assert!(
+        parsed
+            .akm_suites()
+            .contains(crate::security::rsn::AkmSuite::from_octets(PSK))
+    );
     assert_eq!(parsed.capabilities(), None);
     assert_eq!(parsed.pmkid_count(), None);
     assert!(parsed.pmkids().next().is_none());
@@ -59,7 +75,12 @@ fn minimal_element_exposes_suites_without_optional_fields() {
 #[test]
 fn complete_optional_tail_is_exposed_without_policy() {
     let mut tail = [0; 2 + 2 + RSN_PMKID_LEN + 4];
-    tail[..2].copy_from_slice(&(RSN_CAPABILITY_MFPR | RSN_CAPABILITY_MFPC).to_le_bytes());
+    tail[..2].copy_from_slice(
+        &RsnCapabilities::NONE
+            .with_mfpr(true)
+            .with_mfpc(true)
+            .to_bytes(),
+    );
     tail[2..4].copy_from_slice(&1_u16.to_le_bytes());
     tail[4..4 + RSN_PMKID_LEN].fill(0xa5);
     tail[4 + RSN_PMKID_LEN..].copy_from_slice(&BIP);
@@ -68,11 +89,18 @@ fn complete_optional_tail_is_exposed_without_policy() {
 
     assert_eq!(
         parsed.capabilities(),
-        Some(RSN_CAPABILITY_MFPR | RSN_CAPABILITY_MFPC)
+        Some(RsnCapabilities::NONE.with_mfpr(true).with_mfpc(true))
     );
     assert_eq!(parsed.pmkid_count(), Some(1));
-    assert!(parsed.pmkids().eq([[0xa5; RSN_PMKID_LEN]]));
-    assert_eq!(parsed.group_management_cipher(), Some(BIP));
+    assert!(
+        parsed
+            .pmkids()
+            .eq([Pmkid::from_octets([0xa5; RSN_PMKID_LEN])])
+    );
+    assert_eq!(
+        parsed.group_management_cipher(),
+        Some(CipherSuite::from_octets(BIP))
+    );
 }
 
 #[test]
@@ -90,9 +118,18 @@ fn counted_views_preserve_every_entry_and_refuse_partial_pmkids() {
         bytes.extend_from_slice(&body);
         let parsed = RsnElement::parse(&bytes).unwrap();
         assert_eq!(parsed.pmkid_count(), Some(usize::from(count)));
-        assert!(parsed.pmkids().eq(expected.iter().copied()));
+        assert!(
+            parsed
+                .pmkids()
+                .eq(expected.iter().copied().map(Pmkid::from_octets))
+        );
         assert_eq!(parsed.akm_suites().len(), 2);
-        assert!(parsed.akm_suites().iter().eq([SAE, PSK]));
+        assert!(
+            parsed
+                .akm_suites()
+                .iter()
+                .eq([AkmSuite::SAE, AkmSuite::PSK])
+        );
         if count != 0 {
             for missing in 1..RSN_PMKID_LEN {
                 let mut short = bytes[..bytes.len() - missing].to_vec();
@@ -170,7 +207,12 @@ fn header_must_name_an_rsn_element_of_exact_length() {
 
 fn rsn_element_parse_never_panics(count: usize) {
     let mut tail = [0; 2 + 2 + RSN_PMKID_LEN + 4];
-    tail[..2].copy_from_slice(&(RSN_CAPABILITY_MFPR | RSN_CAPABILITY_MFPC).to_le_bytes());
+    tail[..2].copy_from_slice(
+        &RsnCapabilities::NONE
+            .with_mfpr(true)
+            .with_mfpc(true)
+            .to_bytes(),
+    );
     tail[2..4].copy_from_slice(&1_u16.to_le_bytes());
     tail[4..4 + RSN_PMKID_LEN].fill(0xa5);
     tail[4 + RSN_PMKID_LEN..].copy_from_slice(&BIP);
@@ -185,10 +227,12 @@ fn rsn_element_parse_never_panics(count: usize) {
     crate::fuzz::inputs(&seeds, count, 96, |element| {
         if let Ok(parsed) = RsnElement::parse(element) {
             let _ = parsed.group_data_cipher();
-            for list in [parsed.pairwise_ciphers(), parsed.akm_suites()] {
-                let _ = (list.len(), list.is_empty(), list.contains(CCMP));
-                let _ = list.iter().map(Akm::from_suite_selector).count();
-            }
+            let ciphers = parsed.pairwise_ciphers();
+            let _ = (ciphers.len(), ciphers.is_empty());
+            let _ = ciphers.contains(CipherSuite::CCMP_128);
+            let akms = parsed.akm_suites();
+            let _ = (akms.len(), akms.is_empty(), akms.contains(AkmSuite::PSK));
+            let _ = akms.iter().map(Akm::from_suite_selector).count();
             let _ = parsed.capabilities();
             let _ = parsed.pmkid_count();
             let _ = parsed.pmkids().count();
@@ -211,38 +255,37 @@ fn rsn_element_parse_never_panics_on_received_bytes_full() {
 #[test]
 fn single_suite_elements_round_trip_through_the_parser() {
     let element = rsn_single_suite_element(
-        RSN_CIPHER_CCMP,
-        RSN_CIPHER_CCMP,
-        RSN_AKM_PSK,
-        RSN_CAPABILITY_MFPC,
+        CipherSuite::CCMP_128,
+        CipherSuite::CCMP_128,
+        AkmSuite::PSK,
+        RsnCapabilities::NONE.with_mfpc(true),
     );
     let parsed = RsnElement::parse(&element).unwrap();
-    assert_eq!(parsed.group_data_cipher(), ieee_suite(RSN_CIPHER_CCMP));
+    assert_eq!(parsed.group_data_cipher(), CipherSuite::CCMP_128);
     assert_eq!(parsed.pairwise_ciphers().len(), 1);
-    assert!(
-        parsed
-            .pairwise_ciphers()
-            .contains(ieee_suite(RSN_CIPHER_CCMP))
-    );
+    assert!(parsed.pairwise_ciphers().contains(CipherSuite::CCMP_128));
     assert_eq!(parsed.akm_suites().len(), 1);
-    assert!(parsed.akm_suites().contains(ieee_suite(RSN_AKM_PSK)));
-    assert_eq!(parsed.capabilities(), Some(RSN_CAPABILITY_MFPC));
+    assert!(parsed.akm_suites().contains(AkmSuite::PSK));
+    assert_eq!(
+        parsed.capabilities(),
+        Some(RsnCapabilities::NONE.with_mfpc(true))
+    );
     assert_eq!(parsed.pmkid_count(), None);
     assert_eq!(parsed.group_management_cipher(), None);
 
     let element = rsn_group_management_element(
-        RSN_CIPHER_CCMP,
-        RSN_CIPHER_CCMP,
-        RSN_AKM_SAE,
-        RSN_CAPABILITY_MFPC | RSN_CAPABILITY_MFPR,
-        RSN_CIPHER_BIP_CMAC_128,
+        CipherSuite::CCMP_128,
+        CipherSuite::CCMP_128,
+        AkmSuite::SAE,
+        RsnCapabilities::NONE.with_mfpr(true).with_mfpc(true),
+        CipherSuite::BIP_CMAC_128,
     );
     let parsed = RsnElement::parse(&element).unwrap();
-    assert!(parsed.akm_suites().contains(ieee_suite(RSN_AKM_SAE)));
+    assert!(parsed.akm_suites().contains(AkmSuite::SAE));
     assert_eq!(parsed.pmkid_count(), Some(0));
     assert_eq!(
         parsed.group_management_cipher(),
-        Some(ieee_suite(RSN_CIPHER_BIP_CMAC_128))
+        Some(CipherSuite::BIP_CMAC_128)
     );
     // A truncated element is refused.
     assert_eq!(
@@ -258,4 +301,22 @@ fn a_one_octet_rsnxe_round_trips_and_a_short_one_is_refused() {
     assert!(rsnx_capabilities(&element).unwrap().sae_h2e());
     assert!(!rsnx_capabilities(&[244, 1, 0]).unwrap().sae_h2e());
     assert_eq!(rsnx_capabilities(&element[..2]), None);
+}
+
+#[test]
+fn an_akm_is_its_suite_and_another_suite_is_none() {
+    for (akm, octets) in [
+        (Akm::Psk, PSK),
+        (Akm::PskSha256, [0x00, 0x0f, 0xac, 6]),
+        (Akm::Sae, SAE),
+    ] {
+        assert_eq!(akm.suite_selector().octets(), octets);
+        assert_eq!(
+            Akm::from_suite_selector(AkmSuite::from_octets(octets)),
+            Some(akm)
+        );
+    }
+    for other in [CCMP, [0x00, 0x50, 0xf2, 2]] {
+        assert_eq!(Akm::from_suite_selector(AkmSuite::from_octets(other)), None);
+    }
 }

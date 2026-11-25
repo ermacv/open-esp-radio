@@ -5,8 +5,8 @@ use super::*;
 use crate::security::{AssociationAkm, AssociationSecurity, Pmkid, RsnAssociation};
 
 use crate::security::rsn::{
-    RSN_CIPHER_CCMP, RSNXE_ONE_OCTET_LEN, RsnExtendedCapabilities, rsn_single_suite_element,
-    rsnx_element,
+    CipherSuite, RSNXE_ONE_OCTET_LEN, RsnCapabilities, RsnExtendedCapabilities,
+    rsn_single_suite_element, rsnx_element,
 };
 
 /// The association request's RSN element and RSNXE, and the security they
@@ -74,7 +74,7 @@ impl SelectedRsn {
         );
         crate::encoding::write_array::<{ SELECTED_RSN_IE_LEN + 2 }, _, _>(
             &mut resumed.bytes,
-            &pmkid.0,
+            pmkid.octets(),
         );
         let rsnxe_start = SELECTED_RSN_IE_LEN + PMKID_LIST_LEN;
         oer_portable_wire::Writer::new(resumed.bytes.get_mut(rsnxe_start..)?)
@@ -97,7 +97,7 @@ impl SelectedRsn {
     /// [`Self::with_pmkid`]; `association.pmkid` is recorded as `None`.
     pub fn rsn(
         association: RsnAssociation,
-        capabilities: u16,
+        capabilities: RsnCapabilities,
         extended: Option<RsnExtendedCapabilities>,
     ) -> Self {
         let mut selected = Self::OPEN;
@@ -108,9 +108,9 @@ impl SelectedRsn {
         crate::encoding::write_array::<0, _, _>(
             &mut selected.bytes,
             &rsn_single_suite_element(
-                RSN_CIPHER_CCMP,
-                RSN_CIPHER_CCMP,
-                association.akm.akm().suite_selector()[3],
+                CipherSuite::CCMP_128,
+                CipherSuite::CCMP_128,
+                association.akm.akm().suite_selector(),
                 capabilities,
             ),
         );

@@ -10,41 +10,82 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 use crate::element::ElementId;
+use crate::security::Pmkid;
 
 /// The only RSN element version defined by IEEE 802.11.
 pub const RSN_VERSION: u16 = 1;
 /// OUI of the IEEE 802.11 cipher and AKM suite selectors.
 pub const RSN_OUI: [u8; 3] = [0x00, 0x0f, 0xac];
-/// Cipher suite type of CCMP-128.
-pub const RSN_CIPHER_CCMP: u8 = 4;
-/// AKM suite type of PSK with SHA-1 key derivation.
-pub const RSN_AKM_PSK: u8 = 2;
-/// `00-0F-AC:6`: PSK with SHA-256 key derivation.
-pub const RSN_AKM_PSK_SHA256: u8 = 6;
-/// `00-0F-AC:8`: SAE.
-pub const RSN_AKM_SAE: u8 = 8;
-/// `00-0F-AC:6`: BIP-CMAC-128, the default group management cipher.
-pub const RSN_CIPHER_BIP_CMAC_128: u8 = 6;
-/// RSN Capabilities: management frame protection required.
-pub const RSN_CAPABILITY_MFPR: u16 = RsnCapabilities::from_bytes([0; 2]).with_mfpr(true).value();
-/// RSN Capabilities: management frame protection capable.
-pub const RSN_CAPABILITY_MFPC: u16 = RsnCapabilities::from_bytes([0; 2]).with_mfpc(true).value();
-/// RSN Capabilities: signaling-and-payload-protected A-MSDU capable.
-pub const RSN_CAPABILITY_SPP_AMSDU_CAPABLE: u16 = RsnCapabilities::from_bytes([0; 2])
-    .with_spp_capable(true)
-    .value();
-/// SPP A-MSDU Required; valid only together with SPP A-MSDU Capable.
-pub const RSN_CAPABILITY_SPP_AMSDU_REQUIRED: u16 = RsnCapabilities::from_bytes([0; 2])
-    .with_spp_required(true)
-    .value();
 /// Length of one PMKID.
 pub const RSN_PMKID_LEN: usize = 16;
 
 const SUITE_LEN: usize = 4;
 
-/// The suite selector for `suite_type` under the IEEE 802.11 OUI.
-pub const fn ieee_suite(suite_type: u8) -> [u8; 4] {
-    [RSN_OUI[0], RSN_OUI[1], RSN_OUI[2], suite_type]
+macro_rules! suite_selector {
+    (
+        $(#[$meta:meta])*
+        $name:ident {
+            $($(#[$value_meta:meta])* $value:ident = $number:literal),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        ///
+        /// Octets are no selector until they are named one:
+        ///
+        /// ```compile_fail,E0308
+        #[doc = concat!("use oer_protocols_ieee80211_wire::security::rsn::", stringify!($name), ";")]
+        #[doc = concat!("let suite: ", stringify!($name), " = [0x00, 0x0f, 0xac, 4];")]
+        /// ```
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        #[repr(transparent)]
+        pub struct $name([u8; SUITE_LEN]);
+
+        impl $name {
+            $($(#[$value_meta])* pub const $value: Self = Self::ieee($number);)+
+
+            /// The selector of `suite_type` under the IEEE 802.11 OUI.
+            const fn ieee(suite_type: u8) -> Self {
+                let [o0, o1, o2] = RSN_OUI;
+                Self([o0, o1, o2, suite_type])
+            }
+
+            /// The selector of `octets`: an OUI and its suite type.
+            pub const fn from_octets(octets: [u8; SUITE_LEN]) -> Self {
+                Self(octets)
+            }
+
+            /// Its octets.
+            pub const fn octets(self) -> [u8; SUITE_LEN] {
+                self.0
+            }
+        }
+    };
+}
+
+suite_selector! {
+    /// A cipher suite selector: any octets, some of them named.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.2 (Cipher suites).
+    CipherSuite {
+        /// CCMP-128.
+        CCMP_128 = 4,
+        /// BIP-CMAC-128, the default group management cipher.
+        BIP_CMAC_128 = 6,
+    }
+}
+
+suite_selector! {
+    /// An AKM suite selector: any octets, some of them named.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.3 (AKM suites).
+    AkmSuite {
+        /// PSK with SHA-1 key derivation.
+        PSK = 2,
+        /// PSK with SHA-256 key derivation.
+        PSK_SHA256 = 6,
+        /// SAE.
+        SAE = 8,
+    }
 }
 
 /// Authentication and key management suite named by an RSN element.
@@ -65,21 +106,21 @@ pub enum Akm {
 
 impl Akm {
     /// The suite named by an RSN element AKM selector, if supported.
-    pub const fn from_suite_selector(selector: [u8; 4]) -> Option<Self> {
+    pub const fn from_suite_selector(selector: AkmSuite) -> Option<Self> {
         match selector {
-            [0x00, 0x0f, 0xac, RSN_AKM_PSK] => Some(Self::Psk),
-            [0x00, 0x0f, 0xac, RSN_AKM_PSK_SHA256] => Some(Self::PskSha256),
-            [0x00, 0x0f, 0xac, RSN_AKM_SAE] => Some(Self::Sae),
+            AkmSuite::PSK => Some(Self::Psk),
+            AkmSuite::PSK_SHA256 => Some(Self::PskSha256),
+            AkmSuite::SAE => Some(Self::Sae),
             _ => None,
         }
     }
 
-    pub const fn suite_selector(self) -> [u8; 4] {
-        ieee_suite(match self {
-            Self::Psk => RSN_AKM_PSK,
-            Self::PskSha256 => RSN_AKM_PSK_SHA256,
-            Self::Sae => RSN_AKM_SAE,
-        })
+    pub const fn suite_selector(self) -> AkmSuite {
+        match self {
+            Self::Psk => AkmSuite::PSK,
+            Self::PskSha256 => AkmSuite::PSK_SHA256,
+            Self::Sae => AkmSuite::SAE,
+        }
     }
 }
 
@@ -95,11 +136,12 @@ pub enum RsnSyntaxError {
 
 /// A counted list of four-byte suite selectors.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RsnSuiteList<'a> {
+pub struct RsnSuiteList<'a, S> {
     suites: CountedArrays<'a, SUITE_LEN>,
+    kind: core::marker::PhantomData<S>,
 }
 
-impl<'a> RsnSuiteList<'a> {
+impl<'a, S> RsnSuiteList<'a, S> {
     pub const fn len(&self) -> usize {
         self.suites.bytes.len() / SUITE_LEN
     }
@@ -107,25 +149,34 @@ impl<'a> RsnSuiteList<'a> {
     pub const fn is_empty(&self) -> bool {
         self.suites.bytes.is_empty()
     }
-
-    pub fn iter(&self) -> impl Iterator<Item = [u8; 4]> + 'a {
-        self.suites.iter()
-    }
-
-    pub fn contains(&self, suite: [u8; 4]) -> bool {
-        self.iter().any(|candidate| candidate == suite)
-    }
 }
+
+macro_rules! suite_list {
+    ($name:ident) => {
+        impl<'a> RsnSuiteList<'a, $name> {
+            pub fn iter(&self) -> impl Iterator<Item = $name> + 'a {
+                self.suites.iter().map($name::from_octets)
+            }
+
+            pub fn contains(&self, suite: $name) -> bool {
+                self.iter().any(|candidate| candidate == suite)
+            }
+        }
+    };
+}
+
+suite_list!(CipherSuite);
+suite_list!(AkmSuite);
 
 /// A syntactically complete version-1 RSN element.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RsnElement<'a> {
-    group_data_cipher: [u8; 4],
-    pairwise_ciphers: RsnSuiteList<'a>,
-    akm_suites: RsnSuiteList<'a>,
-    capabilities: Option<u16>,
+    group_data_cipher: CipherSuite,
+    pairwise_ciphers: RsnSuiteList<'a, CipherSuite>,
+    akm_suites: RsnSuiteList<'a, AkmSuite>,
+    capabilities: Option<RsnCapabilities>,
     pmkids: Option<CountedArrays<'a, RSN_PMKID_LEN>>,
-    group_management_cipher: Option<[u8; 4]>,
+    group_management_cipher: Option<CipherSuite>,
 }
 
 impl<'a> RsnElement<'a> {
@@ -152,7 +203,7 @@ impl<'a> RsnElement<'a> {
         let group_data_cipher = reader.suite()?;
         let pairwise_ciphers = reader.suite_list()?;
         let akm_suites = reader.suite_list()?;
-        let capabilities = reader.optional(RsnReader::u16)?;
+        let capabilities = reader.optional(RsnReader::capabilities)?;
         let pmkids = reader.optional(|reader| reader.counted_arrays::<RSN_PMKID_LEN>())?;
         let group_management_cipher = reader.optional(RsnReader::suite)?;
         if !reader.0.is_empty() {
@@ -169,20 +220,20 @@ impl<'a> RsnElement<'a> {
         })
     }
 
-    pub const fn group_data_cipher(&self) -> [u8; 4] {
+    pub const fn group_data_cipher(&self) -> CipherSuite {
         self.group_data_cipher
     }
 
-    pub const fn pairwise_ciphers(&self) -> RsnSuiteList<'a> {
+    pub const fn pairwise_ciphers(&self) -> RsnSuiteList<'a, CipherSuite> {
         self.pairwise_ciphers
     }
 
-    pub const fn akm_suites(&self) -> RsnSuiteList<'a> {
+    pub const fn akm_suites(&self) -> RsnSuiteList<'a, AkmSuite> {
         self.akm_suites
     }
 
     /// RSN Capabilities, or `None` when the element ends after the AKM list.
-    pub const fn capabilities(&self) -> Option<u16> {
+    pub const fn capabilities(&self) -> Option<RsnCapabilities> {
         self.capabilities
     }
 
@@ -196,11 +247,14 @@ impl<'a> RsnElement<'a> {
     }
 
     /// The listed PMKIDs, in order.
-    pub fn pmkids(&self) -> impl Iterator<Item = [u8; RSN_PMKID_LEN]> + use<'a> {
-        self.pmkids.unwrap_or(CountedArrays { bytes: &[] }).iter()
+    pub fn pmkids(&self) -> impl Iterator<Item = Pmkid> + use<'a> {
+        self.pmkids
+            .unwrap_or(CountedArrays { bytes: &[] })
+            .iter()
+            .map(Pmkid::from_octets)
     }
 
-    pub const fn group_management_cipher(&self) -> Option<[u8; 4]> {
+    pub const fn group_management_cipher(&self) -> Option<CipherSuite> {
         self.group_management_cipher
     }
 }
@@ -235,8 +289,17 @@ impl<'a> RsnReader<'a> {
     fn u16(&mut self) -> Result<u16, RsnSyntaxError> {
         self.0.u16_le().map_err(|_| RsnSyntaxError::Malformed)
     }
-    fn suite(&mut self) -> Result<[u8; 4], RsnSyntaxError> {
-        self.0.read().map_err(|_| RsnSyntaxError::Malformed)
+    fn capabilities(&mut self) -> Result<RsnCapabilities, RsnSyntaxError> {
+        self.0
+            .read()
+            .map(RsnCapabilities::from_bytes)
+            .map_err(|_| RsnSyntaxError::Malformed)
+    }
+    fn suite(&mut self) -> Result<CipherSuite, RsnSyntaxError> {
+        self.0
+            .read()
+            .map(CipherSuite::from_octets)
+            .map_err(|_| RsnSyntaxError::Malformed)
     }
 
     fn counted_arrays<const N: usize>(&mut self) -> Result<CountedArrays<'a, N>, RsnSyntaxError> {
@@ -252,9 +315,10 @@ impl<'a> RsnReader<'a> {
         })
     }
 
-    fn suite_list(&mut self) -> Result<RsnSuiteList<'a>, RsnSyntaxError> {
+    fn suite_list<S>(&mut self) -> Result<RsnSuiteList<'a, S>, RsnSyntaxError> {
         Ok(RsnSuiteList {
             suites: self.counted_arrays::<SUITE_LEN>()?,
+            kind: core::marker::PhantomData,
         })
     }
 
@@ -281,44 +345,46 @@ pub const RSN_GROUP_MANAGEMENT_ELEMENT_LEN: usize = 28;
 pub const RSNXE_ONE_OCTET_LEN: usize = 3;
 
 /// The RSN element of one group data cipher, one pairwise cipher, one AKM
-/// and `capabilities`, each suite under the IEEE 802.11 OUI.
+/// and `capabilities`.
 ///
 /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.1 (RSNE format: Element ID,
 /// Length, Version, Group Data Cipher Suite, Pairwise Cipher Suite Count and
 /// List, AKM Suite Count and List, RSN Capabilities).
 pub const fn rsn_single_suite_element(
-    group_data_cipher: u8,
-    pairwise_cipher: u8,
-    akm: u8,
-    capabilities: u16,
+    group_data_cipher: CipherSuite,
+    pairwise_cipher: CipherSuite,
+    akm: AkmSuite,
+    capabilities: RsnCapabilities,
 ) -> [u8; RSN_SINGLE_SUITE_ELEMENT_LEN] {
     const BODY_LEN: u8 = crate::encoding::octet::<{ RSN_SINGLE_SUITE_ELEMENT_LEN - 2 }>();
     let [v0, v1] = RsnField::of(RSN_VERSION).to_bytes();
-    let [o0, o1, o2] = RSN_OUI;
     // One suite in each list.
     let [n0, n1] = RsnField::of(1).to_bytes();
-    let [c0, c1] = RsnField::of(capabilities).to_bytes();
+    let [c0, c1] = capabilities.to_bytes();
+    let [g0, g1, g2, g3] = group_data_cipher.octets();
+    let [p0, p1, p2, p3] = pairwise_cipher.octets();
+    let [a0, a1, a2, a3] = akm.octets();
     [
         ElementId::RSN.value(),
         BODY_LEN,
         v0,
         v1,
-        o0,
-        o1,
-        o2,
-        group_data_cipher,
+        g0,
+        g1,
+        g2,
+        g3,
         n0,
         n1,
-        o0,
-        o1,
-        o2,
-        pairwise_cipher,
+        p0,
+        p1,
+        p2,
+        p3,
         n0,
         n1,
-        o0,
-        o1,
-        o2,
-        akm,
+        a0,
+        a1,
+        a2,
+        a3,
         c0,
         c1,
     ]
@@ -330,11 +396,11 @@ pub const fn rsn_single_suite_element(
 /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.1 (PMKID Count, PMKID List and
 /// Group Management Cipher Suite follow RSN Capabilities in this order).
 pub const fn rsn_group_management_element(
-    group_data_cipher: u8,
-    pairwise_cipher: u8,
-    akm: u8,
-    capabilities: u16,
-    group_management_cipher: u8,
+    group_data_cipher: CipherSuite,
+    pairwise_cipher: CipherSuite,
+    akm: AkmSuite,
+    capabilities: RsnCapabilities,
+    group_management_cipher: CipherSuite,
 ) -> [u8; RSN_GROUP_MANAGEMENT_ELEMENT_LEN] {
     const BODY_LEN: u8 = crate::encoding::octet::<{ RSN_GROUP_MANAGEMENT_ELEMENT_LEN - 2 }>();
     let [
@@ -361,38 +427,12 @@ pub const fn rsn_group_management_element(
         c0,
         c1,
     ] = rsn_single_suite_element(group_data_cipher, pairwise_cipher, akm, capabilities);
-    let [o0, o1, o2] = RSN_OUI;
+    let [m0, m1, m2, m3] = group_management_cipher.octets();
     // No PMKID.
     let [k0, k1] = RsnField::of(0).to_bytes();
     [
-        id,
-        BODY_LEN,
-        v0,
-        v1,
-        g0,
-        g1,
-        g2,
-        g3,
-        p0,
-        p1,
-        p2,
-        p3,
-        p4,
-        p5,
-        a0,
-        a1,
-        a2,
-        a3,
-        a4,
-        a5,
-        c0,
-        c1,
-        k0,
-        k1,
-        o0,
-        o1,
-        o2,
-        group_management_cipher,
+        id, BODY_LEN, v0, v1, g0, g1, g2, g3, p0, p1, p2, p3, p4, p5, a0, a1, a2, a3, a4, a5, c0,
+        c1, k0, k1, m0, m1, m2, m3,
     ]
 }
 
@@ -422,18 +462,21 @@ oer_portable_wire::bitfield! {
         pub mfpc, with_mfpc: bool = 7..8;
         pub spp_capable, with_spp_capable: bool = 10..11;
         pub spp_required, with_spp_required: bool = 11..12;
-        /// The whole field as one little-endian value.
-        pub value, with_value: {u16} = 0..16, view;
     }
 }
 oer_portable_wire::bitfield! {
     /// A two-octet little-endian field of an RSNE: the Version, a suite
-    /// count, the RSN Capabilities or the PMKID Count.
+    /// count or the PMKID Count.
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.1 (RSNE: general, Figure
     /// 9-288).
     pub struct RsnField[2] (little) {
         pub value, with_value: {u16} = 0..16;
     }
+}
+
+impl RsnCapabilities {
+    /// Every subfield clear.
+    pub const NONE: Self = Self::from_bytes([0; 2]);
 }
 
 impl RsnField {

@@ -369,7 +369,7 @@ impl RsnApHandshake {
             return Err(RsnApError::Rejected(RsnStateError::WrongPeer));
         }
         let key = frame.key_frame()?;
-        if key.key_info().descriptor_version() != self.akm.key_descriptor_version().get() {
+        if key.key_info().descriptor_version() != self.akm.key_descriptor_version() {
             return Err(RsnApError::Rejected(
                 RsnStateError::UnsupportedDescriptorVersion,
             ));

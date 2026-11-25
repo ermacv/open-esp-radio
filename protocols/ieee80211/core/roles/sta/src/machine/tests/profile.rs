@@ -148,11 +148,29 @@ fn a_new_profile_forgets_the_previous_networks_cached_associations() {
                 bssid(last),
                 heapless::Vec::from_slice(ssid).unwrap(),
                 Pmk::from_bytes([last; 32]),
-                [last; 16],
+                oer_protocols_ieee80211_wire::security::Pmkid::from_octets([last; 16]),
             ));
         }
         world.station.set_profile(open_profile(b"second")).unwrap();
-        assert!(world.station.pmksa.find(bssid(1), [1; 16]).is_none());
-        assert!(world.station.pmksa.find(bssid(2), [2; 16]).is_some());
+        assert!(
+            world
+                .station
+                .pmksa
+                .find(
+                    bssid(1),
+                    oer_protocols_ieee80211_wire::security::Pmkid::from_octets([1; 16])
+                )
+                .is_none()
+        );
+        assert!(
+            world
+                .station
+                .pmksa
+                .find(
+                    bssid(2),
+                    oer_protocols_ieee80211_wire::security::Pmkid::from_octets([2; 16])
+                )
+                .is_some()
+        );
     });
 }

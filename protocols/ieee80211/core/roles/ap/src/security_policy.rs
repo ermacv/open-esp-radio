@@ -6,9 +6,8 @@ use oer_protocols_ieee80211_wire::security::spp::SppScope;
 use oer_protocols_ieee80211_wire::security::{
     BssSecurityElements, LinkProtection, ManagementProtection, SppCapability,
     rsn::{
-        RSN_AKM_PSK, RSN_AKM_SAE, RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR,
-        RSN_CIPHER_BIP_CMAC_128, RSN_CIPHER_CCMP, RSN_GROUP_MANAGEMENT_ELEMENT_LEN,
-        RSN_SINGLE_SUITE_ELEMENT_LEN, RSNXE_ONE_OCTET_LEN, RsnExtendedCapabilities,
+        AkmSuite, CipherSuite, RSN_GROUP_MANAGEMENT_ELEMENT_LEN, RSN_SINGLE_SUITE_ELEMENT_LEN,
+        RSNXE_ONE_OCTET_LEN, RsnCapabilities, RsnExtendedCapabilities,
         rsn_group_management_element, rsn_single_suite_element, rsnx_element,
     },
 };
@@ -40,17 +39,22 @@ pub enum ApSecurityPolicy {
 /// RSN element of the WPA2-Personal access point: CCMP group and pairwise
 /// ciphers, PSK, no capabilities.
 pub const AP_WPA2_PERSONAL_RSN_ELEMENT: [u8; RSN_SINGLE_SUITE_ELEMENT_LEN] =
-    rsn_single_suite_element(RSN_CIPHER_CCMP, RSN_CIPHER_CCMP, RSN_AKM_PSK, 0);
+    rsn_single_suite_element(
+        CipherSuite::CCMP_128,
+        CipherSuite::CCMP_128,
+        AkmSuite::PSK,
+        RsnCapabilities::NONE,
+    );
 
 /// RSN element of the WPA3-Personal access point: CCMP group and pairwise
 /// ciphers, SAE, MFPC and MFPR, no PMKID and BIP-CMAC-128.
 pub const AP_WPA3_PERSONAL_RSN_ELEMENT: [u8; RSN_GROUP_MANAGEMENT_ELEMENT_LEN] =
     rsn_group_management_element(
-        RSN_CIPHER_CCMP,
-        RSN_CIPHER_CCMP,
-        RSN_AKM_SAE,
-        RSN_CAPABILITY_MFPC | RSN_CAPABILITY_MFPR,
-        RSN_CIPHER_BIP_CMAC_128,
+        CipherSuite::CCMP_128,
+        CipherSuite::CCMP_128,
+        AkmSuite::SAE,
+        RsnCapabilities::NONE.with_mfpc(true).with_mfpr(true),
+        CipherSuite::BIP_CMAC_128,
     );
 
 /// RSNXE of an access point offering SAE hash-to-element.

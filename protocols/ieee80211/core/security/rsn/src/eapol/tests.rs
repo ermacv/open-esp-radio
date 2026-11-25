@@ -26,7 +26,7 @@ fn parses_and_classifies_pairwise_messages() {
     let message1 = key_packet(KEY_INFO_PAIRWISE | KEY_INFO_ACK | 2, 7);
     let parsed = EapolKeyFrame::parse(&message1).unwrap();
     assert_eq!(parsed.message(), EapolKeyMessage::PairwiseMessage1);
-    assert_eq!(parsed.key_info().descriptor_version(), 2);
+    assert_eq!(parsed.key_info().descriptor_version().get(), 2);
     assert_eq!(parsed.replay_counter(), 7);
 
     let message3 = key_packet(
@@ -65,4 +65,21 @@ fn a_damaged_owned_frame_returns_the_parser_error_instead_of_panicking() {
     owned.bytes[1] = 0;
     assert_eq!(owned.key_frame(), Err(EapolParseError::NotKeyPacket));
     assert_eq!(owned.as_bytes().len(), packet.len());
+}
+
+/// Error, Request and SMK Message each make a frame no handshake message.
+#[test]
+fn an_error_a_request_and_an_smk_message_are_no_handshake_message() {
+    let message1 = KeyInformation::EMPTY.with_pairwise(true).with_ack(true);
+    assert_eq!(
+        EapolKeyMessage::of(message1),
+        EapolKeyMessage::PairwiseMessage1
+    );
+    for information in [
+        message1.with_error(true),
+        message1.with_request(true),
+        message1.with_smk_message(true),
+    ] {
+        assert_eq!(EapolKeyMessage::of(information), EapolKeyMessage::Other);
+    }
 }

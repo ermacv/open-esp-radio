@@ -6,8 +6,7 @@ use oer_protocols_ieee80211_wire::{
     security::{
         AssociationAkm, LinkProtection, ManagementProtection, SaePwe, SppCapability, SppError,
         rsn::{
-            RSN_AKM_PSK, RSN_AKM_PSK_SHA256, RSN_AKM_SAE, RSN_CIPHER_BIP_CMAC_128, RSN_CIPHER_CCMP,
-            RsnCapabilities, RsnElement, RsnSyntaxError, ieee_suite, rsnx_capabilities,
+            AkmSuite, CipherSuite, RsnCapabilities, RsnElement, RsnSyntaxError, rsnx_capabilities,
         },
     },
     station::SelectedRsn,
@@ -124,33 +123,29 @@ fn select_personal_rsn(
         RsnSyntaxError::UnsupportedVersion => StaSecurityError::UnsupportedVersion,
     })?;
 
-    if rsn.group_data_cipher() != ieee_suite(RSN_CIPHER_CCMP) {
+    if rsn.group_data_cipher() != CipherSuite::CCMP_128 {
         return Err(StaSecurityError::UnsupportedGroupCipher);
     }
-    if !rsn.pairwise_ciphers().contains(ieee_suite(RSN_CIPHER_CCMP)) {
+    if !rsn.pairwise_ciphers().contains(CipherSuite::CCMP_128) {
         return Err(StaSecurityError::UnsupportedPairwiseCipher);
     }
     // An advertised PMKID list is ignored.
-    let capabilities = rsn.capabilities().unwrap_or(0);
+    let capabilities = rsn.capabilities().unwrap_or(RsnCapabilities::NONE);
     let spp = SppCapability::Capable
         .negotiate(SppCapability::from_rsn(capabilities).map_err(StaSecurityError::Spp)?)
         .map_err(StaSecurityError::Spp)?;
-    let management_protection = policy.management_protection().capable()
-        && RsnCapabilities::from_bytes(capabilities.to_le_bytes()).mfpc();
-    if !management_protection
-        && (rsn.group_management_cipher().is_some()
-            || RsnCapabilities::from_bytes(capabilities.to_le_bytes()).mfpr())
-    {
+    let management_protection = policy.management_protection().capable() && capabilities.mfpc();
+    if !management_protection && (rsn.group_management_cipher().is_some() || capabilities.mfpr()) {
         return Err(StaSecurityError::MalformedRsn);
     }
     if management_protection
         && rsn
             .group_management_cipher()
-            .is_some_and(|cipher| cipher != ieee_suite(RSN_CIPHER_BIP_CMAC_128))
+            .is_some_and(|cipher| cipher != CipherSuite::BIP_CMAC_128)
     {
         return Err(StaSecurityError::UnsupportedGroupManagementCipher);
     }
-    let sae = management_protection && rsn.akm_suites().contains(ieee_suite(RSN_AKM_SAE));
+    let sae = management_protection && rsn.akm_suites().contains(AkmSuite::SAE);
     let akm = match policy {
         _ if sae && policy != StaSecurityPolicy::Wpa2Psk => AssociationAkm::Sae(
             if rsnx_capabilities(access_point.rsnxe_bytes())
@@ -165,12 +160,12 @@ fn select_personal_rsn(
             return Err(StaSecurityError::UnsupportedAkm);
         }
         StaSecurityPolicy::Wpa2Personal | StaSecurityPolicy::Wpa2Psk
-            if rsn.akm_suites().contains(ieee_suite(RSN_AKM_PSK_SHA256)) =>
+            if rsn.akm_suites().contains(AkmSuite::PSK_SHA256) =>
         {
             AssociationAkm::PskSha256
         }
         StaSecurityPolicy::Wpa2Personal | StaSecurityPolicy::Wpa2Psk
-            if rsn.akm_suites().contains(ieee_suite(RSN_AKM_PSK)) =>
+            if rsn.akm_suites().contains(AkmSuite::PSK) =>
         {
             AssociationAkm::Psk
         }
@@ -199,17 +194,15 @@ pub fn personal_rsn(
     spp: oer_protocols_ieee80211_wire::security::Spp,
     management: Option<oer_protocols_ieee80211_wire::security::GroupManagementCipher>,
 ) -> SelectedRsn {
-    use oer_protocols_ieee80211_wire::security::rsn::{
-        RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RsnExtendedCapabilities,
-    };
+    use oer_protocols_ieee80211_wire::security::rsn::RsnExtendedCapabilities;
     use oer_protocols_ieee80211_wire::security::{RsnAssociation, SppCapability};
     let sae = matches!(akm, AssociationAkm::Sae(_));
-    let mut capabilities = SppCapability::Capable.rsn_bits();
+    let mut capabilities = SppCapability::Capable.rsn_capabilities();
     if management.is_some() {
-        capabilities |= RSN_CAPABILITY_MFPC;
+        capabilities = capabilities.with_mfpc(true);
     }
     if sae {
-        capabilities |= RSN_CAPABILITY_MFPR;
+        capabilities = capabilities.with_mfpr(true);
     }
     SelectedRsn::rsn(
         RsnAssociation {

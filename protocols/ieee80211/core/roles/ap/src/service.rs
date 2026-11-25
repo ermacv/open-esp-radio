@@ -8,7 +8,7 @@ use oer_protocols_ieee80211_wire::data::PeerQos;
 use oer_protocols_ieee80211_wire::management::AssociationId;
 use oer_protocols_ieee80211_wire::phy::DsssPreamble;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
-use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::security::Pmkid;
 use oer_protocols_ieee80211_wire::security::spp::SppScope;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_ieee80211_wire::status::StatusCode;
@@ -506,7 +506,7 @@ struct ApPeer {
     /// cached one its association resumed.
     pmk: Option<Pmk>,
     /// The PMKID of `pmk`.
-    pmkid: Option<[u8; RSN_PMKID_LEN]>,
+    pmkid: Option<Pmkid>,
     wpa2_retry: RsnRetry,
     wpa2_retry_alarm: Option<RsnRetryAlarm>,
     maximum_legacy_rate_500kbps: u8,

@@ -78,7 +78,19 @@ impl AssociationAkm {
 
 /// One PMKSA identifier.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Pmkid(pub [u8; rsn::RSN_PMKID_LEN]);
+pub struct Pmkid([u8; rsn::RSN_PMKID_LEN]);
+
+impl Pmkid {
+    /// The identifier of `octets`.
+    pub const fn from_octets(octets: [u8; rsn::RSN_PMKID_LEN]) -> Self {
+        Self(octets)
+    }
+
+    /// Its octets.
+    pub const fn octets(&self) -> &[u8; rsn::RSN_PMKID_LEN] {
+        &self.0
+    }
+}
 
 /// The group management cipher protecting group-addressed robust
 /// management frames; only the default is implemented.
@@ -116,11 +128,8 @@ pub enum SppError {
 }
 
 impl SppCapability {
-    pub const fn from_rsn(capabilities: u16) -> Result<Self, SppError> {
-        match (
-            capabilities & rsn::RSN_CAPABILITY_SPP_AMSDU_CAPABLE != 0,
-            capabilities & rsn::RSN_CAPABILITY_SPP_AMSDU_REQUIRED != 0,
-        ) {
+    pub const fn from_rsn(capabilities: rsn::RsnCapabilities) -> Result<Self, SppError> {
+        match (capabilities.spp_capable(), capabilities.spp_required()) {
             (false, false) => Ok(Self::NotCapable),
             (true, false) => Ok(Self::Capable),
             (true, true) => Ok(Self::Required),
@@ -128,13 +137,13 @@ impl SppCapability {
         }
     }
 
-    pub const fn rsn_bits(self) -> u16 {
+    /// RSN Capabilities that say it alone.
+    pub const fn rsn_capabilities(self) -> rsn::RsnCapabilities {
+        let none = rsn::RsnCapabilities::NONE;
         match self {
-            Self::NotCapable => 0,
-            Self::Capable => rsn::RSN_CAPABILITY_SPP_AMSDU_CAPABLE,
-            Self::Required => {
-                rsn::RSN_CAPABILITY_SPP_AMSDU_CAPABLE | rsn::RSN_CAPABILITY_SPP_AMSDU_REQUIRED
-            }
+            Self::NotCapable => none,
+            Self::Capable => none.with_spp_capable(true),
+            Self::Required => none.with_spp_capable(true).with_spp_required(true),
         }
     }
 

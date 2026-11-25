@@ -6,11 +6,10 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-use oer_protocols_ieee80211_wire::security::ManagementProtection;
 use oer_protocols_ieee80211_wire::security::rsn::{
-    RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RSN_CIPHER_BIP_CMAC_128, RSN_CIPHER_CCMP,
-    RSN_PMKID_LEN, RsnElement, RsnSyntaxError, ieee_suite,
+    CipherSuite, RsnCapabilities, RsnElement, RsnSyntaxError,
 };
+use oer_protocols_ieee80211_wire::security::{ManagementProtection, Pmkid};
 
 use crate::{
     Akm,
@@ -32,7 +31,7 @@ pub enum RsnElementError {
 pub struct ValidatedRsnElement {
     owned: OwnedRsnIe,
     akm: Akm,
-    capabilities: u16,
+    capabilities: RsnCapabilities,
     pmkid_count: usize,
 }
 
@@ -46,7 +45,7 @@ impl ValidatedRsnElement {
         &self.owned
     }
 
-    pub const fn capabilities(&self) -> u16 {
+    pub const fn capabilities(&self) -> RsnCapabilities {
         self.capabilities
     }
 
@@ -71,16 +70,16 @@ impl ValidatedRsnElement {
     }
 
     /// The PMKIDs the element lists, in order.
-    pub fn pmkids(&self) -> Result<impl Iterator<Item = [u8; RSN_PMKID_LEN]> + '_, RsnSyntaxError> {
+    pub fn pmkids(&self) -> Result<impl Iterator<Item = Pmkid> + '_, RsnSyntaxError> {
         Ok(self.element()?.pmkids())
     }
 
     /// The management frame protection the element advertises: its MFPC
     /// and MFPR. Validation refused MFPR without MFPC.
     pub const fn management_frame_protection(&self) -> ManagementProtection {
-        if self.capabilities & RSN_CAPABILITY_MFPR != 0 {
+        if self.capabilities.mfpr() {
             ManagementProtection::Required
-        } else if self.capabilities & RSN_CAPABILITY_MFPC != 0 {
+        } else if self.capabilities.mfpc() {
             ManagementProtection::Capable
         } else {
             ManagementProtection::Disabled
@@ -108,14 +107,14 @@ pub fn validate_rsn_element(bytes: &[u8]) -> Result<ValidatedRsnElement, RsnElem
         RsnSyntaxError::UnsupportedVersion => RsnElementError::UnsupportedVersion,
     })?;
 
-    if rsn.group_data_cipher() != ieee_suite(RSN_CIPHER_CCMP) {
+    if rsn.group_data_cipher() != CipherSuite::CCMP_128 {
         return Err(RsnElementError::UnsupportedGroupCipher);
     }
-    if !rsn.pairwise_ciphers().contains(ieee_suite(RSN_CIPHER_CCMP)) {
+    if !rsn.pairwise_ciphers().contains(CipherSuite::CCMP_128) {
         return Err(RsnElementError::UnsupportedPairwiseCipher);
     }
-    let capabilities = rsn.capabilities().unwrap_or(0);
-    let capable = capabilities & RSN_CAPABILITY_MFPC != 0;
+    let capabilities = rsn.capabilities().unwrap_or(RsnCapabilities::NONE);
+    let capable = capabilities.mfpc();
     // SAE requires management frame protection.
     let akm = rsn
         .akm_suites()
@@ -125,13 +124,13 @@ pub fn validate_rsn_element(bytes: &[u8]) -> Result<ValidatedRsnElement, RsnElem
         .ok_or(RsnElementError::UnsupportedAkm)?;
     // Required protection without the capability is contradictory, and so
     // is a group management cipher of a party that protects nothing.
-    if capabilities & RSN_CAPABILITY_MFPR != 0 && !capable {
+    if capabilities.mfpr() && !capable {
         return Err(RsnElementError::Malformed);
     }
     match rsn.group_management_cipher() {
         None => {}
         Some(_) if !capable => return Err(RsnElementError::Malformed),
-        Some(cipher) if cipher == ieee_suite(RSN_CIPHER_BIP_CMAC_128) => {}
+        Some(cipher) if cipher == CipherSuite::BIP_CMAC_128 => {}
         Some(_) => return Err(RsnElementError::UnsupportedGroupManagementCipher),
     }
     Ok(ValidatedRsnElement {

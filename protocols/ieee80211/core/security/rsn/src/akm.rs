@@ -164,15 +164,45 @@ mod tests {
             Akm::from_suite_selector(Akm::Psk.suite_selector()),
             Some(Akm::Psk)
         );
-        assert_eq!(Akm::Psk.suite_selector(), [0x00, 0x0f, 0xac, 2]);
         assert_eq!(
-            Akm::from_suite_selector([0x00, 0x0f, 0xac, 6]),
+            Akm::Psk.suite_selector(),
+            oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                0x00, 0x0f, 0xac, 2
+            ])
+        );
+        assert_eq!(
+            Akm::from_suite_selector(
+                oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                    0x00, 0x0f, 0xac, 6
+                ])
+            ),
             Some(Akm::PskSha256)
         );
         // FT-SAE and SAE-EXT-KEY stay unsupported.
-        assert_eq!(Akm::from_suite_selector([0x00, 0x0f, 0xac, 9]), None);
-        assert_eq!(Akm::from_suite_selector([0x00, 0x0f, 0xac, 24]), None);
-        assert_eq!(Akm::from_suite_selector([0x00, 0x50, 0xf2, 2]), None);
+        assert_eq!(
+            Akm::from_suite_selector(
+                oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                    0x00, 0x0f, 0xac, 9
+                ])
+            ),
+            None
+        );
+        assert_eq!(
+            Akm::from_suite_selector(
+                oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                    0x00, 0x0f, 0xac, 24
+                ])
+            ),
+            None
+        );
+        assert_eq!(
+            Akm::from_suite_selector(
+                oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                    0x00, 0x50, 0xf2, 2
+                ])
+            ),
+            None
+        );
     }
 
     #[test]
@@ -237,10 +267,19 @@ mod tests {
     #[test]
     fn sae_keys_like_psk_sha256_under_the_akm_defined_descriptor() {
         assert_eq!(
-            Akm::from_suite_selector([0x00, 0x0f, 0xac, 8]),
+            Akm::from_suite_selector(
+                oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                    0x00, 0x0f, 0xac, 8
+                ])
+            ),
             Some(Akm::Sae)
         );
-        assert_eq!(Akm::Sae.suite_selector(), [0x00, 0x0f, 0xac, 8]);
+        assert_eq!(
+            Akm::Sae.suite_selector(),
+            oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                0x00, 0x0f, 0xac, 8
+            ])
+        );
         assert_eq!(Akm::Sae.key_descriptor_version().get(), 0);
         let pmk: [u8; 32] = core::array::from_fn(|index| index as u8);
         let context: [u8; 76] = core::array::from_fn(|index| 100 + index as u8);
