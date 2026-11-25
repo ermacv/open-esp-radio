@@ -17,8 +17,8 @@
 //! loan does not compile here:
 //!
 //! ```compile_fail,E0521
-//! # use oer_protocols_network_core::{claim, with_local_network};
-//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
+//! # use oer_protocols_network_core::{BlockPlace, claim, with_local_network};
+//! # fn f<'m>(a: &'m mut [BlockPlace<'m, 64>; 1], b: &'m mut [BlockPlace<'m, 64>; 1]) {
 //! with_local_network(|first| {
 //!     with_local_network(|second| {
 //!         let (mut first, _) = claim(first, a);

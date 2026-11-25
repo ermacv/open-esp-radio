@@ -17,8 +17,8 @@ use embassy_futures::yield_now;
 use oer_portable_memory::WakingSpscSender;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, Brand, Eviction, Group, Interface, NetworkClaim, NetworkOwner, OpenRefused, Outcome,
-    Remote, SendRefusal, claim, with_local_network,
+    Block, BlockPlace, Brand, Eviction, Group, Interface, NetworkClaim, NetworkOwner, OpenRefused,
+    Outcome, Remote, SendRefusal, claim, with_local_network,
 };
 use oer_protocols_network_port::{
     CopyReason, EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource,
@@ -524,7 +524,7 @@ struct Bench<'n, B: 'n> {
 }
 
 fn bench<'n, B: Brand + 'n>(right: NetworkClaim<B>) -> Bench<'n, B> {
-    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
     let (pool, brand) = claim(right, memory);
     let wire = WirePort::default();
     wire.0.borrow_mut().switches.on(WireSwitch::Answers);
@@ -1298,7 +1298,7 @@ fn a_full_datagram_lane_wakes_the_service_when_it_is_read() {
 #[test]
 fn a_refused_bind_changes_nothing_and_the_storage_serves_again() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
         let (pool, brand) = claim(right, memory);
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
         let wire = WirePort::default();
@@ -1587,7 +1587,7 @@ fn a_dropped_service_ends_a_full_lane_wait() {
 #[test]
 fn sockets_waiting_for_blocks_take_turns() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; 1]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 1]));
         let (pool, brand) = claim(right, memory);
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
         let owner: NetworkOwner<'_, _, SIZE, 2, CREDITS, RECEIVED, 2, 1, WirePort> =
@@ -1629,7 +1629,7 @@ fn sockets_waiting_for_blocks_take_turns() {
 #[test]
 fn three_sockets_waiting_for_two_blocks_all_take_turns() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; 2]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 2]));
         let (pool, brand) = claim(right, memory);
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
         let owner: NetworkOwner<'_, _, SIZE, 3, CREDITS, RECEIVED, 2, 2, WirePort> =
@@ -1694,7 +1694,7 @@ fn pair<'n, B: Brand + 'n>(
     WirePort,
     WakingSpscSender<'n, (), 1>,
 ) {
-    let storage_of_blocks = Box::leak(Box::new([[0; SIZE]; 2]));
+    let storage_of_blocks = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 2]));
     let (pool, brand) = claim(right, storage_of_blocks);
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let wire = WirePort::default();
@@ -1877,7 +1877,7 @@ fn a_group_evicts_nothing_of_its_own_for_itself() {
 #[test]
 fn pressure_spares_a_group_that_holds_less_however_old_its_work() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; 3]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 3]));
         let (pool, brand) = claim(right, memory);
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
         let wire = WirePort::default();
@@ -2002,7 +2002,7 @@ fn another_groups_block_returned_here_frees_nothing_of_this_group() {
 #[test]
 fn a_dropped_socket_leaves_its_blocks_charged_until_they_return() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; 2]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 2]));
         let (pool, brand) = claim(right, memory);
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
         let wire = WirePort::default();
@@ -2060,7 +2060,7 @@ fn received_data_stays_within_its_groups_limit() {
 #[test]
 fn a_group_has_one_limit_however_many_sockets_it_has() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; 2]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 2]));
         let (pool, brand) = claim(right, memory);
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
         let owner: NetworkOwner<'_, _, SIZE, 2, CREDITS, RECEIVED, 2, 2, WirePort> =
@@ -2100,7 +2100,7 @@ fn before_the_service<'n, B: Brand + 'n>(
     right: NetworkClaim<B>,
     held: usize,
 ) -> BeforeTheService<'n, B> {
-    let memory = Box::leak(Box::new([[0; SIZE]; 3]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 3]));
     let (mut pool, brand) = claim(right, memory);
     let absent = pool.group(usize::MAX).unwrap();
     let blocks = (0..held).map(|_| pool.take_as(absent).unwrap()).collect();
@@ -2576,7 +2576,7 @@ fn a_close_at_the_end_of_all_keeps_what_was_accepted_and_refuses_the_rest() {
 #[test]
 fn a_receive_loan_stays_owed_across_a_retired_service() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
         let (mut pool, brand) = claim(right, memory);
         pool.loans().pool(2, 0).unwrap();
         pool.loans().grant(0, 1).unwrap();
@@ -2616,7 +2616,7 @@ fn a_frame_the_port_rejects_for_good_ends_and_the_service_goes_on() {
 #[test]
 fn a_final_refusal_passes_the_turn_to_the_next_socket() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; 4]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 4]));
         let (pool, brand) = claim(right, memory);
         let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
         let wire = WirePort::default();
@@ -3053,7 +3053,7 @@ mod turns;
 #[test]
 fn a_lease_ends_in_the_service_s_own_wait_and_the_watch_tells() {
     with_local_network(|right| {
-        let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; BLOCKS]));
         let (pool, brand) = claim(right, memory);
         let wire = WirePort::default();
         wire.0.borrow_mut().switches.on(WireSwitch::Answers);

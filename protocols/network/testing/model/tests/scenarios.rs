@@ -33,8 +33,8 @@ use oer_portable_memory::WakingSpscSender;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, Brand, Interface, NetEvent, NetworkClaim, NetworkOwner, Outcome, Remote, claim,
-    with_local_network,
+    Block, BlockPlace, Brand, Interface, NetEvent, NetworkClaim, NetworkOwner, Outcome, Remote,
+    claim, with_local_network,
 };
 use oer_protocols_network_port::FrameSource;
 use oer_protocols_network_runtime::{
@@ -93,7 +93,7 @@ fn medium(peers: &[PeerSpec]) -> Medium {
 }
 
 fn owner<'n, B: Brand, const N: usize>(right: NetworkClaim<B>, medium: &Medium) -> Owner<'n, B, N> {
-    let memory = Box::leak(Box::new([[0; SIZE]; N]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; N]));
     let (pool, brand) = claim(right, memory);
     NetworkOwner::new(brand, interface(), pool, medium.clone())
 }

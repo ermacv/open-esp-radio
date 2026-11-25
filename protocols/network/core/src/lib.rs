@@ -25,9 +25,9 @@
 //! ([`with_local_network`]).
 //!
 //! ```compile_fail,E0521
-//! # use oer_protocols_network_core::{Core, Interface, claim, with_local_network};
+//! # use oer_protocols_network_core::{BlockPlace, Core, Interface, claim, with_local_network};
 //! # use oer_protocols_network_wire::ip::Dscp;
-//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1], interface: Interface) {
+//! # fn f<'m>(a: &'m mut [BlockPlace<'m, 64>; 1], b: &'m mut [BlockPlace<'m, 64>; 1], interface: Interface) {
 //! with_local_network(|first| {
 //!     with_local_network(|second| {
 //!         let (_, brand) = claim(first, a);
@@ -44,8 +44,8 @@
 //! Nor does another network's block:
 //!
 //! ```compile_fail,E0521
-//! # use oer_protocols_network_core::{claim, with_local_network};
-//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
+//! # use oer_protocols_network_core::{BlockPlace, claim, with_local_network};
+//! # fn f<'m>(a: &'m mut [BlockPlace<'m, 64>; 1], b: &'m mut [BlockPlace<'m, 64>; 1]) {
 //! with_local_network(|first| {
 //!     with_local_network(|second| {
 //!         let (mut first, _) = claim(first, a);
@@ -60,8 +60,8 @@
 //! Nor its group:
 //!
 //! ```compile_fail,E0521
-//! # use oer_protocols_network_core::{claim, with_local_network};
-//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1]) {
+//! # use oer_protocols_network_core::{BlockPlace, claim, with_local_network};
+//! # fn f<'m>(a: &'m mut [BlockPlace<'m, 64>; 1], b: &'m mut [BlockPlace<'m, 64>; 1]) {
 //! with_local_network(|first| {
 //!     with_local_network(|second| {
 //!         let (mut first, _) = claim(first, a);
@@ -87,9 +87,9 @@
 //! The same calls, each within its brand, compile in two scopes at once:
 //!
 //! ```
-//! # use oer_protocols_network_core::{Core, Interface, claim, with_local_network};
+//! # use oer_protocols_network_core::{BlockPlace, Core, Interface, claim, with_local_network};
 //! # use oer_protocols_network_wire::ip::Dscp;
-//! # fn f(a: &mut [[u8; 64]; 1], b: &mut [[u8; 64]; 1], interface: Interface) {
+//! # fn f<'m>(a: &'m mut [BlockPlace<'m, 64>; 1], b: &'m mut [BlockPlace<'m, 64>; 1], interface: Interface) {
 //! with_local_network(|first| {
 //!     with_local_network(|second| {
 //!         let (mut pool, brand) = claim(first, a);
@@ -127,7 +127,9 @@ mod owner;
 mod payload;
 mod places;
 
-pub use block::{Block, BlockTooShort, Claimed, CoreBrand, GROUPS, Group, GroupsFull, Pool, claim};
+pub use block::{
+    Block, BlockPlace, BlockTooShort, Claimed, CoreBrand, GROUPS, Group, GroupsFull, Pool, claim,
+};
 pub use brand::{Brand, LocalNetwork, NetworkClaim, with_local_network};
 pub use dhcp::{DNS_SERVERS, DhcpDrop, DhcpState, Lease, LeaseFault, Servers};
 pub use diagnostics::Count;

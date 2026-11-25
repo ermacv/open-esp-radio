@@ -24,7 +24,7 @@
 //! wrong: a model that cannot fail proves nothing.
 
 use oer_protocols_network_core::{
-    Brand, GROUPS, Loan, Loans, NetworkClaim, NotLent, Pool, claim, with_local_network,
+    BlockPlace, Brand, GROUPS, Loan, Loans, NetworkClaim, NotLent, Pool, claim, with_local_network,
 };
 
 const SLOW: usize = 0;
@@ -64,7 +64,7 @@ struct Counts {
 type TestPool<B> = Pool<'static, B, 64, 1>;
 
 fn pool_of<B: Brand>(right: NetworkClaim<B>) -> TestPool<B> {
-    let memory = Box::leak(Box::new([[0; 64]; 1]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<64>::new() }; 1]));
     claim(right, memory).0
 }
 

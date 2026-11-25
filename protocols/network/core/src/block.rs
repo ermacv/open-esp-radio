@@ -3,6 +3,7 @@
 use crate::brand::{Brand, NetworkClaim};
 use crate::loans::Loans;
 use core::marker::PhantomData;
+use core::mem::replace;
 
 /// Who a value belongs to: a brand no other network shares. Invariant, so no
 /// subtyping between two brands carries a value from one to the other.
@@ -23,22 +24,109 @@ pub type Claimed<'m, B, const SIZE: usize, const BLOCKS: usize> =
 
 /// Give `storage` to the brand `right` was made for, and take the right: it
 /// is the brand's only one, and only `claim` and a retired core make a
-/// [`CoreBrand`], so one brand has one pool and one core at a time.
-pub fn claim<B: Brand, const SIZE: usize, const BLOCKS: usize>(
+/// [`CoreBrand`], so one brand has one pool and one core at a time. The
+/// storage is the pool's for as long as it lasts: a second pool over it does
+/// not compile, with the first gone either:
+///
+/// ```compile_fail,E0499
+/// # use oer_protocols_network_core::{BlockPlace, Brand, NetworkClaim, claim};
+/// fn twice<A: Brand, B: Brand>(first: NetworkClaim<A>, second: NetworkClaim<B>) {
+///     let mut storage = [const { BlockPlace::<64>::new() }; 1];
+///     drop(claim(first, &mut storage));
+///     drop(claim(second, &mut storage));
+/// }
+/// ```
+///
+/// The same with a storage for each compiles:
+///
+/// ```
+/// # use oer_protocols_network_core::{BlockPlace, Brand, NetworkClaim, claim};
+/// fn each<A: Brand, B: Brand>(first: NetworkClaim<A>, second: NetworkClaim<B>) {
+///     let mut storage = [const { BlockPlace::<64>::new() }; 1];
+///     let mut other = [const { BlockPlace::<64>::new() }; 1];
+///     drop(claim(first, &mut storage));
+///     drop(claim(second, &mut other));
+/// }
+/// ```
+pub fn claim<'m, B: Brand, const SIZE: usize, const BLOCKS: usize>(
     right: NetworkClaim<B>,
-    storage: &mut [[u8; SIZE]; BLOCKS],
-) -> Claimed<'_, B, SIZE, BLOCKS> {
+    storage: &'m mut [BlockPlace<'m, SIZE>; BLOCKS],
+) -> Claimed<'m, B, SIZE, BLOCKS> {
     let NetworkClaim { brand } = right;
     (Pool::new(storage), CoreBrand { brand, serial: 0 })
 }
 
-/// One block of stack memory and the octets it holds.
+/// One block's place in a pool's storage: its octets, and what its block and
+/// its pool know of it. The pool has it while the block is free, and the block
+/// while it is out.
+#[derive(Debug)]
+pub struct BlockPlace<'m, const SIZE: usize> {
+    link: Link<'m, SIZE>,
+    /// How many octets the block holds, and the group it counts toward: set
+    /// when it is taken, and read by the block that was.
+    length: usize,
+    group: u8,
+    bytes: [u8; SIZE],
+}
+
+impl<const SIZE: usize> BlockPlace<'_, SIZE> {
+    /// A place of no pool yet.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            link: Link::Off,
+            length: 0,
+            group: 0,
+            bytes: [0; SIZE],
+        }
+    }
+}
+
+impl<const SIZE: usize> Default for BlockPlace<'_, SIZE> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Whether a place is on its pool's chain of free ones.
+#[derive(Debug)]
+enum Link<'m, const SIZE: usize> {
+    /// Off it: a block holds the place, or no pool has it yet.
+    Off,
+    /// On it, with the chain behind it.
+    On(Chain<'m, SIZE>),
+}
+
+/// Free places, each holding those behind it.
+#[derive(Debug)]
+enum Chain<'m, const SIZE: usize> {
+    End,
+    Head(&'m mut BlockPlace<'m, SIZE>),
+}
+
+impl<'m, const SIZE: usize> Chain<'m, SIZE> {
+    /// Put `place` first.
+    fn push(&mut self, place: &'m mut BlockPlace<'m, SIZE>) {
+        place.link = Link::On(replace(self, Self::End));
+        *self = Self::Head(place);
+    }
+
+    /// Take the first place, if there is one.
+    fn pop(&mut self) -> Option<&'m mut BlockPlace<'m, SIZE>> {
+        let Self::Head(place) = replace(self, Self::End) else {
+            return None;
+        };
+        if let Link::On(behind) = replace(&mut place.link, Link::Off) {
+            *self = behind;
+        }
+        Some(place)
+    }
+}
+
+/// One block of stack memory and the octets it holds: the handle of its place.
 #[derive(Debug)]
 pub struct Block<'m, B, const SIZE: usize> {
-    bytes: &'m mut [u8; SIZE],
-    length: usize,
-    /// The group this block counts toward, until the pool has it back.
-    group: u8,
+    place: &'m mut BlockPlace<'m, SIZE>,
     brand: Tag<B>,
 }
 
@@ -46,14 +134,14 @@ impl<B, const SIZE: usize> Block<'_, B, SIZE> {
     /// The group this block counts toward.
     pub const fn group(&self) -> Group<B> {
         Group {
-            index: self.group,
+            index: self.place.group,
             brand: PhantomData,
         }
     }
 
     /// The whole block, to fill.
     pub fn space(&mut self) -> &mut [u8; SIZE] {
-        self.bytes
+        &mut self.place.bytes
     }
 
     /// Say how many octets the block holds.
@@ -64,13 +152,16 @@ impl<B, const SIZE: usize> Block<'_, B, SIZE> {
         if length > SIZE {
             return Err(BlockTooShort);
         }
-        self.length = length;
+        self.place.length = length;
         Ok(())
     }
 
     /// The octets the block holds.
     pub fn octets(&self) -> &[u8] {
-        self.bytes.get(..self.length).unwrap_or_default()
+        self.place
+            .bytes
+            .get(..self.place.length)
+            .unwrap_or_default()
     }
 
     /// Fill the block from `octets`.
@@ -78,10 +169,10 @@ impl<B, const SIZE: usize> Block<'_, B, SIZE> {
     /// # Errors
     /// `octets` do not fit; the block stays as it was.
     pub fn fill(&mut self, octets: &[u8]) -> Result<(), BlockTooShort> {
-        oer_portable_wire::Writer::new(&mut *self.bytes)
+        oer_portable_wire::Writer::new(self.place.bytes.as_mut_slice())
             .write(octets)
             .map_err(|_| BlockTooShort)?;
-        self.length = octets.len();
+        self.place.length = octets.len();
         Ok(())
     }
 }
@@ -141,11 +232,12 @@ struct Account {
     held: usize,
 }
 
-/// The free blocks of brand `B`'s storage. Only its own blocks fit the brand,
-/// and it holds room for all of them, so a block always has its place.
+/// The free blocks of brand `B`'s storage, chained through their own places,
+/// so one that comes back always has its place. The last to come back is the
+/// next taken; the first taken of all is the storage's last.
 #[derive(Debug)]
 pub struct Pool<'m, B, const SIZE: usize, const BLOCKS: usize> {
-    free: heapless::Vec<Block<'m, B, SIZE>, BLOCKS>,
+    free: Chain<'m, SIZE>,
     /// By group, the shared one first.
     groups: heapless::Vec<Account, GROUPS>,
     /// What receive loans hold of the driver's buffers. It stays here because
@@ -154,13 +246,11 @@ pub struct Pool<'m, B, const SIZE: usize, const BLOCKS: usize> {
 }
 
 impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
-    fn new(storage: &'m mut [[u8; SIZE]; BLOCKS]) -> Self {
-        let free = heapless::Vec::from_array(storage.each_mut().map(|bytes| Block {
-            bytes,
-            length: 0,
-            group: 0,
-            brand: PhantomData,
-        }));
+    fn new(storage: &'m mut [BlockPlace<'m, SIZE>; BLOCKS]) -> Self {
+        let mut free = Chain::End;
+        for place in storage {
+            free.push(place);
+        }
         // The shared group.
         let groups = heapless::Vec::from_array([Account {
             limit: usize::MAX,
@@ -209,22 +299,25 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
         if !self.may_take(group) {
             return None;
         }
-        let mut block = self.free.pop()?;
-        block.length = 0;
-        block.group = group.index;
+        let place = self.free.pop()?;
+        place.length = 0;
+        place.group = group.index;
         if let Some(account) = self.groups.get_mut(usize::from(group.index)) {
             account.held = account.held.saturating_add(1);
         }
-        Some(block)
+        Some(Block {
+            place,
+            brand: PhantomData,
+        })
     }
 
     /// Take a block back: only now does it stop counting toward its group.
     pub fn give(&mut self, block: Block<'m, B, SIZE>) {
-        if let Some(account) = self.groups.get_mut(usize::from(block.group)) {
+        let Block { place, .. } = block;
+        if let Some(account) = self.groups.get_mut(usize::from(place.group)) {
             account.held = account.held.saturating_sub(1);
         }
-        // A brand has one pool, which made this block and has its place.
-        let _fits = self.free.push(block);
+        self.free.push(place);
     }
 
     /// Whether `group` is under its limit.
@@ -252,12 +345,14 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
 
     /// How many blocks are free.
     pub fn free(&self) -> usize {
-        self.free.len()
+        BLOCKS.saturating_sub(self.outstanding())
     }
 
     /// How many blocks are out: a retired core's outstanding obligations,
     /// which an application returns by [`Self::give`] whenever it does.
     pub fn outstanding(&self) -> usize {
-        BLOCKS.saturating_sub(self.free.len())
+        self.groups
+            .iter()
+            .fold(0, |out: usize, account| out.saturating_add(account.held))
     }
 }

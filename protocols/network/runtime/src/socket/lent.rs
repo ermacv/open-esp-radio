@@ -423,7 +423,7 @@ mod tests {
     use std::vec::Vec;
 
     use oer_protocols_network_core::{
-        Brand, Datagram, NetworkClaim, Pool, Remote, claim, with_local_network,
+        BlockPlace, Brand, Datagram, NetworkClaim, Pool, Remote, claim, with_local_network,
     };
     use oer_protocols_network_port::{EthernetFrame, EthernetFrameView, FrameLengthError};
 
@@ -461,7 +461,7 @@ mod tests {
     }
 
     fn ends<'n, B: Brand + 'n>(right: NetworkClaim<B>) -> Ends<'n, B> {
-        let memory = Box::leak(Box::new([[0; SIZE]; 1]));
+        let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; 1]));
         let (mut pool, _brand) = claim(right, memory);
         pool.loans().pool(LANE, 0).unwrap();
         pool.loans().grant(0, LANE).unwrap();

@@ -7,6 +7,7 @@
 
 use oer_portable_events::EventSink;
 use oer_portable_time::{Clock, Duration, Timer};
+use oer_protocols_network_core::BlockPlace;
 use oer_protocols_network_core::NetEvent;
 
 use super::*;
@@ -80,7 +81,9 @@ fn paced<'n, B: Brand + 'n>(
     right: NetworkClaim<B>,
     bursts: &[usize],
 ) -> (Paced, Vec<u8>, usize, Vec<TurnEnd>) {
-    let memory = Box::leak(Box::new([[0; SIZE]; PACED_BLOCKS]));
+    let memory = Box::leak(Box::new(
+        [const { BlockPlace::<SIZE>::new() }; PACED_BLOCKS],
+    ));
     let (pool, brand) = claim(right, memory);
     let wire = WirePort::default();
     wire.0.borrow_mut().switches.on(WireSwitch::Answers);

@@ -5,6 +5,7 @@
 use crate::tests::Room;
 use core::cell::Cell;
 use core::future::poll_fn;
+use oer_protocols_network_core::BlockPlace;
 
 use super::*;
 use crate::PublishEnd;
@@ -82,7 +83,7 @@ fn plan_bench_on<'n, B: Brand + 'n, D: crate::Diagnostics>(
     interface: Interface,
     diagnostics: D,
 ) -> PlanBench<'n, B, D> {
-    let memory = Box::leak(Box::new([[0; SIZE]; PLAN_BLOCKS]));
+    let memory = Box::leak(Box::new([const { BlockPlace::<SIZE>::new() }; PLAN_BLOCKS]));
     let (pool, brand) = claim(right, memory);
     let wire = WirePort::default();
     wire.0.borrow_mut().switches.on(WireSwitch::Answers);

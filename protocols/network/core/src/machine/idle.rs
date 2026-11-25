@@ -5,11 +5,11 @@
 use oer_portable_time::Instant;
 
 use super::Core;
-use crate::{Interface, claim, with_local_network};
+use crate::{BlockPlace, Interface, claim, with_local_network};
 
 #[test]
 fn an_owed_neighbor_request_alone_keeps_the_core_from_idle() {
-    let mut storage = [[0_u8; 64]; 2];
+    let mut storage = [const { BlockPlace::<64>::new() }; 2];
     with_local_network(|right| {
         let (_pool, brand) = claim(right, &mut storage);
         let interface = Interface::new([2, 0, 0, 0, 0, 1], [192, 0, 2, 1], 24, None, 1500).unwrap();
