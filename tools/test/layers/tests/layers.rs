@@ -6711,11 +6711,6 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
         1,
         "correct: what the port released stays the port\'s, and the binding reaches it there",
     ),
-    (
-        "protocols/network/core/src/block.rs::_fits",
-        1,
-        BY_FINAL_CRATES,
-    ),
     ("protocols/network/runtime/src/device.rs::_room", 1, BY_PUMP),
     (
         "protocols/network/runtime/src/returns.rs::_any",
