@@ -11,8 +11,46 @@ pub struct Checksum {
     /// Sums 16-bit words, so carries need 2^48 words to wrap; the wrap is
     /// named all the same.
     sum: u64,
-    /// The first octet of a word whose second comes with the next part.
-    odd: Option<u8>,
+    at: At,
+}
+
+/// Where in a word the sequence stands.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum At {
+    /// Between two words.
+    #[default]
+    Word,
+    /// After the first octet of a word, which is here.
+    Octet(u8),
+}
+
+oer_portable_wire::bitfield! {
+    /// A checksum field.
+    /// SOURCE: RFC 1071, 1 (Introduction); RFC 791, 3.1 (Header Checksum);
+    /// RFC 768 (Checksum).
+    pub(crate) struct ChecksumField[2] (big) {
+        pub(crate) value, with_value: {u16} = 0..16;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// What follows the addresses in UDP's pseudo header.
+    /// SOURCE: RFC 768 (the pseudo header).
+    struct PseudoHeaderTail[4] (big) {
+        zero, with_zero: {u8} = 24..32;
+        protocol, with_protocol: {u8} = 16..24;
+        length, with_length: {u16} = 0..16;
+    }
+}
+
+/// `sum` as a 16-bit word, its carries come back in.
+fn fold(mut sum: u64) -> u16 {
+    loop {
+        match u16::try_from(sum) {
+            Ok(word) => return word,
+            Err(_) => sum = (sum & 0xFFFF).wrapping_add(sum >> 16),
+        }
+    }
 }
 
 /// One's complement addition of 32-bit words: a carry comes back in.
@@ -23,7 +61,10 @@ const fn add_carrying(sum: u32, word: u32) -> u32 {
 
 impl Checksum {
     pub const fn new() -> Self {
-        Self { sum: 0, odd: None }
+        Self {
+            sum: 0,
+            at: At::Word,
+        }
     }
 
     /// Add the next octets of the sequence. This runs on every octet of every
@@ -77,7 +118,8 @@ impl Checksum {
         if left == 0 {
             return self;
         }
-        if let Some(high) = self.odd.take() {
+        if let At::Octet(high) = self.at {
+            self.at = At::Word;
             self.add_word(high, byte);
             left = left.saturating_sub(1);
         }
@@ -96,17 +138,20 @@ impl Checksum {
         };
         self.sum = self.sum.wrapping_add(part);
         if left & 1 == 1 {
-            self.odd = Some(byte);
+            self.at = At::Octet(byte);
         }
         self
     }
 
     fn octets(&mut self, bytes: &[u8]) {
         for byte in bytes {
-            match self.odd.take() {
-                Some(high) => self.add_word(high, *byte),
-                None => self.odd = Some(*byte),
-            }
+            self.at = match self.at {
+                At::Octet(high) => {
+                    self.add_word(high, *byte);
+                    At::Word
+                }
+                At::Word => At::Octet(*byte),
+            };
         }
     }
 
@@ -194,13 +239,10 @@ impl Checksum {
     /// Add `sum`, the one's complement sum of words loaded in the machine's
     /// order.
     fn add_words(&mut self, sum: u32) {
-        let folded = (sum & 0xFFFF).wrapping_add(sum >> 16);
-        let folded = (folded & 0xFFFF).wrapping_add(folded >> 16) as u16;
-        let ordered = u16::from_be(folded);
-        let word = if self.odd.is_some() {
-            ordered.swap_bytes()
-        } else {
-            ordered
+        let ordered = u16::from_be(fold(u64::from(sum)));
+        let word = match self.at {
+            At::Octet(_) => ordered.swap_bytes(),
+            At::Word => ordered,
         };
         self.sum = self.sum.wrapping_add(u64::from(word));
     }
@@ -214,14 +256,10 @@ impl Checksum {
     /// The checksum field: the complement of the folded sum. A sequence ending
     /// on an odd octet counts it as the high octet of a last word.
     pub fn finish(mut self) -> u16 {
-        if let Some(high) = self.odd.take() {
+        if let At::Octet(high) = self.at {
             self.add_word(high, 0);
         }
-        let mut sum = self.sum;
-        while sum > 0xFFFF {
-            sum = (sum & 0xFFFF).wrapping_add(sum >> 16);
-        }
-        !(sum as u16)
+        !fold(self.sum)
     }
 
     /// Whether a sequence that holds its own checksum field sums to all ones.
@@ -256,7 +294,10 @@ pub const fn ipv4_pseudo_header(
 ) -> [u8; 12] {
     let [s0, s1, s2, s3] = source;
     let [d0, d1, d2, d3] = destination;
-    let [length_high, length_low] = length.to_be_bytes();
+    let [zero, next, length_high, length_low] = PseudoHeaderTail::from_bytes([0; 4])
+        .with_protocol(protocol)
+        .with_length(length)
+        .to_bytes();
     [
         s0,
         s1,
@@ -266,8 +307,8 @@ pub const fn ipv4_pseudo_header(
         d1,
         d2,
         d3,
-        0,
-        protocol,
+        zero,
+        next,
         length_high,
         length_low,
     ]
@@ -303,11 +344,13 @@ mod tests {
         while sum > 0xFFFF {
             sum = (sum & 0xFFFF) + (sum >> 16);
         }
-        !(sum as u16)
+        !u16::try_from(sum).unwrap()
     }
 
     fn octets(length: usize) -> Vec<u8> {
-        (0..length).map(|at| (at * 31 + (at >> 8)) as u8).collect()
+        (0..length)
+            .map(|at| u8::try_from((at * 31 + (at >> 8)) & 0xFF).unwrap())
+            .collect()
     }
 
     #[test]

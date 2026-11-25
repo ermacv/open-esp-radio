@@ -34,12 +34,12 @@ fn a_template_s_headers_are_the_ones_its_fields_make() {
         let mut head = [0; UDP_FRAME_HEADERS];
         let sum = template.write(&mut head, length, identification).unwrap();
         UdpFrameTemplate::close(&mut head, sum.with(&data));
-        let udp_length = (UDP_HEADER_LEN + length) as u16;
+        let udp_length = u16::try_from(UDP_HEADER_LEN + length).unwrap();
         let mut expected = std::vec::Vec::new();
         expected.extend_from_slice(&ethernet.to_bytes());
         expected.extend_from_slice(
             &Ipv4Fields {
-                total_length: udp_length + IPV4_HEADER_LEN as u16,
+                total_length: udp_length + u16::try_from(IPV4_HEADER_LEN).unwrap(),
                 identification,
                 ..fields
             }

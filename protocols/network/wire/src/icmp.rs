@@ -22,6 +22,18 @@ oer_portable_wire::bitfield! {
     }
 }
 
+oer_portable_wire::bitfield! {
+    /// The header of an echo or echo reply.
+    /// SOURCE: RFC 792 (Echo or Echo Reply Message).
+    struct EchoHeader[8] (big) {
+        kind, with_kind: {u8} = 56..64;
+        code, with_code: {u8} = 48..56;
+        checksum, with_checksum: {u16} = 32..48;
+        identifier, with_identifier: {u16} = 16..32;
+        sequence, with_sequence: {u16} = 0..16;
+    }
+}
+
 /// A message that cannot be an echo.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IcmpError {
@@ -49,15 +61,13 @@ impl<'a> Echo<'a> {
     /// [`IcmpError::Truncated`] below [`ECHO_HEADER_LEN`] octets.
     pub fn parse(message: &'a [u8]) -> Result<Self, IcmpError> {
         let mut reader = Reader::new(message);
-        let [kind, code, c0, c1, i0, i1, s0, s1] = reader
-            .read::<ECHO_HEADER_LEN>()
-            .map_err(|_| IcmpError::Truncated)?;
+        let header = EchoHeader::from_bytes(reader.read().map_err(|_| IcmpError::Truncated)?);
         Ok(Self {
-            kind: MessageType::from_encoding(kind),
-            code,
-            checksum: u16::from_be_bytes([c0, c1]),
-            identifier: u16::from_be_bytes([i0, i1]),
-            sequence: u16::from_be_bytes([s0, s1]),
+            kind: MessageType::from_encoding(header.kind()),
+            code: header.code(),
+            checksum: header.checksum(),
+            identifier: header.identifier(),
+            sequence: header.sequence(),
             data: reader.remaining(),
         })
     }
@@ -65,14 +75,16 @@ impl<'a> Echo<'a> {
     /// The header of this message with `kind` and its checksum over the
     /// header and the same data, RFC 792 (Checksum).
     pub fn header(&self, kind: MessageType) -> [u8; ECHO_HEADER_LEN] {
-        let header = |checksum: u16| {
-            let [c0, c1] = checksum.to_be_bytes();
-            let [i0, i1] = self.identifier.to_be_bytes();
-            let [s0, s1] = self.sequence.to_be_bytes();
-            [kind.encoding(), self.code, c0, c1, i0, i1, s0, s1]
-        };
-        let checksum = Checksum::new().with(&header(0)).with(self.data).finish();
-        header(checksum)
+        let header = EchoHeader::from_bytes([0; ECHO_HEADER_LEN])
+            .with_kind(kind.encoding())
+            .with_code(self.code)
+            .with_identifier(self.identifier)
+            .with_sequence(self.sequence);
+        let checksum = Checksum::new()
+            .with(&header.to_bytes())
+            .with(self.data)
+            .finish();
+        header.with_checksum(checksum).to_bytes()
     }
 }
 

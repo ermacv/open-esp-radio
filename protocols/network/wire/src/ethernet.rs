@@ -57,6 +57,14 @@ impl EtherType {
     }
 }
 
+oer_portable_wire::bitfield! {
+    /// The Length/Type field.
+    /// SOURCE: IEEE Std 802.3-2022, 3.2.6 (Length/Type field).
+    struct LengthType[2] (big) {
+        value, with_value: {u16} = 0..16;
+    }
+}
+
 /// One Ethernet II header.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EthernetHeader {
@@ -88,13 +96,12 @@ impl EthernetHeader {
             s3,
             s4,
             s5,
-            type_high,
-            type_low,
+            length_type @ ..,
         ] = *bytes;
         Self {
             destination: [d0, d1, d2, d3, d4, d5],
             source: [s0, s1, s2, s3, s4, s5],
-            ether_type: EtherType(u16::from_be_bytes([type_high, type_low])),
+            ether_type: EtherType(LengthType::from_bytes(length_type).value()),
         }
     }
 
@@ -102,7 +109,9 @@ impl EthernetHeader {
     pub const fn to_bytes(&self) -> [u8; HEADER_LEN] {
         let [d0, d1, d2, d3, d4, d5] = self.destination;
         let [s0, s1, s2, s3, s4, s5] = self.source;
-        let [type_high, type_low] = self.ether_type.0.to_be_bytes();
+        let [type_high, type_low] = LengthType::from_bytes([0; 2])
+            .with_value(self.ether_type.0)
+            .to_bytes();
         [
             d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5, type_high, type_low,
         ]

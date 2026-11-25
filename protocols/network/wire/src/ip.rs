@@ -48,15 +48,27 @@ impl Ipv4Fields {
 
     /// The header's octets, with `checksum` in its field.
     pub(crate) fn with_checksum(&self, checksum: u16) -> [u8; IPV4_HEADER_LEN] {
-        let [checksum_high, checksum_low] = checksum.to_be_bytes();
         // Version 4, five words.
         let [version_ihl] = Ipv4VersionIhl::from_bytes([0x45]).to_bytes();
         let [services] = self.services.to_bytes();
-        let [length_high, length_low] = self.total_length.to_be_bytes();
-        let [identification_high, identification_low] = self.identification.to_be_bytes();
+        let [
+            length_high,
+            length_low,
+            identification_high,
+            identification_low,
+        ] = Ipv4Numbers::from_bytes([0; 4])
+            .with_total_length(self.total_length)
+            .with_identification(self.identification)
+            .to_bytes();
         let [flags_high, flags_low] = Ipv4Fragment::from_bytes([0, 0])
             .with_dont_fragment(true)
             .to_bytes();
+        let [time_to_live, protocol, checksum_high, checksum_low] =
+            Ipv4Carriage::from_bytes([0; 4])
+                .with_time_to_live(self.time_to_live)
+                .with_protocol(self.protocol)
+                .with_checksum(checksum)
+                .to_bytes();
         let [source0, source1, source2, source3] = self.source;
         let [destination0, destination1, destination2, destination3] = self.destination;
         [
@@ -68,8 +80,8 @@ impl Ipv4Fields {
             identification_low,
             flags_high,
             flags_low,
-            self.time_to_live,
-            self.protocol,
+            time_to_live,
+            protocol,
             checksum_high,
             checksum_low,
             source0,
@@ -161,6 +173,35 @@ oer_portable_wire::bitfield! {
     }
 }
 
+oer_portable_wire::bitfield! {
+    /// IPv4's Total Length and Identification.
+    /// SOURCE: RFC 791, 3.1 (Internet Header Format).
+    pub(crate) struct Ipv4Numbers[4] (big) {
+        pub(crate) total_length, with_total_length: {u16} = 16..32;
+        pub(crate) identification, with_identification: {u16} = 0..16;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// IPv4's Time to Live, Protocol and Header Checksum.
+    /// SOURCE: RFC 791, 3.1 (Internet Header Format).
+    struct Ipv4Carriage[4] (big) {
+        time_to_live, with_time_to_live: {u8} = 24..32;
+        protocol, with_protocol: {u8} = 16..24;
+        checksum, with_checksum: {u16} = 0..16;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// IPv6's Payload Length, Next Header and Hop Limit.
+    /// SOURCE: RFC 8200, 3 (IPv6 Header Format).
+    struct Ipv6Carriage[4] (big) {
+        payload_length, with_payload_length: {u16} = 16..32;
+        next_header, with_next_header: {u8} = 8..16;
+        hop_limit, with_hop_limit: {u8} = 0..8;
+    }
+}
+
 /// A checked IPv4 header over the caller's packet.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ipv4Header<'a> {
@@ -187,14 +228,14 @@ impl<'a> Ipv4Header<'a> {
             services,
             length_high,
             length_low,
-            _,
-            _,
+            identification_high,
+            identification_low,
             fragment_high,
             fragment_low,
-            _,
+            time_to_live,
             protocol,
-            _,
-            _,
+            checksum_high,
+            checksum_low,
             addresses @ ..,
         ] = fixed;
         let version_ihl = Ipv4VersionIhl::from_bytes([version_ihl]);
@@ -204,7 +245,15 @@ impl<'a> Ipv4Header<'a> {
         let header_len = usize::from(version_ihl.ihl())
             .checked_mul(4)
             .ok_or(IpError::HeaderLength)?;
-        let total_len = usize::from(u16::from_be_bytes([length_high, length_low]));
+        let numbers = Ipv4Numbers::from_bytes([
+            length_high,
+            length_low,
+            identification_high,
+            identification_low,
+        ]);
+        let carriage =
+            Ipv4Carriage::from_bytes([time_to_live, protocol, checksum_high, checksum_low]);
+        let total_len = usize::from(numbers.total_length());
         if header_len < Self::MIN_LEN || header_len > total_len {
             return Err(IpError::HeaderLength);
         }
@@ -216,7 +265,7 @@ impl<'a> Ipv4Header<'a> {
         Ok(Self {
             services: DsField::from_bytes([services]),
             fragment: Ipv4Fragment::from_bytes([fragment_high, fragment_low]),
-            protocol,
+            protocol: carriage.protocol(),
             addresses,
             payload,
         })
@@ -277,18 +326,19 @@ impl<'a> Ipv6Header<'a> {
             length_high,
             length_low,
             next_header,
-            _,
+            hop_limit,
             addresses @ ..,
         ] = fixed;
         let prefix = Ipv6HeaderPrefix::from_bytes([first, second]);
         if prefix.version() != 6 {
             return Err(IpError::Version);
         }
-        let payload_len = usize::from(u16::from_be_bytes([length_high, length_low]));
+        let carriage = Ipv6Carriage::from_bytes([length_high, length_low, next_header, hop_limit]);
+        let payload_len = usize::from(carriage.payload_length());
         let payload = reader.take(payload_len).map_err(|_| IpError::Length)?;
         Ok(Self {
             prefix,
-            next_header,
+            next_header: carriage.next_header(),
             addresses,
             payload,
         })

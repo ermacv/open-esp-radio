@@ -62,6 +62,19 @@ oer_portable_wire::bitfield! {
     }
 }
 
+oer_portable_wire::bitfield! {
+    /// The fields before 'flags'.
+    /// SOURCE: RFC 2131, 2, Figure 1 (Format of a DHCP message).
+    struct Opening[10] (big) {
+        op, with_op: {u8} = 72..80;
+        htype, with_htype: {u8} = 64..72;
+        hlen, with_hlen: {u8} = 56..64;
+        hops, with_hops: {u8} = 48..56;
+        xid, with_xid: {u32} = 16..48;
+        secs, with_secs: {u16} = 0..16;
+    }
+}
+
 /// Option codes this codec names.
 pub mod option {
     /// SOURCE: RFC 2132, 3.1 (Pad Option).
@@ -147,9 +160,14 @@ impl Fixed {
                 remaining: writer.remaining(),
             });
         }
-        writer.write(&[self.op.encoding(), self.htype, self.hlen, self.hops])?;
-        writer.write(&self.xid.to_be_bytes())?;
-        writer.u16_be(self.secs)?;
+        let opening = Opening::from_bytes([0; 10])
+            .with_op(self.op.encoding())
+            .with_htype(self.htype)
+            .with_hlen(self.hlen)
+            .with_hops(self.hops)
+            .with_xid(self.xid)
+            .with_secs(self.secs);
+        writer.write(&opening.to_bytes())?;
         writer.write(&self.flags.to_bytes())?;
         writer.write(&self.ciaddr)?;
         writer.write(&self.yiaddr)?;
@@ -187,51 +205,24 @@ impl<'a> DhcpMessage<'a> {
             return Err(DhcpError::Cookie);
         }
         let mut fields = Reader::new(&fixed);
-        let header = fields.read::<44>().map_err(|_| DhcpError::Truncated)?;
-        let [
-            op,
-            htype,
-            hlen,
-            hops,
-            x0,
-            x1,
-            x2,
-            x3,
-            s0,
-            s1,
-            f0,
-            f1,
-            c0,
-            c1,
-            c2,
-            c3,
-            y0,
-            y1,
-            y2,
-            y3,
-            i0,
-            i1,
-            i2,
-            i3,
-            g0,
-            g1,
-            g2,
-            g3,
-            chaddr @ ..,
-        ] = header;
+        let opening = Opening::from_bytes(fields.read().map_err(|_| DhcpError::Truncated)?);
+        let flags = Flags::from_bytes(fields.read().map_err(|_| DhcpError::Truncated)?);
+        let mut address = || fields.read::<4>().map_err(|_| DhcpError::Truncated);
+        let (ciaddr, yiaddr, siaddr, giaddr) = (address()?, address()?, address()?, address()?);
+        let chaddr = fields.read().map_err(|_| DhcpError::Truncated)?;
         let message = Self {
             fixed: Fixed {
-                op: Op::from_encoding(op),
-                htype,
-                hlen,
-                hops,
-                xid: u32::from_be_bytes([x0, x1, x2, x3]),
-                secs: u16::from_be_bytes([s0, s1]),
-                flags: Flags::from_bytes([f0, f1]),
-                ciaddr: [c0, c1, c2, c3],
-                yiaddr: [y0, y1, y2, y3],
-                siaddr: [i0, i1, i2, i3],
-                giaddr: [g0, g1, g2, g3],
+                op: Op::from_encoding(opening.op()),
+                htype: opening.htype(),
+                hlen: opening.hlen(),
+                hops: opening.hops(),
+                xid: opening.xid(),
+                secs: opening.secs(),
+                flags,
+                ciaddr,
+                yiaddr,
+                siaddr,
+                giaddr,
                 chaddr,
             },
             options: reader.remaining(),
