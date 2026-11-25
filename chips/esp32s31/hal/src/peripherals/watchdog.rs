@@ -16,7 +16,7 @@ mod registers;
 pub use oer_chips_family_drivers_watchdog::{
     ArmedRtcWatchdog, MainSession, MainWatchdog, MicrosecondTick, Microseconds, RtcWatchdog,
     StoppedMainWatchdog, SuperWatchdog,
-    deadline::{DeadlineBudget, DeadlineError},
+    policy::{DeadlineBudget, DeadlineError},
 };
 pub use registers::{Mwdt0Registers, Mwdt1Registers, RwdtRegisters, SwdRegisters};
 

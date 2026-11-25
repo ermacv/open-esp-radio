@@ -9,8 +9,8 @@
 //! The named settle on a virtual counter: one cycle a microsecond, each
 //! sample advancing it by its step.
 
+use oer_portable_settle::{Settle, SettleCounter, SettleLimit, Unsettled, hold, settle};
 use oer_portable_time::Duration;
-use oer_portable_time::settle::{Settle, SettleCounter, SettleLimit, Unsettled, hold, settle};
 use oer_portable_time_virtual::VirtualCounter;
 
 fn limit(micros: u64) -> SettleLimit {

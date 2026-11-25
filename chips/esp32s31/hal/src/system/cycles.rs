@@ -3,7 +3,7 @@
 #![forbid(unsafe_code)]
 
 use oer_chips_family_boot::adoption::CpuHz;
-use oer_portable_time::settle::{SettleCounter, SettleLimit};
+use oer_portable_settle::{SettleCounter, SettleLimit};
 
 /// The hertz of one cycle a microsecond.
 const MICRO_HZ: u32 = 1_000_000;

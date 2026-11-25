@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 //! Finite deadlines as values, independent of any peripheral or reset owner.
 //!
 //! The caller supplies each time observation. This policy records one
@@ -7,7 +5,7 @@
 //! it owns no clock, hardware or callback. The platform owner decides how
 //! to enforce the deadline and retains its own affine hardware lease.
 
-use crate::{Duration, Instant};
+use oer_portable_time::{Duration, Instant};
 
 /// Explicit caller-selected timeout. There is deliberately no default.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -15,9 +15,9 @@ use std::{cell::Cell, rc::Rc, vec::Vec};
 struct Delay;
 impl PhyShortDelay for Delay {
     const MAX_MICROS: u32 = 20;
-    fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    fn settle<K: oer_portable_settle::SettleCounter + ?Sized>(
         _: &K,
-        _: oer_portable_time::settle::SettleLimit,
+        _: oer_portable_settle::SettleLimit,
     ) {
     }
 }
@@ -85,7 +85,7 @@ impl<'a> Fake<'a> {
     }
 }
 impl Hardware for Fake<'_> {
-    fn control<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    fn control<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
         &mut self,
         _: &K,
         _: ControlCommand,
@@ -93,7 +93,7 @@ impl Hardware for Fake<'_> {
         self.atom();
         Ok(())
     }
-    fn pbus<C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn pbus<C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         _: &C,
         _: PhyPbusForceTest,
@@ -114,7 +114,7 @@ impl Hardware for Fake<'_> {
             Ok(())
         }
     }
-    fn estimator<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    fn estimator<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
         &mut self,
         _: &K,
         command: PhyDcIqAction,
@@ -144,7 +144,7 @@ impl Hardware for Fake<'_> {
                 )
         }
     }
-    fn frequency<D: PhyShortDelay, C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn frequency<D: PhyShortDelay, C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         _: &C,
         command: RfpllFrequencyAction,
@@ -152,7 +152,7 @@ impl Hardware for Fake<'_> {
         self.atom();
         Ok(self.oracle.frequency(command))
     }
-    fn direct_i2c<C: Clock + oer_portable_time::settle::SettleCounter>(
+    fn direct_i2c<C: Clock + oer_portable_settle::SettleCounter>(
         &mut self,
         _: &C,
         transaction: &mut PhyColdI2cTransaction,
@@ -325,8 +325,8 @@ fn false_ready_registers_a_real_timer_and_preserves_the_atomic_capture_tail() {
 #[test]
 fn an_immediately_ready_timer_is_consumed_once_and_resumes_in_a_later_poll() {
     struct Immediate<'a>(&'a VirtualClock<2>);
-    impl oer_portable_time::settle::SettleCounter for Immediate<'_> {
-        fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+    impl oer_portable_settle::SettleCounter for Immediate<'_> {
+        fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
             limit.micros()
         }
         fn sample(&self) -> u32 {

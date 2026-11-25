@@ -118,7 +118,7 @@ pub(crate) fn complete_memory(
 
 /// Synchronous entry/restoration around the sole correction await. It never
 /// executes a correction action or constructs an always-ready child future.
-pub(super) fn envelope<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+pub(super) fn envelope<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
     counter: &K,
     child: &mut rfpll::thermal::Transition,
     registers: &mut impl SharedPhyAccess,

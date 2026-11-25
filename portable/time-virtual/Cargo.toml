@@ -9,6 +9,7 @@ description = "Deterministic per-instance virtual time for tests and simulations
 
 [dependencies]
 oer-portable-time = { path = "../time" }
+oer-portable-settle = { path = "../settle" }
 
 [dev-dependencies]
 embassy-futures = "0.1.2"

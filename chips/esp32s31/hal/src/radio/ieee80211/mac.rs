@@ -27,7 +27,8 @@ use crate::types::{
 
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
 use oer_portable_memory::PreparedTxDma;
-use oer_portable_time::{Duration, settle::SettleLimit};
+use oer_portable_settle::SettleLimit;
+use oer_portable_time::Duration;
 
 use crate::radio::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters};
 
@@ -260,16 +261,13 @@ pub(crate) fn start_receive(port: &mut impl MacRuntimePort) {
 
 /// Register transaction of [`WifiMacHal::request_stop`]: the request, the
 /// fence, then the hold.
-pub(crate) fn request_stop<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+pub(crate) fn request_stop<K: oer_portable_settle::SettleCounter + ?Sized>(
     port: &mut impl MacRuntimePort,
     counter: &K,
 ) -> StopRequested {
     port.request_stop();
     port.fence();
-    oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(
-        MAC_STOP_HOLD,
-        counter,
-    ));
+    oer_portable_settle::hold(oer_portable_settle::Settle::new(MAC_STOP_HOLD, counter));
     StopRequested { _private: () }
 }
 
@@ -318,7 +316,7 @@ impl<'registers> WifiMacHal<'registers> {
     /// The MAC's stop request after the walker's edge, held for
     /// [`MAC_STOP_HOLD`] on `counter`. Nothing is read: no activity field
     /// decides the stop.
-    pub fn request_stop<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    pub fn request_stop<K: oer_portable_settle::SettleCounter + ?Sized>(
         &mut self,
         edge: crate::radio::ieee80211::dma::receive::WalkerEdge,
         counter: &K,
@@ -651,7 +649,7 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// [`WifiRadioRegisters::abort_mac_tx`](crate::radio::ieee80211::registers::WifiRadioRegisters::abort_mac_tx).
-    pub fn abort_tx_queue<K: oer_portable_time::settle::SettleCounter + ?Sized, R>(
+    pub fn abort_tx_queue<K: oer_portable_settle::SettleCounter + ?Sized, R>(
         &mut self,
         queue: MacTxQueueIndex,
         cause: MacTxAbortCause,

@@ -6,7 +6,7 @@ extern crate std;
 use core::cell::Cell;
 use std::vec::Vec;
 
-use oer_portable_time::settle::{SettleCounter, SettleLimit};
+use oer_portable_settle::{SettleCounter, SettleLimit};
 
 use super::{MacRuntimePort, StopRequested, open_core, request_stop, start_receive};
 

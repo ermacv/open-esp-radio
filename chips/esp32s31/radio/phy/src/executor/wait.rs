@@ -9,7 +9,7 @@
 
 use core::{future::Future, pin::pin, task::Poll};
 
-use oer_portable_time::settle::{SettleCounter, SettleLimit};
+use oer_portable_settle::{SettleCounter, SettleLimit};
 use oer_portable_time::{Duration, Timer};
 
 pub mod tx;

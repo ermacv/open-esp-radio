@@ -22,7 +22,7 @@ use oer_chips_esp32s31_hal::system::owner::{SharedPhyAccess, SharedPhyContext};
 pub fn clear_pbus<
     D: PhyShortDelay,
     O: PhyTargetObserver,
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     mut child: PhyCalibrationPbusClearTransition,
@@ -102,7 +102,7 @@ pub fn dcode<
     'a,
     D: PhyShortDelay + 'a,
     P,
-    T: oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter,
+    T: oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationDcodeTransition,
@@ -131,7 +131,7 @@ fn dcode_poll<
     'a,
     D: PhyShortDelay + 'a,
     R: crate::executor::step::Registers,
-    T: oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter,
+    T: oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationDcodeTransition,
@@ -162,7 +162,7 @@ fn dcode_poll<
 /// Advance the retained coefficient owner; only its caller publishes the result.
 pub async fn rx_gain_init<
     D: PhyShortDelay,
-    T: oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter,
+    T: oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter,
 >(
     clock: &T,
     child: &mut crate::rx::gain::RxProgram,
@@ -187,7 +187,7 @@ pub async fn rx_gain_init<
     result
 }
 
-fn short_settle<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+fn short_settle<D: PhyShortDelay, K: oer_portable_settle::SettleCounter + ?Sized>(
     counter: &K,
     micros: u32,
 ) -> Result<(), PhyTargetPortError> {
@@ -215,7 +215,7 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
     physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
     observer: &super::ObserverSlot<'_, O>,
-    clock: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
+    clock: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
 ) -> Result<(), PhyTargetPortError> {
     child
         .execute_target_direct(
@@ -231,7 +231,7 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
 
 fn tx_settle<D: PhyShortDelay, O: PhyTargetObserver>(
     observer: &super::ObserverSlot<'_, O>,
-    clock: &(impl oer_portable_time::Clock + oer_portable_time::settle::SettleCounter),
+    clock: &(impl oer_portable_time::Clock + oer_portable_settle::SettleCounter),
     scope: crate::executor::wait::tx::Scope,
     micros: u32,
 ) -> Result<(), PhyTargetPortError> {
@@ -287,7 +287,7 @@ pub fn channel<
     D: PhyShortDelay + 'a,
     P: 'a,
     O: PhyTargetObserver + 'a,
-    T: oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter,
+    T: oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationChannelTransition,
@@ -375,7 +375,7 @@ pub(crate) fn complete_channel_direct<
     D: PhyShortDelay,
     P,
     O: PhyTargetObserver,
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     binding: crate::channel::PhyChipChannelExternalBinding,
@@ -420,7 +420,7 @@ pub(crate) fn complete_channel_direct<
 }
 
 fn complete_temperature_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     binding: crate::analog::temperature::PhyTemperatureExternalBinding,
@@ -466,7 +466,7 @@ fn complete_temperature_direct<
 }
 
 fn complete_channel_i2c_direct<
-    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    C: oer_portable_time::Clock + ?Sized + oer_portable_settle::SettleCounter,
 >(
     clock: &C,
     mut binding: crate::channel::PhyChipChannelI2cBinding,

@@ -457,9 +457,7 @@ impl<'t, D, T> TargetCompleter<'t, D, T> {
     }
 }
 
-impl<D: PhyShortDelay, T: Timer + oer_portable_time::settle::SettleCounter>
-    TargetCompleter<'_, D, T>
-{
+impl<D: PhyShortDelay, T: Timer + oer_portable_settle::SettleCounter> TargetCompleter<'_, D, T> {
     fn complete_rfpll<'a>(
         &'a self,
         binding: RfpllFrequencyExternalBinding,
@@ -1884,7 +1882,7 @@ impl<
     P,
     S: crate::sar_pilot::Service,
     D: PhyShortDelay,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
     O: PhyTargetObserver,
 > PhyCalibrationTrackingPort for TargetPhyCalibrationTrackingPort<'_, '_, P, S, D, T, O>
 {
@@ -2078,7 +2076,7 @@ impl<
     P,
     S: crate::sar_pilot::Service,
     D: PhyShortDelay,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
     O: PhyTargetObserver,
 > PhyParamTrackingPort for TargetPhyParamTrackingPort<'_, '_, P, S, D, T, O>
 {
@@ -2203,7 +2201,7 @@ impl<
     P,
     R: PhyInitializationAccess + crate::executor::step::Registers,
     D: PhyShortDelay,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
     O: PhyTargetObserver,
 > PhyRegisterPort for TargetPhyRegisterPort<'_, P, R, D, T, O>
 {
@@ -2296,7 +2294,7 @@ impl<
 /// The raw state is not a registration proof, so this entry stays inside the
 /// crate; callers select channels through the concurrent domain.
 pub(crate) async fn select_phy_channel_with_hal<D: PhyShortDelay, P, O: PhyTargetObserver>(
-    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl Timer + oer_portable_settle::SettleCounter),
     state: &mut PhyState,
     channel_or_frequency: u16,
     cbw: u8,
@@ -2314,7 +2312,7 @@ pub(crate) async fn switch_phy_channel_with_hal_and_mac_restart<
     P,
     O: PhyTargetObserver,
 >(
-    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
+    timer: &(impl Timer + oer_portable_settle::SettleCounter),
     state: &mut PhyState,
     channel_or_frequency: u16,
     cbw: u8,

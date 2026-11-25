@@ -19,10 +19,10 @@ impl<C: Clock + ?Sized> Clock for OutlinedClock<'_, C> {
         clock_now(self.0)
     }
 }
-impl<C: oer_portable_time::settle::SettleCounter + ?Sized> oer_portable_time::settle::SettleCounter
+impl<C: oer_portable_settle::SettleCounter + ?Sized> oer_portable_settle::SettleCounter
     for OutlinedClock<'_, C>
 {
-    fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+    fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
         self.0.cycles(limit)
     }
     fn sample(&self) -> u32 {
@@ -94,7 +94,7 @@ pub(super) enum I2cBoundary {
 /// One shared direct observation policy. Command callers stop at one byte's
 /// completion edge; transaction callers finish the complete retained RMW.
 #[inline(never)]
-pub(super) fn direct_i2c<C: Clock + ?Sized + oer_portable_time::settle::SettleCounter>(
+pub(super) fn direct_i2c<C: Clock + ?Sized + oer_portable_settle::SettleCounter>(
     io: &mut Io<'_>,
     clock: &C,
     transaction: &mut PhyColdI2cTransaction,

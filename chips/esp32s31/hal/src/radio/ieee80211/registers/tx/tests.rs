@@ -302,8 +302,8 @@ impl TickingClock {
     }
 }
 
-impl oer_portable_time::settle::SettleCounter for TickingClock {
-    fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+impl oer_portable_settle::SettleCounter for TickingClock {
+    fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
         limit.micros()
     }
     fn sample(&self) -> u32 {

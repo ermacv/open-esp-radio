@@ -724,7 +724,7 @@ impl PhyDcIqMmioBinding {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn capture_target<
         D: crate::executor::wait::PhyShortDelay,
-        K: oer_portable_time::settle::SettleCounter + ?Sized,
+        K: oer_portable_settle::SettleCounter + ?Sized,
     >(
         self,
         counter: &K,
@@ -792,7 +792,7 @@ impl PhyDcIqReadinessBinding {
     #[cfg(target_arch = "riscv32")]
     pub(crate) fn capture_target<
         D: crate::executor::wait::PhyShortDelay,
-        K: oer_portable_time::settle::SettleCounter + ?Sized,
+        K: oer_portable_settle::SettleCounter + ?Sized,
     >(
         self,
         counter: &K,

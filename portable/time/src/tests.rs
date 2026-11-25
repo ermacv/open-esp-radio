@@ -147,6 +147,7 @@ fn the_crate_has_no_dependency_and_no_feature() {
 fn the_clock_epoch_offset_sets_bit_31_of_the_low_word() {
     assert_eq!(CLOCK_EPOCH_OFFSET.as_micros(), 1 << 31);
     let start = Instant::EPOCH.checked_add(CLOCK_EPOCH_OFFSET).unwrap();
-    assert_eq!(start.as_micros() as u32, 1 << 31);
-    assert_eq!((start.as_micros() as u32) as i32, i32::MIN);
+    let low = u32::try_from(start.as_micros() % (1 << 32)).unwrap();
+    assert_eq!(low, 1 << 31);
+    assert_eq!(low.cast_signed(), i32::MIN);
 }

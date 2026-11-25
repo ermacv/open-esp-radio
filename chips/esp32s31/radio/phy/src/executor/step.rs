@@ -255,7 +255,7 @@ impl<'a> Job<'a> {
     #[inline(never)]
     fn advance_one<
         D: super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         io: Io<'_>,
@@ -277,7 +277,7 @@ impl<'a> Job<'a> {
     }
     fn advance<
         D: super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+        C: oer_portable_time::Clock + oer_portable_settle::SettleCounter,
     >(
         &mut self,
         mut io: Io<'_>,
@@ -638,7 +638,7 @@ trait Engine: Future<Output = Result<(), Failure>> {
 impl<
     'a,
     R: Registers,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: super::wait::PhyShortDelay,
@@ -693,7 +693,7 @@ impl<
 impl<
     'a,
     R: Registers,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: super::wait::PhyShortDelay,
@@ -938,7 +938,7 @@ fn driver<
     'j,
     D: super::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
 >(
     input: Input<'a, 'j>,
     registers: &'a mut R,
@@ -979,7 +979,7 @@ pub(crate) fn drive<
     'j,
     D: super::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
 >(
     job: &'a mut Job<'j>,
     registers: &'a mut R,
@@ -1015,7 +1015,7 @@ pub(crate) fn drive_calibration<
     'j,
     D: super::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_time::settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter,
 >(
     job: &'a mut Job<'j>,
     registers: &'a mut R,

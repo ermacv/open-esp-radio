@@ -12,7 +12,8 @@ use super::{
     MainWatchdogRegisters, MicrosecondTick, Microseconds, ResetLength, RtcStageAction, RtcWatchdog,
     RtcWatchdogArm, RtcWatchdogRegisters, StoppedMainWatchdog, SuperWatchdog,
     SuperWatchdogRegisters, WRITE_KEY, WriteProtected,
-    deadline::{DeadlineBudget, DeadlineError, DeadlineWatchdog},
+    deadline::DeadlineWatchdog,
+    policy::{DeadlineBudget, DeadlineError},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

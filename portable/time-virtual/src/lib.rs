@@ -28,7 +28,7 @@
 //! a clock.
 //!
 //! [`VirtualCounter`] is a settle's counter
-//! ([`oer_portable_time::settle::SettleCounter`]) for host tests: it counts
+//! ([`oer_portable_settle::SettleCounter`]) for host tests: it counts
 //! one cycle a microsecond, and every sample advances it by its step, so a
 //! settle over it ends after a known number of samples.
 //!
@@ -43,10 +43,8 @@ use core::{
     task::{Poll, Waker},
 };
 
-use oer_portable_time::{
-    CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer,
-    settle::{SettleCounter, SettleLimit},
-};
+use oer_portable_settle::{SettleCounter, SettleLimit};
+use oer_portable_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer};
 
 /// A settle's counter on the host: one cycle a microsecond, each sample
 /// advancing it by `step` cycles; [`Self::advance`] moves it as an

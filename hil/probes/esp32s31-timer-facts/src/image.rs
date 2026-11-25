@@ -31,7 +31,7 @@ use oer_hil_services_timer_facts::{
 };
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
-use oer_portable_time::settle::{SettleCounter as _, SettleLimit};
+use oer_portable_settle::{SettleCounter as _, SettleLimit};
 use oer_portable_time::{Duration, Timer as _};
 
 use crate::comparators::{One, Ticks, Two};

@@ -1419,6 +1419,7 @@ dependencies = [
  "aes",
  "oer-chips-esp32s31-hal",
  "oer-portable-crypto",
+ "oer-portable-settle",
  "oer-portable-time",
  "zeroize",
 ]
@@ -1451,6 +1452,7 @@ dependencies = [
  "oer-portable-memory",
  "oer-portable-mmio",
  "oer-portable-riscv",
+ "oer-portable-settle",
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-protocols-radio-coex",
@@ -1545,6 +1547,7 @@ dependencies = [
  "oer-portable-diagnostics",
  "oer-portable-hot",
  "oer-portable-memory",
+ "oer-portable-settle",
  "oer-portable-time",
  "oer-portable-time-virtual",
  "pin-project-lite",
@@ -1939,6 +1942,7 @@ dependencies = [
  "oer-portable-embassy-time",
  "oer-portable-memory",
  "oer-portable-riscv",
+ "oer-portable-settle",
  "oer-portable-time",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-core-upper-mac",
@@ -1997,6 +2001,7 @@ dependencies = [
  "oer-portable-embassy-time",
  "oer-portable-memory",
  "oer-portable-riscv",
+ "oer-portable-settle",
  "oer-portable-sync",
  "oer-portable-time",
  "oer-portable-trace",
@@ -2032,6 +2037,7 @@ dependencies = [
  "oer-portable-embassy-time",
  "oer-portable-mmio",
  "oer-portable-riscv",
+ "oer-portable-settle",
  "oer-portable-time",
  "oer-protocols-hil-agent",
  "static_cell",
@@ -2180,6 +2186,14 @@ name = "oer-portable-riscv"
 version = "0.1.0"
 
 [[package]]
+name = "oer-portable-settle"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+ "oer-portable-time-virtual",
+]
+
+[[package]]
 name = "oer-portable-sync"
 version = "0.1.0"
 dependencies = [
@@ -2199,6 +2213,7 @@ name = "oer-portable-time-virtual"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
+ "oer-portable-settle",
  "oer-portable-time",
  "tempfile",
 ]

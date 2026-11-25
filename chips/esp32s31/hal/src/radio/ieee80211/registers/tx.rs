@@ -1096,9 +1096,8 @@ pub enum MacTxDetachReason {
 ///
 /// SOURCE: complete `libpp[lmac.o]::lmacStopTransmit` (`PROMOTED_LMAC_TX`)
 /// forces CCA to three and delays 16 us before it samples VALID.
-pub const MAC_TX_ABORT_SETTLE: oer_portable_time::settle::SettleLimit =
-    match oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(16))
-    {
+pub const MAC_TX_ABORT_SETTLE: oer_portable_settle::SettleLimit =
+    match oer_portable_settle::SettleLimit::new(oer_portable_time::Duration::from_micros(16)) {
         Some(limit) => limit,
         None => panic!("the abort's settle is within a settle's limit"),
     };
@@ -2072,7 +2071,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete `libpp[lmac.o]::lmacStopTransmit`
     /// (`PROMOTED_LMAC_TX`): CCA forced, the 16 us delay, VALID sampled and
     /// cleared, CCA released, the queue disabled only if it was valid.
-    pub fn abort_mac_tx<'registers, K: oer_portable_time::settle::SettleCounter + ?Sized, R>(
+    pub fn abort_mac_tx<'registers, K: oer_portable_settle::SettleCounter + ?Sized, R>(
         &'registers mut self,
         queue: MacTxQueueIndex,
         cause: MacTxAbortCause,
@@ -2087,7 +2086,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let _ = queue::set_cca_force(common, Bits::constant::<3>());
         oer_portable_riscv::fence();
         // The vendor's fixed delay.
-        oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(
+        oer_portable_settle::hold(oer_portable_settle::Settle::new(
             MAC_TX_ABORT_SETTLE,
             counter,
         ));

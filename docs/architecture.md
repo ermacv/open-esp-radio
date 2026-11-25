@@ -376,7 +376,7 @@ checks these direct dependencies. Every HIL image is an image on the entry;
 entries, priorities and task spawning through the compositions directly.
 These crates are outside the sans-IO layer. `oer-chips-family-drivers-watchdog` is
 also a platform owner: it owns hardware reset arming and the affine
-system-deadline lease. `oer-portable-time::deadline` contains only the deadline policy,
+system-deadline lease. Its `policy` contains only the deadline's policy,
 taking time observations and returning typed completion errors; it owns no
 hardware or reset callback. The sans-IO rules forbid unsafe
 code, runtime panic paths and dependencies on fatal, reset, retained-record,
@@ -563,7 +563,7 @@ probe has one at each of P1 to P4).
   The AES driver waits for each Typical block synchronously on its `STATE`
   flag within such a settle, sourced from the measured block time; a block
   still working at its end is a typed timeout.
-  Every such settle is `oer_portable_time::settle`, counted in cycles of a
+  Every such settle is `oer_portable_settle::settle`, counted in cycles of a
   `SettleCounter`. On the chip that counter is the HAL's `CycleCounter`: the
   runtime handover adopts the CPU rate from the clock registers as a value
   (a clock of no known rate or a fractional divider is the adoption's

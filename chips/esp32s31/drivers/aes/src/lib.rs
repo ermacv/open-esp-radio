@@ -14,7 +14,7 @@
 //! ([`oer_portable_crypto::block::Aes128Engine`]). No DMA, AES ISR, allocation or
 //! software fallback. Each block is written, started and waited for on the
 //! `STATE` flag in place, within the named settle [`BLOCK_SETTLE`]
-//! (`oer_portable_time::settle`); a block still working at its end is a typed
+//! (`oer_portable_settle`); a block still working at its end is a typed
 //! timeout.
 //! SOURCE: TRM_S31_V01_AES §10.5.3 and ESP-IDF 4d80c1b2 aes_ll.h/aes_hal.c
 //! for the sequence; neither states a block latency.
@@ -26,10 +26,8 @@ use oer_portable_crypto::{
     Aes128Key,
     block::{Aes128Engine, Block, BlockEngine, BlockError},
 };
-use oer_portable_time::{
-    Duration,
-    settle::{Settle, SettleCounter, SettleLimit, settle},
-};
+use oer_portable_settle::{Settle, SettleCounter, SettleLimit, settle};
+use oer_portable_time::Duration;
 use zeroize::Zeroize;
 
 /// The named settle of one Typical block, from its start to `STATE`

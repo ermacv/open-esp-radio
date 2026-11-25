@@ -14,7 +14,7 @@ SDK RPC image, which serves its unwraps to the host; or
 boot-smoke's hart-1 task, which unwraps RFC 3394 §4.1 for the boot hart.
 
 A block waits on `STATE` in the named settle `BLOCK_SETTLE`
-(`oer_portable_time::settle`, 10 µs on the engine's settle counter: the HAL's
+(`oer_portable_settle`, 10 µs on the engine's settle counter: the HAL's
 `CycleCounter` at the adopted CPU rate in `runtime`). TRM v0.1 §10.5.3 and the pinned ESP-IDF 4d80c1b2 AES HAL state
 no block latency; the bound comes from the `esp32s31-aes-timing` probe (removed; last built at 6ef20cfb2),
 which measured 270–279 cycles (0.87 µs) from the start to `STATE` reading

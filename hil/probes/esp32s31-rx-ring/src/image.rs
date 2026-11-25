@@ -54,7 +54,7 @@ use oer_hil_services_radio_pair::{self as service, ReceiverCommand, ReceiverRequ
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::arena::{Arena, Handle};
-use oer_portable_time::settle::SettleCounter as _;
+use oer_portable_settle::SettleCounter as _;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 
@@ -259,7 +259,7 @@ fn main(
     // The adopted rate's cycles of one microsecond, for the hand-over's
     // answer.
     let Some(micro) =
-        oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1))
+        oer_portable_settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1))
     else {
         fail(name!("settle-limit"; 32));
     };

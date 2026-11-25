@@ -22,6 +22,7 @@ oer-portable-mmio = { path = "../../../portable/mmio" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
 oer-portable-time = { path = "../../../portable/time" }
+oer-portable-settle = { path = "../../../portable/settle" }
 oer-chips-esp32s31-pac = { path = "../../../chips/esp32s31/pac" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
 oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
