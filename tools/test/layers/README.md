@@ -213,9 +213,7 @@ observation and intact code/data. It proves no radio event ordering.
 
 Reset owners are admitted explicitly: HAL, chip composition, staged runtime,
 staged bootstrap, executor, the application entry (`oer`, on the
-image's behalf) and the image containing the site. The family
-IEEE 802.15.4 engine's typed reasons belong to PHY HIL's terminal policy;
-their declaration grants the engine no reset dependency. An ordinary driver
+image's behalf) and the image containing the site. An ordinary driver
 or sans-IO source cannot gain an owner merely by adding a registry entry.
 
 The scan starts at library/binary roots below `chips/`, `firmware/`,
@@ -239,8 +237,8 @@ Site kinds cover:
   needs a reason and must still exist.
 - `reset-trigger`: HAL system-reset requests and the typed PAC reset strobe
   used by HAL and the isolated facts image.
-- `retained-reason`, `retained-code`, `retained-slot`: runtime, PHY,
-  IEEE 802.15.4 and HIL reason catalogues, numeric decoder arms (including
+- `retained-reason`, `retained-code`, `retained-slot`: runtime, PHY
+  and HIL reason catalogues, numeric decoder arms (including
   payload subcodes), retained slots and the facts image's `.noinit` slot.
 - `terminal-binding`, `panic-handler`: image entry, exception and PHY
   reporter bindings, plus panic handlers in source and macro definitions.

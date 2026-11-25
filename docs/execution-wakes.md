@@ -27,8 +27,7 @@ wake through the waker it was given. Its model checks run with
 ## Notification paths
 
 Paths in the table are relative to the repository root. A row naming a file
-of a package in the workspace's `exclude` (the Bluetooth LE and IEEE 802.15.4
-backends, protocols and engine, the old Wi-Fi path) describes sources outside the build: no built
+of a package in the workspace's `exclude` (the old Wi-Fi path) describes sources outside the build: no built
 image runs it ([repository layout](repository-layout.md)). P1 includes the
 station service, network stack and applications; the word “radio” in a type
 name does not establish that its task runs on P2.
@@ -53,11 +52,9 @@ name does not establish that its task runs on P2.
 | `chips/family/platform/executor/src/peer/obligation.rs` | Peer client task → liveness supervisor task, both of one executor `C` | No waker cell: the supervisor's task handle (`C::current`) sits in a `ContextCell` of `C`'s context and every seat write wakes it with `C::wake`. Writes take the checked proof of `C`'s context (`signal::enter`) and the supervisor registers only after `signal::enter_task`, so both run in one executor context, never at once, and the wake stays on its hart. |
 | `portable/memory/src/waking_spsc.rs`, `exchange.rs`, `lib.rs` | Network/application/service P1 ↔ P1 | Ordinary AtomicWakers are the default consumer and producer notifies (`lib.rs` re-exports the type); same-hart endpoints currently run on P1. Ends on two harts name executor-signal notifies instead and use no waker. The generic queue must not be composed across priorities with an upward wake. The exchange (`exchange.rs`) is two such queues of depth one: its ends' notifies are named, and an end woken from a level below its own names a `PriorityWaker`. |
 | `chips/esp32s31/radio/ieee80211/backend/src/rx/returns.rs`, Wi-Fi MAC/power interrupt consumers | Held-frame return P1 → P2; MAC/power P4 (`radio`) → P2 | `IrqSignal::raise` ORs facts and pends P2 without a waker call. Registration of the polling task's handle and its wake occur only in the bound P2 executor. |
-| `chips/esp32s31/radio/bluetooth/backend/src/interrupt/{halves,wake}.rs`, `modem_lp_timer_queue.rs` | Scheduler request P2 → doorbell P3; scheduler/timer reply P3 → P2 | P2 rings the hardware doorbell; P3 owns scheduler registers and raises typed IrqSignals back. No task waker is invoked on P3. |
-| `chips/family/radio/ieee802154/engine` and `protocols/ieee802154/{port,mac}` | Engine events in P3; MAC state advanced by its caller | Synchronous callbacks/polling, no atomic-waker task cell. The model's RefCell wakers belong to its single-threaded host world. |
 | `chips/family/platform/executor/src/time_driver.rs`, `timer_queue.rs` | Timer alarm P4 (`radio`)/P1 → owning executor P2/P1 | Alarm latches/pends; the executor services its own timer queue. Expired timers and foreign-context rejection call the task waker directly without an AtomicWaker or a lock held by a lower-priority producer. |
 | `chips/family/platform/interrupt-table/src/signal.rs` | Higher handler (`FromHandler`), lower task (`FromTask`), or same-level `Exempt(ExecutorLevel)` handler (`FromExecutorLevel`) → bound executor on the same hart | Shared state is an atomic fact word. A same-level handler cannot preempt the executor's round; it publishes facts and pends the next round. Only the receiving executor touches its task handle (`SignalExecutor::Task`, woken by a direct call, no `Waker`); the raising context never owns it, and a waker that names no task of the executor is refused. |
-| `protocols/radio/port/src/pool/fifo.rs`, BLE/Wi-Fi models, `portable/time-virtual` | Parts of one task or one host model world | RefCell/Option or MultiWakerRegistration, not Sync. No shared cell crosses execution levels. |
+| `protocols/radio/port/src/pool/fifo.rs`, the Wi-Fi model, `portable/time-virtual` | Parts of one task or one host model world | RefCell/Option or MultiWakerRegistration, not Sync. No shared cell crosses execution levels. |
 | Cooperative `cx.waker().wake_by_ref()` in driver/HIL/probe steps | Task → itself | Direct executor waker, no shared registration held during the callback. |
 
 The network device, radio runner, RX publisher and link controller cannot be

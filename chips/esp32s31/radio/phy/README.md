@@ -68,7 +68,7 @@ reset or retained-sleep wakeup replay.
 | [PHY state](src/state.rs) | Configuration, calibration results, temperature references and cache values | Values do not grant register access |
 | [Client state](src/state/client.rs) and [tracking schedule](src/tracking/schedule.rs) | Active clients, source intervals and read-only demand | Wi-Fi and BT/154 are scheduling classes; BT and 154 remain distinct clients |
 | [Registered domain](src/domain.rs) | One `PhyDomain` per registration: calibration state and the shared client set | A domain cannot be cloned, rebuilt or paired with another epoch; operations check the registration epoch before hardware access |
-| [Concurrent domain](src/concurrent.rs) and its [target port](src/target_port/concurrent.rs) | The shared domain in the HAL radio domain; Wi-Fi joins it as a client (the Bluetooth and IEEE 802.15.4 clients are kept as sources, not built) | Lifecycle and tracking consume the radio domain and return it with their typed result |
+| [Concurrent domain](src/concurrent.rs) and its [target port](src/target_port/concurrent.rs) | The shared domain in the HAL radio domain; Wi-Fi joins it as a client | Lifecycle and tracking consume the radio domain and return it with their typed result |
 | [Tracking graphs](src/tracking.rs) and [executor](src/executor.rs) | Execute selected children and validate their completions | No independent RF arbitration |
 | [Target port](src/target_port.rs), [family PHY](../../../family/radio/phy/README.md) and [HAL PHY](../../hal/src/radio/phy.rs) | Driver sequences over owned HAL register atoms | Hardware access is borrowed from the admitted owner |
 | [Analog register bus](../../../family/drivers/regi2c/README.md) | Field, configuration and parallel transitions of the vendor analog-I2C leaves | The transitions touch no bus; the target port and HAL drive them |
@@ -78,7 +78,6 @@ reset or retained-sleep wakeup replay.
 ```mermaid
 flowchart TD
     W[Wi-Fi client] --> L[Radio domain, owned by the radio system]
-    Z[IEEE 802.15.4 client] --> L
     T[Tracking timer of the shared radio's owner] --> L
     P[PHY demand and calibration state] --> T
     L --> E[PHY finite executor]
@@ -187,9 +186,7 @@ The production operations are:
 - `acquire_client` and `release_client` enter and leave Wi-Fi, Bluetooth and
   IEEE 802.15.4 as clients of the one client set;
   `wifi_client::join_wifi` and `leave_wifi` do this for Wi-Fi on the HAL's
-  clocked Wi-Fi owner (`esp_phy_enable`/`esp_phy_disable(PHY_MODEM_WIFI)`),
-  `ieee802154_client` and `bluetooth_client` are kept as sources outside the
-  crate's module tree and are not built;
+  clocked Wi-Fi owner (`esp_phy_enable`/`esp_phy_disable(PHY_MODEM_WIFI)`);
 - `select_concurrent_wifi_channel` and `switch_concurrent_wifi_channel` tune
   the shared domain for Wi-Fi through the HAL Wi-Fi client's channel HAL,
   which it lends together with the domain's attachment; the switch stops and
@@ -228,27 +225,6 @@ restart requires. The last client's half of `esp_phy_disable` closes
 RF (`close_concurrent_rf`) only when the domain is open and its client set is
 empty; a `ConcurrentRfError::Recoverable` failure keeps RF open, any other
 started failure requires reset.
-
-Kept as sources, not built: IEEE 802.15.4 composes these steps in
-[its client module](src/ieee802154_client.rs).
-`join_ieee802154` runs on the HAL `Ieee802154Clocked` owner and consumes a
-`PhyReady` proof (`phy_ready`: the domain registered, RF open and settled,
-its registration describing the domain, which the proof borrows until the
-join gives it back); every client's entry into the client set consumes one,
-so no client enters a domain that is not ready. The 802.15.4 and Bluetooth
-joins prepare the client clock evaluation without changing its bits, timer
-obligation or timestamps. They publish the retained registration's gain and take
-BTBB before infallibly committing that evaluation. A refusal returns the prior
-client owner; no fallible rollback from Pending is needed. A due commit returns
-`TrackingDue` together with the affine membership and BTBB reference, and the
-caller runs `maintain_concurrent_phy` before using RF. Wi-Fi, the one built
-client, uses the same prepared pure client acquisition without BTBB. IEEE 802.15.4 issues an affine
-`Ieee802154PhyMembership`.
-`RegisteredIeee802154Operational` in the IEEE 802.15.4 driver keeps the
-membership beside the operational MAC owners; they return through a foundation
-readback, not a policy readback, because the operational MAC rewrote the PIB.
-`leave_ieee802154` releases the
-client and the BTBB reference, neither with register access.
 
 IEEE 802.15.4 stays a PHY client while it sleeps. On the ESP32-S31 the
 vendor `ieee802154_rf_disable` closes RF only together with the REGDMA PHY

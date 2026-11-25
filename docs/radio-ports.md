@@ -20,13 +20,7 @@ of doing it. For IEEE 802.11 one publication is one hardware transmission
 attempt and the caller chooses the retry plan; the backend always draws
 contention below the port. The core allocates protected MPDU packet numbers
 before handoff; the backend formats the supplied PN with the installed key ID
-in the CCMP header, which retries retain. For IEEE 802.15.4 the acknowledgement
-(frame pending and the enhanced ACK's contents), a single clear-channel
-assessment per transmission and the cipher run below the port from tables and
-parameters the core sets through it; the CSMA-CA backoff between assessments
-and frame retries stay above.
-For Bluetooth LE the backend reports its event timing allowances, and the
-link layer above the port decides how long each event may last.
+in the CCMP header, which retries retain.
 
 ## Five parts of every port
 

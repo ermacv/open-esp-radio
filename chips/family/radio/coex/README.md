@@ -39,9 +39,7 @@ The portable vocabulary is [`oer-protocols-radio-coex`](../../../../protocols/ra
 publishes. This crate knows no protocol: it names the table events
 (`wifi_events`, `ieee802154_events`), and the protocol's owner maps an
 operation to its row: `wifi_event` in the S31 Wi-Fi station (beacon window,
-connection frames) and `ieee802154_event` in
-`oer-chips-family-radio-ieee802154-engine` (idle, immediate and timed operations,
-ACK, CSL slot). Each row is an exhaustive `match` with its vendor `SOURCE` or a
+connection frames). Each row is an exhaustive `match` with its vendor `SOURCE` or a
 stated `product choice`. Whether an operation is raised at a given time, such
 as a reconnecting station's connection frames, is state of the coexistence
 owner, not of the row.

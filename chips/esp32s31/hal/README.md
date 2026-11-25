@@ -37,11 +37,7 @@ core (`memory`: `dma_address`, `dma_static`; the `dma_static!` macro is exported
 at the crate root) and the bootstrap's owners (`boot`). `power` holds the
 platform clocks, common radio power and the PMU sleep (`sleep`). `radio` holds the shared domain
 (`domain`), the modem (`modem`), coexistence (`coex`), the PHY's registers
-(`phy`) and Wi-Fi's hardware (`ieee80211`). The `bluetooth` and
-`ieee802154` modules, with their compile-fail cases (`ui/` beside each), are
-kept as sources outside the crate's module tree and are not built
-([repository layout](../../../docs/repository-layout.md)); the sections on
-them below describe those sources. The root drops the PAC's owners of their
+(`phy`) and Wi-Fi's hardware (`ieee80211`). The root drops the PAC's owners of their
 blocks at its claim, as it drops the PMU wake observer, and the shared radio
 drops the Bluetooth and IEEE 802.15.4 baseband words; the domain keeps no
 BTBB membership and no Bluetooth low-power timer clock.
@@ -70,26 +66,6 @@ dictionary stays behind `MasterAddress`, which cannot be constructed by a
 caller or substituted with a fake port’s address. PHY calibration
 configuration/restore machines and other cross-block calibration operations
 remain here; the no-wait scan does not classify them as atoms.
-
-For BLE (kept as sources), `oer-chips-family-radio-bluetooth-ports` supplies the task/interrupt register
-contracts, controller-time contracts, modify/stop progress values and
-non-repeating installation identity. The existing HAL owners implement these
-ports without transferring a P3 writer to P2. HAL retains affine publication
-and release receipts, generative pool/epoch brands, arena projection and DMA
-custody. The execution-lock/modify/stop machines, diagnostic settling,
-request/reply exchange, terminal output release and role workers remain here.
-
-For IEEE 802.15.4 (kept as sources), `ieee802154::polled` retains task/IRQ owners with `Silent`
-while exposing finite semantic transactions. `ieee802154::frames` owns the
-permanent DMA static and projects each frame into the typed DMA window.
-`oer-chips-esp32s31-radio-ieee802154-backend` (kept as sources, not built) implements the
-family engine's LL contract and owns its service/placement wrapper above HAL. HAL has no normal or test
-engine dependency.
-The family engine owns reset/foundation validation, static policy and
-startup/teardown order. HAL supplies register atoms, reset loans and consuming
-startup/teardown phase ports. Intermediate startup phases expose no parts;
-only the final discard fence releases a bindable IRQ owner. Runtime teardown
-keeps the saved affine sample through all three masks before acknowledgement.
 
 `coex::CoexDomainPorts` binds the family coexistence policy
 ([`oer-chips-family-radio-coex`](../../family/radio/coex/README.md)) to one radio domain:
@@ -261,78 +237,7 @@ literal zero to analog69.04. SOURCE: `phy/temperature.rs`, pinned ESP-IDF
 `phy_override.c::phy_set_tsens_power`, `sar_tsens_ctrl.c`,
 `sar_periph_ctrl_common.c` and S31 `regi2c_ctrl_ll.h`.
 
-## Bluetooth register transactions
-
-Kept as sources, not built.
-
-The interrupt bank clears and enables baseline images `0x8000` / `0x1302`,
-including `CONTROLLER_TIME_OVERFLOW` in bank one. A primary status snapshot
-carries this normal event separately from fault and dynamic scheduler sources.
-CONTROL0 starts BTLC. CONTROL1/2 do not lower an enabled pending cause, so
-terminal release masks the baseline, dynamic and sourced ISO/coex/CIG/CC
-feature enable lanes in its handler mask step. The task's RUN-disable
-step masks all task enables, including opaque task17, and strobes the sourced
-all-lane task WT acknowledgement. Before the last visible fault check preceding
-masking and before final release confirmation, the handler performs the same
-affine NRT sample/sample/admit/acknowledge/acknowledge transaction as runtime.
-Admission excludes shared primary fault and overflow clear lanes; a refused
-pair stays unacknowledged and returns `ReleaseNotQuiet` with both exact snapshots
-and the primary/task observations. Other sampled NRT lanes are acknowledged even
-when outside the fixed cleanup images. Visible primary fault/unsupported causes
-also return their complete observation for quarantine.
-After RUN-disable, it writes fixed non-fault W1C images `0x18212103` / `0x207a`
-under the mask, issues CONTROL1/2 and fences, then performs the admitted sampled
-NRT acknowledgement before verifying zero primary/task enables.
-Nonzero enables or residual visible status are `ReleaseNotQuiet`.
-The fixed images exclude bank0[15] and bank1[8/9/12]. A fault arriving after
-the last visible check is hidden and retained through release, so release
-can succeed without reporting it. The next open's baseline W1C images
-`0x8000` / `0x1302` silently discard that retained fault before enabling
-its lane. This is a known limitation of the release/open transaction; there
-is no workaround in this policy.
-No enable is reopened and no matrix route is transferred. Masked pending is
-not observable, so this proves neither zero pending nor producer shutdown.
-
-SOURCE: `POLICY_S31_BLE_TERMINAL_NONFAULT_ACK_20261027`,
-`BLOB_LIBBTDM_CONTROLLER_IRQ`, `BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027`,
-`BLOB_LIBBLE_ISO_COEX_REGISTERS`, `BLOB_S31_BLE_NRT_DISPOSITION_20261027`,
-`HW32_S31_BT_MASKED_FIXED_W1C_20261027` and
-`HW32_S31_BT_OUTPUT_OBSERVER_20261027` (PR #757).
-Masked W1C is hardware-confirmed only for bank1 CC0/CC1/overflow.
-Bank0/NRT and other feature lanes retain vendor coverage. Masked status cannot
-prove zero pending; no positive fault-lane stimulus qualifies that conclusion.
-
-The measured overflow is visible in primary status/source124 while the NRT
-snapshots/source133 remain zero. Before either NRT acknowledgement in runtime
-or release, the exact affine sample is checked against all primary-owned fault and
-overflow clear lanes. `BluetoothNrtInterruptFault` retains both words and
-refuses both writes when any such lane is present. An arrival absent from
-the sample is absent from its clear image. This does not identify an NRT
-producer or establish simultaneous set/clear priority.
-
-The modem LP timer samples the low bytes of its pending and rollover words,
-acknowledges each nonzero byte with a reviewed whole-word zero, and publishes
-software pending with a whole-word one. These stores include the unmodeled
-upper bytes. SOURCE: `BLOB_LIBBTDM_LP_PENDING_WORDS_CURRENT` (L4/L6/L7).
-LP command lanes and mode controls retain their measured scope; compare disable
-does not prove all-cause quiescence.
-
-Source 127 must be serviced within one low-counter wrap (2^24 LP ticks).
-`MODEM_LP_TIMER_SOURCE127_SERVICE_BOUND_XTAL_CYCLES` derives the interval
-from the generated counter width and selected divider 399: 167.77216 s at
-40 MHz XTAL / 100 kHz LP. Two natural wraps coalesce into one visible pending
-indication; a zero-store after the second leaves no second visible credit.
-Any future sleep path must wake on 127 before one wrap elapses. This is the
-service contract; the constant adds no timer, wake programming or latency
-measurement. SOURCE: `HW22_S31_LP_TWO_WRAPS_20261027`,
-`ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK`.
-
-Compare publication uses the typed 24-bit `COMPARE_TARGET` field, preserving
-the opaque upper byte. Deadline projection and half-range checkpoints wrap
-explicitly in that 24-bit domain. SOURCE: `HW22_S31_LP_COMPARE_WIDTH_20261027` and
-`HW22_S31_LP_CONDITIONAL_ACK_20261027` qualify XTAL/divider1 observations
-only. Production clears CONTROL0/4 and selects divider399; those observations
-do not establish production timing or its latch witness.
+## Modem PLL and transmit queue facts
 
 Modem PLL source gating uses the pinned ESP-IDF 4d80c1b2 whole-word sequence:
 open `0x15 → 0x1d`, close `0x2d → 0x25`. Platform source-clock readback
@@ -382,53 +287,6 @@ Staged firmware retains operation/epoch and source observations in the common fa
 `WifiClocked` and `RadioAccess` consume PHY custody into a
 `ChannelTransaction`, which borrows their MAC and platform. Channel and retune
 futures own that custody and return the domain with their typed result.
-
-
-Bluetooth task and interrupt owners expose `interrupt_observation(&self)`
-for value-only diagnostic reads. The interrupt owners return
-all modeled primary enable/status and NRT words; the task owner returns its
-complete enable word and the complete opaque +0x4bc word through a sourced
-whole-word read; its unmodeled bits retain no event meaning. Dynamic
-enables are subsets of the primary words. These sequential reads grant no
-acknowledgement or release proof and do not establish a task cause/output
-mapping. Comparison code may borrow the existing owner for these reads;
-production uses `interrupt_enable_image` for task enables and never reads
-+0x4bc. The primary observation remains a sequential, masked status view.
-Before the first production enable write, `admit_interrupts` requires every
-lane outside the typed production set to be zero: bank0 baseline15 and dynamic
-21/27/28, bank1 baseline1/8/9/12 and dynamic3, and task14's scheduler lifecycle.
-Task14 is acknowledged before RUN and at terminal stop; this policy supplies
-no vendor scan-truncation runtime consumer. A foreign enable, including opaque
-bank1[0,2] or task17, is `ForeignEnable` with seven source words
-(primary ENA/status/NRT and task ENA).
-Read side effects of the opaque +0x4bc view remain unestablished.
-Its cited sources establish use, not general read safety.
-`HW32_S31_BT_04BC_READ_SCOPE_20261027` covers the tested timer indications
-without a positive task cause; general read safety remains unqualified.
-
-Admission and terminal readback faults retain their owners and reach the
-image's terminal policy. The returned fault retains the seven observation words.
-Readback is sequential, not an atomic cross-bank sample or proof that every
-producer is stopped. The stop sequence keeps its handler/task order.
-SOURCE: `BLOB_S31_BLE_IRQ_RELEASE_SCOPE_20261027`,
-`BLOB_S31_BLE_TASK_IRQ_INHERITANCE_20261027`,
-`BLOB_S31_BT_TASK17_SELECTION_SCOPE_20261027`,
-`HW25_S31_BLE_INHERITED_20261027`, `HW25_S31_BLE_RELEASE_20261027`.
-
-The CTE interrupt bank at +0x4c4/+0x4c8/+0x4cc is outside this admission and
-release policy. Production has no enabled CTE interrupt consumer; its
-controller-global CTE publication is disabled. The adjacent bank is not a
-primary ENA/status bank or the task +0x4b4/+0x4b8 bank. No all-bank cleanup or
-pending-zero claim covers it (SOURCE: `BLOB_LIBBLE_PHY_INIT_REGISTERS` and
-`BLOB_LIBBLE_HW_CTE_RING_CONTROL`).
-
-Shared radio membership and registration epoch policy execute in
-`oer-chips-family-radio-power` over the S31 binding. The HAL retains affine power,
-coexistence and registration proofs, platform clock guards, register owners,
-restore storage, transaction seat/reunion checks and both quarantine guards.
-Module membership, first/last common-power ordering and external
-coexistence sequencing belong to the family driver. S31 modem settings
-remain in `knowledge::modem_clock`.
 
 ## Typical AES
 

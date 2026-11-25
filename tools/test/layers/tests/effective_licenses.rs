@@ -1,13 +1,11 @@
-//! The shared MAC dictionary stays below execution; Apache-only dependencies
-//! determine their consumers' effective licenses across the workspace.
+//! The chip facts stay below execution; Apache-only dependencies determine
+//! their consumers' effective licenses across the workspace.
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
 };
 
-const VALUES: &str = "oer-chips-family-radio-ieee802154-values";
 const KNOWLEDGE: &str = "oer-chips-esp32s31-knowledge";
-const ENGINE: &str = "oer-chips-family-radio-ieee802154-engine";
 
 fn normal_dependencies(value: &toml::Value, workspace: &toml::Value) -> BTreeSet<String> {
     let mut tables = vec![value];
@@ -69,7 +67,7 @@ fn apache_license_violations(
 }
 
 #[test]
-fn the_dictionary_stays_below_execution_and_apache_consumers_state_the_license() {
+fn the_chip_facts_stay_below_execution_and_apache_consumers_state_the_license() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let workspace: toml::Value =
         toml::from_str(&std::fs::read_to_string(root.join("Cargo.toml")).unwrap()).unwrap();
@@ -94,18 +92,12 @@ fn the_dictionary_stays_below_execution_and_apache_consumers_state_the_license()
         };
         licenses.insert(name, license.as_str().unwrap().to_owned());
     }
-    for owner in [VALUES, KNOWLEDGE] {
-        let dependencies = normal_closure(&graph, owner);
-        let forbidden = dependencies
-            .iter()
-            .filter(|name| {
-                name.as_str() == ENGINE
-                    || name.as_str() == "oer-chips-esp32s31-hal"
-                    || name.starts_with("oer-protocols-ieee802154-")
-            })
-            .collect::<Vec<_>>();
-        assert!(forbidden.is_empty(), "{owner} reaches {forbidden:?}");
-    }
+    let dependencies = normal_closure(&graph, KNOWLEDGE);
+    let forbidden = dependencies
+        .iter()
+        .filter(|name| name.as_str() == "oer-chips-esp32s31-hal")
+        .collect::<Vec<_>>();
+    assert!(forbidden.is_empty(), "{KNOWLEDGE} reaches {forbidden:?}");
     assert_eq!(
         apache_license_violations(&graph, &licenses),
         Vec::<String>::new(),
@@ -157,6 +149,8 @@ fn apache_license_follows_normal_edges_and_requires_exact_apache() {
 
 #[test]
 fn normal_closure_follows_target_aliases_and_workspace_names_but_excludes_dev_edges() {
+    const VALUES: &str = "values";
+    const ENGINE: &str = "engine";
     let manifest: toml::Value = toml::from_str("[target.'cfg(test)'.dependencies]\nforward = { workspace = true }\n[dev-dependencies]\nignored = '1'\n[build-dependencies]\nalso_ignored = '1'\n[package.metadata.dependencies]\nnot_a_dependency = '1'\n").unwrap();
     let workspace: toml::Value =
         toml::from_str("forward = { package = 'bridge', version = '1' }\n").unwrap();

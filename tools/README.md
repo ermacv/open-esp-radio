@@ -24,8 +24,7 @@ tools/
   hil/        the host end of the HIL core: link/ the board's serial link, harness/ a
               scenario program's life cycle, cli/ is `cargo hil` (scenarios: hil/scenarios/)
   vendor/     the vendor comparison, lineage, provenance and the PHY archive audit; cli/ is
-              `cargo vendor-check`, scenario-cli/ the typed vendor scenarios and reviewer commands,
-              ieee802154-esp32s31-cli/ the IEEE 802.15.4 host stand
+              `cargo vendor-check`, scenario-cli/ the typed vendor scenarios and reviewer commands
 ```
 
 A program is one package: `main.rs` and its own modules. Code moves into a

@@ -15,7 +15,7 @@ facts about the Wi-Fi stamp are cataloged as
   (`oer_protocols_radio_port::RadioStamp<D>`).
 - An **alarm** wakes something at an instant of its domain. An executor wait
   is an alarm of monotonic time (`oer_portable_time::Timer`). A hardware timer of a MAC
-  or PHY (station TBTT, the TSF timers, the BLE modem LP timer) is an alarm of
+  or PHY (station TBTT, the TSF timers) is an alarm of
   its own domain, armed through a port or driver operation, never an
   `oer_portable_time::Timer`.
 
@@ -26,9 +26,6 @@ facts about the Wi-Fi stamp are cataloged as
 | Monotonic CPU time | the system timer, through `oer-portable-embassy-time` | `oer_portable_time::Instant` | itself |
 | ESP32-S31 Wi-Fi MAC local time | `WIFI_MAC_LOCAL_TIME` (`MacLocalTime`), widened by `MacTimeline` | `Ieee80211Instant`, `Ieee80211Stamp` | affine; its relation owner is the lower-MAC port backend, generations `Ieee80211ClockGeneration` |
 | An interface's TSF | the MAC's TSF of that interface | `TsfInstant`, as `VifTsf` with its interface | affine to the port's radio clock (`TSF_RELATION`, `TSF_DRIFT_PPM` = 200 ppm: the AP's timer and the station's crystal), sampled by `TsfSample` |
-| BLE controller | the controller clock, extended from its 32-bit latch | `LeInstant` | none |
-| BLE modem LP timer | the modem LP timer | `BluetoothModemLpTimerInstant` (wrapping, no claimed unit) | none |
-| IEEE 802.15.4 | the runtime's monotonic clock | `Ieee802154Instant` | identical |
 | FTM | the exchange's timestamps | `FtmTimestampPs`, 48-bit picosecond wire values | none |
 
 A TSF generation (`TsfGeneration`) starts with the epoch each relation owner

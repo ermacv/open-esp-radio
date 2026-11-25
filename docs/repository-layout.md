@@ -38,13 +38,11 @@ tools/probe/{codegen, macros}/
 tools/registers/{cli, contracts, generate, model}/
 tools/regulatory/generate/
 tools/test/{layers, ui-cases}/
-tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
-    provenance, scenario, scenario-cli}/
+tools/vendor/{cli, lineage, provenance, scenario, scenario-cli}/
 portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, settle,
     sync, time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
 protocols/bluetooth/hci/
-protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
 protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/
 protocols/ieee802/wire/
@@ -54,7 +52,6 @@ protocols/ieee80211/core/{arbiter, upper-mac}/
 protocols/ieee80211/core/roles/{ap, sta}/
 protocols/ieee80211/core/security/{cipher, rsn}/
 protocols/ieee80211/testing/{conformance, model}/
-protocols/ieee802154/{mac, model, port, wire}/
 protocols/network/{core, port, runtime, wire}/
 protocols/network/testing/model/
 protocols/radio/{coex, port, regulatory}/
@@ -69,9 +66,7 @@ chips/family/registers/analog-i2c/
 chips/family/platform/{bootstrap, executor, interrupt-table, layout, port,
     runtime}/
 chips/family/radio/{coex, modem-clock, phy, power}/
-chips/family/radio/bluetooth/ports/
 chips/family/radio/ieee80211/policy/
-chips/family/radio/ieee802154/{engine, values}/
 oer/
 hil/agent/
 hil/images/aes/
@@ -81,26 +76,20 @@ hil/scenarios/{aes, radio-pair, timer-facts}/
 hil/services/{aes, radio-pair, timer-facts}/
 ```
 
-The workspace's `exclude` names the packages that stay as sources and are
-not built. Kept as sources until their radio returns:
-- the Bluetooth LE and IEEE 802.15.4 backends
-  (`chips/esp32s31/radio/{bluetooth, ieee802154}/backend/`);
-- their protocols (`protocols/bluetooth/le/{cipher, controller, ll, model,
-  port, runtime, wire}/`, `protocols/ieee802154/{mac, model, port, wire}/`);
-- their family crates (`chips/family/radio/bluetooth/ports/`,
-  `chips/family/radio/ieee802154/{engine, values}/`);
-- the IEEE 802.15.4 host stand (`tools/vendor/ieee802154-esp32s31{,-cli}/`).
+Of Bluetooth LE and IEEE 802.15.4 the tree holds the register model's facts
+(`chips/esp32s31/registers/`, what the PAC generates from them, the chip
+knowledge and the vendor facts) and no code, but for `protocols/bluetooth/hci`.
+The last tree in which CI built both radios is the tag
+`legacy-bluetooth-ieee802154-2026-11-15`.
 
-Kept too, until a plan takes it up: ESP-NOW
+The workspace's `exclude` names the packages that stay as sources and are
+not built. Kept, until a plan takes it up: ESP-NOW
 (`protocols/ieee80211/core/extensions/esp-now/`).
 
 `protocols/bluetooth/hci/` stays built: the stand's Linux fixture helpers
 (`tools/lab/fixture-helpers`) depend on it, the Wi-Fi fixture's programs
 among them. Inside built packages, files stay as sources outside their
 crate's module tree:
-- the HAL's `radio/{bluetooth, ieee802154}` modules, with their
-  compile-fail cases (`ui/` beside each);
-- the PHY crate's `bluetooth_client` and `ieee802154_client`;
 - the family application's observation counters
   (`chips/family/app/src/observe{.rs,/}`), whose one reader is
   `hil/images/wifi-station`, and the S31 application's `observed.rs`,
@@ -210,8 +199,7 @@ network codecs carry and stands on `oer-portable-wire` alone.
 - A normal dependency outside its role: `chips/esp32s31/hal` depends on
   `protocols/radio/coex`.
 - HAL production files that wait or poll are listed with exact counts:
-  modules of `radio::bluetooth`, `system::boot`, `radio::ieee80211` and
-  `radio::phy`.
+  modules of `system::boot`, `radio::ieee80211` and `radio::phy`.
 - A direct normal dependency on `embassy-sync` remains in
   `protocols/hil/agent`.
 
