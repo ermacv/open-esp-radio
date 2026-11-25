@@ -23,7 +23,7 @@ facts about the Wi-Fi stamp are cataloged as
 
 | Domain | Counted by | Type | Relation to monotonic time |
 | --- | --- | --- | --- |
-| Monotonic CPU time | the system timer, through `oer-portable-embassy-time` | `oer_portable_time::Instant` | itself |
+| Monotonic CPU time (`Monotonic`) | the system timer, through `oer-portable-embassy-time` | `oer_portable_time::Instant` | itself |
 | ESP32-S31 Wi-Fi MAC local time | `WIFI_MAC_LOCAL_TIME` (`MacLocalTime`), widened by `MacTimeline` | `Ieee80211Instant`, `Ieee80211Stamp` | affine; its relation owner is the lower-MAC port backend, generations `Ieee80211ClockGeneration` |
 | An interface's TSF | the MAC's TSF of that interface | `TsfInstant`, as `VifTsf` with its interface | affine to the port's radio clock (`TSF_RELATION`, `TSF_DRIFT_PPM` = 200 ppm: the AP's timer and the station's crystal), sampled by `TsfSample` |
 | FTM | the exchange's timestamps | `FtmTimestampPs`, 48-bit picosecond wire values | none |
@@ -41,11 +41,12 @@ sample of another generation does not convert (`StaleSample`).
   returns for the executor is a monotonic `Instant`; an instant it returns for
   a hardware alarm stays in that alarm's domain, and the driver arms it.
 - Domains do not mix at the type level: a port's instants are
-  `RadioInstant<D>` of its domain `D`, a coordinate in its owner's radio
-  epoch. Raw microseconds establish no relation between clocks.
-- Radio arithmetic belongs to `oer-portable-time`: `RadioDuration<D>` spans add only
+  `DomainInstant<D>` of its domain `D`, a coordinate in its owner's epoch.
+  Raw microseconds establish no relation between clocks.
+- Arithmetic belongs to `oer-portable-time`: `DomainDuration<D>` spans add only
   to instants of the same domain. Checked operations return `None` outside
-  the represented range; nothing wraps, narrows or clamps. `RadioWindow` is
+  the represented range; nothing wraps, narrows or clamps, but for the
+  monotonic domain's explicit saturation for deadlines. `DomainWindow` is
   non-empty and half-open; touching windows do not overlap.
 - Time crosses domains only through `ClockRelation<A, B>` (identical, or
   affine within a drift bound), a `RelationSample<A, B>` of back-to-back

@@ -78,10 +78,10 @@ pub enum Ieee80211Radio {}
 pub enum ConnectionEpochKind {}
 
 /// An instant on the IEEE 802.11 lower-MAC port's clock.
-pub type Ieee80211Instant = oer_portable_time::RadioInstant<Ieee80211Radio>;
+pub type Ieee80211Instant = oer_portable_time::DomainInstant<Ieee80211Radio>;
 
 /// A span of the port's radio clock.
-pub type Ieee80211Duration = oer_portable_time::RadioDuration<Ieee80211Radio>;
+pub type Ieee80211Duration = oer_portable_time::DomainDuration<Ieee80211Radio>;
 
 /// An instant on the IEEE 802.11 lower-MAC port's clock with the generation
 /// of its relation to the monotonic clock.
@@ -89,7 +89,7 @@ pub type Ieee80211Stamp = oer_protocols_radio_port::RadioStamp<Ieee80211Radio>;
 
 /// A generation of the port's radio-clock relation to monotonic time.
 pub type Ieee80211ClockGeneration =
-    oer_protocols_radio_port::Generation<Ieee80211Instant, oer_portable_time::Instant>;
+    oer_portable_time::Generation<Ieee80211Radio, oer_portable_time::Monotonic>;
 
 /// A paired reading of the IEEE 802.11 lower-MAC port's clock and the
 /// monotonic clock.
@@ -105,10 +105,7 @@ pub use extensions::{
     TSF_RELATION, TbttEvent, TsfArithmeticError, TsfGeneration, TsfProjectionError, TsfSample,
     TsfVifMismatch, VifTsf,
 };
-pub use oer_protocols_radio_port::{
-    ClockInfo, ClockRelation, EventsLost, Generation, GenerationSource, Poisoned, PortResult,
-    Projected, ProjectionError, RelationRate,
-};
+pub use oer_protocols_radio_port::{ClockInfo, EventsLost, Poisoned, PortResult};
 pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
     AccessPoint, AckHeader, AmpduRate, BssColor, FrameHeader, HeaderSpec, Ieee80211Capabilities,

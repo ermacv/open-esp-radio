@@ -10,142 +10,45 @@
     )
 )]
 
-//! Chip-neutral monotonic and radio time.
+//! Chip-neutral time: the values of a clock's domain, the relation of two
+//! domains, and the ports of the monotonic clock.
 //!
-//! Two time axes cross the radio contracts:
+//! - [`DomainInstant`] is an instant of the clock of domain `D`, an empty
+//!   type its owner declares, and [`DomainDuration`] a non-negative span of
+//!   that domain. Instants of different domains cannot be compared or
+//!   subtracted. The owner validates additional interface, instance or
+//!   generation identity.
+//! - The image's monotonic clock is the domain [`Monotonic`]: [`Instant`] and
+//!   [`Duration`] name its values, the one axis every executor task waits on.
+//!   A [`Clock`] reads it and a [`Timer`] waits for a deadline on it.
+//!   Portable code takes both as ports; an adapter binds them to an
+//!   executor's time driver and a host model binds them to virtual time.
+//! - A [`ClockRelation`] states how the clocks of two domains advance, and is
+//!   the only way to carry time from one to the other. Raw microseconds of a
+//!   domain imply no relation to another's.
 //!
-//! - [`Instant`] and [`Duration`] are the image's monotonic time, the one
-//!   axis every executor task waits on. A [`Clock`] reads it and a [`Timer`]
-//!   waits for a deadline on it. Portable code takes both as ports; an
-//!   adapter binds them to an executor's time driver and a host model binds
-//!   them to virtual time.
-//! - [`RadioInstant`] is a coordinate in its owner's radio domain and
-//!   epoch; [`RadioDuration`] is a non-negative span within that domain.
-//!   Instants of different domains cannot be compared or subtracted. The owner
-//!   validates additional interface, instance or generation identity.
-//!   Raw microseconds imply no image-monotonic or wall-clock relationship;
-//!   the existing clock relations own conversion between domains.
-//! - [`Coordinate`] names an instant of either axis by its microseconds and
-//!   span type, the only view a clock relation takes to carry time across.
-//!
-//! Both axes represent microseconds in `u64`. Radio spans include every
-//! value from zero through `u64::MAX`; [`RadioWindow`] additionally requires
-//! a non-zero span and a representable exclusive endpoint.
-//! Checked arithmetic returns `None` or [`TimeOverflow`] when a result would
-//! leave the representable range, and window construction returns
-//! [`WindowError`]. The monotonic axis also exposes explicit saturation via
-//! [`Instant::saturating_add`] for deadlines and
-//! [`Instant::saturating_duration_since`]; radio arithmetic never saturates.
+//! Every domain counts microseconds in `u64`. Spans include every value from
+//! zero through `u64::MAX`; [`DomainWindow`] additionally requires a non-zero
+//! span and a representable exclusive endpoint. Checked arithmetic returns
+//! `None` or [`TimeOverflow`] when a result would leave the representable
+//! range, and window construction returns [`WindowError`]. The monotonic
+//! domain alone also has explicit saturation, for deadlines
+//! ([`Instant::saturating_add`], [`Instant::saturating_duration_since`],
+//! [`Duration::saturating_sub`]); no other domain's arithmetic saturates.
 
 use core::future::Future;
 
-mod coordinate;
-pub mod radio;
+mod domain;
+mod relation;
 
-pub use coordinate::Coordinate;
-pub use radio::{NonZeroRadioDuration, RadioDuration, RadioInstant, RadioWindow, WindowError};
-
-/// A point on the image's monotonic time, in microseconds since an epoch
-/// the [`Clock`] defines.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[repr(transparent)]
-pub struct Instant(u64);
-
-impl Instant {
-    /// The clock's epoch.
-    pub const EPOCH: Self = Self(0);
-
-    /// Construct an instant from microseconds since the epoch.
-    pub const fn from_micros(micros: u64) -> Self {
-        Self(micros)
-    }
-
-    /// Microseconds since the epoch.
-    pub const fn as_micros(self) -> u64 {
-        self.0
-    }
-
-    /// The instant `duration` later, or `None` past the representable range.
-    pub const fn checked_add(self, duration: Duration) -> Option<Self> {
-        match self.0.checked_add(duration.0) {
-            Some(micros) => Some(Self(micros)),
-            None => None,
-        }
-    }
-
-    /// The deadline `duration` later, or the end of representable time when
-    /// it lies past it: such a deadline never comes, and `u64` microseconds
-    /// outlast any image. Use it for deadlines, never to measure time.
-    pub const fn saturating_add(self, duration: Duration) -> Self {
-        Self(self.0.saturating_add(duration.0))
-    }
-
-    /// The instant `duration` earlier, or `None` before the epoch.
-    pub const fn checked_sub(self, duration: Duration) -> Option<Self> {
-        match self.0.checked_sub(duration.0) {
-            Some(micros) => Some(Self(micros)),
-            None => None,
-        }
-    }
-
-    /// The time from `earlier` to `self`, or `None` when `earlier` is later.
-    pub const fn checked_duration_since(self, earlier: Self) -> Option<Duration> {
-        match self.0.checked_sub(earlier.0) {
-            Some(micros) => Some(Duration(micros)),
-            None => None,
-        }
-    }
-
-    /// The time from `earlier` to `self`, zero when `earlier` is later.
-    pub const fn saturating_duration_since(self, earlier: Self) -> Duration {
-        Duration(self.0.saturating_sub(earlier.0))
-    }
-}
-
-/// A non-negative span of monotonic time, in microseconds.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[repr(transparent)]
-pub struct Duration(u64);
-
-impl Duration {
-    /// No time.
-    pub const ZERO: Self = Self(0);
-
-    /// Construct a duration from microseconds.
-    pub const fn from_micros(micros: u64) -> Self {
-        Self(micros)
-    }
-
-    /// Construct a duration from milliseconds; every `u32` fits.
-    pub const fn from_millis(millis: u32) -> Self {
-        // A `u32` of milliseconds is below 2^42 microseconds.
-        Self((millis as u64).saturating_mul(1_000))
-    }
-
-    /// Construct a duration from seconds; every `u32` fits.
-    pub const fn from_secs(secs: u32) -> Self {
-        // A `u32` of seconds is below 2^52 microseconds.
-        Self((secs as u64).saturating_mul(1_000_000))
-    }
-
-    /// Microseconds.
-    pub const fn as_micros(self) -> u64 {
-        self.0
-    }
-
-    /// The sum, or `None` past the representable range.
-    pub const fn checked_add(self, other: Self) -> Option<Self> {
-        match self.0.checked_add(other.0) {
-            Some(micros) => Some(Self(micros)),
-            None => None,
-        }
-    }
-
-    /// The difference, zero when `other` is longer.
-    pub const fn saturating_sub(self, other: Self) -> Self {
-        Self(self.0.saturating_sub(other.0))
-    }
-}
+pub use domain::{
+    DomainDuration, DomainInstant, DomainWindow, Duration, Instant, Monotonic,
+    NonZeroDomainDuration, WindowError,
+};
+pub use relation::{
+    ClockRelation, Generation, GenerationSource, Projected, ProjectionError, RelationRate,
+    RelationSample, Stamp,
+};
 
 /// How far past [`Instant::EPOCH`] a [`Clock`] starts: 2^31 µs, about
 /// 35.8 minutes.
