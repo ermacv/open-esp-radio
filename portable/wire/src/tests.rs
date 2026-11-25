@@ -555,3 +555,23 @@ fn a_proven_length_and_value_narrow_without_loss_up_to_their_bounds() {
         0x1f_fffe
     );
 }
+
+crate::octet_code! { "oer_portable_wire::tests";
+    /// A code of these tests.
+    TestCode {
+        /// The lowest.
+        LOWEST = 0,
+        /// The highest.
+        HIGHEST = 255,
+    }
+}
+
+#[test]
+fn an_octet_code_is_any_octet_and_its_named_values_are_theirs() {
+    for value in 0..=u8::MAX {
+        let code = TestCode::new(value);
+        assert_eq!(code.value(), value);
+        assert_eq!(code == TestCode::LOWEST, value == 0);
+        assert_eq!(code == TestCode::HIGHEST, value == 255);
+    }
+}

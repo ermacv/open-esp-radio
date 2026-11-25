@@ -7,7 +7,7 @@
 //! from the 'options' field only: options overloaded into 'sname' and 'file'
 //! (RFC 2131, 4.1) are not interpreted.
 
-use crate::code::octet_code;
+use oer_portable_wire::octet_code;
 use oer_portable_wire::{Error, Reader, Writer};
 
 use crate::address::Ipv4Address;
@@ -78,7 +78,7 @@ oer_portable_wire::bitfield! {
     }
 }
 
-octet_code! { dhcp;
+octet_code! { "oer_protocols_network_wire::dhcp";
     /// The code of an option: any octet, some of them named.
     OptionCode {
         /// SOURCE: RFC 2132, 3.1 (Pad Option).
@@ -112,7 +112,7 @@ octet_code! { dhcp;
     }
 }
 
-octet_code! { dhcp;
+octet_code! { "oer_protocols_network_wire::dhcp";
     /// A hardware type of one octet: DHCP's 'htype', and the value of ARP's
     /// wider field.
     ///

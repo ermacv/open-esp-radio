@@ -4,9 +4,9 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-use crate::code::octet_code;
+use oer_portable_wire::octet_code;
 
-octet_code! { element;
+octet_code! { "oer_protocols_ieee80211_wire::element";
     /// An Element ID: any octet, some of them named.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.1, Table 9-92 (Element IDs).
@@ -57,7 +57,7 @@ octet_code! { element;
     }
 }
 
-octet_code! { element;
+octet_code! { "oer_protocols_ieee80211_wire::element";
     /// An Element ID Extension: any octet, some of them named.
     ///
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.1, Table 9-92 (Element IDs);

@@ -4,8 +4,8 @@
 //! Format); RFC 2474, 3 (Differentiated Services Field). Options and
 //! extension headers are not interpreted; checksums are not checked.
 
-use crate::code::octet_code;
 use oer_portable_wire::Reader;
+use oer_portable_wire::octet_code;
 
 use crate::address::{Ipv4Address, Ipv6Address};
 
@@ -28,7 +28,7 @@ pub enum IpError {
     Length,
 }
 
-octet_code! { ip;
+octet_code! { "oer_protocols_network_wire::ip";
     /// What an IP packet carries: IPv4's Protocol and IPv6's Next Header, any
     /// octet, some of them named.
     ///
