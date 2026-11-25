@@ -7,6 +7,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::address::Bssid;
+use crate::element::{ElementId, ElementIdExtension};
 use crate::ht::{
     HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN, HtPeerCapabilities, ht_peer_capabilities,
 };
@@ -19,9 +20,6 @@ pub const EXTENDED_RATES_CAPACITY: usize = 16;
 pub const HE_CAPABILITY_IE_CAPACITY: usize = 64;
 pub const HE_OPERATION_IE_CAPACITY: usize = 32;
 pub const WMM_IE_CAPACITY: usize = 26;
-
-const HE_CAPABILITIES_EXTENSION_ID: u8 = 35;
-const HE_OPERATION_EXTENSION_ID: u8 = 36;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HtSecondaryChannel {
@@ -39,11 +37,15 @@ pub enum HtSecondaryChannel {
 /// `libpp.a[hal_mac_ctl.o]::hal_he_set_default_pe`.
 pub fn he_default_packet_extension_duration(he_operation_ie: &[u8]) -> Option<u8> {
     match *he_operation_ie {
-        [255, _, HE_OPERATION_EXTENSION_ID, parameters, ..] => {
+        [_, _, _, parameters, ..] if named_he_operation(he_operation_ie) => {
             Some(crate::he::HeOperationFields::from_bytes([parameters, 0, 0, 0, 0, 0]).default_pe())
         }
         _ => None,
     }
+}
+
+fn named_he_operation(element: &[u8]) -> bool {
+    ElementIdExtension::read(element) == Some(ElementIdExtension::HE_OPERATION)
 }
 
 /// Recover the peer's HE Operation `ER-SU-Disable` bit.
@@ -54,7 +56,7 @@ pub fn he_default_packet_extension_duration(he_operation_ie: &[u8]) -> Option<u8
 /// peer-state bit 10 and passes it unchanged to `hal_he_set_ersu`.
 pub fn he_extended_range_single_user_disabled(he_operation_ie: &[u8]) -> Option<bool> {
     match *he_operation_ie {
-        [255, _, HE_OPERATION_EXTENSION_ID, _, _, parameters, ..] => Some(
+        [_, _, _, _, _, parameters, ..] if named_he_operation(he_operation_ie) => Some(
             crate::he::HeOperationFields::from_bytes([0, 0, parameters, 0, 0, 0]).er_su_disabled(),
         ),
         _ => None,
@@ -440,31 +442,31 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
             record.information_elements = ElementList::Truncated;
             break;
         };
-        match (id, value) {
-            (0, _) => {
+        match (ElementId::new(id), value) {
+            (ElementId::SSID, _) => {
                 if let Some(length) = store_value(&mut record.ssid, value) {
                     record.ssid_len = length;
                 }
             }
-            (1, _) => {
+            (ElementId::SUPPORTED_RATES, _) => {
                 if let Some(length) = store_value(&mut record.supported_rates, value) {
                     record.supported_rates_len = length;
                 }
             }
-            (3, &[channel]) => record.ds_channel = Some(channel),
-            (45, _) => {
+            (ElementId::DSSS_PARAMETER_SET, &[channel]) => record.ds_channel = Some(channel),
+            (ElementId::HT_CAPABILITIES, _) => {
                 if let Some(element) = exact_element(element_header, value) {
                     record.ht_capability_ie = Some(element);
                 }
             }
-            (48, _) => {
+            (ElementId::RSN, _) => {
                 record.rsn_ie_count = record.rsn_ie_count.saturating_add(1);
                 match store_element(&mut record.rsn_ie, element_header, value) {
                     Some(length) => record.rsn_ie_len = length,
                     None => record.information_elements = ElementList::Truncated,
                 }
             }
-            (50, _) => {
+            (ElementId::EXTENDED_SUPPORTED_RATES, _) => {
                 let copied = record
                     .extended_supported_rates
                     .iter_mut()
@@ -476,29 +478,35 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
                     record.information_elements = ElementList::Truncated;
                 }
             }
-            (61, _) => {
+            (ElementId::HT_OPERATION, _) => {
                 if let Some(element) = exact_element(element_header, value) {
                     record.ht_operation_ie = Some(element);
                 }
             }
-            (244, _) => match store_element(&mut record.rsnxe, element_header, value) {
+            (ElementId::RSNX, _) => match store_element(&mut record.rsnxe, element_header, value) {
                 Some(length) => record.rsnxe_len = length,
                 None => record.information_elements = ElementList::Truncated,
             },
-            (255, [HE_CAPABILITIES_EXTENSION_ID, ..]) => {
+            (ElementId::EXTENSION, &[extension, ..])
+                if ElementIdExtension::new(extension) == ElementIdExtension::HE_CAPABILITIES =>
+            {
                 match store_element(&mut record.he_capability_ie, element_header, value) {
                     Some(length) => record.he_capability_ie_len = length,
                     None => record.information_elements = ElementList::Truncated,
                 }
             }
-            (255, [HE_OPERATION_EXTENSION_ID, ..]) => {
+            (ElementId::EXTENSION, &[extension, ..])
+                if ElementIdExtension::new(extension) == ElementIdExtension::HE_OPERATION =>
+            {
                 match store_element(&mut record.he_operation_ie, element_header, value) {
                     Some(length) => record.he_operation_ie_len = length,
                     None => record.information_elements = ElementList::Truncated,
                 }
             }
-            (221, [0x00, 0x50, 0xf2, 0x01, ..]) => record.legacy_wpa = ElementPresence::Present,
-            (221, [0x00, 0x50, 0xf2, 0x02, _, _, ..]) => {
+            (ElementId::VENDOR_SPECIFIC, [0x00, 0x50, 0xf2, 0x01, ..]) => {
+                record.legacy_wpa = ElementPresence::Present
+            }
+            (ElementId::VENDOR_SPECIFIC, [0x00, 0x50, 0xf2, 0x02, _, _, ..]) => {
                 match store_element(&mut record.wmm_ie, element_header, value) {
                     Some(length) => record.wmm_ie_len = length,
                     None => record.information_elements = ElementList::Truncated,
@@ -627,5 +635,112 @@ mod record_tests {
         record.capability_info = crate::management::CapabilityInformation::from_bytes([0; 2]);
         record.rsn_ie_count = 1;
         assert!(!record.privacy() && record.rsn());
+    }
+
+    /// A beacon of `elements`.
+    fn scanned(elements: &[u8]) -> ScanRecord {
+        let mut frame = std::vec![0_u8; 36];
+        frame[0] = 0x80;
+        frame[4..10].fill(0xff);
+        frame[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+        frame[16..22].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+        frame.extend_from_slice(elements);
+        *ScanFrame::parse(&frame).unwrap().record()
+    }
+
+    /// A complete element of `id` whose body is `body`.
+    fn element(id: u8, body: &[u8]) -> std::vec::Vec<u8> {
+        let mut element = std::vec![id, body.len() as u8];
+        element.extend_from_slice(body);
+        element
+    }
+
+    /// Each element is kept in its own place and leaves every other place
+    /// empty.
+    #[test]
+    fn each_element_is_kept_in_its_place_alone() {
+        let ht_capability = element(45, &[1; 26]);
+        let ht_operation = element(61, &[2; 22]);
+        let rsn = element(48, &[1, 0]);
+        let rsnxe = element(244, &[0x20]);
+        let he_capability = element(255, &[35, 3, 3]);
+        let he_operation = element(255, &[36, 4, 4]);
+        let wmm = element(221, &[0x00, 0x50, 0xf2, 0x02, 1, 1]);
+        let wpa = element(221, &[0x00, 0x50, 0xf2, 0x01, 1, 0]);
+        let all: [&[u8]; 13] = [
+            &[0, 2, b'a', b'b'],
+            &[1, 2, 0x82, 0x84],
+            &[3, 1, 11],
+            &ht_capability,
+            &rsn,
+            &[50, 1, 0x6c],
+            &ht_operation,
+            &rsnxe,
+            &he_capability,
+            &he_operation,
+            &wpa,
+            &wmm,
+            // Another extension and another vendor are kept nowhere.
+            &[255, 2, 37, 1, 221, 6, 0, 0x50, 0xf3, 2, 1, 1],
+        ];
+        let places = |record: &ScanRecord| {
+            [
+                record.ssid_bytes() == b"ab",
+                record.supported_rates_bytes() == [0x82, 0x84],
+                record.ds_channel == Some(11),
+                record.ht_capability_ie_bytes().map(|ie| &ie[..]) == Some(&ht_capability[..]),
+                record.rsn() && record.rsn_ie_bytes() == rsn,
+                record.extended_supported_rates_bytes() == [0x6c],
+                record.ht_operation_ie_bytes().map(|ie| &ie[..]) == Some(&ht_operation[..]),
+                record.rsnxe_bytes() == rsnxe,
+                record.he_capability_ie_bytes() == he_capability,
+                record.he_operation_ie_bytes() == he_operation,
+                record.legacy_wpa == ElementPresence::Present,
+                record.wmm_ie_bytes() == wmm,
+                false,
+            ]
+        };
+        for (index, one) in all.iter().enumerate() {
+            let record = scanned(one);
+            assert_eq!(record.information_elements, ElementList::Complete);
+            for (place, filled) in places(&record).into_iter().enumerate() {
+                assert_eq!(filled, place == index && index != 12, "{index} {place}");
+            }
+            // And no other place holds anything.
+            assert_eq!(
+                record.he_capability_ie_bytes().is_empty(),
+                index != 8,
+                "{index}"
+            );
+            assert_eq!(
+                record.he_operation_ie_bytes().is_empty(),
+                index != 9,
+                "{index}"
+            );
+            assert_eq!(record.wmm_ie_bytes().is_empty(), index != 11, "{index}");
+        }
+    }
+
+    /// The HE Operation helpers read only an HE Operation element.
+    #[test]
+    fn he_operation_fields_are_read_from_its_element_alone() {
+        assert_eq!(
+            he_default_packet_extension_duration(&[255, 4, 36, 0b1010_1100, 0, 0]),
+            Some(4)
+        );
+        assert_eq!(
+            he_default_packet_extension_duration(&[255, 4, 36, 0, 0, 0]),
+            Some(0)
+        );
+        for (parameters, disabled) in [(0, false), (1, true)] {
+            assert_eq!(
+                he_extended_range_single_user_disabled(&[255, 4, 36, 0, 0, parameters]),
+                Some(disabled)
+            );
+        }
+        for other in [[255, 4, 35, 4, 0, 1], [254, 4, 36, 4, 0, 1]] {
+            assert_eq!(he_default_packet_extension_duration(&other), None);
+            assert_eq!(he_extended_range_single_user_disabled(&other), None);
+        }
     }
 }

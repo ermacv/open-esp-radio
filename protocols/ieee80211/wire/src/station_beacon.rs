@@ -6,17 +6,13 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::element::{ElementId, ElementIdExtension};
 use crate::frame::FrameControlFields;
 use crate::management::AidField;
 use oer_protocols_ieee802_wire::Eui48;
 
 const BEACON_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0x80, 0x00]);
 const FIXED_BEACON_LENGTH: usize = 36;
-const TIM_ELEMENT_ID: u8 = 5;
-const HT_OPERATION_ELEMENT_ID: u8 = 61;
-const EXTENSION_ELEMENT_ID: u8 = 255;
-const VENDOR_ELEMENT_ID: u8 = 221;
-const HE_OPERATION_EXTENSION_ID: u8 = 36;
 
 use crate::protection::{ErpElements, ErpElementsError, HtProtectionMode};
 
@@ -176,7 +172,8 @@ pub fn parse_sta_beacon(
             .take(usize::from(length))
             .map_err(|_| StaBeaconError::MalformedInformationElement)?;
         remaining = reader.remaining();
-        if id == VENDOR_ELEMENT_ID
+        let id = ElementId::new(id);
+        if id == ElementId::VENDOR_SPECIFIC
             && let Some(element) = usize::from(length)
                 .checked_add(2)
                 .and_then(|whole| oer_portable_wire::Reader::new(element).take(whole).ok())
@@ -184,7 +181,7 @@ pub fn parse_sta_beacon(
         {
             edca = Some(parameters);
         }
-        if id == TIM_ELEMENT_ID {
+        if id == ElementId::TIM {
             let &[dtim_count, dtim_period, bitmap_control, ref bitmap @ ..] = body else {
                 return Err(StaBeaconError::MalformedTim);
             };
@@ -224,12 +221,14 @@ pub fn parse_sta_beacon(
             });
         }
         match (id, body) {
-            (HT_OPERATION_ELEMENT_ID, [_, _, information, ..]) if body.len() == 22 => {
+            (ElementId::HT_OPERATION, [_, _, information, ..]) if body.len() == 22 => {
                 protection.ht = HtProtectionMode::from_field(*information);
             }
             // HE Operation Parameters: TXOP Duration RTS Threshold in bits
             // 13:4 of its first two octets.
-            (EXTENSION_ELEMENT_ID, [HE_OPERATION_EXTENSION_ID, low, high, ..]) => {
+            (ElementId::EXTENSION, [extension, low, high, ..])
+                if ElementIdExtension::new(*extension) == ElementIdExtension::HE_OPERATION =>
+            {
                 let threshold = crate::he::HeOperationFields::from_bytes([*low, *high, 0, 0, 0, 0])
                     .rts_threshold();
                 protection.he_txop_rts_threshold =

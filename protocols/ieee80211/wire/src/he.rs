@@ -15,9 +15,9 @@
 //! Received bytes reach the HE Capabilities and HE Operation element parsers
 //! (stored scan elements, parsed at association); nothing in them panics on
 //! those bytes, and they deny the panic lints item by item.
+use crate::element::ElementId;
+use crate::element::ElementIdExtension;
 
-pub const HE_CAPABILITIES_EXTENSION_ID: u8 = 35;
-pub const HE_OPERATION_EXTENSION_ID: u8 = 36;
 pub const HE_CAPABILITIES_IE_MIN_LEN: usize = 24;
 pub const HE_OPERATION_IE_MIN_LEN: usize = 9;
 
@@ -854,9 +854,9 @@ pub const fn he_capability_ie(
     let [r0, r1] = local.receive.one_stream_map();
     let [t0, t1] = local.transmit.one_stream_map();
     [
-        255,
+        ElementId::EXTENSION.value(),
         const { crate::encoding::octet::<{ HE_CAPABILITIES_IE_MIN_LEN - 2 }>() },
-        HE_CAPABILITIES_EXTENSION_ID,
+        ElementIdExtension::HE_CAPABILITIES.value(),
         m0,
         m1,
         m2,
@@ -893,9 +893,9 @@ pub enum HeElementError {
 /// prefix (header included) and the optional bytes after it.
 fn validate_extension<const MINIMUM_LEN: usize>(
     element: &[u8],
-    extension: u8,
+    extension: ElementIdExtension,
 ) -> Result<(&[u8; MINIMUM_LEN], &[u8]), HeElementError> {
-    if element.first().copied() != Some(255) {
+    if element.first().copied().map(ElementId::new) != Some(ElementId::EXTENSION) {
         return Err(HeElementError::WrongElement);
     }
     let Some(declared_len) = element.get(1).copied() else {
@@ -909,15 +909,17 @@ fn validate_extension<const MINIMUM_LEN: usize>(
         .array::<MINIMUM_LEN>()
         .map_err(|_| HeElementError::TooShort)?;
     let tail = reader.remaining();
-    if prefix.get(2).copied() != Some(extension) {
+    if prefix.get(2).copied().map(ElementIdExtension::new) != Some(extension) {
         return Err(HeElementError::WrongExtension);
     }
     Ok((prefix, tail))
 }
 
 pub fn parse_he_capabilities(element: &[u8]) -> Result<HeCapabilities, HeElementError> {
-    let (element, _) =
-        validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(element, HE_CAPABILITIES_EXTENSION_ID)?;
+    let (element, _) = validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(
+        element,
+        ElementIdExtension::HE_CAPABILITIES,
+    )?;
     let mut reader = oer_portable_wire::Reader::new(element);
     reader.take(9).map_err(|_| HeElementError::TooShort)?;
     let phy = HePhyCapabilities::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
@@ -934,7 +936,7 @@ pub fn parse_he_capabilities(element: &[u8]) -> Result<HeCapabilities, HeElement
 
 pub fn parse_he_operation(element: &[u8]) -> Result<HeOperation, HeElementError> {
     let (element, _) =
-        validate_extension::<HE_OPERATION_IE_MIN_LEN>(element, HE_OPERATION_EXTENSION_ID)?;
+        validate_extension::<HE_OPERATION_IE_MIN_LEN>(element, ElementIdExtension::HE_OPERATION)?;
     let mut reader = oer_portable_wire::Reader::new(element);
     reader.take(3).map_err(|_| HeElementError::TooShort)?;
     let fields =
@@ -954,10 +956,12 @@ pub fn parse_he_peer_state(
     capability: &[u8],
     operation: &[u8],
 ) -> Result<HePeerState, HeElementError> {
-    let (capability, thresholds) =
-        validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(capability, HE_CAPABILITIES_EXTENSION_ID)?;
+    let (capability, thresholds) = validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(
+        capability,
+        ElementIdExtension::HE_CAPABILITIES,
+    )?;
     let (operation, optional) =
-        validate_extension::<HE_OPERATION_IE_MIN_LEN>(operation, HE_OPERATION_EXTENSION_ID)?;
+        validate_extension::<HE_OPERATION_IE_MIN_LEN>(operation, ElementIdExtension::HE_OPERATION)?;
 
     let mut reader = oer_portable_wire::Reader::new(capability);
     reader.take(9).map_err(|_| HeElementError::TooShort)?;

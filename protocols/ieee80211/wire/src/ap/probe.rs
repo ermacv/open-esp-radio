@@ -4,6 +4,7 @@
 //! every panicking construct; [`write_response`] builds a frame from the AP's
 //! own advertisement and takes no received bytes.
 
+use crate::element::ElementId;
 use crate::sequence::SequenceNumber;
 use oer_protocols_ieee802_wire::Eui48;
 
@@ -26,7 +27,7 @@ pub(super) fn ssid(mut elements: &[u8]) -> Option<&[u8]> {
         let mut reader = oer_portable_wire::Reader::new(rest);
         let value = reader.take(usize::from(length)).ok()?;
         let rest = reader.remaining();
-        if id == 0 {
+        if ElementId::new(id) == ElementId::SSID {
             if found.is_some() || value.len() > 32 {
                 return None;
             }
@@ -68,7 +69,7 @@ pub fn write_response(
     while !reader.is_empty() {
         let [id, length] = reader.read::<2>().map_err(invalid)?;
         reader.take(usize::from(length)).map_err(invalid)?;
-        if id != 5 {
+        if ElementId::new(id) != ElementId::TIM {
             required = required.checked_add(2 + usize::from(length)).ok_or(
                 ResponseError::OutputTooSmall {
                     required: usize::MAX,
@@ -95,7 +96,7 @@ pub fn write_response(
     while !reader.is_empty() {
         let header @ [id, length] = reader.read::<2>().map_err(invalid)?;
         let value = reader.take(usize::from(length)).map_err(invalid)?;
-        if id != 5 {
+        if ElementId::new(id) != ElementId::TIM {
             writer.write(&header).map_err(too_small)?;
             writer.write(value).map_err(too_small)?;
         }

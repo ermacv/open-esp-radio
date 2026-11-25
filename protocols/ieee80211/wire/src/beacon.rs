@@ -4,6 +4,7 @@
 //! supplied timestamp and the beacon's advertised interval. The caller owns
 //! the clock relation; this codec does not read a backend or executor clock.
 
+use crate::element::ElementId;
 use crate::frame::FrameControlFields;
 use crate::management::AssociationId;
 use oer_protocols_ieee802_wire::Eui48;
@@ -206,13 +207,13 @@ pub fn write_ht_beacon(
     );
     let capabilities = profile.capabilities(security.link_protection());
     crate::encoding::write_array::<34, _, _>(&mut fixed, &capabilities.to_bytes());
-    let dsss = [3, 1, channel.number()];
-    let erp = [ERP_ELEMENT_ID, 1, protection.erp_information()];
+    let dsss = [ElementId::DSSS_PARAMETER_SET.value(), 1, channel.number()];
+    let erp = [ElementId::ERP.value(), 1, protection.erp_information()];
     // Bitmap offset zero plus two octets covers AID 1..=15 without aliasing
     // AID 8..=15 onto the first byte. Bit zero of bitmap control remains the
     // independent DTIM multicast indication maintained by `stamp`.
     let tim = [
-        5,
+        ElementId::TIM.value(),
         5,
         dtim_period
             .checked_sub(1)
@@ -224,15 +225,21 @@ pub fn write_ht_beacon(
     ];
     crate::encoding::FrameParts([
         fixed.as_slice(),
-        &[0, ssid.length().to_u8()],
+        &[ElementId::SSID.value(), ssid.length().to_u8()],
         ssid.as_bytes(),
-        &[1, crate::ap::profile::LegacyRates::SUPPORTED_LEN],
+        &[
+            ElementId::SUPPORTED_RATES.value(),
+            crate::ap::profile::LegacyRates::SUPPORTED_LEN,
+        ],
         profile.legacy_rates.supported(),
         if ghz2_4 { &dsss } else { &[] },
         &tim,
         if ghz2_4 { &erp } else { &[] },
         rsn,
-        &[50, crate::ap::profile::LegacyRates::EXTENDED_LEN],
+        &[
+            ElementId::EXTENDED_SUPPORTED_RATES.value(),
+            crate::ap::profile::LegacyRates::EXTENDED_LEN,
+        ],
         profile.legacy_rates.extended(),
         &wmm_parameter_ie,
         &ht_capability,
@@ -242,10 +249,6 @@ pub fn write_ht_beacon(
     .write(output)
     .map_err(|required| ApBeaconBuildError::OutputTooSmall { required })
 }
-
-use crate::protection::ERP_ELEMENT_ID;
-const DSSS_PARAMETER_SET_ELEMENT_ID: u8 = 3;
-const HT_OPERATION_ELEMENT_ID: u8 = 61;
 
 /// Replace the ERP Information and HT Operation protection fields of one
 /// beacon or probe-response template in place.
@@ -277,10 +280,10 @@ pub fn update_bss_protection(
         reader
             .take(usize::from(length))
             .map_err(|_| ApBeaconProtectionError::MalformedElement)?;
-        match id {
-            ERP_ELEMENT_ID if length == 1 => erp = Some(value),
-            DSSS_PARAMETER_SET_ELEMENT_ID => dsss = true,
-            HT_OPERATION_ELEMENT_ID if length == 22 => {
+        match ElementId::new(id) {
+            ElementId::ERP if length == 1 => erp = Some(value),
+            ElementId::DSSS_PARAMETER_SET => dsss = true,
+            ElementId::HT_OPERATION if length == 22 => {
                 ht_operation = Some(
                     value
                         .checked_add(2)
@@ -371,7 +374,7 @@ pub fn insert_after_tim(
 pub fn remove_elements(
     template: &mut [u8],
     len: usize,
-    ids: &[u8],
+    ids: &[ElementId],
 ) -> Result<usize, BeaconTemplateError> {
     const FIXED_BEACON_LENGTH: usize = MANAGEMENT_HEADER_LEN + BEACON_FIXED_BODY_LEN;
     let mut len = len;
@@ -388,7 +391,7 @@ pub fn remove_elements(
             .checked_add(length)
             .filter(|end| *end <= len)
             .ok_or(BeaconTemplateError::Malformed)?;
-        if ids.contains(&id) {
+        if ids.contains(&ElementId::new(id)) {
             for (destination, source) in (offset..len).zip(end..len) {
                 let byte = *template.get(source).ok_or(BeaconTemplateError::Malformed)?;
                 *template
@@ -424,9 +427,9 @@ pub fn write_channel_switch_count(template: &mut [u8], len: usize, count: u8) ->
     while let Some(([id, length], rest)) = remaining.split_first_chunk_mut::<2>() {
         let (body, tail) = rest.split_at_mut_checked(usize::from(*length))?;
         if matches!(
-            (*id, *length),
-            (crate::channel_switch::CHANNEL_SWITCH_ELEMENT_ID, 3)
-                | (crate::channel_switch::EXTENDED_CHANNEL_SWITCH_ELEMENT_ID, 4)
+            (ElementId::new(*id), *length),
+            (ElementId::CHANNEL_SWITCH_ANNOUNCEMENT, 3)
+                | (ElementId::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT, 4)
         ) {
             *body.last_mut()? = count;
             return Some(());
@@ -456,7 +459,7 @@ pub fn dtim(bytes: &[u8]) -> Option<(usize, u8, u8)> {
             let mut reader = oer_portable_wire::Reader::new(bytes.get(offset..)?);
             let [id, length] = reader.read::<2>().ok()?;
             let element = reader.take(usize::from(length)).ok()?;
-            if id == 5 {
+            if ElementId::new(id) == ElementId::TIM {
                 let [count, period, _, _] =
                     oer_portable_wire::Reader::new(element).read::<4>().ok()?;
                 return (period != 0 && count < period).then_some((offset, count, period));

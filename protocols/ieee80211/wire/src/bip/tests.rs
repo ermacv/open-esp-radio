@@ -131,3 +131,19 @@ fn an_igtk_is_named_four_or_five_and_by_no_other_field() {
         }
     }
 }
+
+/// The element's identifier and its length each refuse a frame alone.
+#[test]
+fn an_element_of_another_identifier_or_length_is_no_management_mic() {
+    for (octet, value) in [(26, 75), (27, 15)] {
+        let mut frame = deauthentication();
+        BipProtection::append(&mut frame, 26, IgtkKeyId::Four, ipn(1))
+            .unwrap()
+            .finish(&[0; 8]);
+        frame[octet] = value;
+        assert_eq!(
+            BipFrame::parse(&frame).err(),
+            Some(BipFormatError::MissingManagementMic)
+        );
+    }
+}

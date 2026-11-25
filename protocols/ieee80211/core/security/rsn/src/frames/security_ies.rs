@@ -4,6 +4,7 @@
 
 use super::*;
 use oer_protocols_ieee80211_wire::element::Element;
+use oer_protocols_ieee80211_wire::element::ElementId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedRsnIe<const N: usize = RSN_IE_CAPACITY> {
@@ -12,7 +13,7 @@ pub struct OwnedRsnIe<const N: usize = RSN_IE_CAPACITY> {
 
 impl<const N: usize> OwnedRsnIe<N> {
     pub fn try_copy(bytes: &[u8]) -> Result<Self, RsnFrameError> {
-        if !Element::exact(bytes).is_some_and(|element| element.id == RSN_ELEMENT_ID) {
+        if !Element::exact(bytes).is_some_and(|element| element.id == ElementId::RSN) {
             return Err(RsnFrameError::InvalidRsnIe);
         }
         let bytes =
@@ -47,7 +48,7 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
         let Some((rsn, rsnxe)) = Element::split(bytes) else {
             return Err(RsnFrameError::InvalidRsnIe);
         };
-        if rsn.id != RSN_ELEMENT_ID {
+        if rsn.id != ElementId::RSN {
             return Err(RsnFrameError::InvalidRsnIe);
         }
         let rsn = OwnedRsnIe::<RSN_IE_CAPACITY>::try_copy(rsn.bytes)?;
@@ -59,7 +60,7 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
         rsnxe: &[u8],
     ) -> Result<Self, RsnFrameError> {
         if !rsnxe.is_empty()
-            && !Element::exact(rsnxe).is_some_and(|element| element.id == RSNXE_ELEMENT_ID)
+            && !Element::exact(rsnxe).is_some_and(|element| element.id == ElementId::RSNX)
         {
             return Err(RsnFrameError::InvalidRsnxe);
         }
@@ -112,7 +113,11 @@ mod tests {
 
     #[test]
     fn damaged_association_envelopes_return_errors_for_both_views() {
-        for bytes in [&[][..], &[RSN_ELEMENT_ID][..], &[RSN_ELEMENT_ID, 255][..]] {
+        for bytes in [
+            &[][..],
+            &[ElementId::RSN.value()][..],
+            &[ElementId::RSN.value(), 255][..],
+        ] {
             let mut array = [0; 4];
             array[..bytes.len()].copy_from_slice(bytes);
             let owned = OwnedAssociationSecurityIes::<4> {

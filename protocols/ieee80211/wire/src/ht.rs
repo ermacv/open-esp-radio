@@ -8,6 +8,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::channel::{Channel, ChannelWidth};
+use crate::element::ElementId;
 use crate::protection::HtOperationProtection;
 
 pub const HT_CAPABILITY_IE_LEN: usize = 28;
@@ -111,7 +112,7 @@ pub const fn ht_capability_ie_for_peer(
         .with_short_gi40(width40)
         .to_bytes();
     let mut element = [0_u8; HT_CAPABILITY_IE_LEN];
-    element[0] = 45;
+    element[0] = ElementId::HT_CAPABILITIES.value();
     element[1] = 26;
     element[2] = c0;
     element[3] = c1;
@@ -150,7 +151,7 @@ pub const fn ht_operation_ie(
     protection: HtOperationProtection,
 ) -> [u8; HT_OPERATION_IE_LEN] {
     let mut element = [0_u8; 24];
-    element[0] = 61;
+    element[0] = ElementId::HT_OPERATION.value();
     element[1] = 22;
     element[2] = channel.number();
     element[3] = match channel.width() {
@@ -233,7 +234,8 @@ pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
     while let [_, length, ..] = *remaining.remaining() {
         let record = remaining.take(usize::from(length).checked_add(2)?).ok()?;
         if let Ok(record) = <&[u8; HT_CAPABILITY_IE_LEN]>::try_from(record)
-            && let [45, _, c0, c1, ampdu_parameters, rx_mcs_0_to_7, ..] = *record
+            && let [id, _, c0, c1, ampdu_parameters, rx_mcs_0_to_7, ..] = *record
+            && ElementId::new(id) == ElementId::HT_CAPABILITIES
             && let Some(rx_mcs_0_to_7) = core::num::NonZeroU8::new(rx_mcs_0_to_7)
         {
             return Some(HtPeerCapabilities {

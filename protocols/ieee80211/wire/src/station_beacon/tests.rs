@@ -1,7 +1,7 @@
 extern crate std;
 
 use super::*;
-use crate::protection::ERP_ELEMENT_ID;
+use crate::element::{ElementId, ElementIdExtension};
 
 fn aid(value: u16) -> crate::management::AidField {
     crate::management::AidField::from_bytes(value.to_le_bytes())
@@ -27,7 +27,7 @@ fn beacon(tim: &[u8]) -> std::vec::Vec<u8> {
 fn decodes_dtim_group_and_partial_virtual_bitmap_for_local_aid() {
     // AID 17 lives in byte two, bit one. Bitmap offset one is encoded as
     // two in bits 7:1 and therefore body bitmap byte zero names AID16..23.
-    let frame = beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0x03, 0x02]);
+    let frame = beacon(&[ElementId::TIM.value(), 4, 0, 3, 0x03, 0x02]);
     assert_eq!(
         parse_sta_beacon(&frame, Eui48::new(BSSID), aid(17)).map(|beacon| beacon.observation),
         Ok(StaBeaconObservation {
@@ -51,7 +51,7 @@ fn decodes_dtim_group_and_partial_virtual_bitmap_for_local_aid() {
 
 #[test]
 fn carries_the_wmm_parameter_element_of_the_beacon() {
-    let mut elements = std::vec![TIM_ELEMENT_ID, 4, 0, 3, 0, 0];
+    let mut elements = std::vec![ElementId::TIM.value(), 4, 0, 3, 0, 0];
     let wmm = [
         221, 24, 0x00, 0x50, 0xf2, 0x02, 1, 1, 0x07, 0, 0x03, 0xa4, 0, 0, 0x27, 0xa4, 0, 0, 0x42,
         0x43, 94, 0, 0x62, 0x32, 47, 0,
@@ -79,14 +79,14 @@ fn carries_the_wmm_parameter_element_of_the_beacon() {
 
 #[test]
 fn rejects_foreign_or_structurally_incomplete_beacons() {
-    let mut foreign = beacon(&[TIM_ELEMENT_ID, 4, 1, 3, 0, 0]);
+    let mut foreign = beacon(&[ElementId::TIM.value(), 4, 1, 3, 0, 0]);
     foreign[10] ^= 1;
     assert_eq!(
         parse_sta_beacon(&foreign, Eui48::new(BSSID), aid(1)),
         Err(StaBeaconError::ForeignBssid)
     );
 
-    let malformed = beacon(&[TIM_ELEMENT_ID, 5, 1, 3, 0, 0]);
+    let malformed = beacon(&[ElementId::TIM.value(), 5, 1, 3, 0, 0]);
     assert_eq!(
         parse_sta_beacon(&malformed, Eui48::new(BSSID), aid(1)),
         Err(StaBeaconError::MalformedInformationElement)
@@ -95,16 +95,16 @@ fn rejects_foreign_or_structurally_incomplete_beacons() {
 
 #[test]
 fn decodes_erp_ht_and_he_protection_fields() {
-    let mut elements = std::vec![ERP_ELEMENT_ID, 1, 0x07];
+    let mut elements = std::vec![ElementId::ERP.value(), 1, 0x07];
     let mut ht_operation = [0_u8; 24];
-    ht_operation[..3].copy_from_slice(&[HT_OPERATION_ELEMENT_ID, 22, 6]);
+    ht_operation[..3].copy_from_slice(&[ElementId::HT_OPERATION.value(), 22, 6]);
     ht_operation[4] = 0x05;
     elements.extend_from_slice(&ht_operation);
     // HE Operation with TXOP Duration RTS Threshold 64 (bits 13:4).
     elements.extend_from_slice(&[
-        EXTENSION_ELEMENT_ID,
+        ElementId::EXTENSION.value(),
         7,
-        HE_OPERATION_EXTENSION_ID,
+        ElementIdExtension::HE_OPERATION.value(),
         0x00,
         0x04,
         0,
@@ -124,9 +124,9 @@ fn decodes_erp_ht_and_he_protection_fields() {
     assert!(parsed.erp.unwrap().information().eq([0x07]));
 
     let disabled = [
-        EXTENSION_ELEMENT_ID,
+        ElementId::EXTENSION.value(),
         7,
-        HE_OPERATION_EXTENSION_ID,
+        ElementIdExtension::HE_OPERATION.value(),
         0xf0,
         0x3f,
         0,
@@ -144,13 +144,31 @@ fn decodes_erp_ht_and_he_protection_fields() {
 fn a_beacon_hands_every_erp_element_over_unchosen() {
     // Neither the last nor the first wins: every value, in frame order.
     for order in [[0x02, 0x00], [0x00, 0x02]] {
-        let elements = [ERP_ELEMENT_ID, 1, order[0], ERP_ELEMENT_ID, 1, order[1]];
+        let elements = [
+            ElementId::ERP.value(),
+            1,
+            order[0],
+            ElementId::ERP.value(),
+            1,
+            order[1],
+        ];
         let frame = beacon(&elements);
         let parsed = parse_sta_beacon(&frame, Eui48::new(BSSID), aid(1)).unwrap();
         assert!(parsed.erp.unwrap().information().eq(order));
     }
     // A damaged ERP element spoils the ERP view, not the beacon.
-    let frame = beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0, 0, ERP_ELEMENT_ID, 2, 0x02, 0x02]);
+    let frame = beacon(&[
+        ElementId::TIM.value(),
+        4,
+        0,
+        3,
+        0,
+        0,
+        ElementId::ERP.value(),
+        2,
+        0x02,
+        0x02,
+    ]);
     let parsed = parse_sta_beacon(&frame, Eui48::new(BSSID), aid(1)).unwrap();
     assert_eq!(
         parsed.erp,
@@ -178,7 +196,7 @@ fn a_beacon_carries_its_bss_s_channel_switch_announcement() {
     // A reserved switch mode spoils the announcement, not the beacon: its
     // traffic indication still counts.
     let observation = parse_sta_beacon(
-        &beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0, 0, 37, 3, 7, 11, 4]),
+        &beacon(&[ElementId::TIM.value(), 4, 0, 3, 0, 0, 37, 3, 7, 11, 4]),
         Eui48::new(BSSID),
         aid(17),
     )
@@ -192,15 +210,15 @@ fn a_beacon_carries_its_bss_s_channel_switch_announcement() {
 }
 
 fn parse_sta_beacon_never_panics(count: usize) {
-    let mut protection = std::vec![ERP_ELEMENT_ID, 1, 0x07];
+    let mut protection = std::vec![ElementId::ERP.value(), 1, 0x07];
     let mut ht_operation = [0_u8; 24];
-    ht_operation[..3].copy_from_slice(&[HT_OPERATION_ELEMENT_ID, 22, 6]);
+    ht_operation[..3].copy_from_slice(&[ElementId::HT_OPERATION.value(), 22, 6]);
     ht_operation[4] = 0x05;
     protection.extend_from_slice(&ht_operation);
     protection.extend_from_slice(&[
-        EXTENSION_ELEMENT_ID,
+        ElementId::EXTENSION.value(),
         7,
-        HE_OPERATION_EXTENSION_ID,
+        ElementIdExtension::HE_OPERATION.value(),
         0x00,
         0x04,
         0,
@@ -209,11 +227,11 @@ fn parse_sta_beacon_never_panics(count: usize) {
         0xff,
     ]);
     let seeds = [
-        beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0x03, 0x02]),
-        beacon(&[TIM_ELEMENT_ID, 6, 1, 3, 0xfe, 0, 0, 0xff]),
+        beacon(&[ElementId::TIM.value(), 4, 0, 3, 0x03, 0x02]),
+        beacon(&[ElementId::TIM.value(), 6, 1, 3, 0xfe, 0, 0, 0xff]),
         beacon(&protection),
         beacon(&[37, 3, 1, 11, 4, 62, 1, 3]),
-        beacon(&[TIM_ELEMENT_ID, 4, 0, 3, 0, 0, 37, 3, 7, 11, 4]),
+        beacon(&[ElementId::TIM.value(), 4, 0, 3, 0, 0, 37, 3, 7, 11, 4]),
         beacon(&[60, 4, 0, 117, 40, 2]),
     ];
     let seeds: std::vec::Vec<&[u8]> = seeds.iter().map(std::vec::Vec::as_slice).collect();
@@ -249,7 +267,7 @@ fn parse_sta_beacon_never_panics_on_received_bytes_full() {
 fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
     // AID 2007 is bit seven of octet 250; a bitmap offset of 250 (encoded
     // 250 in bits 7:1) makes it the first bitmap octet.
-    let frame = beacon(&[TIM_ELEMENT_ID, 4, 1, 3, 250, 0x80]);
+    let frame = beacon(&[ElementId::TIM.value(), 4, 1, 3, 250, 0x80]);
     let tim = parse_sta_beacon(&frame, Eui48::new(BSSID), aid(2007))
         .unwrap()
         .observation
@@ -259,8 +277,8 @@ fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
     assert_eq!(tim.group, BufferedTraffic::Clear);
     // A TIM without a bitmap octet, or with DTIM period zero, is malformed.
     for tim in [
-        &[TIM_ELEMENT_ID, 3, 0, 3, 0][..],
-        &[TIM_ELEMENT_ID, 4, 0, 0, 0, 0],
+        &[ElementId::TIM.value(), 3, 0, 3, 0][..],
+        &[ElementId::TIM.value(), 4, 0, 0, 0, 0],
     ] {
         assert_eq!(
             parse_sta_beacon(&beacon(tim), Eui48::new(BSSID), aid(1)),
@@ -269,7 +287,7 @@ fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
     }
     // A lone trailing octet cannot be an element header.
     let mut frame = beacon(&[]);
-    frame.push(TIM_ELEMENT_ID);
+    frame.push(ElementId::TIM.value());
     assert_eq!(
         parse_sta_beacon(&frame, Eui48::new(BSSID), aid(1)),
         Err(StaBeaconError::MalformedInformationElement)
@@ -278,4 +296,20 @@ fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
         parse_sta_beacon(&frame[..FIXED_BEACON_LENGTH - 1], Eui48::new(BSSID), aid(1)),
         Err(StaBeaconError::Truncated)
     );
+}
+
+/// An HT Operation of another length and another extension element carry no
+/// protection.
+#[test]
+fn protection_comes_from_the_elements_that_carry_it() {
+    let mut ht_operation = [0_u8; 25];
+    ht_operation[..2].copy_from_slice(&[ElementId::HT_OPERATION.value(), 23]);
+    ht_operation[4] = 0x05;
+    let capabilities = [255, 7, 35, 0x00, 0x04, 0, 5, 0xfd, 0xff];
+    for elements in [&ht_operation[..], &capabilities] {
+        let observation = parse_sta_beacon(&beacon(elements), Eui48::new(BSSID), aid(1))
+            .unwrap()
+            .observation;
+        assert_eq!(observation.protection, StaBeaconProtection::UNPROTECTED);
+    }
 }

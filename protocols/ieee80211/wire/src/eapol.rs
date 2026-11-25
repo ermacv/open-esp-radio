@@ -5,6 +5,7 @@
 
 use crate::bip::KeyIdField;
 use crate::ccmp::GroupKeyId;
+use crate::element::ElementId;
 use crate::security::rsn::RSN_OUI;
 use oer_protocols_ieee802_wire::Eui48;
 
@@ -80,10 +81,6 @@ impl KeyReplayCounter {
 /// the nearest non-TPMR bridge group address 01-80-C2-00-00-03).
 pub const PAE_GROUP_ADDRESS: Eui48 = Eui48::new([0x01, 0x80, 0xc2, 0x00, 0x00, 0x03]);
 
-/// Element ID of a Key Data Encapsulation: the vendor-specific element ID.
-///
-/// SOURCE: IEEE Std 802.11-2020, 12.7.2, Figure 12-35 (KDE format).
-pub const KDE_ELEMENT_ID: u8 = 0xdd;
 /// Data Type of the GTK KDE.
 ///
 /// SOURCE: IEEE Std 802.11-2020, 12.7.2, Table 12-10 (KDE selectors).
@@ -155,7 +152,14 @@ pub const fn kde_header(data_type: u8, data_len: usize) -> Option<[u8; KDE_HEADE
         return None;
     };
     let [o0, o1, o2] = RSN_OUI;
-    Some([KDE_ELEMENT_ID, length.to_u8(), o0, o1, o2, data_type])
+    Some([
+        ElementId::VENDOR_SPECIFIC.value(),
+        length.to_u8(),
+        o0,
+        o1,
+        o2,
+        data_type,
+    ])
 }
 
 /// One KDE of the IEEE 802.11 OUI: its Data Type and data.
@@ -171,7 +175,7 @@ impl<'a> Kde<'a> {
     pub fn parse(element: &'a [u8]) -> Option<Self> {
         let (&[id, _, o0, o1, o2, data_type], data) =
             element.split_first_chunk::<KDE_HEADER_LEN>()?;
-        if id != KDE_ELEMENT_ID || [o0, o1, o2] != RSN_OUI {
+        if ElementId::new(id) != ElementId::VENDOR_SPECIFIC || [o0, o1, o2] != RSN_OUI {
             return None;
         }
         Some(Self { data_type, data })
@@ -671,7 +675,7 @@ pub const fn key_data_padding(unpadded: usize) -> Option<usize> {
 pub fn write_key_data_padding(padding: &mut [u8]) {
     let mut octets = padding.iter_mut();
     if let Some(first) = octets.next() {
-        *first = KDE_ELEMENT_ID;
+        *first = ElementId::VENDOR_SPECIFIC.value();
     }
     for octet in octets {
         *octet = 0;
@@ -707,7 +711,8 @@ impl<'a> Iterator for KeyDataElements<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let (&first, after_first) = self.remaining.split_first()?;
         if self.remaining.iter().all(|byte| *byte == 0)
-            || (first == KDE_ELEMENT_ID && after_first.iter().all(|byte| *byte == 0))
+            || (ElementId::new(first) == ElementId::VENDOR_SPECIFIC
+                && after_first.iter().all(|byte| *byte == 0))
         {
             self.remaining = &[];
             return None;

@@ -18,10 +18,8 @@ use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::beacon::{
     BeaconTemplateError, dtim, insert_after_tim, remove_elements, write_channel_switch_count,
 };
-use oer_protocols_ieee80211_wire::channel_switch::{
-    CHANNEL_SWITCH_ELEMENT_ID, ChannelSwitch, EXTENDED_CHANNEL_SWITCH_ELEMENT_ID,
-    SECONDARY_CHANNEL_OFFSET_ELEMENT_ID,
-};
+use oer_protocols_ieee80211_wire::channel_switch::ChannelSwitch;
+use oer_protocols_ieee80211_wire::element::ElementId;
 use oer_protocols_ieee80211_wire::frame::write_sequence_control;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_ieee80211_wire::tsf::time_units_micros;
@@ -236,9 +234,9 @@ impl<'storage> ApBeacon<'storage> {
             self.storage,
             self.len,
             &[
-                CHANNEL_SWITCH_ELEMENT_ID,
-                EXTENDED_CHANNEL_SWITCH_ELEMENT_ID,
-                SECONDARY_CHANNEL_OFFSET_ELEMENT_ID,
+                ElementId::CHANNEL_SWITCH_ANNOUNCEMENT,
+                ElementId::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT,
+                ElementId::SECONDARY_CHANNEL_OFFSET,
             ],
         )
         .map_err(template_error)?;

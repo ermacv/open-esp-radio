@@ -421,7 +421,12 @@ fn template_edits_insert_count_and_remove_elements_after_the_tim() {
     write_channel_switch_count(&mut bytes, inserted, 2).unwrap();
     assert_eq!(bytes[after_tim + 4], 2);
 
-    let removed = remove_elements(&mut bytes, inserted, &[37]).unwrap();
+    let removed = remove_elements(
+        &mut bytes,
+        inserted,
+        &[crate::element::ElementId::CHANNEL_SWITCH_ANNOUNCEMENT],
+    )
+    .unwrap();
     assert_eq!(removed, len);
     assert_eq!(bytes, original);
     assert_eq!(write_channel_switch_count(&mut bytes, removed, 2), None);
@@ -436,4 +441,37 @@ fn template_edits_insert_count_and_remove_elements_after_the_tim() {
         insert_after_tim(&mut no_tim, 36, &announcement),
         Err(BeaconTemplateError::Malformed)
     );
+}
+
+/// A template of `elements` after the fixed fields.
+fn template(elements: &[&[u8]]) -> std::vec::Vec<u8> {
+    let mut frame = std::vec![0_u8; 36];
+    for element in elements {
+        frame.extend_from_slice(element);
+    }
+    frame
+}
+
+/// The protection fields are an ERP element of one octet and an HT Operation
+/// of 22; a beacon that has the DSSS element needs the first.
+#[test]
+fn protection_is_written_to_elements_of_their_lengths_alone() {
+    let protection = crate::protection::ApBssProtection::default();
+    let mut ht = [0_u8; 24];
+    ht[..2].copy_from_slice(&[61, 22]);
+    let mut long_ht = [0_u8; 25];
+    long_ht[..2].copy_from_slice(&[61, 23]);
+    let missing = Err(crate::beacon::ApBeaconProtectionError::MissingProtectionElement);
+    for (elements, result) in [
+        (&[&ht[..]][..], Ok(())),
+        (&[&[3, 1, 6], &ht[..]], missing),
+        (&[&[3, 1, 6], &[42, 1, 0], &ht[..]], Ok(())),
+        (&[&[3, 1, 6], &[42, 2, 0, 0], &ht[..]], missing),
+        (&[&long_ht[..]], missing),
+    ] {
+        assert_eq!(
+            update_bss_protection(&mut template(elements), protection),
+            result
+        );
+    }
 }

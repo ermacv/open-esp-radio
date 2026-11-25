@@ -1,4 +1,5 @@
 use super::*;
+use oer_protocols_ieee80211_wire::element::ElementId;
 
 fn rsn(pairwise: u8, akm: u8, capabilities: u16) -> [u8; 22] {
     let mut ie = [0_u8; 22];
@@ -150,11 +151,7 @@ fn accepts_only_bip_cmac_128_as_group_management_cipher() {
 #[test]
 fn a_damaged_validated_element_returns_syntax_errors_from_its_views() {
     let mut validated = validate_rsn_element(&rsn(4, 2, 0)).unwrap();
-    validated.owned = OwnedRsnIe::try_copy(&[
-        oer_protocols_ieee80211_wire::security::rsn::RSN_ELEMENT_ID,
-        0,
-    ])
-    .unwrap();
+    validated.owned = OwnedRsnIe::try_copy(&[ElementId::RSN.value(), 0]).unwrap();
     assert_eq!(
         validated.lists_akm(Akm::Psk),
         Err(RsnSyntaxError::Malformed)

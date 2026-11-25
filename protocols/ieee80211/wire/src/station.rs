@@ -41,7 +41,6 @@ const SELECTED_SECURITY_IES_CAPACITY: usize = SELECTED_RSN_IE_LEN + PMKID_LIST_L
 /// A PMKID list naming one PMKID.
 const PMKID_LIST_LEN: usize = 2 + 16;
 const HE_UL_MU_POWER_CAPABILITY_IE_LEN: usize = 14;
-const HE_UL_MU_POWER_CAPABILITY_EXTENSION_ID: u8 = 60;
 const POWER_CAPABILITY_IE_LEN: usize = 4;
 
 /// Baseline HT A-MSDU limit selected when HT Capabilities Info bit 11 is

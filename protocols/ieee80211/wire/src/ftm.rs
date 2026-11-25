@@ -8,9 +8,9 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::action::{ActionCategory, PublicAction};
+use crate::element::ElementId;
 use crate::management::DialogToken;
 
-pub const FTM_PARAMETERS_ELEMENT_ID: u8 = 206;
 pub const FTM_PARAMETERS_FIELD_LEN: usize = 9;
 pub const FTM_PARAMETERS_ELEMENT_LEN: usize = 2 + FTM_PARAMETERS_FIELD_LEN;
 pub const FTM_REQUEST_PREFIX_LEN: usize = 3;
@@ -474,7 +474,7 @@ impl FtmResponseParameters {
 }
 
 fn parameter_fields(element: &[u8]) -> Result<[u8; FTM_PARAMETERS_FIELD_LEN], FtmParameterError> {
-    if element.first().copied() != Some(FTM_PARAMETERS_ELEMENT_ID) {
+    if element.first().copied().map(ElementId::new) != Some(ElementId::FTM_PARAMETERS) {
         return Err(FtmParameterError::WrongElementId);
     }
     if element.get(1).copied()
@@ -796,7 +796,7 @@ fn find_parameters<T>(
             .take(total)
             .map_err(|_| FtmWireError::MalformedInformationElement)?;
         let rest = whole.remaining();
-        if id == FTM_PARAMETERS_ELEMENT_ID {
+        if ElementId::new(id) == ElementId::FTM_PARAMETERS {
             if found.is_some() {
                 return Err(FtmWireError::DuplicateParametersElement);
             }
@@ -840,7 +840,7 @@ oer_portable_wire::bitfield! {
 const fn parameters_element(fields: FtmParameterFields) -> [u8; FTM_PARAMETERS_ELEMENT_LEN] {
     let [f0, f1, f2, f3, f4, f5, f6, f7, f8] = fields.to_bytes();
     [
-        FTM_PARAMETERS_ELEMENT_ID,
+        ElementId::FTM_PARAMETERS.value(),
         const { crate::encoding::octet::<FTM_PARAMETERS_FIELD_LEN>() },
         f0,
         f1,

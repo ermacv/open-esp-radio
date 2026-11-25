@@ -1,5 +1,6 @@
 //! Allocation-free IEEE 802.11 management-frame construction.
 
+use crate::element::ElementId;
 use crate::status::{ReasonCode, StatusCode};
 use oer_portable_wire::PrefixLength;
 use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
@@ -12,9 +13,6 @@ pub const MAX_SUPPORTED_RATES_LEN: usize = 24;
 
 const PROBE_REQUEST_FRAME_CONTROL: crate::frame::FrameControlFields =
     crate::frame::FrameControlFields::from_bytes([0x40, 0x00]);
-const SSID_ELEMENT_ID: u8 = 0;
-const SUPPORTED_RATES_ELEMENT_ID: u8 = 1;
-const EXTENDED_SUPPORTED_RATES_ELEMENT_ID: u8 = 50;
 const SUPPORTED_RATES_ELEMENT_CAPACITY: usize = 8;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -83,14 +81,14 @@ impl ProbeRequest<'_> {
             &self.sequence_number.sequence_control().to_bytes(),
         );
         let extended_header = [
-            EXTENDED_SUPPORTED_RATES_ELEMENT_ID,
+            ElementId::EXTENDED_SUPPORTED_RATES.value(),
             extended_rates_len.to_u8(),
         ];
         crate::encoding::FrameParts([
             header.as_slice(),
-            &[SSID_ELEMENT_ID, ssid_len.to_u8()],
+            &[ElementId::SSID.value(), ssid_len.to_u8()],
             self.ssid,
-            &[SUPPORTED_RATES_ELEMENT_ID, first_rates_len.to_u8()],
+            &[ElementId::SUPPORTED_RATES.value(), first_rates_len.to_u8()],
             first_rates,
             if extended_rates.is_empty() {
                 &[]

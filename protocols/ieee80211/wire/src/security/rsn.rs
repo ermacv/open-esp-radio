@@ -9,9 +9,8 @@
 //! iteration reads fixed arrays and cannot omit a partial entry.
 //!
 //! Received bytes reach this module; nothing here panics on them.
+use crate::element::ElementId;
 
-/// Element ID of the RSN element.
-pub const RSN_ELEMENT_ID: u8 = 48;
 /// The only RSN element version defined by IEEE 802.11.
 pub const RSN_VERSION: u16 = 1;
 /// OUI of the IEEE 802.11 cipher and AKM suite selectors.
@@ -136,9 +135,12 @@ impl<'a> RsnElement<'a> {
     /// sequence; every field that is started must be complete, and no bytes
     /// may follow the Group Management Cipher Suite.
     pub fn parse(element: &'a [u8]) -> Result<Self, RsnSyntaxError> {
-        let [RSN_ELEMENT_ID, length, body @ ..] = element else {
+        let [id, length, body @ ..] = element else {
             return Err(RsnSyntaxError::Malformed);
         };
+        if ElementId::new(*id) != ElementId::RSN {
+            return Err(RsnSyntaxError::Malformed);
+        }
         if usize::from(*length) != body.len() {
             return Err(RsnSyntaxError::Malformed);
         }
@@ -268,11 +270,6 @@ impl<'a> RsnReader<'a> {
     }
 }
 
-/// Element ID of the RSN Extension element (RSNXE).
-///
-/// SOURCE: IEEE Std 802.11-2020, 9.4.2.241 and Table 9-92 (Element IDs).
-pub const RSNXE_ELEMENT_ID: u8 = 244;
-
 /// Length of an RSN element naming one group data cipher, one pairwise
 /// cipher, one AKM suite and the RSN Capabilities, without the optional
 /// PMKID list and group management cipher.
@@ -302,7 +299,7 @@ pub const fn rsn_single_suite_element(
     let [n0, n1] = RsnField::of(1).to_bytes();
     let [c0, c1] = RsnField::of(capabilities).to_bytes();
     [
-        RSN_ELEMENT_ID,
+        ElementId::RSN.value(),
         BODY_LEN,
         v0,
         v1,
@@ -407,7 +404,7 @@ pub const fn rsn_group_management_element(
 pub const fn rsnx_element(capabilities: RsnExtendedCapabilities) -> [u8; RSNXE_ONE_OCTET_LEN] {
     const BODY_LEN: u8 = crate::encoding::octet::<{ RSNXE_ONE_OCTET_LEN - 2 }>();
     let [octet] = capabilities.to_bytes();
-    [RSNXE_ELEMENT_ID, BODY_LEN, octet]
+    [ElementId::RSNX.value(), BODY_LEN, octet]
 }
 
 /// The Extended RSN Capabilities of an RSNXE, or `None` for an element

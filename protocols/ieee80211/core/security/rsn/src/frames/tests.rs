@@ -1,6 +1,7 @@
 use super::*;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::GtkTx;
+use oer_protocols_ieee80211_wire::element::ElementId;
 
 /// The negotiated group management cipher of an association that protects
 /// its management frames.
@@ -10,7 +11,7 @@ use crate::EapolKeyMessage;
 
 fn rsn_ie() -> OwnedRsnIe<22> {
     let mut bytes = [0; 22];
-    bytes[0] = RSN_ELEMENT_ID;
+    bytes[0] = ElementId::RSN.value();
     bytes[1] = 20;
     OwnedRsnIe::try_copy(&bytes).unwrap()
 }
@@ -22,7 +23,7 @@ fn association_ies() -> OwnedAssociationSecurityIes<22> {
 #[test]
 fn contiguous_association_security_ies_retain_exact_rsn_and_rsnxe() {
     let rsn = rsn_ie();
-    let rsnxe = [RSNXE_ELEMENT_ID, 2, 0x20, 0x00];
+    let rsnxe = [ElementId::RSNX.value(), 2, 0x20, 0x00];
     let mut bytes = [0_u8; 26];
     bytes[..22].copy_from_slice(rsn.as_bytes());
     bytes[22..].copy_from_slice(&rsnxe);
@@ -58,7 +59,7 @@ fn gtk_key_data_round_trips_with_key_wrap_padding() {
 #[test]
 fn protected_key_data_carries_the_rsnxe_and_an_igtk_the_station_reads() {
     let rsn = rsn_ie();
-    let rsnxe = [RSNXE_ELEMENT_ID, 1, 0x20];
+    let rsnxe = [ElementId::RSNX.value(), 1, 0x20];
     let mut elements = [0_u8; 25];
     elements[..22].copy_from_slice(rsn.as_bytes());
     elements[22..].copy_from_slice(&rsnxe);
@@ -155,7 +156,7 @@ fn parser_rejects_changed_rsn_ie_and_duplicate_gtk() {
     );
     let data = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
     let mut other = [0; 22];
-    other[0] = RSN_ELEMENT_ID;
+    other[0] = ElementId::RSN.value();
     other[1] = 20;
     other[2] = 1;
     assert_eq!(
@@ -186,13 +187,13 @@ fn parser_validates_authenticator_rsnxe_without_ignoring_unknown_elements() {
         &[7; 16],
     );
     let data = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
-    let rsnxe = [RSNXE_ELEMENT_ID, 2, 0x20, 0x00];
+    let rsnxe = [ElementId::RSNX.value(), 2, 0x20, 0x00];
     let mut with_rsnxe = [0; 64];
     let source = data.as_bytes();
     with_rsnxe[..22].copy_from_slice(&source[..22]);
     with_rsnxe[22..26].copy_from_slice(&rsnxe);
     with_rsnxe[26..50].copy_from_slice(&source[22..46]);
-    with_rsnxe[50] = KDE_ELEMENT_ID;
+    with_rsnxe[50] = ElementId::VENDOR_SPECIFIC.value();
 
     let parsed = parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &rsnxe, None)
         .map(|keys| keys.gtk)
@@ -213,7 +214,7 @@ fn parser_validates_authenticator_rsnxe_without_ignoring_unknown_elements() {
         Some(RsnFrameError::MissingRsnxe)
     );
 
-    let changed = [RSNXE_ELEMENT_ID, 2, 0x21, 0x00];
+    let changed = [ElementId::RSNX.value(), 2, 0x21, 0x00];
     assert_eq!(
         parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &changed, None)
             .map(|keys| keys.gtk)

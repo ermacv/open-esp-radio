@@ -1,4 +1,5 @@
 use oer_protocols_ieee80211_wire::beacon::TimVirtualBitmap;
+use oer_protocols_ieee80211_wire::element::ElementId;
 use oer_protocols_ieee80211_wire::management::AssociationId;
 
 use oer_protocols_ieee80211_wire::{
@@ -453,7 +454,7 @@ fn initialized_template_refuses_lengths_outside_its_storage() {
 #[test]
 fn a_truncated_channel_switch_count_is_refused_without_writing_outside_the_template() {
     let mut storage = [0; AP_BEACON_CAPACITY];
-    storage[AP_BEACON_CAPACITY - 2] = CHANNEL_SWITCH_ELEMENT_ID;
+    storage[AP_BEACON_CAPACITY - 2] = ElementId::CHANNEL_SWITCH_ANNOUNCEMENT.value();
     storage[AP_BEACON_CAPACITY - 1] = 3;
     let mut beacon = ApBeacon::from_initialized(&mut storage, AP_BEACON_CAPACITY, 100).unwrap();
     // Skip well-formed zero-length elements until the final truncated one.

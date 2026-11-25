@@ -9,10 +9,9 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::element::ElementId;
 use crate::frame::{FrameControl, FrameControlFields};
 
-/// Management MIC element identifier.
-pub const MANAGEMENT_MIC_ELEMENT_ID: u8 = 76;
 /// Length of a BIP-CMAC-128 MIC.
 pub const BIP_MIC_LEN: usize = 8;
 /// Length of the IGTK packet number.
@@ -152,7 +151,9 @@ impl<'a> BipFrame<'a> {
         let (&[id, length, key_low, key_high], ipn) = before_mic
             .split_first_chunk::<4>()
             .ok_or(BipFormatError::Truncated)?;
-        if id != MANAGEMENT_MIC_ELEMENT_ID || usize::from(length) != MANAGEMENT_MIC_BODY_LEN {
+        if ElementId::new(id) != ElementId::MANAGEMENT_MIC
+            || usize::from(length) != MANAGEMENT_MIC_BODY_LEN
+        {
             return Err(BipFormatError::MissingManagementMic);
         }
         let &ipn = <&[u8; IPN_LEN]>::try_from(ipn).map_err(|_| BipFormatError::Truncated)?;
@@ -229,7 +230,7 @@ impl<'a> BipProtection<'a> {
         let [k0, k1] = key_id.field().to_bytes();
         let [i0, i1, i2, i3, i4, i5] = ipn_to_bytes(packet_number);
         *element = [
-            MANAGEMENT_MIC_ELEMENT_ID,
+            ElementId::MANAGEMENT_MIC.value(),
             const { crate::encoding::octet::<MANAGEMENT_MIC_BODY_LEN>() },
             k0,
             k1,

@@ -12,25 +12,9 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::element::{ElementId, ElementIdExtension};
 use crate::security::SaePwe;
 use oer_portable_wire::{Reader, Writer};
-
-/// Element ID that introduces an Element ID Extension.
-///
-/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1, Table 9-92 (Element IDs).
-pub const ELEMENT_ID_EXTENSION: u8 = 255;
-/// Element ID Extension of the Password Identifier element.
-///
-/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1, Table 9-92 (Element IDs).
-pub const PASSWORD_IDENTIFIER_EXTENSION_ID: u8 = 33;
-/// Element ID Extension of the Rejected Groups element.
-///
-/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1, Table 9-92 (Element IDs).
-pub const REJECTED_GROUPS_EXTENSION_ID: u8 = 92;
-/// Element ID Extension of the Anti-Clogging Token Container element.
-///
-/// SOURCE: IEEE Std 802.11-2020, 9.4.2.1, Table 9-92 (Element IDs).
-pub const ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID: u8 = 93;
 
 /// Octets of the Finite Cyclic Group field that starts an SAE Commit body
 /// and of the Send-Confirm field that starts an SAE Confirm body.
@@ -144,7 +128,7 @@ impl SaeCommitValues {
             let (extension, value, tail) =
                 extension_element_at(rest).ok_or(SaeBodyError::Malformed)?;
             match extension {
-                REJECTED_GROUPS_EXTENSION_ID
+                ElementIdExtension::REJECTED_GROUPS
                     if value.len().is_multiple_of(2) && !contains_offered_group(value) => {}
                 _ => return Err(SaeBodyError::Malformed),
             }
@@ -210,7 +194,7 @@ pub fn anti_clogging_token(body: &[u8], pwe: SaePwe) -> Result<&[u8], SaeBodyErr
         return Ok(rest);
     }
     match extension_element_at(rest) {
-        Some((ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID, token, _)) => Ok(token),
+        Some((ElementIdExtension::ANTI_CLOGGING_TOKEN_CONTAINER, token, _)) => Ok(token),
         _ => Err(SaeBodyError::Malformed),
     }
 }
@@ -260,14 +244,14 @@ impl<'a> SaeConfirm<'a> {
 ///
 /// SOURCE: IEEE Std 802.11-2020, 9.4.2.1 (General: Element ID, Length,
 /// Element ID Extension).
-fn extension_element_at(bytes: &[u8]) -> Option<(u8, &[u8], &[u8])> {
+fn extension_element_at(bytes: &[u8]) -> Option<(ElementIdExtension, &[u8], &[u8])> {
     let mut reader = Reader::new(bytes);
-    if reader.u8().ok()? != ELEMENT_ID_EXTENSION {
+    if ElementId::new(reader.u8().ok()?) != ElementId::EXTENSION {
         return None;
     }
     let length = reader.u8().ok()?;
     let mut element = Reader::new(reader.take(usize::from(length)).ok()?);
-    let extension = element.u8().ok()?;
+    let extension = ElementIdExtension::new(element.u8().ok()?);
     Some((extension, element.remaining(), reader.remaining()))
 }
 
@@ -295,9 +279,9 @@ pub const fn anti_clogging_token_container_header(token_len: usize) -> Option<[u
         return None;
     };
     Some([
-        ELEMENT_ID_EXTENSION,
+        ElementId::EXTENSION.value(),
         length.to_u8(),
-        ANTI_CLOGGING_TOKEN_CONTAINER_EXTENSION_ID,
+        ElementIdExtension::ANTI_CLOGGING_TOKEN_CONTAINER.value(),
     ])
 }
 
