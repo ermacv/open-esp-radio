@@ -44,14 +44,16 @@ impl XorShift {
             0
         } else {
             match self.next().checked_rem(bound as u64) {
-                Some(value) => value as usize,
+                // Below `bound`, so it fits.
+                Some(value) => usize::try_from(value).unwrap_or(0),
                 None => 0,
             }
         }
     }
 
     fn byte(&mut self) -> u8 {
-        self.next() as u8
+        // One octet of the value.
+        u8::try_from(self.next() & 0xFF).unwrap_or(0)
     }
 }
 
