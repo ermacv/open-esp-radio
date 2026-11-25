@@ -2,6 +2,7 @@ extern crate std;
 
 use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_network_wire::address::Ipv4Address;
+use oer_protocols_network_wire::ip::IpProtocol;
 use std::vec;
 use std::vec::Vec;
 
@@ -11,7 +12,7 @@ use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
 use oer_protocols_network_wire::ethernet::EthernetHeader;
 use oer_protocols_network_wire::ip::{DsField, Dscp, Ipv4Fields, Ipv4Header};
-use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UdpHeader};
+use oer_protocols_network_wire::transport::{Ports, UdpHeader};
 
 use crate::{
     Block, BlockPlace, Brand, CommandState, Core, CoreBrand, Eviction, GROUPS, Group, GroupsFull,
@@ -384,7 +385,7 @@ fn udp_frame(source_port: u16, destination_port: u16, data: &[u8]) -> Vec<u8> {
     let pseudo = ipv4_pseudo_header(
         Ipv4Address::new(PEER_IP),
         Ipv4Address::new(OUR_IP),
-        PROTOCOL_UDP,
+        IpProtocol::UDP,
         length,
     );
     let checksum = udp_field(
@@ -407,7 +408,7 @@ fn udp_frame(source_port: u16, destination_port: u16, data: &[u8]) -> Vec<u8> {
             total_length: length + 20,
             identification: 1,
             time_to_live: 64,
-            protocol: PROTOCOL_UDP,
+            protocol: IpProtocol::UDP,
             source: Ipv4Address::new(PEER_IP),
             destination: Ipv4Address::new(OUR_IP),
         }
@@ -548,7 +549,7 @@ fn a_reply_releases_the_datagram_and_its_frame_is_whole() {
         let pseudo = ipv4_pseudo_header(
             Ipv4Address::new(OUR_IP),
             Ipv4Address::new(PEER_IP),
-            PROTOCOL_UDP,
+            IpProtocol::UDP,
             udp.length,
         );
         assert!(

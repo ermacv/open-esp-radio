@@ -23,7 +23,8 @@ use oer_portable_wire::{Error, PrefixLength, Writer};
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_wire::address::Ipv4Address;
 use oer_protocols_network_wire::dhcp::{
-    self, DhcpMessage, Fixed, Flags, HEADER_LEN, MessageSize, MessageType, Op, Seconds, option,
+    self, DhcpMessage, Fixed, Flags, HEADER_LEN, HardwareType, MessageSize, MessageType, Op,
+    OptionCode, Seconds,
 };
 
 use crate::interface::{Ipv4, is_unicast};
@@ -52,12 +53,12 @@ const REQUEST_TRIES: u8 = 5;
 const RENEW_LEAST: Duration = Duration::from_secs(60);
 /// RFC 2132, 9.8: the subnet mask, router and domain name servers.
 const PARAMETERS: [u8; 3] = [
-    option::SUBNET_MASK,
-    option::ROUTER,
-    option::DOMAIN_NAME_SERVER,
+    OptionCode::SUBNET_MASK.value(),
+    OptionCode::ROUTER.value(),
+    OptionCode::DOMAIN_NAME_SERVER.value(),
 ];
 /// RFC 2132, 9.14 and the ARP hardware type 1: Ethernet.
-const HARDWARE_ETHERNET: u8 = 1;
+const HARDWARE_ETHERNET: HardwareType = HardwareType::ETHERNET;
 /// The largest IPv4 header, RFC 791, 3.1 (IHL of 15 words), and UDP's.
 const HEADERS_MOST: u16 = 60 + 8;
 /// The domain name servers a lease keeps.
@@ -247,26 +248,26 @@ impl Outgoing {
             chaddr: [h0, h1, h2, h3, h4, h5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         }
         .write(writer)?;
-        dhcp::write_option(writer, option::MESSAGE_TYPE, &[self.kind.encoding()])?;
+        dhcp::write_option(writer, OptionCode::MESSAGE_TYPE, &[self.kind.encoding()])?;
         dhcp::write_option(
             writer,
-            option::CLIENT_IDENTIFIER,
-            &[HARDWARE_ETHERNET, h0, h1, h2, h3, h4, h5],
+            OptionCode::CLIENT_IDENTIFIER,
+            &[HARDWARE_ETHERNET.value(), h0, h1, h2, h3, h4, h5],
         )?;
         if let Some(requested) = self.requested {
-            dhcp::write_option(writer, option::REQUESTED_ADDRESS, requested.as_octets())?;
+            dhcp::write_option(writer, OptionCode::REQUESTED_ADDRESS, requested.as_octets())?;
         }
         if let Some(server) = self.server {
-            dhcp::write_option(writer, option::SERVER_IDENTIFIER, server.as_octets())?;
+            dhcp::write_option(writer, OptionCode::SERVER_IDENTIFIER, server.as_octets())?;
         }
         dhcp::write_option(
             writer,
-            option::MAXIMUM_MESSAGE_SIZE,
+            OptionCode::MAXIMUM_MESSAGE_SIZE,
             &MessageSize::from_bytes([0; 2])
                 .with_octets(self.largest)
                 .to_bytes(),
         )?;
-        dhcp::write_option(writer, option::PARAMETER_REQUEST_LIST, &PARAMETERS)?;
+        dhcp::write_option(writer, OptionCode::PARAMETER_REQUEST_LIST, &PARAMETERS)?;
         dhcp::write_end(writer)
     }
 }
@@ -727,7 +728,7 @@ impl Client {
             return Err(DhcpDrop::Transaction);
         }
         let server =
-            address_of(message.option(option::SERVER_IDENTIFIER)).ok_or(DhcpDrop::NoServer)?;
+            address_of(message.option(OptionCode::SERVER_IDENTIFIER)).ok_or(DhcpDrop::NoServer)?;
         match (self.phase, kind) {
             (Phase::Init | Phase::Selecting { .. }, MessageType::Offer) => {
                 // The first OFFER is taken, RFC 2131, 4.4.1.
@@ -789,7 +790,7 @@ fn lease(
     if !is_unicast(address) {
         return Err(LeaseFault::Address);
     }
-    let mask = address_of(message.option(option::SUBNET_MASK)).ok_or(LeaseFault::Mask)?;
+    let mask = address_of(message.option(OptionCode::SUBNET_MASK)).ok_or(LeaseFault::Mask)?;
     let mask = mask.bits();
     let prefix = u8::try_from(mask.leading_ones()).map_err(|_| LeaseFault::Mask)?;
     if mask.checked_shl(u32::from(prefix)).unwrap_or(0) != 0 {
@@ -797,7 +798,7 @@ fn lease(
     }
     // The first router that is a host, in the server's order of preference,
     // RFC 2132, 3.5: one of 0.0.0.0 is none.
-    let router = match message.option(option::ROUTER) {
+    let router = match message.option(OptionCode::ROUTER) {
         None => None,
         Some(routers) => {
             let mut first = None;
@@ -821,7 +822,7 @@ fn lease(
         return Err(LeaseFault::Address);
     }
     let mut dns = Servers::default();
-    if let Some(servers) = message.option(option::DOMAIN_NAME_SERVER) {
+    if let Some(servers) = message.option(OptionCode::DOMAIN_NAME_SERVER) {
         if servers.is_empty() {
             return Err(LeaseFault::Servers);
         }
@@ -845,7 +846,7 @@ fn lease(
             .and_then(|data| data.first_chunk::<4>().filter(|_| data.len() == 4))
             .map(|data| Seconds::from_bytes(*data).value())
     };
-    let length = seconds(option::LEASE_TIME)
+    let length = seconds(OptionCode::LEASE_TIME)
         .filter(|seconds| *seconds != 0)
         .ok_or(LeaseFault::Time)?;
     let length = if length == INFINITE {
@@ -855,8 +856,8 @@ fn lease(
     };
     let (renew, rebind) = times(
         length,
-        seconds(option::RENEWAL_TIME).map(Duration::from_secs),
-        seconds(option::REBINDING_TIME).map(Duration::from_secs),
+        seconds(OptionCode::RENEWAL_TIME).map(Duration::from_secs),
+        seconds(OptionCode::REBINDING_TIME).map(Duration::from_secs),
     );
     Ok(Lease {
         ipv4,

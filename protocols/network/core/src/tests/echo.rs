@@ -5,7 +5,8 @@ use super::*;
 use crate::{ECHO_RATE, ECHOES, IcmpDrop};
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_wire::address::Ipv4Address;
-use oer_protocols_network_wire::icmp::{Echo, MessageType, PROTOCOL_ICMP};
+use oer_protocols_network_wire::icmp::{Echo, MessageType};
+use oer_protocols_network_wire::ip::IpProtocol;
 
 /// An ICMP message from the peer to `to`, in an Ethernet frame.
 pub(super) fn icmp_frame(to: [u8; 4], message: &[u8]) -> Vec<u8> {
@@ -22,7 +23,7 @@ pub(super) fn icmp_frame(to: [u8; 4], message: &[u8]) -> Vec<u8> {
             total_length: u16::try_from(20 + message.len()).unwrap(),
             identification: 9,
             time_to_live: 64,
-            protocol: PROTOCOL_ICMP,
+            protocol: IpProtocol::ICMP,
             source: Ipv4Address::new(PEER_IP),
             destination: Ipv4Address::new(to),
         }
@@ -36,7 +37,7 @@ pub(super) fn icmp_frame(to: [u8; 4], message: &[u8]) -> Vec<u8> {
 pub(super) fn echo(sequence: u16, data: &[u8]) -> Vec<u8> {
     let request = Echo {
         kind: MessageType::Echo,
-        code: 0,
+        code: oer_protocols_network_wire::icmp::IcmpCode::ECHO,
         checksum: 0,
         identifier: 17,
         sequence,
@@ -84,13 +85,13 @@ fn an_echo_is_answered_from_the_address_it_was_sent_to_with_all_its_data() {
         );
         let ip = Ipv4Header::parse(payload).unwrap();
         assert!(Checksum::new().with(&payload[..20]).verifies());
-        assert_eq!(ip.protocol(), PROTOCOL_ICMP);
+        assert_eq!(ip.protocol(), IpProtocol::ICMP);
         assert_eq!(ip.source().octets(), [192, 0, 2, 1]);
         assert_eq!(ip.destination().octets(), [192, 0, 2, 2]);
         assert!(Checksum::new().with(ip.payload()).verifies());
         let reply = Echo::parse(ip.payload()).unwrap();
         assert_eq!(reply.kind, MessageType::EchoReply);
-        assert_eq!(reply.code, 0);
+        assert_eq!(reply.code.value(), 0);
         assert_eq!((reply.identifier, reply.sequence), (17, 7));
         assert_eq!(reply.data, &data[..]);
         assert_eq!(stack.pool().free(), free, "its block is home");

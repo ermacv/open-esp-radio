@@ -8,6 +8,7 @@
 use super::*;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_wire::address::Ipv4Address;
+use oer_protocols_network_wire::ip::IpProtocol;
 
 /// What a datagram's frame carries, read back from its octets: its station
 /// address, its ports, its marking and its data, every checksum verified.
@@ -20,7 +21,7 @@ fn read(frame: &[u8]) -> ([u8; 6], (u16, u16), Dscp, Vec<u8>) {
     let pseudo = ipv4_pseudo_header(
         Ipv4Address::new(OUR_IP),
         Ipv4Address::new(PEER_IP),
-        PROTOCOL_UDP,
+        IpProtocol::UDP,
         udp.length,
     );
     assert!(

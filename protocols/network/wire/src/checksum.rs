@@ -4,6 +4,7 @@
 //! header and its zero; RFC 791, 3.1 for IPv4's header.
 
 use crate::address::Ipv4Address;
+use crate::ip::IpProtocol;
 
 /// The one's complement sum of a sequence of octets, in any number of parts.
 ///
@@ -291,13 +292,13 @@ pub const fn udp_field(computed: u16) -> u16 {
 pub const fn ipv4_pseudo_header(
     source: Ipv4Address,
     destination: Ipv4Address,
-    protocol: u8,
+    protocol: IpProtocol,
     length: u16,
 ) -> [u8; 12] {
     let [s0, s1, s2, s3] = source.octets();
     let [d0, d1, d2, d3] = destination.octets();
     let [zero, next, length_high, length_low] = PseudoHeaderTail::from_bytes([0; 4])
-        .with_protocol(protocol)
+        .with_protocol(protocol.value())
         .with_length(length)
         .to_bytes();
     [
@@ -323,7 +324,6 @@ mod tests {
     use std::{vec, vec::Vec};
 
     use super::*;
-    use crate::transport::PROTOCOL_UDP;
 
     /// RFC 1071, 3 (Numerical Examples): the sum 0xDDF2.
     const EXAMPLE: [u8; 8] = [0x00, 0x01, 0xF2, 0x03, 0xF4, 0xF5, 0xF6, 0xF7];
@@ -553,7 +553,7 @@ mod tests {
         let pseudo = ipv4_pseudo_header(
             Ipv4Address::new([192, 0, 2, 1]),
             Ipv4Address::new([192, 0, 2, 2]),
-            PROTOCOL_UDP,
+            IpProtocol::UDP,
             10,
         );
         let field = Checksum::new().with(&pseudo).with(&datagram).finish();

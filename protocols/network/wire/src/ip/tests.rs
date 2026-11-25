@@ -1,5 +1,6 @@
 use super::{DsField, Dscp, IpError, Ipv4Fields, Ipv4Header, Ipv6Header};
 use crate::address::Ipv4Address;
+use crate::ip::IpProtocol;
 
 /// RFC 791 header, 20 octets: DSCP 46 (EF) with ECN 1, total length 24,
 /// UDP, 192.0.2.1 to 198.51.100.2, then four payload octets and one past
@@ -14,7 +15,7 @@ fn an_ipv4_header_reads_its_fields_within_its_total_length() {
     let header = Ipv4Header::parse(&IPV4).unwrap();
     assert_eq!(header.dscp().value(), 46);
     assert_eq!(header.services().ecn(), 1);
-    assert_eq!(header.protocol(), 17);
+    assert_eq!(header.protocol(), IpProtocol::UDP);
     assert_eq!(header.source().octets(), [192, 0, 2, 1]);
     assert_eq!(header.destination().octets(), [198, 51, 100, 2]);
     assert!(!header.is_fragment());
@@ -61,7 +62,7 @@ fn an_ipv6_header_reads_its_traffic_class_and_bounds_its_payload() {
     packet[40..].copy_from_slice(&[7, 8, 9]);
     let header = Ipv6Header::parse(&packet).unwrap();
     assert_eq!(header.dscp().value(), 46);
-    assert_eq!(header.next_header(), 6);
+    assert_eq!(header.next_header(), IpProtocol::TCP);
     assert_eq!(header.source().octets()[0], 0x20);
     assert_eq!(header.destination().octets()[15], 0x01);
     assert_eq!(header.payload(), &[7, 8]);
@@ -87,14 +88,14 @@ fn ipv4_fields_write_a_header_that_parses_and_verifies() {
         total_length: 20,
         identification: 7,
         time_to_live: 64,
-        protocol: 17,
+        protocol: IpProtocol::UDP,
         source: Ipv4Address::new([192, 0, 2, 1]),
         destination: Ipv4Address::new([192, 0, 2, 2]),
     }
     .to_bytes();
     assert!(crate::checksum::Checksum::new().with(&bytes).verifies());
     let header = Ipv4Header::parse(&bytes).unwrap();
-    assert_eq!(header.protocol(), 17);
+    assert_eq!(header.protocol(), IpProtocol::UDP);
     assert_eq!(header.source().octets(), [192, 0, 2, 1]);
     assert_eq!(header.destination().octets(), [192, 0, 2, 2]);
     assert!(!header.is_fragment());

@@ -1,15 +1,13 @@
 //! ICMPv4 Echo and Echo Reply messages.
 //!
-//! SOURCE: RFC 792 (Echo or Echo Reply Message); the protocol number from the
-//! IANA Assigned Internet Protocol Numbers registry. A parse does not check the
+//! SOURCE: RFC 792 (Echo or Echo Reply Message). A parse does not check the
 //! checksum.
 
 use oer_portable_wire::Reader;
 
 use crate::checksum::Checksum;
+use crate::code::octet_code;
 
-/// Internet Control Message Protocol.
-pub const PROTOCOL_ICMP: u8 = 1;
 /// RFC 792: Type, Code, Checksum, Identifier and Sequence Number.
 pub const ECHO_HEADER_LEN: usize = 8;
 
@@ -19,6 +17,16 @@ oer_portable_wire::bitfield! {
     pub enum MessageType: u8 {
         EchoReply = 0,
         Echo = 8,
+    }
+}
+
+octet_code! { icmp;
+    /// The Code of an ICMP message: any octet. What it says is its Type's.
+    ///
+    /// SOURCE: RFC 792 (Echo or Echo Reply Message, Code).
+    IcmpCode {
+        /// An echo's and an echo reply's.
+        ECHO = 0,
     }
 }
 
@@ -46,7 +54,7 @@ pub enum IcmpError {
 pub struct Echo<'a> {
     pub kind: MessageType,
     /// RFC 792: 0 for an echo.
-    pub code: u8,
+    pub code: IcmpCode,
     pub checksum: u16,
     pub identifier: u16,
     pub sequence: u16,
@@ -64,7 +72,7 @@ impl<'a> Echo<'a> {
         let header = EchoHeader::from_bytes(reader.read().map_err(|_| IcmpError::Truncated)?);
         Ok(Self {
             kind: MessageType::from_encoding(header.kind()),
-            code: header.code(),
+            code: IcmpCode::new(header.code()),
             checksum: header.checksum(),
             identifier: header.identifier(),
             sequence: header.sequence(),
@@ -77,7 +85,7 @@ impl<'a> Echo<'a> {
     pub fn header(&self, kind: MessageType) -> [u8; ECHO_HEADER_LEN] {
         let header = EchoHeader::from_bytes([0; ECHO_HEADER_LEN])
             .with_kind(kind.encoding())
-            .with_code(self.code)
+            .with_code(self.code.value())
             .with_identifier(self.identifier)
             .with_sequence(self.sequence);
         let checksum = Checksum::new()
@@ -96,7 +104,7 @@ mod tests {
     fn echo() -> [u8; 12] {
         let request = Echo {
             kind: MessageType::Echo,
-            code: 0,
+            code: IcmpCode::ECHO,
             checksum: 0,
             identifier: 17,
             sequence: 7,

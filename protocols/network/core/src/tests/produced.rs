@@ -3,6 +3,7 @@
 
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_wire::address::Ipv4Address;
+use oer_protocols_network_wire::ip::IpProtocol;
 use std::cell::Cell;
 use std::vec::Vec;
 
@@ -164,7 +165,7 @@ fn a_produced_frame_is_written_in_the_slot_and_its_checksum_verifies() {
                 .with(&ipv4_pseudo_header(
                     Ipv4Address::new(OUR_IP),
                     Ipv4Address::new(PEER_IP),
-                    PROTOCOL_UDP,
+                    IpProtocol::UDP,
                     udp.length
                 ))
                 .with(datagram)
@@ -202,7 +203,7 @@ fn a_header_and_filler_go_out_whole_under_a_checksum_that_verifies() {
                     .with(&ipv4_pseudo_header(
                         Ipv4Address::new(OUR_IP),
                         Ipv4Address::new(PEER_IP),
-                        PROTOCOL_UDP,
+                        IpProtocol::UDP,
                         udp.length
                     ))
                     .with(datagram)
@@ -229,7 +230,7 @@ fn datagram_of(frame: &[u8]) -> (Vec<u8>, bool) {
         .with(&ipv4_pseudo_header(
             Ipv4Address::new(OUR_IP),
             Ipv4Address::new(PEER_IP),
-            PROTOCOL_UDP,
+            IpProtocol::UDP,
             udp.length,
         ))
         .with(datagram)

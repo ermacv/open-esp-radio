@@ -9,12 +9,13 @@
 //! Checksum at 10); RFC 768 (Length at octet 4, Checksum at 6, the pseudo
 //! header); RFC 1071 (the sum).
 
+use crate::ip::IpProtocol;
 use oer_portable_wire::PrefixLength;
 
 use crate::checksum::{Checksum, ChecksumField, ipv4_pseudo_header, udp_field};
 use crate::ethernet::{self, EthernetHeader};
 use crate::ip::{IPV4_HEADER_LEN, Ipv4Fields, Ipv4Numbers};
-use crate::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN, UdpHeader, UdpNumbers};
+use crate::transport::{Ports, UDP_HEADER_LEN, UdpHeader, UdpNumbers};
 
 /// The octets of the three headers.
 pub const UDP_FRAME_HEADERS: usize = ethernet::HEADER_LEN + IPV4_HEADER_LEN + UDP_HEADER_LEN;
@@ -70,7 +71,7 @@ impl UdpFrameTemplate {
                 .with(&ipv4_pseudo_header(
                     ip.source,
                     ip.destination,
-                    PROTOCOL_UDP,
+                    IpProtocol::UDP,
                     0,
                 ))
                 .with(&udp_octets),
