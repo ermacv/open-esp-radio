@@ -7,6 +7,8 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::management::DialogToken;
+
 pub const PUBLIC_ACTION_CATEGORY: u8 = 4;
 pub const FTM_REQUEST_PUBLIC_ACTION: u8 = 32;
 pub const FTM_MEASUREMENT_PUBLIC_ACTION: u8 = 33;
@@ -609,8 +611,8 @@ pub struct FtmToaError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FtmMeasurementFields {
-    pub dialog_token: u8,
-    pub follow_up_dialog_token: u8,
+    pub dialog_token: DialogToken,
+    pub follow_up_dialog_token: DialogToken,
     pub tod: FtmTimestampPs,
     pub toa: FtmTimestampPs,
     pub tod_error: FtmTodError,
@@ -661,8 +663,8 @@ impl<'a> FtmMeasurement<'a> {
             return Err(FtmWireError::ReservedTimestampErrorBits);
         }
         let fields = FtmMeasurementFields {
-            dialog_token,
-            follow_up_dialog_token,
+            dialog_token: DialogToken::new(dialog_token),
+            follow_up_dialog_token: DialogToken::new(follow_up_dialog_token),
             tod,
             toa,
             tod_error: FtmTodError {
@@ -673,7 +675,7 @@ impl<'a> FtmMeasurement<'a> {
                 max_error_exponent: toa_error.exponent(),
             },
         };
-        if fields.follow_up_dialog_token == 0
+        if fields.follow_up_dialog_token == DialogToken::ZERO
             && (fields.tod != FtmTimestampPs::ZERO
                 || fields.toa != FtmTimestampPs::ZERO
                 || tod_error != no_error
@@ -700,7 +702,7 @@ pub fn encode_measurement(
     if fields.tod_error.max_error_exponent > 31 || fields.toa_error.max_error_exponent > 31 {
         return Err(FtmWireError::ReservedTimestampErrorBits);
     }
-    if fields.follow_up_dialog_token == 0
+    if fields.follow_up_dialog_token == DialogToken::ZERO
         && (fields.tod != FtmTimestampPs::ZERO
             || fields.toa != FtmTimestampPs::ZERO
             || fields.tod_error.max_error_exponent != 0
@@ -729,8 +731,8 @@ pub fn encode_measurement(
     *prefix = [
         PUBLIC_ACTION_CATEGORY,
         FTM_MEASUREMENT_PUBLIC_ACTION,
-        fields.dialog_token,
-        fields.follow_up_dialog_token,
+        fields.dialog_token.value(),
+        fields.follow_up_dialog_token.value(),
         d0,
         d1,
         d2,

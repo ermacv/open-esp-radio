@@ -6,7 +6,7 @@ fn parses_all_block_ack_action_bodies() {
     assert_eq!(
         parse_block_ack_action(&[3, 0, 7, 0x87, 0x07, 0, 0, 0x30, 0x12]),
         Some(BlockAckAction::AddbaRequest {
-            dialog_token: 7,
+            dialog_token: DialogToken::new(7),
             timeout_tu: 0,
             starting_sequence: seq(0x123),
             parameters: crate::block_ack::frame::AddbaParameters::new(
@@ -21,7 +21,7 @@ fn parses_all_block_ack_action_bodies() {
     assert_eq!(
         parse_block_ack_action(&[3, 1, 7, 0, 0, 0x86, 0x07, 5, 0]),
         Some(BlockAckAction::AddbaResponse {
-            dialog_token: 7,
+            dialog_token: DialogToken::new(7),
             status: 0,
             timeout_tu: 5,
             parameters: crate::block_ack::frame::AddbaParameters::new(
@@ -64,12 +64,13 @@ fn block_ack_request_names_the_tid_and_window_start() {
 #[test]
 fn successful_response_narrows_the_window_and_disables_amsdu() {
     let mut body = [0xff; 9];
-    write_successful_addba_response(&mut body, 137, Tid::constant::<0>(), 16).unwrap();
+    write_successful_addba_response(&mut body, DialogToken::new(137), Tid::constant::<0>(), 16)
+        .unwrap();
     assert_eq!(body, [3, 1, 137, 0, 0, 0x02, 0x04, 0, 0]);
     assert_eq!(
         parse_block_ack_action(&body),
         Some(BlockAckAction::AddbaResponse {
-            dialog_token: 137,
+            dialog_token: DialogToken::new(137),
             status: 0,
             timeout_tu: 0,
             parameters: crate::block_ack::frame::AddbaParameters::new(
@@ -86,11 +87,12 @@ fn successful_response_narrows_the_window_and_disables_amsdu() {
 #[test]
 fn declined_response_preserves_request_identity_without_claiming_success() {
     let mut body = [0xff; 9];
-    write_declined_addba_response(&mut body, 23, Tid::constant::<6>(), 64).unwrap();
+    write_declined_addba_response(&mut body, DialogToken::new(23), Tid::constant::<6>(), 64)
+        .unwrap();
     assert_eq!(
         parse_block_ack_action(&body),
         Some(BlockAckAction::AddbaResponse {
-            dialog_token: 23,
+            dialog_token: DialogToken::new(23),
             status: ADDBA_STATUS_REQUEST_DECLINED,
             timeout_tu: 0,
             parameters: crate::block_ack::frame::AddbaParameters::new(
@@ -108,9 +110,21 @@ fn declined_response_preserves_request_identity_without_claiming_success() {
 /// writers produce.
 fn action_seeds() -> std::vec::Vec<std::vec::Vec<u8>> {
     let mut successful = [0; 9];
-    write_successful_addba_response(&mut successful, 137, Tid::constant::<0>(), 16).unwrap();
+    write_successful_addba_response(
+        &mut successful,
+        DialogToken::new(137),
+        Tid::constant::<0>(),
+        16,
+    )
+    .unwrap();
     let mut declined = [0; 9];
-    write_declined_addba_response(&mut declined, 23, Tid::constant::<6>(), 64).unwrap();
+    write_declined_addba_response(
+        &mut declined,
+        DialogToken::new(23),
+        Tid::constant::<6>(),
+        64,
+    )
+    .unwrap();
     std::vec![
         std::vec![3, 0, 7, 0x87, 0x07, 0, 0, 0x30, 0x12],
         std::vec![3, 1, 7, 0, 0, 0x86, 0x07, 5, 0],
@@ -143,7 +157,7 @@ fn block_ack_action_parser_never_panics_full() {
 fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
     let sequence = crate::sequence::seq(0xabc);
     let body = encode_addba_request(
-        7,
+        DialogToken::new(7),
         Tid::constant::<15>(),
         1023,
         12,
@@ -154,7 +168,7 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
     assert_eq!(
         parse_block_ack_action(&body),
         Some(BlockAckAction::AddbaRequest {
-            dialog_token: 7,
+            dialog_token: DialogToken::new(7),
             timeout_tu: 12,
             starting_sequence: sequence,
             parameters: crate::block_ack::frame::AddbaParameters::new(
@@ -169,7 +183,7 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
     for window in [0, 1024, u16::MAX] {
         assert_eq!(
             encode_addba_request(
-                7,
+                DialogToken::new(7),
                 Tid::constant::<0>(),
                 window,
                 0,
@@ -184,7 +198,7 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
 #[test]
 fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
     let response = encode_addba_response(
-        9,
+        DialogToken::new(9),
         0,
         Tid::constant::<5>(),
         64,
@@ -195,7 +209,7 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
     assert_eq!(
         parse_block_ack_action(&response),
         Some(BlockAckAction::AddbaResponse {
-            dialog_token: 9,
+            dialog_token: DialogToken::new(9),
             status: 0,
             timeout_tu: 0x1234,
             parameters: crate::block_ack::frame::AddbaParameters::new(
@@ -209,7 +223,7 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
     );
     assert_eq!(
         encode_addba_response(
-            9,
+            DialogToken::new(9),
             0,
             Tid::constant::<5>(),
             1024,
@@ -270,7 +284,7 @@ fn a_compressed_bar_round_trips_and_other_variants_are_refused() {
 #[test]
 fn an_addba_response_holds_tid_15_and_refuses_16() {
     let written = encode_addba_response(
-        1,
+        DialogToken::new(1),
         0,
         Tid::constant::<15>(),
         64,
@@ -313,8 +327,16 @@ fn the_parameter_set_names_its_refusal() {
 #[test]
 fn each_encoder_reports_the_parameter_reason() {
     let sequence = SequenceNumber::new(0).unwrap();
-    let request =
-        |tid, window| encode_addba_request(1, tid, window, 0, AmsduSupport::NotSupported, sequence);
+    let request = |tid, window| {
+        encode_addba_request(
+            DialogToken::new(1),
+            tid,
+            window,
+            0,
+            AmsduSupport::NotSupported,
+            sequence,
+        )
+    };
     assert_eq!(
         request(Tid::constant::<0>(), 0x0400),
         Err(AddbaRequestError::InvalidWindow(0x0400))
@@ -327,22 +349,27 @@ fn each_encoder_reports_the_parameter_reason() {
 
     let mut body = [0_u8; ADDBA_ACTION_BODY_LEN];
     assert_eq!(
-        write_successful_addba_response(&mut body, 1, Tid::constant::<0>(), 0x0400),
+        write_successful_addba_response(
+            &mut body,
+            DialogToken::new(1),
+            Tid::constant::<0>(),
+            0x0400
+        ),
         Err(RxAddbaResponseError::InvalidWindow(0x0400))
     );
     assert_eq!(
-        write_successful_addba_response(&mut body, 1, Tid::constant::<0>(), 0),
+        write_successful_addba_response(&mut body, DialogToken::new(1), Tid::constant::<0>(), 0),
         Err(RxAddbaResponseError::InvalidWindow(0))
     );
     // A refused write leaves the body as it was.
     assert_eq!(body, [0; ADDBA_ACTION_BODY_LEN]);
 
     assert_eq!(
-        write_declined_addba_response(&mut body, 1, Tid::constant::<0>(), 0x0400),
+        write_declined_addba_response(&mut body, DialogToken::new(1), Tid::constant::<0>(), 0x0400),
         Err(RxAddbaResponseError::InvalidWindow(0x0400))
     );
     assert_eq!(body, [0; ADDBA_ACTION_BODY_LEN]);
-    write_declined_addba_response(&mut body, 1, Tid::constant::<0>(), 0).unwrap();
+    write_declined_addba_response(&mut body, DialogToken::new(1), Tid::constant::<0>(), 0).unwrap();
     assert!(matches!(
         parse_block_ack_action(&body),
         Some(BlockAckAction::AddbaResponse { parameters, .. }) if parameters.window() == 0

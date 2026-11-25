@@ -6,6 +6,7 @@
 use super::{RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease};
 use core::num::NonZeroU64;
 use oer_portable_time::{Duration, Instant};
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::{
     block_ack::frame::{
@@ -51,7 +52,7 @@ pub enum BankRoom {
 /// Fixed fields of one parsed ADDBA Request, without another action variant.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxAddbaRequest {
-    dialog_token: u8,
+    dialog_token: DialogToken,
     tid: Tid,
     policy: BlockAckPolicy,
     amsdu: Amsdu,
@@ -100,7 +101,7 @@ impl RxAddbaRequest {
 /// A response to one parsed request; refusal retains its dialog and TID.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AddbaResponse {
-    pub dialog_token: u8,
+    pub dialog_token: DialogToken,
     pub status: AddbaStatus,
     pub tid: Tid,
     pub window: u16,
@@ -248,7 +249,7 @@ pub struct RxBlockAckSession<A, const WINDOW: usize, const SLOTS: usize> {
     requested_amsdu: Amsdu,
     timeout_tu: u16,
     tid: Tid,
-    dialog_token: u8,
+    dialog_token: DialogToken,
     amsdu: bool,
 }
 
@@ -284,7 +285,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         self.reorder.window()
     }
 
-    pub const fn dialog_token(&self) -> u8 {
+    pub const fn dialog_token(&self) -> DialogToken {
         self.dialog_token
     }
 

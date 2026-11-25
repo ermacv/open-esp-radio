@@ -9,6 +9,7 @@ use oer_protocols_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, LowerMacCapabilities, PhyFormatSet,
     RateSupport, ReceiveFilter, RxMeta, WidthSet,
 };
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_protocols_ieee80211_wire::{
     block_ack::frame::{encode_addba_request, encode_block_ack_request, parse_block_ack_action},
@@ -225,7 +226,7 @@ fn bssid() -> Bssid {
 
 fn addba(tid: u8, timeout_tu: u16) -> BlockAckAction {
     let body = encode_addba_request(
-        5,
+        DialogToken::new(5),
         Tid::new(tid).unwrap(),
         8,
         timeout_tu,
@@ -316,7 +317,7 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
     let mut view = storage.view();
     let mut port = Recording::default();
     let body = encode_addba_request(
-        5,
+        DialogToken::new(5),
         Tid::constant::<0>(),
         64,
         0,
@@ -899,7 +900,7 @@ fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
 /// encoder refuses to write.
 fn request_for(dialog_token: u8, tid: u8, window: u16) -> BlockAckAction {
     BlockAckAction::AddbaRequest {
-        dialog_token,
+        dialog_token: DialogToken::new(dialog_token),
         timeout_tu: 0,
         starting_sequence: SequenceNumber::new(100).unwrap(),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(

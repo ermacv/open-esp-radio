@@ -11,6 +11,7 @@
 use core::num::NonZeroU8;
 use oer_protocols_ieee802_wire::IndividualAddress;
 use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
+use oer_protocols_ieee80211_wire::management::DialogToken;
 
 use heapless::Vec;
 use oer_portable_time::{Duration, Instant};
@@ -32,8 +33,8 @@ struct TokenSet([u32; 8]);
 impl TokenSet {
     const EMPTY: Self = Self([0; 8]);
 
-    fn contains(&self, token: u8) -> bool {
-        NonZeroU8::new(token)
+    fn contains(&self, token: DialogToken) -> bool {
+        NonZeroU8::new(token.value())
             .is_some_and(|token| *Self::word(token, self.0.each_ref()) & Self::bit(token) != 0)
     }
 
@@ -201,6 +202,11 @@ impl FtmLocalExchangeTiming {
             ack_departure_t3_ps,
         })
     }
+
+    /// The token of the exchange's frame.
+    const fn token(self) -> DialogToken {
+        DialogToken::new(self.dialog_token.get())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -225,7 +231,7 @@ pub struct FtmRawIntervalDifferencePs {
 /// One owned four-timestamp exchange.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FtmRawExchange {
-    pub dialog_token: u8,
+    pub dialog_token: DialogToken,
     pub responder_departure_t1_ps: FtmTimestampPs,
     pub initiator_arrival_t2_ps: FtmTimestampPs,
     pub initiator_ack_departure_t3_ps: FtmTimestampPs,
@@ -345,8 +351,8 @@ pub enum FtmRequesterError {
     TooManyMeasurements,
     DialogTokenReused,
     DialogTokenOutOfSequence {
-        expected: u8,
-        actual: u8,
+        expected: DialogToken,
+        actual: DialogToken,
     },
     ConflictingDuplicate,
 }
@@ -587,20 +593,20 @@ pub enum FtmMeasurementDisposition {
     Stale,
     Duplicate,
     InitialAccepted {
-        dialog_token: u8,
+        dialog_token: DialogToken,
         allocated_ftms_per_burst: u8,
         maximum_samples: u8,
     },
     InitialRetransmissionAccepted {
-        abandoned_dialog_token: u8,
-        dialog_token: u8,
+        abandoned_dialog_token: DialogToken,
+        dialog_token: DialogToken,
     },
     SampleAccepted {
-        dialog_token: u8,
+        dialog_token: DialogToken,
         sample_index: usize,
     },
     DuplicateSample {
-        dialog_token: u8,
+        dialog_token: DialogToken,
     },
     Complete {
         samples: usize,
@@ -976,7 +982,7 @@ impl<const N: usize> FtmSession<N> {
         local_timing: Option<FtmLocalExchangeTiming>,
         session_deadline: Instant,
     ) -> Result<FtmMeasurementDisposition, FtmRequesterError> {
-        if measurement.fields.follow_up_dialog_token != 0 {
+        if measurement.fields.follow_up_dialog_token != DialogToken::ZERO {
             return Ok(FtmMeasurementDisposition::Stale);
         }
         let Some(negotiated) = measurement.parameters else {
@@ -1004,7 +1010,7 @@ impl<const N: usize> FtmSession<N> {
         self.validate_negotiation(negotiated)?;
         let information_elements =
             self.own_information_elements(measurement.information_elements)?;
-        if measurement.fields.dialog_token == 0 {
+        if measurement.fields.dialog_token == DialogToken::ZERO {
             if local_timing.is_some() {
                 return self.protocol_error(FtmRequesterError::UnexpectedLocalTiming);
             }
@@ -1058,7 +1064,9 @@ impl<const N: usize> FtmSession<N> {
             return self.protocol_error(FtmRequesterError::MissingLocalTiming);
         };
 
-        if measurement.fields.dialog_token == 0 && measurement.fields.follow_up_dialog_token == 0 {
+        if measurement.fields.dialog_token == DialogToken::ZERO
+            && measurement.fields.follow_up_dialog_token == DialogToken::ZERO
+        {
             if local_timing.is_some() {
                 return self.protocol_error(FtmRequesterError::UnexpectedLocalTiming);
             }
@@ -1070,9 +1078,9 @@ impl<const N: usize> FtmSession<N> {
             });
         }
 
-        let sample = if measurement.fields.follow_up_dialog_token == pending.dialog_token.get() {
+        let sample = if measurement.fields.follow_up_dialog_token == pending.token() {
             Some(FtmRawExchange {
-                dialog_token: pending.dialog_token.get(),
+                dialog_token: pending.token(),
                 responder_departure_t1_ps: measurement.fields.tod,
                 initiator_arrival_t2_ps: pending.arrival_t2_ps,
                 initiator_ack_departure_t3_ps: pending.ack_departure_t3_ps,
@@ -1086,7 +1094,7 @@ impl<const N: usize> FtmSession<N> {
             return Ok(FtmMeasurementDisposition::Stale);
         };
 
-        if measurement.fields.dialog_token == 0 {
+        if measurement.fields.dialog_token == DialogToken::ZERO {
             if local_timing.is_some() {
                 return self.protocol_error(FtmRequesterError::UnexpectedLocalTiming);
             }
@@ -1106,10 +1114,7 @@ impl<const N: usize> FtmSession<N> {
             });
         }
 
-        self.validate_next_dialog_token(
-            pending.dialog_token.get(),
-            measurement.fields.dialog_token,
-        )?;
+        self.validate_next_dialog_token(pending.token(), measurement.fields.dialog_token)?;
         let local_timing = self.validate_new_local_timing(measurement, local_timing)?;
         let maximum_samples = usize::from(negotiated.ftms_per_burst.saturating_sub(1));
         let disposition = if let Some(sample) = sample {
@@ -1118,7 +1123,7 @@ impl<const N: usize> FtmSession<N> {
             }
             let sample_index = self.push_sample(sample)?;
             FtmMeasurementDisposition::SampleAccepted {
-                dialog_token: pending.dialog_token.get(),
+                dialog_token: pending.token(),
                 sample_index,
             }
         } else {
@@ -1151,21 +1156,18 @@ impl<const N: usize> FtmSession<N> {
         let Some(last) = self.owner.last_measurement else {
             return self.protocol_error(FtmRequesterError::InitialRetransmissionMismatch);
         };
-        if measurement.fields.dialog_token == 0
-            || measurement.fields.follow_up_dialog_token != 0
+        if measurement.fields.dialog_token == DialogToken::ZERO
+            || measurement.fields.follow_up_dialog_token != DialogToken::ZERO
             || measurement.parameters != Some(negotiated)
             || last.parameters != Some(negotiated)
-            || last.fields.follow_up_dialog_token != 0
+            || last.fields.follow_up_dialog_token != DialogToken::ZERO
             || !last
                 .information_elements
                 .matches(measurement.information_elements)
         {
             return self.protocol_error(FtmRequesterError::InitialRetransmissionMismatch);
         }
-        self.validate_next_dialog_token(
-            pending.dialog_token.get(),
-            measurement.fields.dialog_token,
-        )?;
+        self.validate_next_dialog_token(pending.token(), measurement.fields.dialog_token)?;
         let local_timing = self.validate_new_local_timing(measurement, local_timing)?;
         let information_elements =
             self.own_information_elements(measurement.information_elements)?;
@@ -1177,7 +1179,7 @@ impl<const N: usize> FtmSession<N> {
             information_elements,
         });
         Ok(FtmMeasurementDisposition::InitialRetransmissionAccepted {
-            abandoned_dialog_token: pending.dialog_token.get(),
+            abandoned_dialog_token: pending.token(),
             dialog_token: measurement.fields.dialog_token,
         })
     }
@@ -1237,17 +1239,13 @@ impl<const N: usize> FtmSession<N> {
 
     fn validate_next_dialog_token(
         &mut self,
-        previous: u8,
-        actual: u8,
+        previous: DialogToken,
+        actual: DialogToken,
     ) -> Result<(), FtmRequesterError> {
         if self.owner.dialog_tokens.contains(actual) {
             return self.protocol_error(FtmRequesterError::DialogTokenReused);
         }
-        let expected = if previous == u8::MAX {
-            1
-        } else {
-            previous.saturating_add(1)
-        };
+        let expected = previous.next_nonzero();
         if actual != expected {
             return self
                 .protocol_error(FtmRequesterError::DialogTokenOutOfSequence { expected, actual });
@@ -1275,7 +1273,7 @@ impl<const N: usize> FtmSession<N> {
         measurement: FtmMeasurement<'_>,
         local_timing: Option<FtmLocalExchangeTiming>,
     ) -> Result<FtmLocalExchangeTiming, FtmRequesterError> {
-        if measurement.fields.dialog_token == 0 {
+        if measurement.fields.dialog_token == DialogToken::ZERO {
             self.phase = FtmRequesterPhase::Failed(FtmSessionFailure::ProtocolViolation);
             return Err(FtmRequesterError::ZeroLocalDialogToken);
         }
@@ -1283,7 +1281,7 @@ impl<const N: usize> FtmSession<N> {
             self.phase = FtmRequesterPhase::Failed(FtmSessionFailure::ProtocolViolation);
             return Err(FtmRequesterError::MissingLocalTiming);
         };
-        if local_timing.dialog_token.get() != measurement.fields.dialog_token {
+        if local_timing.token() != measurement.fields.dialog_token {
             self.phase = FtmRequesterPhase::Failed(FtmSessionFailure::ProtocolViolation);
             return Err(FtmRequesterError::LocalDialogTokenMismatch);
         }

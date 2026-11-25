@@ -7,6 +7,7 @@ use super::*;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{RxCryptoStatus, RxEvidence, RxMeta};
 use oer_protocols_ieee80211_wire::channel::{Channel, ChannelWidth};
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::Tid;
 
 /// A source behind the access point.
@@ -638,7 +639,7 @@ pub(super) fn addba(starting: u16) -> Vec<u8> {
     frame.extend_from_slice(&[0, 0]);
     frame.extend_from_slice(
         &encode_addba_request(
-            5,
+            DialogToken::new(5),
             Tid::constant::<0>(),
             8,
             0,

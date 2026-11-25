@@ -17,9 +17,9 @@ const POLICY: TxBlockAckOriginatorPolicy = TxBlockAckOriginatorPolicy {
         WmmUserPriority::UP5,
     ],
     dialog_tokens: DialogTokenSequence {
-        first: 1,
-        lowest: 0,
-        highest: 62,
+        first: DialogToken::new(1),
+        lowest: DialogToken::new(0),
+        highest: DialogToken::new(62),
     },
 };
 
@@ -44,7 +44,7 @@ fn sequence(value: u16) -> SequenceNumber {
 
 fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckAction {
     BlockAckAction::AddbaResponse {
-        dialog_token,
+        dialog_token: DialogToken::new(dialog_token),
         status,
         timeout_tu: 7,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
@@ -72,11 +72,11 @@ fn the_policy_s_tids_share_one_token_sequence_and_route_responses() {
         .unwrap();
     assert_eq!(
         [tid0.dialog_token, tid7.dialog_token, tid5.dialog_token],
-        [1, 2, 3]
+        [1, 2, 3].map(DialogToken::new)
     );
     assert_eq!(originator.alarm(WmmUserPriority::UP7), Some(tid7.alarm));
     assert_eq!(
-        originator.on_response_action(response(tid7.dialog_token, 7, 0, 16)),
+        originator.on_response_action(response(tid7.dialog_token.value(), 7, 0, 16)),
         Ok(TxBlockAckResponseDisposition::Matched(
             TxBlockAckOriginatorResponse {
                 tid: WmmUserPriority::UP7,
@@ -93,7 +93,7 @@ fn the_policy_s_tids_share_one_token_sequence_and_route_responses() {
     assert_eq!(originator.alarm(WmmUserPriority::UP7), None);
     // TID 0 may carry A-MSDUs, as the configuration allows.
     assert!(matches!(
-        originator.on_response_action(response(tid0.dialog_token, 0, 0, 16)),
+        originator.on_response_action(response(tid0.dialog_token.value(), 0, 0, 16)),
         Ok(TxBlockAckResponseDisposition::Matched(
             TxBlockAckOriginatorResponse {
                 response: TxBlockAckResponse::Operational(OperationalTxBlockAck {
@@ -147,7 +147,9 @@ fn an_unowned_tid_and_a_stale_token_change_nothing() {
     );
     assert_eq!(
         originator.on_response(&[3, 1, 42, 0, 0, 0, 0, 0, 0]),
-        Ok(TxBlockAckResponseDisposition::StaleDialogToken(42))
+        Ok(TxBlockAckResponseDisposition::StaleDialogToken(
+            DialogToken::new(42)
+        ))
     );
     assert!(!originator.stop(WmmUserPriority::UP3));
 }
@@ -178,14 +180,14 @@ fn attempts_requeue_until_the_peer_answers_or_they_run_out() {
         Some(WmmUserPriority::UP0)
     );
     assert!(!originator.has_pending());
-    assert_ne!(tid0.dialog_token, 0);
+    assert_ne!(tid0.dialog_token, DialogToken::ZERO);
 
     // TID 7 is refused: the peer's answer ends its attempts.
     let tid7 = originator
         .begin(WmmUserPriority::UP7, sequence(0), Instant::from_micros(0))
         .unwrap();
     assert_eq!(
-        originator.on_response_action(response(tid7.dialog_token, 7, 37, 0)),
+        originator.on_response_action(response(tid7.dialog_token.value(), 7, 37, 0)),
         Ok(TxBlockAckResponseDisposition::Matched(
             TxBlockAckOriginatorResponse {
                 tid: WmmUserPriority::UP7,
@@ -275,7 +277,7 @@ fn no_attempt_queues_nothing() {
         interval: Duration::ZERO,
     });
     assert!(!originator.has_pending());
-    assert_eq!(next_nonzero_dialog_token(255), 1);
+    assert_eq!(DialogToken::new(255).next_nonzero(), DialogToken::new(1));
 }
 
 #[test]
@@ -349,7 +351,7 @@ fn active_originator(start: u16) -> TxBlockAckOriginator<TX_BLOCK_ACK_MAX_TIDS> 
     let request = core
         .begin(WmmUserPriority::UP0, sequence(start), Instant::EPOCH)
         .unwrap();
-    core.on_response_action(response(request.dialog_token, 0, 0, 32))
+    core.on_response_action(response(request.dialog_token.value(), 0, 0, 32))
         .unwrap();
     core
 }
@@ -701,7 +703,7 @@ fn queue_offers_one_idle_tid_and_never_a_live_one() {
         "a negotiation is live"
     );
     originator
-        .on_response_action(response(request.dialog_token, 7, 0, 32))
+        .on_response_action(response(request.dialog_token.value(), 7, 0, 32))
         .unwrap();
     assert!(originator.operational(WmmUserPriority::UP7).is_some());
     assert!(
@@ -725,7 +727,7 @@ fn a_refusal_or_spent_attempts_close_the_tid_until_stop_all() {
         .begin(WmmUserPriority::UP0, sequence(1), at)
         .unwrap();
     originator
-        .on_response_action(response(request.dialog_token, 0, 37, 32))
+        .on_response_action(response(request.dialog_token.value(), 0, 37, 32))
         .unwrap();
     assert!(originator.is_closed(WmmUserPriority::UP0));
     assert!(!originator.queue(WmmUserPriority::UP0, RETRY));
@@ -758,14 +760,14 @@ fn a_refusal_or_spent_attempts_close_the_tid_until_stop_all() {
 #[test]
 fn a_dialog_token_sequence_wraps_to_its_lowest_token() {
     let modulo_63 = POLICY.dialog_tokens;
-    assert_eq!(modulo_63.next(1), 2);
-    assert_eq!(modulo_63.next(61), 62);
-    assert_eq!(modulo_63.next(62), 0);
-    assert_eq!(modulo_63.next(0), 1);
+    assert_eq!(modulo_63.next(DialogToken::new(1)), DialogToken::new(2));
+    assert_eq!(modulo_63.next(DialogToken::new(61)), DialogToken::new(62));
+    assert_eq!(modulo_63.next(DialogToken::new(62)), DialogToken::new(0));
+    assert_eq!(modulo_63.next(DialogToken::new(0)), DialogToken::new(1));
     for current in 0..=u8::MAX {
         assert_eq!(
-            DialogTokenSequence::NONZERO.next(current),
-            next_nonzero_dialog_token(current)
+            DialogTokenSequence::NONZERO.next(DialogToken::new(current)),
+            DialogToken::new(current).next_nonzero()
         );
     }
 }
@@ -775,9 +777,9 @@ fn the_requests_carry_the_sequence_in_turn() {
     let mut originator = TxBlockAckOriginator::<TX_BLOCK_ACK_MAX_TIDS>::new(
         TxBlockAckOriginatorPolicy {
             dialog_tokens: DialogTokenSequence {
-                first: 62,
-                lowest: 0,
-                highest: 62,
+                first: DialogToken::new(62),
+                lowest: DialogToken::new(0),
+                highest: DialogToken::new(62),
             },
             ..POLICY
         },
@@ -798,15 +800,15 @@ fn the_requests_carry_the_sequence_in_turn() {
             .unwrap()
             .dialog_token
     });
-    assert_eq!(tokens, [62, 0, 1]);
+    assert_eq!(tokens, [62, 0, 1].map(DialogToken::new));
 }
 
 #[test]
 fn a_first_dialog_token_outside_its_sequence_is_refused() {
     let tokens = DialogTokenSequence {
-        first: 63,
-        lowest: 0,
-        highest: 62,
+        first: DialogToken::new(63),
+        lowest: DialogToken::new(0),
+        highest: DialogToken::new(62),
     };
     assert_eq!(
         TxBlockAckOriginator::<TX_BLOCK_ACK_MAX_TIDS>::new(

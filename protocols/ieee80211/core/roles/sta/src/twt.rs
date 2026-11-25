@@ -11,6 +11,7 @@
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::tsf::{TsfDuration, TsfInstant};
 use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::twt::{
     INDIVIDUAL_TWT_FLOW_CAPACITY, INDIVIDUAL_TWT_SETUP_BODY_LEN, INDIVIDUAL_TWT_TEARDOWN_BODY_LEN,
     IndividualTwtAction, IndividualTwtFlowId, IndividualTwtParameterSet, IndividualTwtSetup,
@@ -323,13 +324,13 @@ enum FlowPhase {
     },
     SetupTransmitting {
         proposal: IndividualTwtProposal,
-        dialog_token: u8,
+        dialog_token: DialogToken,
         generation: u32,
         attempts_remaining: u8,
     },
     AwaitingResponse {
         proposal: IndividualTwtProposal,
-        dialog_token: u8,
+        dialog_token: DialogToken,
         generation: u32,
         attempts_remaining: u8,
         deadline: Instant,
@@ -372,7 +373,7 @@ impl FlowPhase {
 pub struct IndividualTwtRequester {
     config: IndividualTwtRequesterConfig,
     flows: [FlowPhase; INDIVIDUAL_TWT_FLOW_CAPACITY],
-    next_dialog_token: u8,
+    next_dialog_token: DialogToken,
     generation: u32,
     // One bounded flow loan selects this index; its exclusive borrow keeps
     // it stable through mutation. The byte occupies existing tail padding.
@@ -457,7 +458,7 @@ impl IndividualTwtRequester {
         Self {
             config,
             flows: [FlowPhase::IDLE; INDIVIDUAL_TWT_FLOW_CAPACITY],
-            next_dialog_token: 1,
+            next_dialog_token: DialogToken::new(1),
             generation: 0,
             selected_flow: first,
         }
@@ -912,7 +913,7 @@ impl IndividualTwtRequester {
             }
             *phase = FlowPhase::Idle;
         }
-        self.next_dialog_token = 1;
+        self.next_dialog_token = DialogToken::new(1);
         // Never wrap an affine identity. Saturation permanently prevents a
         // stale generation from being reissued after enough reconnects.
         self.generation = self.generation.saturating_add(1);
@@ -975,9 +976,9 @@ impl IndividualTwtRequester {
         Ok(IndividualTwtRequesterEvent::SetupRetryScheduled { flow_id, retry_at })
     }
 
-    fn take_dialog_token(&mut self) -> u8 {
+    fn take_dialog_token(&mut self) -> DialogToken {
         let token = self.next_dialog_token;
-        self.next_dialog_token = next_dialog_token(token);
+        self.next_dialog_token = token.next_nonzero();
         token
     }
 
@@ -1115,11 +1116,6 @@ fn plan_agreement_wake(
         service_end,
         service_open,
     })
-}
-
-const fn next_dialog_token(current: u8) -> u8 {
-    let next = current.wrapping_add(1);
-    if next == 0 { 1 } else { next }
 }
 
 /// Public default stays disabled. It is a named value for compositions that

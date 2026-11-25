@@ -46,7 +46,7 @@ fn a_zero_negotiation_timeout_is_refused() {
 fn matching_response_commits_only_the_static_window() {
     let mut session = TxBlockAckSession::new(CONFIG).unwrap();
     let request = session.begin(seq(0x123), at(0)).unwrap();
-    let response = [3, 1, request.dialog_token, 0, 0, 0x1f, 0x08, 0, 0];
+    let response = [3, 1, request.dialog_token.value(), 0, 0, 0x1f, 0x08, 0, 0];
     let agreement = OperationalTxBlockAck {
         tid: WmmUserPriority::UP7,
         window: 32,
@@ -69,7 +69,7 @@ fn matching_response_accepts_an_addba_extension_ie() {
     let response = [
         3,
         1,
-        request.dialog_token,
+        request.dialog_token.value(),
         0,
         0,
         0x1f,
@@ -104,7 +104,7 @@ fn response_cannot_expand_the_static_capacity() {
     let response = [
         3,
         1,
-        request.dialog_token,
+        request.dialog_token.value(),
         0,
         0,
         parameters[0],
@@ -203,7 +203,7 @@ fn a_window_larger_than_the_originator_marks_is_refused() {
 fn rejected_response_returns_to_idle_without_a_timer_retry() {
     let mut session = TxBlockAckSession::new(CONFIG).unwrap();
     let request = session.begin(seq(0), at(0)).unwrap();
-    let response = [3, 1, request.dialog_token, 37, 0, 0, 0, 0, 0];
+    let response = [3, 1, request.dialog_token.value(), 37, 0, 0, 0, 0, 0];
     assert_eq!(
         session.on_response(&response),
         Ok(TxBlockAckResponse::Rejected(37))
@@ -226,7 +226,7 @@ fn responses(count: usize) {
         |bytes| {
             let mut session = TxBlockAckSession::new(CONFIG).unwrap();
             let request = session.begin(seq(0x100), at(0)).unwrap();
-            assert_eq!(request.dialog_token, 1);
+            assert_eq!(request.dialog_token, DialogToken::new(1));
             if let Ok(TxBlockAckResponse::Operational(agreement)) = session.on_response(bytes) {
                 assert!(agreement.window != 0 && agreement.window <= CONFIG.window);
                 assert_eq!(session.operational(), Some(agreement));

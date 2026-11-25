@@ -6,6 +6,7 @@ use oer_protocols_ieee80211_wire::block_ack::frame::{
     ADDBA_ACTION_BODY_LEN, AddbaRequestError, BlockAckAction, encode_addba_request,
     parse_block_ack_action,
 };
+use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
@@ -52,31 +53,10 @@ pub struct TxBlockAckAlarm {
     pub deadline: Instant,
 }
 
-/// One BlockAck action Dialog Token supplied by a protocol owner.
-///
-/// Keeping construction private prevents independent per-TID sessions from
-/// accidentally reusing a token while their negotiations overlap.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TxBlockAckDialogToken(u8);
-
-impl TxBlockAckDialogToken {
-    /// Wrap a token selected by a multi-session allocation policy.
-    ///
-    /// All bit patterns fit the action-frame field. Whether zero is used and
-    /// when a sequence wraps are policy decisions outside this protocol leaf.
-    pub const fn from_value(value: u8) -> Self {
-        Self(value)
-    }
-
-    pub const fn value(self) -> u8 {
-        self.0
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AddbaRequest {
     pub generation: u32,
-    pub dialog_token: u8,
+    pub dialog_token: DialogToken,
     pub starting_sequence: SequenceNumber,
     pub body: [u8; ADDBA_ACTION_BODY_LEN],
     pub alarm: TxBlockAckAlarm,
@@ -102,7 +82,7 @@ pub enum TxBlockAckResponse {
 enum TxBlockAckPhase {
     Idle,
     Awaiting {
-        dialog_token: u8,
+        dialog_token: DialogToken,
         starting_sequence: SequenceNumber,
     },
     Operational {
@@ -119,7 +99,7 @@ enum TxBlockAckPhase {
 pub struct TxBlockAckSession {
     config: TxBlockAckConfig,
     generation: u32,
-    next_dialog_token: u8,
+    next_dialog_token: DialogToken,
     phase: TxBlockAckPhase,
 }
 
@@ -132,7 +112,7 @@ impl TxBlockAckSession {
         Ok(Self {
             config,
             generation: 0,
-            next_dialog_token: 1,
+            next_dialog_token: DialogToken::new(1),
             phase: TxBlockAckPhase::Idle,
         })
     }
@@ -142,8 +122,8 @@ impl TxBlockAckSession {
         starting_sequence: SequenceNumber,
         now: Instant,
     ) -> Result<AddbaRequest, TxBlockAckError> {
-        let dialog_token = TxBlockAckDialogToken(self.next_dialog_token);
-        self.next_dialog_token = super::next_nonzero_dialog_token(dialog_token.value());
+        let dialog_token = self.next_dialog_token;
+        self.next_dialog_token = dialog_token.next_nonzero();
         self.begin_with_dialog_token(starting_sequence, now, dialog_token)
     }
 
@@ -156,12 +136,11 @@ impl TxBlockAckSession {
         &mut self,
         starting_sequence: SequenceNumber,
         now: Instant,
-        dialog_token: TxBlockAckDialogToken,
+        dialog_token: DialogToken,
     ) -> Result<AddbaRequest, TxBlockAckError> {
         let deadline = now
             .checked_add(self.config.negotiation_timeout)
             .ok_or(TxBlockAckError::DeadlineOverflow)?;
-        let dialog_token = dialog_token.value();
         let body = encode_addba_request(
             dialog_token,
             self.config.tid.tid(),
@@ -387,7 +366,7 @@ impl TxBlockAckSession {
     ///
     /// A multi-TID dispatcher can use this before calling [`Self::on_response`]
     /// so a response is delivered to exactly one session.
-    pub const fn awaiting_dialog_token(&self) -> Option<u8> {
+    pub const fn awaiting_dialog_token(&self) -> Option<DialogToken> {
         match self.phase {
             TxBlockAckPhase::Awaiting { dialog_token, .. } => Some(dialog_token),
             _ => None,

@@ -58,7 +58,7 @@ fn generation_exhaustion_never_reissues_a_stale_identity() {
         requester.status(IndividualTwtFlowId::new(2).unwrap()),
         IndividualTwtFlowStatus::SetupQueued
     );
-    assert_eq!(requester.next_dialog_token, 1);
+    assert_eq!(requester.next_dialog_token, DialogToken::new(1));
 
     requester.reset_for_reconnect();
     assert_eq!(requester.generation, u32::MAX);
@@ -115,7 +115,7 @@ fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
         .with_setup_command(IndividualTwtSetupCommand::Accept.field());
     let disposition = requester
         .on_setup_response(IndividualTwtSetup {
-            dialog_token: 1,
+            dialog_token: DialogToken::new(1),
             control: TwtControlFields::REQUEST,
             parameters: response_parameters,
         })
@@ -358,7 +358,7 @@ fn every_previous_nontransmitting_occupied_phase_still_permits_teardown() {
         },
         FlowPhase::AwaitingResponse {
             proposal: proposal(IndividualTwtImplicit::Implicit),
-            dialog_token: 1,
+            dialog_token: DialogToken::new(1),
             generation: 1,
             attempts_remaining: 1,
             deadline: clock.now(),
@@ -448,4 +448,22 @@ fn a_stale_generation_ends_neither_the_setup_nor_the_teardown_in_flight() {
         requester.flow(flow),
         IndividualTwtFlowAccess::Idle(_)
     ));
+}
+
+#[test]
+fn a_reconnect_returns_every_installed_agreement_and_leaves_none() {
+    let mut requester = IndividualTwtRequester::new(CONFIG);
+    let installed = agreement(2, 10_000, 1_024, 256);
+    *IndividualTwtFlowId::new(2)
+        .unwrap()
+        .select_mut(&mut requester.flows) = FlowPhase::Active(installed);
+    requester.next_dialog_token = DialogToken::new(9);
+    let removed = requester.reset_for_reconnect();
+    assert_eq!(removed.iter().flatten().count(), 1);
+    assert!(removed.contains(&Some(installed)));
+    assert_eq!(requester.next_dialog_token, DialogToken::new(1));
+    assert_eq!(
+        requester.status(IndividualTwtFlowId::new(2).unwrap()),
+        IndividualTwtFlowStatus::Idle
+    );
 }

@@ -1,38 +1,58 @@
 use super::*;
 
+fn control(value: u16) -> SequenceControl {
+    SequenceControl::from_bytes(value.to_le_bytes())
+}
+
 #[test]
 fn duplicate_history_query_never_accepts_fragment_state() {
     let mut filter = RxDuplicateFilter::new();
-    assert!(!filter.is_duplicate(RetrySubfield::Clear, 0x1230, None));
+    assert!(!filter.is_duplicate(RetrySubfield::Clear, control(0x1230), None));
     let ordinary_history = filter;
 
-    assert!(filter.is_known_duplicate(RetrySubfield::Set, 0x1230, None));
-    assert!(!filter.is_known_duplicate(RetrySubfield::Set, 0x1240, None));
-    assert!(!filter.is_known_duplicate(RetrySubfield::Clear, 0x1230, None));
+    assert!(filter.is_known_duplicate(RetrySubfield::Set, control(0x1230), None));
+    assert!(!filter.is_known_duplicate(RetrySubfield::Set, control(0x1240), None));
+    assert!(!filter.is_known_duplicate(RetrySubfield::Clear, control(0x1230), None));
     assert_eq!(filter, ordinary_history);
 }
 
 #[test]
 fn sta_rx_duplicate_filter_requires_retry_and_matching_sequence_space() {
     let mut filter = RxDuplicateFilter::new();
-    assert!(!filter.is_duplicate(RetrySubfield::Clear, 0x1230, None));
-    assert!(filter.is_duplicate(RetrySubfield::Set, 0x1230, None));
-    assert!(!filter.is_duplicate(RetrySubfield::Clear, 0x1230, None));
-    assert!(!filter.is_duplicate(RetrySubfield::Set, 0x1240, None));
+    assert!(!filter.is_duplicate(RetrySubfield::Clear, control(0x1230), None));
+    assert!(filter.is_duplicate(RetrySubfield::Set, control(0x1230), None));
+    assert!(!filter.is_duplicate(RetrySubfield::Clear, control(0x1230), None));
+    assert!(!filter.is_duplicate(RetrySubfield::Set, control(0x1240), None));
 
-    assert!(!filter.is_duplicate(RetrySubfield::Clear, 0x2000, Some(Tid::constant::<3>())));
-    assert!(!filter.is_duplicate(RetrySubfield::Set, 0x2000, Some(Tid::constant::<4>())));
-    assert!(filter.is_duplicate(RetrySubfield::Set, 0x2000, Some(Tid::constant::<3>())));
+    assert!(!filter.is_duplicate(
+        RetrySubfield::Clear,
+        control(0x2000),
+        Some(Tid::constant::<3>())
+    ));
+    assert!(!filter.is_duplicate(
+        RetrySubfield::Set,
+        control(0x2000),
+        Some(Tid::constant::<4>())
+    ));
+    assert!(filter.is_duplicate(
+        RetrySubfield::Set,
+        control(0x2000),
+        Some(Tid::constant::<3>())
+    ));
 }
 
 /// A space with no MPDU yet knows none, whatever another space took.
 #[test]
 fn an_empty_space_knows_no_duplicate() {
     let mut filter = RxDuplicateFilter::new();
-    assert!(!filter.is_duplicate(RetrySubfield::Clear, 0, Some(Tid::constant::<15>())));
-    assert!(filter.is_known_duplicate(RetrySubfield::Set, 0, Some(Tid::constant::<15>())));
+    assert!(!filter.is_duplicate(
+        RetrySubfield::Clear,
+        control(0),
+        Some(Tid::constant::<15>())
+    ));
+    assert!(filter.is_known_duplicate(RetrySubfield::Set, control(0), Some(Tid::constant::<15>())));
     for other in (0..15).map(Tid::new).chain([None]) {
-        assert!(!filter.is_known_duplicate(RetrySubfield::Set, 0, other));
+        assert!(!filter.is_known_duplicate(RetrySubfield::Set, control(0), other));
     }
 }
 
@@ -50,7 +70,7 @@ fn run_duplicate(count: usize) {
             } else {
                 RetrySubfield::Clear
             };
-            let sequence_control = u16::from_le_bytes([low, high]);
+            let sequence_control = SequenceControl::from_bytes([low, high]);
             let tid = (tid & 0x80 == 0).then_some(tid).and_then(Tid::new);
             let known = filter.is_known_duplicate(retry, sequence_control, tid);
             let duplicate = filter.is_duplicate(retry, sequence_control, tid);

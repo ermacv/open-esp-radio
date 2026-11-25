@@ -187,6 +187,45 @@ impl ManagementHeader {
     }
 }
 
+/// A Dialog Token, which matches an action's request with its responses: any
+/// octet. What zero means, and how a sequence of tokens goes, is the
+/// action's.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.1.12 (Dialog Token field).
+///
+/// A number is no token until it is named one:
+///
+/// ```compile_fail,E0308
+/// use oer_protocols_ieee80211_wire::management::DialogToken;
+/// let token: DialogToken = 1;
+/// ```
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub struct DialogToken(u8);
+
+impl DialogToken {
+    /// The token of all zero bits.
+    pub const ZERO: Self = Self(0);
+
+    /// The token `value`.
+    pub const fn new(value: u8) -> Self {
+        Self(value)
+    }
+
+    /// Its octet.
+    pub const fn value(self) -> u8 {
+        self.0
+    }
+
+    /// The token after this one in a sequence that skips zero.
+    pub const fn next_nonzero(self) -> Self {
+        match self.0.wrapping_add(1) {
+            0 => Self(1),
+            next => Self(next),
+        }
+    }
+}
+
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.4 (Capability Information field).
     pub struct CapabilityInformation[2] (little) {

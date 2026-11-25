@@ -85,8 +85,8 @@ fn response_exponent_fifteen_is_a_finite_allocation_not_no_preference() {
 #[test]
 fn measurement_uses_six_octet_picosecond_timestamps() {
     let fields = FtmMeasurementFields {
-        dialog_token: 2,
-        follow_up_dialog_token: 1,
+        dialog_token: DialogToken::new(2),
+        follow_up_dialog_token: DialogToken::new(1),
         tod: FtmTimestampPs::new(0x0102_0304_0506).unwrap(),
         toa: FtmTimestampPs::new(0x0a0b_0c0d_0e0f).unwrap(),
         tod_error: FtmTodError {
@@ -109,8 +109,8 @@ fn measurement_uses_six_octet_picosecond_timestamps() {
 #[test]
 fn initial_measurement_reserves_timestamp_fields_and_decodes_parameters() {
     let fields = FtmMeasurementFields {
-        dialog_token: 1,
-        follow_up_dialog_token: 0,
+        dialog_token: DialogToken::new(1),
+        follow_up_dialog_token: DialogToken::new(0),
         tod: FtmTimestampPs::ZERO,
         toa: FtmTimestampPs::ZERO,
         tod_error: FtmTodError {
@@ -139,8 +139,8 @@ fn duplicate_or_truncated_parameter_elements_are_rejected() {
     let parameters = response_parameters().encode_element().unwrap();
     let mut body = [0_u8; FTM_MEASUREMENT_PREFIX_LEN + 2 * FTM_PARAMETERS_ELEMENT_LEN];
     let fields = FtmMeasurementFields {
-        dialog_token: 1,
-        follow_up_dialog_token: 0,
+        dialog_token: DialogToken::new(1),
+        follow_up_dialog_token: DialogToken::new(0),
         tod: FtmTimestampPs::ZERO,
         toa: FtmTimestampPs::ZERO,
         tod_error: FtmTodError {
@@ -161,7 +161,7 @@ fn duplicate_or_truncated_parameter_elements_are_rejected() {
     body[..FTM_MEASUREMENT_PREFIX_LEN].fill(0);
     body[0] = PUBLIC_ACTION_CATEGORY;
     body[1] = FTM_MEASUREMENT_PUBLIC_ACTION;
-    body[2] = fields.dialog_token;
+    body[2] = fields.dialog_token.value();
     body[FTM_MEASUREMENT_PREFIX_LEN..].copy_from_slice(&information_elements);
     assert_eq!(
         FtmMeasurement::decode_body(&body),
@@ -199,8 +199,8 @@ fn every_prefix_of_a_body_is_handled() {
         let mut output = [0_u8; FTM_MEASUREMENT_PREFIX_LEN];
         let _ = encode_measurement(
             FtmMeasurementFields {
-                dialog_token: 1,
-                follow_up_dialog_token: 0,
+                dialog_token: DialogToken::new(1),
+                follow_up_dialog_token: DialogToken::new(0),
                 tod: FtmTimestampPs::ZERO,
                 toa: FtmTimestampPs::ZERO,
                 tod_error: FtmTodError {
@@ -261,8 +261,8 @@ fn each_status_bit_refuses_a_request() {
 #[test]
 fn each_reserved_timestamp_bit_refuses_a_measurement() {
     let fields = FtmMeasurementFields {
-        dialog_token: 2,
-        follow_up_dialog_token: 1,
+        dialog_token: DialogToken::new(2),
+        follow_up_dialog_token: DialogToken::new(1),
         tod: FtmTimestampPs::new(0x0102_0304_0506).unwrap(),
         toa: FtmTimestampPs::new(0x0a0b_0c0d_0e0f).unwrap(),
         tod_error: FtmTodError {
@@ -289,7 +289,7 @@ fn each_reserved_timestamp_bit_refuses_a_measurement() {
     }
 
     let initial = FtmMeasurementFields {
-        follow_up_dialog_token: 0,
+        follow_up_dialog_token: DialogToken::new(0),
         tod: FtmTimestampPs::ZERO,
         toa: FtmTimestampPs::ZERO,
         tod_error: FtmTodError {
