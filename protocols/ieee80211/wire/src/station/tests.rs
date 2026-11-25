@@ -779,7 +779,9 @@ fn a_selection_encodes_one_suite_and_the_chosen_capabilities() {
             Spp::NotNegotiated,
             crate::security::ManagementProtection::Disabled,
         ),
-        capabilities(crate::security::ManagementProtection::Disabled),
+        crate::security::rsn::RsnCapabilities::from_bytes(
+            (capabilities(crate::security::ManagementProtection::Disabled) as u16).to_le_bytes(),
+        ),
         None,
     );
     let bytes = selected.as_bytes();
@@ -788,7 +790,7 @@ fn a_selection_encodes_one_suite_and_the_chosen_capabilities() {
     assert!(
         element
             .akm_suites()
-            .contains(crate::security::rsn::ieee_suite(2))
+            .contains(crate::security::rsn::AkmSuite::PSK)
     );
     // SPP A-MSDU capable only.
     assert_eq!(&bytes[20..22], &[0, 4]);
@@ -800,7 +802,9 @@ fn a_selection_encodes_one_suite_and_the_chosen_capabilities() {
             Spp::Negotiated,
             crate::security::ManagementProtection::Required,
         ),
-        capabilities(crate::security::ManagementProtection::Required),
+        crate::security::rsn::RsnCapabilities::from_bytes(
+            (capabilities(crate::security::ManagementProtection::Required) as u16).to_le_bytes(),
+        ),
         Some(h2e()),
     );
     // MFPC, MFPR and SPP A-MSDU capable, then the RSNXE announcing H2E.
@@ -822,10 +826,12 @@ fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
             Spp::Negotiated,
             crate::security::ManagementProtection::Required,
         ),
-        capabilities(crate::security::ManagementProtection::Required),
+        crate::security::rsn::RsnCapabilities::from_bytes(
+            (capabilities(crate::security::ManagementProtection::Required) as u16).to_le_bytes(),
+        ),
         Some(h2e()),
     );
-    let resumed = selected.with_pmkid(Pmkid([0x5a; 16])).unwrap();
+    let resumed = selected.with_pmkid(Pmkid::from_octets([0x5a; 16])).unwrap();
     let bytes = resumed.as_bytes();
     assert_eq!(bytes.len(), SELECTED_SECURITY_IES_CAPACITY);
     assert_eq!(&bytes[..2], &[48, 38]);
@@ -834,7 +840,7 @@ fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
     assert_eq!(&bytes[24..40], &[0x5a; 16]);
     assert_eq!(&bytes[40..], &[244, 1, 0x20]);
     // A second PMKID and a non-SAE selection are refused.
-    assert_eq!(resumed.with_pmkid(Pmkid([0xa5; 16])), None);
+    assert_eq!(resumed.with_pmkid(Pmkid::from_octets([0xa5; 16])), None);
     assert_eq!(
         SelectedRsn::rsn(
             rsn_association(
@@ -842,10 +848,13 @@ fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
                 Spp::Negotiated,
                 crate::security::ManagementProtection::Disabled
             ),
-            capabilities(crate::security::ManagementProtection::Disabled),
+            crate::security::rsn::RsnCapabilities::from_bytes(
+                (capabilities(crate::security::ManagementProtection::Disabled) as u16)
+                    .to_le_bytes()
+            ),
             None,
         )
-        .with_pmkid(Pmkid([0x5a; 16])),
+        .with_pmkid(Pmkid::from_octets([0x5a; 16])),
         None
     );
 }

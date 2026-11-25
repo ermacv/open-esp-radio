@@ -11,7 +11,7 @@ pub const RSN_NONCE_LEN: usize = 32;
 
 pub(crate) const RSN_CCMP_TEMPORAL_KEY_LEN: u16 = 16;
 /// Key Information of an authenticator pairwise Message 3 for `akm`.
-pub(crate) fn pairwise_message3_key_info(akm: Akm) -> u16 {
+pub(crate) fn pairwise_message3_key_info(akm: Akm) -> KeyInformation {
     KeyInformation::EMPTY
         .with_descriptor_version(akm.key_descriptor_version())
         .with_pairwise(true)
@@ -20,7 +20,6 @@ pub(crate) fn pairwise_message3_key_info(akm: Akm) -> u16 {
         .with_mic(true)
         .with_secure(true)
         .with_encrypted_key_data(true)
-        .raw()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

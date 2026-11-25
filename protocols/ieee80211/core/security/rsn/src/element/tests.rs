@@ -20,7 +20,12 @@ fn accepts_wpa2_psk_ccmp_and_optional_mfpc() {
     let ie = rsn(4, 2, 1 << 7);
     let validated = validate_rsn_element(&ie).unwrap();
     assert_eq!(validated.owned().as_bytes(), &ie);
-    assert_eq!(validated.capabilities(), 1 << 7);
+    assert_eq!(
+        validated.capabilities(),
+        oer_protocols_ieee80211_wire::security::rsn::RsnCapabilities::from_bytes(
+            (1_u16 << 7).to_le_bytes()
+        )
+    );
     assert_eq!(validated.akm(), Akm::Psk);
 }
 

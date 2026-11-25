@@ -13,7 +13,7 @@ fn entry(last: u8) -> Pmksa<[u8; 6]> {
         [2, 0, 0, 0, 0, last],
         (),
         Pmk::from_bytes([last; 32]),
-        [last; RSN_PMKID_LEN],
+        Pmkid::from_octets([last; 16]),
     )
 }
 
@@ -24,12 +24,20 @@ fn a_station_resumes_only_with_its_own_pmkid() {
     cache.insert(entry(2));
     assert_eq!(
         cache
-            .find([2, 0, 0, 0, 0, 1], [1; RSN_PMKID_LEN])
+            .find([2, 0, 0, 0, 0, 1], Pmkid::from_octets([1; 16]))
             .map(Pmksa::pmkid),
-        Some([1; RSN_PMKID_LEN])
+        Some(Pmkid::from_octets([1; 16]))
     );
-    assert!(cache.find([2, 0, 0, 0, 0, 1], [2; RSN_PMKID_LEN]).is_none());
-    assert!(cache.find([2, 0, 0, 0, 0, 3], [1; RSN_PMKID_LEN]).is_none());
+    assert!(
+        cache
+            .find([2, 0, 0, 0, 0, 1], Pmkid::from_octets([2; 16]))
+            .is_none()
+    );
+    assert!(
+        cache
+            .find([2, 0, 0, 0, 0, 3], Pmkid::from_octets([1; 16]))
+            .is_none()
+    );
 }
 
 #[test]
@@ -42,22 +50,38 @@ fn a_new_entry_replaces_the_stations_old_one_and_a_full_cache_drops_the_oldest()
         [2, 0, 0, 0, 0, 0],
         (),
         Pmk::from_bytes([0xaa; 32]),
-        [0xaa; RSN_PMKID_LEN],
+        Pmkid::from_octets([0xaa; 16]),
     ));
-    assert!(cache.find([2, 0, 0, 0, 0, 0], [0; RSN_PMKID_LEN]).is_none());
     assert!(
         cache
-            .find([2, 0, 0, 0, 0, 0], [0xaa; RSN_PMKID_LEN])
+            .find([2, 0, 0, 0, 0, 0], Pmkid::from_octets([0; 16]))
+            .is_none()
+    );
+    assert!(
+        cache
+            .find([2, 0, 0, 0, 0, 0], Pmkid::from_octets([0xaa; 16]))
             .is_some()
     );
 
     // Station 1 is now the oldest.
     cache.insert(entry(0x20));
-    assert!(cache.find([2, 0, 0, 0, 0, 1], [1; RSN_PMKID_LEN]).is_none());
-    assert!(cache.find([2, 0, 0, 0, 0, 2], [2; RSN_PMKID_LEN]).is_some());
+    assert!(
+        cache
+            .find([2, 0, 0, 0, 0, 1], Pmkid::from_octets([1; 16]))
+            .is_none()
+    );
+    assert!(
+        cache
+            .find([2, 0, 0, 0, 0, 2], Pmkid::from_octets([2; 16]))
+            .is_some()
+    );
 
     cache.remove([2, 0, 0, 0, 0, 2]);
-    assert!(cache.find([2, 0, 0, 0, 0, 2], [2; RSN_PMKID_LEN]).is_none());
+    assert!(
+        cache
+            .find([2, 0, 0, 0, 0, 2], Pmkid::from_octets([2; 16]))
+            .is_none()
+    );
 }
 
 #[test]
@@ -99,7 +123,7 @@ fn sta_entry(last: u8, ssid: &[u8]) -> StaEntry {
         bssid([2, 0, 0, 0, 0, last]),
         heapless::Vec::from_slice(ssid).unwrap(),
         Pmk::from_bytes([last; 32]),
-        [last; RSN_PMKID_LEN],
+        Pmkid::from_octets([last; 16]),
     )
 }
 
@@ -111,7 +135,7 @@ fn an_association_resumes_only_for_its_access_point_and_ssid() {
         cache
             .resume(bssid([2, 0, 0, 0, 0, 1]), b"lab")
             .map(Pmksa::pmkid),
-        Some([1; RSN_PMKID_LEN])
+        Some(Pmkid::from_octets([1; 16]))
     );
     assert!(cache.resume(bssid([2, 0, 0, 0, 0, 2]), b"lab").is_none());
     // The same access point under another SSID flushes its entry.
@@ -151,12 +175,15 @@ fn an_owned_cache_outlives_connections_without_shared_state() {
         bssid,
         heapless::Vec::from_slice(b"lab").unwrap(),
         Pmk::from_bytes([7; 32]),
-        [9; 16],
+        oer_protocols_ieee80211_wire::security::Pmkid::from_octets([9; 16]),
     ));
     // A connection borrows the owner, then returns it for the next one.
     for _ in 0..2 {
         let cached = cache.resume(bssid, b"lab").unwrap();
-        assert_eq!(cached.pmkid(), [9; 16]);
+        assert_eq!(
+            cached.pmkid(),
+            oer_protocols_ieee80211_wire::security::Pmkid::from_octets([9; 16])
+        );
         let binding = cached.pmk().bind_association_security_ies(b"association");
         assert!(binding.matches(&Pmk::from_bytes([7; 32]), b"association"));
     }
@@ -194,16 +221,16 @@ fn forgetting_a_network_drops_only_its_associations_and_keeps_the_order() {
     cache.insert(sta_entry(4, b"kept"));
     cache.forget_context(b"old".as_slice());
     let peer = |last| bssid([2, 0, 0, 0, 0, last]);
-    assert!(cache.find(peer(1), [1; RSN_PMKID_LEN]).is_none());
-    assert!(cache.find(peer(3), [3; RSN_PMKID_LEN]).is_none());
-    assert!(cache.find(peer(2), [2; RSN_PMKID_LEN]).is_some());
-    assert!(cache.find(peer(4), [4; RSN_PMKID_LEN]).is_some());
+    assert!(cache.find(peer(1), Pmkid::from_octets([1; 16])).is_none());
+    assert!(cache.find(peer(3), Pmkid::from_octets([3; 16])).is_none());
+    assert!(cache.find(peer(2), Pmkid::from_octets([2; 16])).is_some());
+    assert!(cache.find(peer(4), Pmkid::from_octets([4; 16])).is_some());
     // The kept entries moved to the front: the cache fills again behind them.
     for last in 10..10 + PMKSA_CAPACITY as u8 - 2 {
         cache.insert(sta_entry(last, b"new"));
     }
-    assert!(cache.find(peer(2), [2; RSN_PMKID_LEN]).is_some());
+    assert!(cache.find(peer(2), Pmkid::from_octets([2; 16])).is_some());
     cache.insert(sta_entry(0x30, b"new"));
-    assert!(cache.find(peer(2), [2; RSN_PMKID_LEN]).is_none());
-    assert!(cache.find(peer(4), [4; RSN_PMKID_LEN]).is_some());
+    assert!(cache.find(peer(2), Pmkid::from_octets([2; 16])).is_none());
+    assert!(cache.find(peer(4), Pmkid::from_octets([4; 16])).is_some());
 }

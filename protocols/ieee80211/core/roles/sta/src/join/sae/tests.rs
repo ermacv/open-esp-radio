@@ -98,7 +98,7 @@ fn a_full_exchange_yields_the_access_point_pmk() {
     ) else {
         panic!("authenticated");
     };
-    assert_eq!(keys.pmkid, *peer.pmkid());
+    assert_eq!(keys.pmkid, peer.pmkid());
     assert!(
         keys.pmk
             .bind_association_security_ies(b"sae")

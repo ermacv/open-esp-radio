@@ -24,7 +24,7 @@
 //! `pmksa_cache_auth_get`) and `src/ap/wpa_auth.c` (`wpa_auth_pmksa_add_sae`).
 
 use crate::Pmk;
-use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::security::Pmkid;
 
 /// Entries the vendor's supplicant and authenticator PMKSA caches hold.
 pub const PMKSA_CAPACITY: usize = 10;
@@ -35,12 +35,12 @@ pub struct Pmksa<P, C = ()> {
     peer: P,
     context: C,
     pmk: Pmk,
-    pmkid: [u8; RSN_PMKID_LEN],
+    pmkid: Pmkid,
 }
 
 impl<P, C> Pmksa<P, C> {
     /// Retain an authenticated SAE association.
-    pub const fn new(peer: P, context: C, pmk: Pmk, pmkid: [u8; RSN_PMKID_LEN]) -> Self {
+    pub const fn new(peer: P, context: C, pmk: Pmk, pmkid: Pmkid) -> Self {
         Self {
             peer,
             context,
@@ -55,7 +55,7 @@ impl<P, C> Pmksa<P, C> {
     }
 
     /// The identifier an association's RSN element names.
-    pub const fn pmkid(&self) -> [u8; RSN_PMKID_LEN] {
+    pub const fn pmkid(&self) -> Pmkid {
         self.pmkid
     }
 }
@@ -74,7 +74,7 @@ impl<P: Copy + Eq, C> PmksaCache<P, C> {
     }
 
     /// The association `peer` resumes by naming `pmkid`.
-    pub fn find(&self, peer: P, pmkid: [u8; RSN_PMKID_LEN]) -> Option<&Pmksa<P, C>> {
+    pub fn find(&self, peer: P, pmkid: Pmkid) -> Option<&Pmksa<P, C>> {
         self.entries
             .iter()
             .flatten()

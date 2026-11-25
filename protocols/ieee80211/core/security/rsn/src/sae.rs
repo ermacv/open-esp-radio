@@ -23,7 +23,7 @@ use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::sae::{
     SAE_CONFIRM_LEN, SAE_ELEMENT_LEN, SAE_PRIME_LEN, SaeBodyError, SaeCommitValues, SaeConfirm,
 };
-use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::security::{Pmkid, rsn::RSN_PMKID_LEN};
 use p256::{
     AffinePoint, FieldBytes, FieldElement, ProjectivePoint, Scalar,
     elliptic_curve::{
@@ -547,8 +547,8 @@ impl SaeKeys {
     pub const fn pmk(&self) -> &[u8; SAE_KEY_LEN] {
         &self.pmk
     }
-    pub const fn pmkid(&self) -> &[u8; RSN_PMKID_LEN] {
-        &self.pmkid
+    pub const fn pmkid(&self) -> Pmkid {
+        Pmkid::from_octets(self.pmkid)
     }
 
     fn confirm(

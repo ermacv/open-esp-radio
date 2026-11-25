@@ -4711,9 +4711,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     if let Some(cached) = self.pmksa.resume(bssid, &profile.ssid) {
                         join.rsn = join
                             .rsn
-                            .with_pmkid(oer_protocols_ieee80211_wire::security::Pmkid(
-                                cached.pmkid(),
-                            ))
+                            .with_pmkid(cached.pmkid())
                             .ok_or(StaDisconnectReason::AuthenticationFailed)?;
                         AssociationKey::Protected(cached.pmk().duplicate())
                     } else {

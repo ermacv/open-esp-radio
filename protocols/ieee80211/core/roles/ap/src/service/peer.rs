@@ -5,7 +5,7 @@ use super::*;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::management::AssociationId;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
-use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
+use oer_protocols_ieee80211_wire::security::Pmkid;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_ieee80211_wire::status::StatusCode;
 
@@ -62,7 +62,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         &mut self,
         peer: [u8; 6],
         pmk: Pmk,
-        pmkid: [u8; RSN_PMKID_LEN],
+        pmkid: Pmkid,
         now: oer_portable_time::Instant,
     ) -> Result<StatusCode, ApServiceError> {
         if self.security_policy() != ApSecurityPolicy::Wpa3Personal {
@@ -236,8 +236,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     fn resume_sae_pmk(
         &self,
         peer: [u8; 6],
-        mut pmkids: impl Iterator<Item = [u8; RSN_PMKID_LEN]>,
-    ) -> Result<Option<(Pmk, [u8; RSN_PMKID_LEN])>, ApServiceError> {
+        mut pmkids: impl Iterator<Item = Pmkid>,
+    ) -> Result<Option<(Pmk, Pmkid)>, ApServiceError> {
         if self.security_policy() != ApSecurityPolicy::Wpa3Personal {
             return Err(ApServiceError::SecurityModeMismatch);
         }

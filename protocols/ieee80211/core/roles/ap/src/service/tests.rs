@@ -1986,7 +1986,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         service.authenticate_sae(
             PEER,
             Pmk::from_bytes(SAE_PMK),
-            SAE_PMKID,
+            oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID),
             oer_portable_time::Instant::from_micros(0)
         ),
         Ok(StatusCode::SUCCESS)
@@ -2111,7 +2111,7 @@ fn a_wpa3_association_resumes_only_a_known_pmkid() {
         .authenticate_sae(
             PEER,
             Pmk::from_bytes(SAE_PMK),
-            SAE_PMKID,
+            oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID),
             oer_portable_time::Instant::from_micros(0),
         )
         .unwrap();
@@ -2136,7 +2136,7 @@ fn a_wpa3_access_point_refuses_psk_and_stations_without_protection() {
         .authenticate_sae(
             PEER,
             Pmk::from_bytes(SAE_PMK),
-            SAE_PMKID,
+            oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID),
             oer_portable_time::Instant::from_micros(0),
         )
         .unwrap();
@@ -2177,7 +2177,12 @@ fn begin_management_handshake(
 ) -> (Ptk, ApEapolTransmit<512>) {
     let now = oer_portable_time::Instant::from_micros(1);
     service
-        .authenticate_sae(peer, Pmk::from_bytes(SAE_PMK), SAE_PMKID, now)
+        .authenticate_sae(
+            peer,
+            Pmk::from_bytes(SAE_PMK),
+            oer_protocols_ieee80211_wire::security::Pmkid::from_octets(SAE_PMKID),
+            now,
+        )
         .unwrap();
     let action = service
         .associate_rsn(
@@ -2482,7 +2487,7 @@ fn non_spp_ap_explicitly_refuses_required_clients_for_each_scope() {
             ),
         ] {
             let mut rsn = WPA2_RSN;
-            rsn[20..22].copy_from_slice(&capability.rsn_bits().to_le_bytes());
+            rsn[20..22].copy_from_slice(&capability.rsn_capabilities().to_bytes());
             let observed = admit_association_security::<S>(
                 ApSecurityPolicy::Wpa2Personal,
                 association_security(&rsn),
@@ -2533,7 +2538,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
         )
         .unwrap();
         let mut rsn = WPA2_RSN;
-        rsn[20..22].copy_from_slice(&capability.rsn_bits().to_le_bytes());
+        rsn[20..22].copy_from_slice(&capability.rsn_capabilities().to_bytes());
         assert_eq!(
             service.associate_rsn(
                 PEER,

@@ -5187,19 +5187,24 @@ fn the_pairwise_installation_names_the_associations_spp() {
     use oer_protocols_ieee80211_core_security_rsn::frames::RsnTxFrame;
     use oer_protocols_ieee80211_wire::security::{
         Spp,
-        rsn::{Akm, RSN_CAPABILITY_SPP_AMSDU_CAPABLE, RSN_CAPABILITY_SPP_AMSDU_REQUIRED},
+        rsn::{Akm, RsnCapabilities},
     };
     for (capabilities, expected) in [
-        (0, Spp::NotNegotiated),
-        (RSN_CAPABILITY_SPP_AMSDU_CAPABLE, Spp::Negotiated),
+        (RsnCapabilities::NONE, Spp::NotNegotiated),
         (
-            RSN_CAPABILITY_SPP_AMSDU_CAPABLE | RSN_CAPABILITY_SPP_AMSDU_REQUIRED,
+            RsnCapabilities::NONE.with_spp_capable(true),
+            Spp::Negotiated,
+        ),
+        (
+            RsnCapabilities::NONE
+                .with_spp_capable(true)
+                .with_spp_required(true),
             Spp::Negotiated,
         ),
     ] {
         installed(|mint| {
             let mut rsn = RSN;
-            rsn[20..22].copy_from_slice(&capabilities.to_le_bytes());
+            rsn[20..22].copy_from_slice(&capabilities.to_bytes());
             let mut beacon = wpa2_beacon();
             beacon[55..].copy_from_slice(&rsn);
             let (mut world, ptk) = wpa2_associated_by::<2>(mint, &beacon);

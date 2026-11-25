@@ -304,8 +304,16 @@ fn wire_peer_connects_sae_only_transition_and_resumes_pmksa() {
                 let keys = authenticate(&mut world, pwe, 30);
                 let association = association_rsn(&world);
                 let rsn = RsnElement::parse(&association).unwrap();
-                assert!(rsn.akm_suites().contains([0, 0x0f, 0xac, 8]));
-                assert!(!rsn.akm_suites().contains([0, 0x0f, 0xac, 2]));
+                assert!(rsn.akm_suites().contains(
+                    oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                        0, 0x0f, 0xac, 8
+                    ])
+                ));
+                assert!(!rsn.akm_suites().contains(
+                    oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                        0, 0x0f, 0xac, 2
+                    ])
+                ));
                 let pmk = Pmk::from_bytes(*keys.pmk());
                 finish_handshake(&mut world, &beacon, Akm::Sae, &pmk, 32);
                 world.command(at(40), 92, StaCommand::Disconnect).unwrap();
@@ -316,8 +324,12 @@ fn wire_peer_connects_sae_only_transition_and_resumes_pmksa() {
                 world.answer_authentication(at(130), 0);
                 let association = association_rsn(&world);
                 let rsn = RsnElement::parse(&association).unwrap();
-                assert_eq!(rsn.pmkids().collect::<Vec<_>>(), [*keys.pmkid()]);
-                assert!(rsn.akm_suites().contains([0, 0x0f, 0xac, 8]));
+                assert_eq!(rsn.pmkids().collect::<Vec<_>>(), [keys.pmkid()]);
+                assert!(rsn.akm_suites().contains(
+                    oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([
+                        0, 0x0f, 0xac, 8
+                    ])
+                ));
                 finish_handshake(&mut world, &beacon, Akm::Sae, &pmk, 131);
             });
         }
@@ -334,8 +346,12 @@ fn wire_peer_connects_psk_only_using_the_provisioned_pmk() {
         world.answer_authentication(at(30), 0);
         let association = association_rsn(&world);
         let rsn = RsnElement::parse(&association).unwrap();
-        assert!(rsn.akm_suites().contains([0, 0x0f, 0xac, 2]));
-        assert!(!rsn.akm_suites().contains([0, 0x0f, 0xac, 8]));
+        assert!(rsn.akm_suites().contains(
+            oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([0, 0x0f, 0xac, 2])
+        ));
+        assert!(!rsn.akm_suites().contains(
+            oer_protocols_ieee80211_wire::security::rsn::AkmSuite::from_octets([0, 0x0f, 0xac, 8])
+        ));
         finish_handshake(&mut world, &beacon, Akm::Psk, &Pmk::from_bytes(PMK), 31);
     });
 }

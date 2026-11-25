@@ -7126,11 +7126,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/security.rs",
-        2,
-        BY_CONTROLLER,
-    ),
-    (
         "protocols/ieee80211/core/security/rsn/src/crypto.rs",
         4,
         "a door in its home: the octet string of a number and back, RFC 8017 4.1 (I2OSP) and 4.2 (OS2IP) (tasks/403)",

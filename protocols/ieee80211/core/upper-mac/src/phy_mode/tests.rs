@@ -65,7 +65,9 @@ fn wpa2_rsn() -> SelectedRsn {
             pmkid: None,
         },
         // SPP A-MSDU capable.
-        0x0400,
+        oer_protocols_ieee80211_wire::security::rsn::RsnCapabilities::from_bytes(
+            (0x0400 as u16).to_le_bytes(),
+        ),
         None,
     )
 }

@@ -36,77 +36,31 @@ pub enum EapolKeyMessage {
     Other,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EapolKeyInfo(u16);
-
-impl EapolKeyInfo {
-    pub const fn raw(self) -> u16 {
-        self.0
-    }
-
-    /// The field's subfields.
-    pub const fn fields(self) -> KeyInformation {
-        KeyInformation::from_raw(self.0)
-    }
-
-    pub const fn descriptor_version(self) -> u8 {
-        self.fields().descriptor_version().get()
-    }
-
-    pub const fn is_pairwise(self) -> bool {
-        self.fields().pairwise()
-    }
-
-    pub const fn install(self) -> bool {
-        self.fields().install()
-    }
-
-    pub const fn ack(self) -> bool {
-        self.fields().ack()
-    }
-
-    pub const fn mic(self) -> bool {
-        self.fields().mic()
-    }
-
-    pub const fn secure(self) -> bool {
-        self.fields().secure()
-    }
-
-    pub const fn error(self) -> bool {
-        self.fields().error()
-    }
-
-    pub const fn request(self) -> bool {
-        self.fields().request()
-    }
-
-    pub const fn encrypted_key_data(self) -> bool {
-        self.fields().encrypted_key_data()
-    }
-
-    pub const fn smk(self) -> bool {
-        self.fields().smk_message()
-    }
-
-    pub const fn classify(self) -> EapolKeyMessage {
-        if self.error() || self.request() || self.smk() {
-            return EapolKeyMessage::Other;
+impl EapolKeyMessage {
+    /// The message whose Key Information is `information`.
+    pub const fn of(information: KeyInformation) -> Self {
+        if information.error() || information.request() || information.smk_message() {
+            return Self::Other;
         }
 
-        if self.is_pairwise() {
-            match (self.ack(), self.mic(), self.install(), self.secure()) {
-                (true, false, false, false) => EapolKeyMessage::PairwiseMessage1,
-                (false, true, false, false) => EapolKeyMessage::PairwiseMessage2,
-                (true, true, true, _) => EapolKeyMessage::PairwiseMessage3,
-                (false, true, false, true) => EapolKeyMessage::PairwiseMessage4,
-                _ => EapolKeyMessage::Other,
+        if information.pairwise() {
+            match (
+                information.ack(),
+                information.mic(),
+                information.install(),
+                information.secure(),
+            ) {
+                (true, false, false, false) => Self::PairwiseMessage1,
+                (false, true, false, false) => Self::PairwiseMessage2,
+                (true, true, true, _) => Self::PairwiseMessage3,
+                (false, true, false, true) => Self::PairwiseMessage4,
+                _ => Self::Other,
             }
         } else {
-            match (self.ack(), self.mic()) {
-                (true, true) => EapolKeyMessage::GroupMessage1,
-                (false, true) => EapolKeyMessage::GroupMessage2,
-                _ => EapolKeyMessage::Other,
+            match (information.ack(), information.mic()) {
+                (true, true) => Self::GroupMessage1,
+                (false, true) => Self::GroupMessage2,
+                _ => Self::Other,
             }
         }
     }
@@ -130,12 +84,12 @@ impl<'a> EapolKeyFrame<'a> {
         self.0.protocol_version()
     }
 
-    pub const fn key_info(self) -> EapolKeyInfo {
-        EapolKeyInfo(self.0.key_information().raw())
+    pub const fn key_info(self) -> KeyInformation {
+        self.0.key_information()
     }
 
     pub const fn message(self) -> EapolKeyMessage {
-        self.key_info().classify()
+        EapolKeyMessage::of(self.key_info())
     }
 
     pub const fn key_length(self) -> u16 {

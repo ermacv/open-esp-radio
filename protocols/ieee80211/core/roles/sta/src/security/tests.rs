@@ -3,10 +3,20 @@ use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::security::{
     Pmkid,
     rsn::{
-        RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RSN_GROUP_MANAGEMENT_ELEMENT_LEN,
+        AkmSuite, CipherSuite, RSN_GROUP_MANAGEMENT_ELEMENT_LEN, RsnCapabilities,
         RsnExtendedCapabilities, rsn_group_management_element, rsnx_element,
     },
 };
+
+/// RSN Capabilities as the tests' elements are written: one little-endian
+/// value.
+const MFPR: u16 = 1 << 6;
+const MFPC: u16 = 1 << 7;
+const SPP_REQUIRED: u16 = 1 << 11;
+
+fn bits(capability: SppCapability) -> u16 {
+    u16::from_le_bytes(capability.rsn_capabilities().to_bytes())
+}
 
 const BSSID: [u8; 6] = [0x30, 0x05, 0x5c, 0x11, 0x22, 0x33];
 const SELECTED_RSN_IE_LEN: usize = 22;
@@ -23,7 +33,7 @@ fn spp_negotiation_follows_both_rsn_capabilities() {
         (SppCapability::Capable, Spp::Negotiated),
         (SppCapability::Required, Spp::Negotiated),
     ] {
-        let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], advertised.rsn_bits());
+        let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], bits(advertised));
         let selected = select_association_rsn(&record, StaSecurityPolicy::Wpa2Personal).unwrap();
         let AssociationSecurity::Rsn(association) = selected.security() else {
             panic!("personal association");
@@ -31,13 +41,10 @@ fn spp_negotiation_follows_both_rsn_capabilities() {
         assert_eq!(association.spp, expected);
         assert_eq!(
             u16::from_le_bytes(selected.as_bytes()[20..22].try_into().unwrap()),
-            SppCapability::Capable.rsn_bits()
+            bits(SppCapability::Capable)
         );
     }
-    let malformed = access_point_with_rsn(
-        &[[0, 0x0f, 0xac, 2]],
-        oer_protocols_ieee80211_wire::security::rsn::RSN_CAPABILITY_SPP_AMSDU_REQUIRED,
-    );
+    let malformed = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], SPP_REQUIRED);
     assert_eq!(
         select_association_rsn(&malformed, StaSecurityPolicy::Wpa2Personal),
         Err(StaSecurityError::Spp(SppError::RequiredWithoutCapability))
@@ -80,7 +87,7 @@ fn a_wpa2_request_upgrades_to_sae_on_a_capable_transition_access_point() {
 fn a_resumed_sae_association_lists_its_pmkid_before_the_rsnxe() {
     let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 8]], 0xc0);
     let selected = select_association_rsn(&record, StaSecurityPolicy::Wpa3Personal).unwrap();
-    let resumed = selected.with_pmkid(Pmkid([0x5a; 16])).unwrap();
+    let resumed = selected.with_pmkid(Pmkid::from_octets([0x5a; 16])).unwrap();
     let bytes = resumed.as_bytes();
     assert_eq!(bytes.len(), SELECTED_SECURITY_IES_CAPACITY);
     assert_eq!(&bytes[..2], &[48, 38]);
@@ -93,7 +100,7 @@ fn a_resumed_sae_association_lists_its_pmkid_before_the_rsnxe() {
         oer_protocols_ieee80211_wire::security::rsn::RsnElement::parse(&bytes[..40])
             .unwrap()
             .akm_suites()
-            .contains(oer_protocols_ieee80211_wire::security::rsn::ieee_suite(8))
+            .contains(AkmSuite::SAE)
     );
 }
 
@@ -151,17 +158,14 @@ fn psk_sha256_is_preferred_whenever_offered() {
 
 #[test]
 fn required_management_frame_protection_needs_capability() {
-    let required = access_point_with_rsn(
-        &[[0, 0x0f, 0xac, 6]],
-        RSN_CAPABILITY_MFPR | RSN_CAPABILITY_MFPC,
-    );
+    let required = access_point_with_rsn(&[[0, 0x0f, 0xac, 6]], MFPR | MFPC);
     let selected = select_association_rsn(&required, StaSecurityPolicy::Wpa2Personal).unwrap();
     assert!(selected.security().protects_management());
     // The station stays capable only; it does not require protection.
     assert_eq!(&selected.as_bytes()[20..22], &[0x80, 4]);
     assert_eq!(
         select_association_rsn(
-            &access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], RSN_CAPABILITY_MFPR),
+            &access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], MFPR),
             StaSecurityPolicy::Wpa2Personal
         ),
         Err(StaSecurityError::MalformedRsn)
@@ -170,7 +174,7 @@ fn required_management_frame_protection_needs_capability() {
 
 #[test]
 fn only_bip_cmac_128_protects_group_management_frames() {
-    let mut gmac = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], RSN_CAPABILITY_MFPC);
+    let mut gmac = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], MFPC);
     append_rsn_tail(&mut gmac, &[0, 0, 0x00, 0x0f, 0xac, 11]);
     assert_eq!(
         select_association_rsn(&gmac, StaSecurityPolicy::Wpa2Personal),
@@ -242,8 +246,8 @@ fn open_ap_needs_no_security_ie() {
 fn a_second_pmkid_is_rejected_without_growing_the_selected_elements() {
     let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 8]], 0xc0);
     let selected = select_association_rsn(&record, StaSecurityPolicy::Wpa3Personal).unwrap();
-    let resumed = selected.with_pmkid(Pmkid([0x5a; 16])).unwrap();
-    assert_eq!(resumed.with_pmkid(Pmkid([0xa5; 16])), None);
+    let resumed = selected.with_pmkid(Pmkid::from_octets([0x5a; 16])).unwrap();
+    assert_eq!(resumed.with_pmkid(Pmkid::from_octets([0xa5; 16])), None);
     assert_eq!(resumed.as_bytes().len(), SELECTED_SECURITY_IES_CAPACITY);
 }
 
@@ -319,11 +323,11 @@ fn a_wpa3_access_point_profile_selects_sae_with_hash_to_element() {
     // The elements a WPA3-Personal access point advertises: SAE with MFPC,
     // MFPR and BIP-CMAC-128, and an RSNXE announcing hash to element.
     let rsne: [u8; RSN_GROUP_MANAGEMENT_ELEMENT_LEN] = rsn_group_management_element(
-        RSN_CIPHER_CCMP,
-        RSN_CIPHER_CCMP,
-        RSN_AKM_SAE,
-        RSN_CAPABILITY_MFPC | RSN_CAPABILITY_MFPR,
-        RSN_CIPHER_BIP_CMAC_128,
+        CipherSuite::CCMP_128,
+        CipherSuite::CCMP_128,
+        AkmSuite::SAE,
+        RsnCapabilities::NONE.with_mfpc(true).with_mfpr(true),
+        CipherSuite::BIP_CMAC_128,
     );
     let mut record = access_point_with_rsn(&[[0, 0x0f, 0xac, 8]], 0);
     record.set_rsn_ie(&rsne).unwrap();
