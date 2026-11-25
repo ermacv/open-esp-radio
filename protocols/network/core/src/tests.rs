@@ -1997,3 +1997,30 @@ mod lending;
 mod materialised;
 mod prepared;
 mod produced;
+
+/// A handle of a retired core sends nothing through the next core's socket
+/// in the same slot, and reads nothing of its results.
+#[test]
+fn a_retired_core_s_handles_reach_nothing_of_the_next_core_s_slot() {
+    with_local_network(|right| {
+        let (pool, brand) = claimed(right);
+        let local = interface(OUR_IP, 24, None);
+        let mut stack: Stack<_> = NetworkOwner::new(brand, local, pool, Port::default());
+        let old = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"old");
+        let old_command = stack.send(at(0), &old, peer(), block).unwrap();
+        let retired = stack.retire();
+        let mut next: Stack<_> =
+            NetworkOwner::new(retired.brand, local, retired.pool, retired.port);
+        let socket = next.open(5000, best_effort()).unwrap();
+        let block = filled(next.pool(), b"stale");
+        let refused = next.send(at(0), &old, peer(), block).unwrap_err();
+        assert_eq!(refused.reason, SendRefusal::Stale);
+        next.pool().give(refused.block);
+        let block = filled(next.pool(), b"new");
+        let command = next.send(at(0), &socket, peer(), block).unwrap();
+        let mut results = next.retire().results;
+        assert_eq!(results.take(old_command), CommandState::Gone);
+        assert_eq!(finished(results.take(command)), Outcome::Retired);
+    });
+}

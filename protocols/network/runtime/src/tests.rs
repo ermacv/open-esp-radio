@@ -3084,7 +3084,7 @@ fn a_lease_ends_in_the_service_s_own_wait_and_the_watch_tells() {
             let mut seen = watch.changes();
             let obtained = loop {
                 seen = watch.changed(seen).await;
-                if let Some(lease) = watch.read().unwrap().configuration.unwrap().lease {
+                if let Some(lease) = watch.read().unwrap().configuration.unwrap().lease() {
                     break lease.obtained;
                 }
             };
@@ -3093,7 +3093,14 @@ fn a_lease_ends_in_the_service_s_own_wait_and_the_watch_tells() {
             assert_eq!(sent, Sent::Ended(Outcome::Accepted));
             loop {
                 seen = watch.changed(seen).await;
-                if watch.read().unwrap().configuration.unwrap().ipv4.is_none() {
+                if watch
+                    .read()
+                    .unwrap()
+                    .configuration
+                    .unwrap()
+                    .ipv4()
+                    .is_none()
+                {
                     break (obtained, oer_portable_time::Clock::now(clock));
                 }
             }

@@ -23,7 +23,7 @@ use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN,
 use oer_protocols_network_wire::udp_frame::UdpFrameTemplate;
 
 use crate::block::{Block, CoreBrand, Group, Pool, Tag};
-use crate::dhcp::{Change, Client, Destination, DhcpDrop, DhcpState, Lease, Outgoing};
+use crate::dhcp::{Client, Destination, DhcpDrop, DhcpState, Lease, Outgoing};
 use crate::diagnostics::{Count, counted};
 use crate::echo::{Echoes, IcmpDrop, Owed};
 use crate::interface::{
@@ -686,11 +686,42 @@ pub(crate) enum FrameWritten {
     Missing,
 }
 
-/// Whether a socket is open, and how its datagrams are received.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Whether a socket is open, and what it has then. A socket being closed
+/// keeps its slot, not its port.
+#[derive(Debug)]
 enum Opened {
     Closed,
-    Open(Mode),
+    Open {
+        /// The bound port.
+        port: u16,
+        mode: Mode,
+        /// What its last datagram prepared for the next to the same remote;
+        /// none before a datagram went through a known neighbor.
+        prepared: Option<Prepared>,
+    },
+}
+
+impl Opened {
+    const fn port(&self) -> Option<u16> {
+        match self {
+            Self::Closed => None,
+            Self::Open { port, .. } => Some(*port),
+        }
+    }
+
+    const fn mode(&self) -> Option<Mode> {
+        match self {
+            Self::Closed => None,
+            Self::Open { mode, .. } => Some(*mode),
+        }
+    }
+
+    const fn prepared(&self) -> Option<&Prepared> {
+        match self {
+            Self::Closed => None,
+            Self::Open { prepared, .. } => prepared.as_ref(),
+        }
+    }
 }
 
 /// A refused datagram with its block.
@@ -770,39 +801,91 @@ fn data_needs<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: us
     sockets.iter().any(|socket| socket.needs(address)) || echoes.needs(address)
 }
 
-/// The neighbor the DHCP client's owed unicast goes through.
-fn dhcp_hop(dhcp: Option<&Client>, ipv4: Option<Ipv4>) -> Option<[u8; 4]> {
-    let client = dhcp?;
-    client.owed()?;
-    match client.destination() {
-        Destination::Broadcast => None,
-        Destination::Server(server) => ipv4?.next_hop(server),
+/// The interface's address, and who holds it.
+#[derive(Debug)]
+enum Address {
+    /// Its owner's.
+    Given(Ipv4),
+    /// The DHCP client's, once it has a lease.
+    Dhcp(Client),
+}
+
+impl Address {
+    /// The address in use.
+    fn ipv4(&self) -> Option<Ipv4> {
+        match self {
+            Self::Given(ipv4) => Some(*ipv4),
+            Self::Dhcp(client) => client.lease().map(|lease| lease.ipv4),
+        }
     }
+
+    const fn client(&self) -> Option<&Client> {
+        match self {
+            Self::Given(_) => None,
+            Self::Dhcp(client) => Some(client),
+        }
+    }
+
+    const fn client_mut(&mut self) -> Option<&mut Client> {
+        match self {
+            Self::Given(_) => None,
+            Self::Dhcp(client) => Some(client),
+        }
+    }
+
+    /// The neighbor the DHCP client's owed unicast goes through.
+    fn dhcp_hop(&self) -> Option<[u8; 4]> {
+        let client = self.client()?;
+        client.owed()?;
+        match client.destination() {
+            Destination::Broadcast => None,
+            Destination::Server(server) => self.ipv4()?.next_hop(server),
+        }
+    }
+}
+
+/// How an interface's address is held.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddressState {
+    /// Given by its owner.
+    Given(Ipv4),
+    /// Leased by the DHCP client, which stands here.
+    Dhcp(DhcpState),
 }
 
 /// What a socket's sends meet: the interface's address and how it is held.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Configuration {
-    /// The address in use, if any.
-    pub ipv4: Option<Ipv4>,
-    /// Moves at every change of `ipv4`.
+    pub address: AddressState,
+    /// Moves at every change of the address in use.
     pub version: u32,
-    /// The lease that holds the address, with a DHCP client.
-    pub lease: Option<Lease>,
-    /// The DHCP client's state; `None` for an address given by its owner.
-    pub dhcp: Option<DhcpState>,
     /// The port's link as the core last observed it: an application that
     /// waits for an address over an up link, or for that link's loss, reads
     /// both from one publication.
     pub link: LinkSnapshot,
 }
 
+impl Configuration {
+    /// The address in use, if any.
+    pub fn ipv4(&self) -> Option<Ipv4> {
+        match self.address {
+            AddressState::Given(ipv4) => Some(ipv4),
+            AddressState::Dhcp(state) => state.lease().map(|lease| lease.ipv4),
+        }
+    }
+
+    /// The lease that holds the address, with a DHCP client.
+    pub fn lease(&self) -> Option<Lease> {
+        match self.address {
+            AddressState::Given(_) => None,
+            AddressState::Dhcp(state) => state.lease().copied(),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T> {
     serial: u64,
-    /// The bound port; a socket being closed keeps its slot, not its port.
-    port: Option<u16>,
-    /// Open, and how its datagrams are received, or closed.
     opened: Opened,
     dscp: Dscp,
     /// What its received data counts toward.
@@ -811,8 +894,6 @@ struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: us
     /// socket's creation, so a close always has a place.
     places: Places<'m, B, SIZE, CREDITS, T>,
     received: heapless::Deque<Datagram<'m, B, SIZE>, RECEIVED>,
-    /// What its last datagram prepared for the next to the same remote.
-    prepared: Option<Prepared>,
 }
 
 impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: Copy>
@@ -821,18 +902,16 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
     const fn new() -> Self {
         Self {
             serial: 0,
-            port: None,
             opened: Opened::Closed,
             dscp: BEST_EFFORT,
             group: Group::shared(),
             places: Places::new(),
             received: heapless::Deque::new(),
-            prepared: None,
         }
     }
 
     fn in_use(&self) -> bool {
-        matches!(self.opened, Opened::Open(_)) || !self.places.idle()
+        matches!(self.opened, Opened::Open { .. }) || !self.places.idle()
     }
 
     /// Whether running work here goes through `address`.
@@ -888,14 +967,11 @@ pub struct Core<
     /// Moves whenever a neighbor entry may have become free for a new send:
     /// see [`Self::neighbors_changed`].
     neighbor_changes: u32,
-    /// The address in use.
-    ipv4: Option<Ipv4>,
-    /// Moves at every change of `ipv4`.
+    address: Address,
+    /// Moves at every change of the address in use.
     version: u32,
     /// Moves at every change of [`Self::configuration`].
     configuration_changes: u32,
-    /// The DHCP client, for an interface whose address it leases.
-    dhcp: Option<Client>,
     echoes: Echoes<'m, B, SIZE>,
     /// The port's link, as last observed.
     link: LinkSnapshot,
@@ -926,12 +1002,11 @@ impl<
     /// until a server grants one, and its client starts at the first link up.
     pub fn new(brand: CoreBrand<B>, interface: Interface) -> Self {
         const { Self::FITS };
-        let (ipv4, dhcp) = match interface.addressing() {
-            Addressing::Static(ipv4) => (Some(ipv4), None),
-            Addressing::Dhcp { seed } => (
-                None,
-                Some(Client::new(interface.hardware(), interface.mtu(), seed)),
-            ),
+        let address = match interface.addressing() {
+            Addressing::Static(ipv4) => Address::Given(ipv4),
+            Addressing::Dhcp { seed } => {
+                Address::Dhcp(Client::new(interface.hardware(), interface.mtu(), seed))
+            }
         };
         Self {
             interface,
@@ -944,10 +1019,9 @@ impl<
             prepares: 0,
             serial: brand.serial,
             neighbor_changes: 0,
-            ipv4,
+            address,
             version: 0,
             configuration_changes: 0,
-            dhcp,
             echoes: Echoes::new(),
             link: LinkSnapshot::DOWN,
             brand: brand.brand,
@@ -957,10 +1031,11 @@ impl<
     /// The interface's address now, how it is held, and its version.
     pub fn configuration(&self) -> Configuration {
         Configuration {
-            ipv4: self.ipv4,
+            address: match &self.address {
+                Address::Given(ipv4) => AddressState::Given(*ipv4),
+                Address::Dhcp(client) => AddressState::Dhcp(client.state()),
+            },
             version: self.version,
-            lease: self.dhcp.as_ref().and_then(Client::lease).copied(),
-            dhcp: self.dhcp.as_ref().map(Client::state),
             link: self.link,
         }
     }
@@ -982,21 +1057,20 @@ impl<
         self.configuration_changes = self.configuration_changes.wrapping_add(1);
     }
 
-    /// Take `ipv4` as the interface's address. Another than the one in use
-    /// moves the version: every running datagram and echo reply ends
-    /// [`Outcome::Readdressed`] with its block home, every neighbor and owed
-    /// ARP reply is forgotten, as they were for the old network, and sockets
-    /// stay open: they hold a port on the interface, not an address.
-    fn readdress<const BLOCKS: usize>(
+    /// The address in use was `before`. Another now moves the version: every
+    /// running datagram and echo reply ends [`Outcome::Readdressed`] with its
+    /// block home, every neighbor and owed ARP reply is forgotten, as they
+    /// were for the old network, and sockets stay open: they hold a port on
+    /// the interface, not an address.
+    fn readdressed<const BLOCKS: usize>(
         &mut self,
-        ipv4: Option<Ipv4>,
+        before: Option<Ipv4>,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) {
-        if self.ipv4 == ipv4 {
+        if self.address.ipv4() == before {
             return;
         }
-        self.ipv4 = ipv4;
         self.version = self.version.wrapping_add(1);
         for socket in &mut self.sockets {
             let _released = socket.places.end_all(Outcome::Readdressed, pool);
@@ -1019,7 +1093,7 @@ impl<
         }
         self.link = link;
         let mut serial = self.serial;
-        if let Some(client) = &mut self.dhcp {
+        if let Some(client) = self.address.client_mut() {
             match link.state {
                 LinkState::Up => client.link_up(now, link.epoch, &mut serial),
                 LinkState::Down => client.link_down(),
@@ -1032,20 +1106,27 @@ impl<
     /// The address a send may use at `now`: none past its lease's end, even
     /// before a tick has taken it away, RFC 2131, 4.4.5.
     fn usable(&self, now: Instant) -> Option<Ipv4> {
-        self.ipv4
-            .filter(|_| !self.dhcp.as_ref().is_some_and(|client| client.expired(now)))
+        self.address.ipv4().filter(|_| {
+            !self
+                .address
+                .client()
+                .is_some_and(|client| client.expired(now))
+        })
     }
 
     /// The address a frame goes out from: 0 before the interface has one.
     fn source(&self) -> [u8; 4] {
-        self.ipv4.map_or(UNSPECIFIED, |ipv4| ipv4.address())
+        self.address
+            .ipv4()
+            .map_or(UNSPECIFIED, |ipv4| ipv4.address())
     }
 
     /// The limited broadcast address, or the network's own.
     fn is_broadcast(&self, address: [u8; 4]) -> bool {
         address == BROADCAST
             || self
-                .ipv4
+                .address
+                .ipv4()
                 .is_some_and(|ipv4| ipv4.is_directed_broadcast(address))
     }
 
@@ -1058,7 +1139,7 @@ impl<
     fn data_may_resolve(&self, hop: [u8; 4]) -> bool {
         let sockets = &self.sockets;
         let echoes = &self.echoes;
-        if self.dhcp.is_none() || data_needs(sockets, echoes, hop) {
+        if self.address.client().is_none() || data_needs(sockets, echoes, hop) {
             return true;
         }
         self.neighbors
@@ -1073,7 +1154,7 @@ impl<
         }
         let serial = self.next_serial();
         let (sockets, echoes) = (&self.sockets, &self.echoes);
-        let dhcp = dhcp_hop(self.dhcp.as_ref(), self.ipv4);
+        let dhcp = self.address.dhcp_hop();
         self.neighbors.resolve(now, hop, serial, |address| {
             data_needs(sockets, echoes, address) || dhcp == Some(address)
         })
@@ -1148,7 +1229,11 @@ impl<
         mode: Mode,
         admit: impl FnOnce(usize) -> Result<(), OpenRefused>,
     ) -> Result<SocketId<B>, OpenRefused> {
-        if self.sockets.iter().any(|socket| socket.port == Some(port)) {
+        if self
+            .sockets
+            .iter()
+            .any(|socket| socket.opened.port() == Some(port))
+        {
             return Err(OpenRefused::PortInUse);
         }
         // A refusal below skips a serial, which only has to be new.
@@ -1164,12 +1249,13 @@ impl<
         admit(index)?;
         let index = index_byte;
         socket.serial = serial;
-        socket.port = Some(port);
-        socket.opened = Opened::Open(mode);
+        socket.opened = Opened::Open {
+            port,
+            mode,
+            prepared: None,
+        };
         socket.dscp = dscp;
         socket.group = group;
-        // A new socket's port and marking: nothing an earlier one prepared.
-        socket.prepared = None;
         Ok(SocketId {
             index,
             serial,
@@ -1263,7 +1349,9 @@ impl<
         let open = self
             .sockets
             .get(usize::from(socket.index))
-            .filter(|open| open.serial == socket.serial && matches!(open.opened, Opened::Open(_)))
+            .filter(|open| {
+                open.serial == socket.serial && matches!(open.opened, Opened::Open { .. })
+            })
             .ok_or(SendRefusal::Stale)?;
         let number = open.places.vacant().ok_or(SendRefusal::NoPlace)?;
         let ipv4 = usable.ok_or(SendRefusal::NoAddress)?;
@@ -1272,11 +1360,11 @@ impl<
         // resolve takes nothing. Only the data's share of the table is
         // asked again, the same as a resolve asks it, unless no DHCP client
         // keeps a reserve or this socket's own work already needs it.
-        if let Some(prepared) = &open.prepared
+        if let Some(prepared) = open.opened.prepared()
             && prepared.serves(remote, prepared.hop, self.version, &self.neighbors, now)
         {
             let hop = prepared.hop;
-            let reserved = self.dhcp.is_some()
+            let reserved = self.address.client().is_some()
                 && hop.is_some_and(|hop| !open.needs(hop) && !self.data_may_resolve(hop));
             if reserved {
                 return Err(SendRefusal::NeighborsFull);
@@ -1320,7 +1408,8 @@ impl<
         let Some(open) = self.socket_mut(socket.index, socket.serial) else {
             return;
         };
-        let Some(source_port) = open.port else {
+        let services = open.dscp.field();
+        let Opened::Open { port, prepared, .. } = &mut open.opened else {
             return;
         };
         let ethernet = EthernetHeader {
@@ -1329,7 +1418,7 @@ impl<
             ether_type: EtherType::IPV4,
         };
         let ip = Ipv4Fields {
-            services: open.dscp.field(),
+            services,
             total_length: 0,
             identification: 0,
             time_to_live: TIME_TO_LIVE,
@@ -1338,10 +1427,10 @@ impl<
             destination: remote.address,
         };
         let ports = Ports {
-            source: source_port,
+            source: *port,
             destination: remote.port,
         };
-        open.prepared = Some(Prepared::new(
+        *prepared = Some(Prepared::new(
             remote, version, hop, found, &ethernet, &ip, ports,
         ));
         #[cfg(test)]
@@ -1419,7 +1508,7 @@ impl<
 
     fn forget_unneeded(&mut self) {
         let (sockets, echoes) = (&self.sockets, &self.echoes);
-        let dhcp = dhcp_hop(self.dhcp.as_ref(), self.ipv4);
+        let dhcp = self.address.dhcp_hop();
         self.neighbors.forget_unneeded(|address| {
             data_needs(sockets, echoes, address) || dhcp == Some(address)
         });
@@ -1556,11 +1645,10 @@ impl<
         let serial = self.next_serial();
         let open = self
             .socket_mut(socket.index, socket.serial)
-            .filter(|open| matches!(open.opened, Opened::Open(_)))
+            .filter(|open| matches!(open.opened, Opened::Open { .. }))
             .ok_or(StaleSocket)?;
         let was = core::mem::replace(&mut open.opened, Opened::Closed);
-        open.port = None;
-        if was == Opened::Open(Mode::Lend) {
+        if was.mode() == Some(Mode::Lend) {
             pool.loans().revoke(usize::from(socket.index));
         }
         while let Some(datagram) = open.received.pop_front() {
@@ -1641,7 +1729,8 @@ impl<
             }
         };
         let for_us = self
-            .ipv4
+            .address
+            .ipv4()
             .is_some_and(|ipv4| packet.target_protocol == ipv4.address());
         let target = if for_us {
             crate::neighbor::ArpTarget::Us
@@ -1680,12 +1769,15 @@ impl<
         };
         let [s0, s1, s2, s3, d0, d1, d2, d3] = packet.addresses();
         let (source, destination) = ([s0, s1, s2, s3], [d0, d1, d2, d3]);
-        let ours = self.ipv4.is_some_and(|ipv4| ipv4.address() == destination)
+        let ours = self
+            .address
+            .ipv4()
+            .is_some_and(|ipv4| ipv4.address() == destination)
             || self.is_broadcast(destination);
         // RFC 2131, 2 and 4.1: before its address, a client takes what a
         // server unicasts to the address it offers; the client's own checks
         // decide.
-        let leasing = self.dhcp.is_some() && packet.protocol() == PROTOCOL_UDP;
+        let leasing = self.address.client().is_some() && packet.protocol() == PROTOCOL_UDP;
         if !ours && !leasing {
             return None;
         }
@@ -1738,7 +1830,7 @@ impl<
             return None;
         }
         let port = header.ports.destination;
-        if self.dhcp.is_some() && port == dhcp::CLIENT_PORT {
+        if self.address.client().is_some() && port == dhcp::CLIENT_PORT {
             if header.ports.source == dhcp::SERVER_PORT {
                 self.input_dhcp(now, source, data, pool, events);
             } else {
@@ -1749,18 +1841,18 @@ impl<
         if !ours {
             return None;
         }
-        let found = (0_u8..).zip(self.sockets.iter_mut()).find(|(_, socket)| {
-            matches!(socket.opened, Opened::Open(_)) && socket.port == Some(port)
-        });
+        let found = (0_u8..)
+            .zip(self.sockets.iter_mut())
+            .find(|(_, socket)| socket.opened.port() == Some(port));
         let Some((index, socket)) = found else {
             report(events, || NetEvent::NoSocket);
             return None;
         };
-        if socket.opened == Opened::Open(Mode::SendOnly) {
+        if socket.opened.mode() == Some(Mode::SendOnly) {
             report(events, || NetEvent::SendOnly);
             return None;
         }
-        if socket.opened == Opened::Open(Mode::Lend) {
+        if socket.opened.mode() == Some(Mode::Lend) {
             match holding {
                 Holding::Lendable => {
                     // `data` lies inside `payload`, which the parse sliced.
@@ -1830,33 +1922,21 @@ impl<
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) {
-        let Some(client) = &mut self.dhcp else {
+        let before = self.address.ipv4();
+        let Some(client) = self.address.client_mut() else {
             return;
         };
         let mut serial = self.serial;
         let taken = client.input(now, source, message, &mut serial);
         self.serial = serial;
         match taken {
-            Ok(change) => {
+            Ok(()) => {
                 self.configured();
-                self.apply(change, pool, events);
+                self.readdressed(before, pool, events);
+                self.forget_unneeded();
             }
             Err(drop) => report(events, || NetEvent::Dhcp(drop)),
         }
-    }
-
-    fn apply<const BLOCKS: usize>(
-        &mut self,
-        change: Option<Change>,
-        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
-        events: &mut impl EventSink<NetEvent>,
-    ) {
-        match change {
-            Some(Change::Leased(ipv4)) => self.readdress(Some(ipv4), pool, events),
-            Some(Change::Lost) => self.readdress(None, pool, events),
-            None => {}
-        }
-        self.forget_unneeded();
     }
 
     /// An ICMP message to `destination`: an echo for this interface's
@@ -1946,12 +2026,12 @@ impl<
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) {
-        if self.dhcp.is_some() {
+        if self.address.client().is_some() {
             self.tick_dhcp(now, pool, events);
         }
         let mut serial = self.serial;
         let mut changes = self.neighbor_changes;
-        let dhcp = dhcp_hop(self.dhcp.as_ref(), self.ipv4);
+        let dhcp = self.address.dhcp_hop();
         // An expired neighbor some work still needs is asked again. The
         // table names its expired entries, usually none, so a turn walks no
         // work unless an entry expired.
@@ -1983,7 +2063,7 @@ impl<
         self.serial = serial;
         let sockets = &mut self.sockets;
         let echoes = &mut self.echoes;
-        let client = &mut self.dhcp;
+        let mut client = self.address.client_mut();
         self.neighbors.tick(now, |address| {
             end_waiting(sockets, address, Outcome::Unreachable, pool);
             echoes.take_through(address, |owed| {
@@ -1993,7 +2073,7 @@ impl<
             // The server's neighbor never answered: the renewal never went,
             // so it counts as refused, and its next try comes at its time.
             if dhcp == Some(address)
-                && let Some(client) = client
+                && let Some(client) = client.as_deref_mut()
                 && let Some(owed) = client.owed()
             {
                 client.refused(now, owed);
@@ -2012,18 +2092,20 @@ impl<
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) {
-        let Some(client) = &mut self.dhcp else {
+        let address = self.address.ipv4();
+        let Some(client) = self.address.client_mut() else {
             return;
         };
         let mut serial = self.serial;
         let before = client.state();
-        let change = client.tick(now, &mut serial);
-        let moved = change.is_some() || client.state() != before;
+        client.tick(now, &mut serial);
+        let moved = client.state() != before;
         self.serial = serial;
         if moved {
             self.configured();
         }
-        self.apply(change, pool, events);
+        self.readdressed(address, pool, events);
+        self.forget_unneeded();
     }
 
     /// When [`Self::tick`] has work: a request's time, the end of the life
@@ -2031,11 +2113,11 @@ impl<
     /// makes demand appear.
     pub fn poll_deadline(&self) -> Option<Instant> {
         let (sockets, echoes) = (&self.sockets, &self.echoes);
-        let dhcp = dhcp_hop(self.dhcp.as_ref(), self.ipv4);
+        let dhcp = self.address.dhcp_hop();
         let neighbors = self
             .neighbors
             .deadline(|address| data_needs(sockets, echoes, address) || dhcp == Some(address));
-        let client = self.dhcp.as_ref().and_then(Client::deadline);
+        let client = self.address.client().and_then(Client::deadline);
         [neighbors, client].into_iter().flatten().min()
     }
 
@@ -2049,7 +2131,7 @@ impl<
     pub fn idle(&self) -> bool {
         self.replies.is_empty()
             && self.echoes.none()
-            && self.dhcp.as_ref().and_then(Client::owed).is_none()
+            && self.address.client().and_then(Client::owed).is_none()
             && self.sockets.iter().all(|socket| !socket.places.runs())
             && !self.neighbors.owes_request()
     }
@@ -2109,8 +2191,8 @@ impl<
                 brand,
             });
         let dhcp = self
-            .dhcp
-            .as_ref()
+            .address
+            .client()
             .and_then(|client| {
                 let serial = client.owed()?;
                 let peer = self.dhcp_peer(now, client)?;
@@ -2168,7 +2250,7 @@ impl<
         match client.destination() {
             Destination::Broadcast => Some(BROADCAST_HARDWARE),
             Destination::Server(server) => {
-                let hop = self.ipv4?.next_hop(server)?;
+                let hop = self.address.ipv4()?.next_hop(server)?;
                 self.neighbors.hardware(now, hop)
             }
         }
@@ -2187,7 +2269,7 @@ impl<
             Run::Declared(declared) => (declared.remote, declared.hop, declared.length),
             Run::Free | Run::Finished(_) | Run::Ended { .. } => return None,
         };
-        let found = match (hop, &socket.prepared) {
+        let found = match (hop, socket.opened.prepared()) {
             (None, _) => None,
             // What its socket prepared still holds: no look at the table.
             (Some(_), Some(prepared))
@@ -2295,7 +2377,7 @@ impl<
     #[cold]
     #[inline(never)]
     fn dhcp_frame(&self, now: Instant, serial: u64, peer: [u8; 6]) -> Option<Frame<'_, T>> {
-        let client = self.dhcp.as_ref()?;
+        let client = self.address.client()?;
         if self.dhcp_peer(now, client)? != peer {
             return None;
         }
@@ -2415,7 +2497,7 @@ impl<
         let source = self.usable(now)?.address();
         let open = self.sockets.get(usize::from(socket))?;
         // A socket being closed has no port: its running work sends nothing.
-        open.port?;
+        open.opened.port()?;
         let entry = open.places.of(place, serial)?;
         let (remote, hop, data, length) = match entry.run() {
             Run::Sending(sending) => (
@@ -2428,7 +2510,7 @@ impl<
             Run::Free | Run::Finished(_) | Run::Ended { .. } => return None,
         };
         let tag = entry.tag().copied();
-        let headers = match &open.prepared {
+        let headers = match open.opened.prepared() {
             // Prepared for this remote, and it holds: its headers.
             Some(prepared) if prepared.serves(remote, hop, self.version, &self.neighbors, now) => {
                 let next_hop = prepared
@@ -2467,7 +2549,7 @@ impl<
         length: usize,
         (peer, found): ([u8; 6], Option<Holds>),
     ) -> Option<UdpHeaders<'static>> {
-        let source_port = open.port?;
+        let source_port = open.opened.port()?;
         let next_hop = self.next_hop(now, hop, found.as_ref(), peer)?;
         if next_hop != peer {
             return None;
@@ -2517,8 +2599,8 @@ impl<
                     end_waiting(&mut self.sockets, address, Outcome::Rejected, pool);
                     self.echoes
                         .take_through(address, |owed| pool.give(owed.block));
-                    if dhcp_hop(self.dhcp.as_ref(), self.ipv4) == Some(address)
-                        && let Some(client) = &mut self.dhcp
+                    if self.address.dhcp_hop() == Some(address)
+                        && let Some(client) = self.address.client_mut()
                         && let Some(owed) = client.owed()
                     {
                         client.refused(now, owed);
@@ -2528,7 +2610,7 @@ impl<
             }
             Work::Datagram { .. } => self.end_published(grant, Outcome::Rejected, pool),
             Work::Dhcp { serial, .. } => {
-                if let Some(client) = &mut self.dhcp {
+                if let Some(client) = self.address.client_mut() {
                     client.refused(now, serial);
                 }
                 self.forget_unneeded();
@@ -2555,7 +2637,7 @@ impl<
     #[cold]
     #[inline(never)]
     fn dhcp_sent(&mut self, now: Instant, serial: u64) {
-        if let Some(client) = &mut self.dhcp {
+        if let Some(client) = self.address.client_mut() {
             client.sent(now, serial);
         }
         self.forget_unneeded();
@@ -2683,8 +2765,8 @@ impl<
         echoes.take_all(|owed| pool.give(owed.block));
         let mut received_dropped = 0_u32;
         let mut index = 0;
-        let mut results = [const { [Kept::NONE; CREDITS] }; SOCKETS];
-        let mut closes = [Kept::NONE; SOCKETS];
+        let mut results = [const { [Kept::Nothing; CREDITS] }; SOCKETS];
+        let mut closes = [Kept::Nothing; SOCKETS];
         let mut generations = [0_u64; SOCKETS];
         for mut socket in sockets {
             if let Some(slot) = generations.get_mut(index) {
@@ -2697,7 +2779,7 @@ impl<
             let (places, close) = socket.places.into_places();
             let close = Kept::of(close);
             let kept = places.map(|place| {
-                let (place_serial, observed, run) = place.into_parts();
+                let (serial, observed, run) = place.into_parts();
                 let tag = run.tag().copied();
                 let outcome = match run {
                     Run::Sending(sending) => {
@@ -2708,10 +2790,14 @@ impl<
                     Run::Finished(outcome) | Run::Ended { outcome, .. } => Some(outcome),
                     Run::Free => None,
                 };
-                Kept {
-                    serial: place_serial,
-                    outcome: outcome.filter(|_| observed),
-                    tag: tag.filter(|_| observed),
+                match (outcome.filter(|_| observed), tag) {
+                    (Some(outcome), Some(tag)) => Kept::Declared {
+                        serial,
+                        outcome,
+                        tag,
+                    },
+                    (Some(outcome), None) => Kept::Result { serial, outcome },
+                    (None, _) => Kept::Nothing,
                 }
             });
             if let Some(slot) = results.get_mut(index) {
@@ -2859,7 +2945,7 @@ impl<
                 },
                 DemandAt::Dhcp => {
                     self.at = DemandAt::Echoes(None);
-                    let owed = core.dhcp.as_ref().and_then(|client| {
+                    let owed = core.address.client().and_then(|client| {
                         let serial = client.owed()?;
                         let peer = core.dhcp_peer(self.now, client)?;
                         let length = client.message(self.now, serial)?.length();
@@ -2949,29 +3035,26 @@ impl<
     }
 }
 
-/// A result kept past its core, with a declared work's producer tag.
+/// A place's result kept past its core.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct Kept<T> {
-    serial: u64,
-    outcome: Option<Outcome>,
-    tag: Option<T>,
+enum Kept<T> {
+    /// No result, or one read.
+    Nothing,
+    /// A command's.
+    Result { serial: u64, outcome: Outcome },
+    /// A declared work's, with its producer's tag.
+    Declared {
+        serial: u64,
+        outcome: Outcome,
+        tag: T,
+    },
 }
 
 impl<T> Kept<T> {
-    const NONE: Self = Self {
-        serial: 0,
-        outcome: None,
-        tag: None,
-    };
-
     fn of<B, const SIZE: usize>(place: Place<'_, B, SIZE, T>) -> Self {
         match place.into_parts() {
-            (serial, true, Run::Finished(outcome)) => Self {
-                serial,
-                outcome: Some(outcome),
-                tag: None,
-            },
-            _ => Self::NONE,
+            (serial, true, Run::Finished(outcome)) => Self::Result { serial, outcome },
+            _ => Self::Nothing,
         }
     }
 }
@@ -3009,16 +3092,16 @@ impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
             .flatten()
             .zip(0_u8..)
             .filter_map(|(kept, place)| {
-                let tag = kept.tag.take()?;
-                let outcome = kept.outcome.take()?;
-                Some((
-                    WorkId {
-                        serial: kept.serial,
-                        place,
-                    },
-                    tag,
+                let Kept::Declared {
+                    serial,
                     outcome,
-                ))
+                    tag,
+                } = *kept
+                else {
+                    return None;
+                };
+                *kept = Kept::Nothing;
+                Some((WorkId { serial, place }, tag, outcome))
             })
     }
 
@@ -3028,10 +3111,20 @@ impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
             .results
             .get_mut(usize::from(command.socket))
             .and_then(|places| places.get_mut(usize::from(command.place)))
-            .or_else(|| self.closes.get_mut(usize::from(command.socket)))
-            .filter(|kept| kept.serial == command.serial);
-        kept.and_then(|kept| kept.outcome.take())
-            .map_or(CommandState::Gone, CommandState::Finished)
+            .or_else(|| self.closes.get_mut(usize::from(command.socket)));
+        let Some(kept) = kept else {
+            return CommandState::Gone;
+        };
+        match *kept {
+            Kept::Result { serial, outcome }
+            | Kept::Declared {
+                serial, outcome, ..
+            } if serial == command.serial => {
+                *kept = Kept::Nothing;
+                CommandState::Finished(outcome)
+            }
+            Kept::Nothing | Kept::Result { .. } | Kept::Declared { .. } => CommandState::Gone,
+        }
     }
 
     /// How many results nobody has read yet.
@@ -3040,7 +3133,7 @@ impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
             .iter()
             .flatten()
             .chain(self.closes.iter())
-            .filter(|kept| kept.outcome.is_some())
+            .filter(|kept| !matches!(kept, Kept::Nothing))
             .count()
     }
 }
