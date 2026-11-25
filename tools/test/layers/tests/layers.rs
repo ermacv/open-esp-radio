@@ -1460,11 +1460,13 @@ fn workspace_dependency_graph() -> BTreeMap<String, BTreeSet<String>> {
         .collect()
 }
 
-/// Who may make the one busy-wait of a driver: hardware code. The chip
-/// crates, the family's drivers and radio crates, the probes, and virtual
-/// time for its counter.
+/// Who may make the one busy-wait of a driver: hardware code. The chip's
+/// HAL, drivers and radio crates, the family's drivers and radio crates, the
+/// probes, and virtual time for its counter.
 fn may_settle(path: &str) -> bool {
-    path.starts_with("chips/esp32s31/")
+    path == "chips/esp32s31/hal"
+        || path.starts_with("chips/esp32s31/drivers/")
+        || path.starts_with("chips/esp32s31/radio/")
         || path.starts_with("chips/family/drivers/")
         || path.starts_with("chips/family/radio/")
         || path.starts_with("hil/probes/")
@@ -1517,6 +1519,8 @@ pause = { package = "oer-portable-settle", version = "1", optional = true }
     };
     for hardware in [
         "chips/esp32s31/hal",
+        "chips/esp32s31/drivers/aes",
+        "chips/esp32s31/radio/phy",
         "chips/family/drivers/watchdog",
         "chips/family/radio/power",
         "hil/probes/esp32s31-radio",
@@ -1529,6 +1533,8 @@ pause = { package = "oer-portable-settle", version = "1", optional = true }
         "protocols/network/runtime",
         "protocols/radio/port",
         "chips/family/platform/executor",
+        "chips/esp32s31/app",
+        "chips/esp32s31/platform/runtime",
         "portable/memory",
         "hil/images/aes",
         "oer",
