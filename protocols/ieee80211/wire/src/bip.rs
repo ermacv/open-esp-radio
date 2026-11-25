@@ -48,6 +48,42 @@ oer_portable_wire::bitfield! {
         pub key_id, with_key_id: {u16} = 0..16;
     }
 }
+
+/// The identifier of an IGTK, 4 or 5.
+///
+/// SOURCE: IEEE Std 802.11-2020, 12.7.2 (EAPOL-Key frames: the IGTK KDE's
+/// KeyID) and 9.4.2.54 (Management MIC element).
+///
+/// A number is no identifier until it is checked:
+///
+/// ```compile_fail,E0308
+/// use oer_protocols_ieee80211_wire::bip::IgtkKeyId;
+/// let key_id: IgtkKeyId = 4;
+/// ```
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IgtkKeyId {
+    Four,
+    Five,
+}
+
+impl IgtkKeyId {
+    /// The identifier `field` names; `None` for every other value.
+    pub const fn from_field(field: KeyIdField) -> Option<Self> {
+        match field.key_id() {
+            4 => Some(Self::Four),
+            5 => Some(Self::Five),
+            _ => None,
+        }
+    }
+
+    /// The Key ID field that names it.
+    pub const fn field(self) -> KeyIdField {
+        KeyIdField::from_bytes([0; 2]).with_key_id(match self {
+            Self::Four => 4,
+            Self::Five => 5,
+        })
+    }
+}
 const MANAGEMENT_HEADER_LEN: usize = 24;
 const AAD_LEN: usize = 2 + 3 * 6;
 const ZERO_MIC: [u8; BIP_MIC_LEN] = [0; BIP_MIC_LEN];
@@ -95,7 +131,7 @@ pub struct BipFrame<'a> {
     aad: [u8; AAD_LEN],
     body: &'a [u8],
     mme_before_mic: &'a [u8],
-    key_id: u16,
+    key_id: KeyIdField,
     packet_number: oer_portable_wire::U64<48>,
     mic: &'a [u8; BIP_MIC_LEN],
 }
@@ -124,14 +160,14 @@ impl<'a> BipFrame<'a> {
             aad: aad(header),
             body,
             mme_before_mic: before_mic,
-            key_id: KeyIdField::from_bytes([key_low, key_high]).key_id(),
+            key_id: KeyIdField::from_bytes([key_low, key_high]),
             packet_number: ipn_from_bytes(ipn),
             mic,
         })
     }
 
     /// The element's Key ID field.
-    pub const fn key_id(&self) -> u16 {
+    pub const fn key_id(&self) -> KeyIdField {
         self.key_id
     }
 
@@ -168,7 +204,7 @@ impl<'a> BipProtection<'a> {
     pub fn append(
         buffer: &'a mut [u8],
         length: usize,
-        key_id: u16,
+        key_id: IgtkKeyId,
         packet_number: oer_portable_wire::U64<48>,
     ) -> Result<Self, BipFormatError> {
         let protected = length
@@ -190,9 +226,7 @@ impl<'a> BipProtection<'a> {
         let (body, element) = covered
             .split_last_chunk_mut::<{ MANAGEMENT_MIC_ELEMENT_LEN - BIP_MIC_LEN }>()
             .ok_or(BipFormatError::Truncated)?;
-        let [k0, k1] = KeyIdField::from_bytes([0; 2])
-            .with_key_id(key_id)
-            .to_bytes();
+        let [k0, k1] = key_id.field().to_bytes();
         let [i0, i1, i2, i3, i4, i5] = ipn_to_bytes(packet_number);
         *element = [
             MANAGEMENT_MIC_ELEMENT_ID,

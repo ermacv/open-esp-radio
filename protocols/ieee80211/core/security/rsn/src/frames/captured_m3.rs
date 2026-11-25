@@ -78,7 +78,10 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
     assert_eq!(keys.gtk.key_id().get(), 1);
     assert_eq!(keys.gtk.key(), &GTK);
     assert_eq!(keys.gtk.tx(), GtkTx::ReceiveOnly);
-    assert_eq!(keys.igtk.unwrap().key_id(), 4);
+    assert_eq!(
+        keys.igtk.unwrap().key_id(),
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four
+    );
 
     // Variants of the recorded KDE exercise every two-bit wire ID. Only
     // the KeyID field changes; these are derived cases, not extra captures.

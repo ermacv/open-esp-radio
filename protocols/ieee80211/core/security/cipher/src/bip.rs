@@ -5,6 +5,7 @@ use oer_portable_crypto::{
     block::{Aes128Engine, BlockError},
     cmac::Cmac,
 };
+use oer_protocols_ieee80211_wire::bip::IgtkKeyId;
 use oer_protocols_ieee80211_wire::bip::{BIP_MIC_LEN, BipFormatError, BipProtection};
 use zeroize::Zeroize;
 
@@ -42,7 +43,7 @@ pub enum BipProtectError {
 pub struct BipFrame<'a>(oer_protocols_ieee80211_wire::bip::BipFrame<'a>);
 
 impl<'a> BipFrame<'a> {
-    pub fn parse(frame: &'a [u8], key_id: u8) -> Result<Self, BipError> {
+    pub fn parse(frame: &'a [u8], key_id: IgtkKeyId) -> Result<Self, BipError> {
         let frame =
             oer_protocols_ieee80211_wire::bip::BipFrame::parse(frame).map_err(
                 |error| match error {
@@ -51,7 +52,7 @@ impl<'a> BipFrame<'a> {
                     BipFormatError::Truncated => BipError::Truncated,
                 },
             )?;
-        if frame.key_id() != u16::from(key_id) {
+        if frame.key_id() != key_id.field() {
             return Err(BipError::UnknownKeyId);
         }
         Ok(Self(frame))
@@ -88,13 +89,13 @@ impl<'a> BipFrame<'a> {
 /// Protect a frame with the caller's IPN, without allocating or advancing it.
 pub fn protect<E: Aes128Engine>(
     engine: &mut E,
-    key_id: u8,
+    key_id: IgtkKeyId,
     key: &[u8; RSN_IGTK_LEN],
     packet_number: oer_portable_wire::U64<48>,
     frame: &mut [u8],
     length: usize,
 ) -> Result<usize, BipProtectError> {
-    let protection = BipProtection::append(frame, length, u16::from(key_id), packet_number)
+    let protection = BipProtection::append(frame, length, key_id, packet_number)
         .map_err(|_| BipProtectError::InvalidFrame)?;
     let key = Aes128Key::copy_from(key);
     let keyed = engine.load(&key).map_err(BipProtectError::Engine)?;
@@ -111,3 +112,6 @@ pub fn protect<E: Aes128Engine>(
     tag.zeroize();
     Ok(protection.finish(&mic))
 }
+
+#[cfg(test)]
+mod tests;

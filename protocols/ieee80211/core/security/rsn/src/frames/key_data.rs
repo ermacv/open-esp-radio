@@ -3,6 +3,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use super::*;
+use oer_protocols_ieee80211_wire::bip::IgtkKeyId;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 use oer_protocols_ieee80211_wire::eapol::{
     GTK_KDE_LEN, GtkKde, GtkKdeInfo, GtkTx, IGTK_KDE_LEN, IgtkKde, Kde, KeyDataElements,
@@ -50,30 +51,29 @@ impl RsnGtk {
 /// BIP frame must exceed, and the BIP-CMAC-128 key.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct RsnIgtk {
-    key_id: u8,
+    /// Public: only the key material needs erasure.
+    #[zeroize(skip)]
+    key_id: IgtkKeyId,
     packet_number: [u8; RSN_IPN_LEN],
     key: [u8; RSN_IGTK_LEN],
 }
 
 impl RsnIgtk {
     pub fn new(
-        key_id: u8,
+        key_id: IgtkKeyId,
         packet_number: [u8; RSN_IPN_LEN],
         key: &[u8; RSN_IGTK_LEN],
-    ) -> Result<Self, RsnFrameError> {
-        if !(4..=5).contains(&key_id) {
-            return Err(RsnFrameError::InvalidKeyId);
-        }
+    ) -> Self {
         let mut igtk = Self {
             key_id,
             packet_number,
             key: [0; RSN_IGTK_LEN],
         };
         igtk.key = *key;
-        Ok(igtk)
+        igtk
     }
 
-    pub const fn key_id(&self) -> u8 {
+    pub const fn key_id(&self) -> IgtkKeyId {
         self.key_id
     }
 
@@ -144,7 +144,7 @@ impl<const N: usize> RsnPlainKeyData<N> {
                     .split_first_chunk_mut::<IGTK_KDE_LEN>()
                     .ok_or(RsnFrameError::CapacityExceeded)?;
                 *igtk_kde = IgtkKde {
-                    key_id: u16::from(igtk.key_id()),
+                    key_id: igtk.key_id().field(),
                     packet_number: igtk.packet_number(),
                     key: igtk.key(),
                 }
@@ -277,8 +277,8 @@ fn parse_key_data(
                             return Err(RsnFrameError::DuplicateIgtk);
                         }
                         let key_id =
-                            u8::try_from(key_id).map_err(|_| RsnFrameError::InvalidKeyId)?;
-                        igtk = Some(RsnIgtk::new(key_id, packet_number, key)?);
+                            IgtkKeyId::from_field(key_id).ok_or(RsnFrameError::InvalidKeyId)?;
+                        igtk = Some(RsnIgtk::new(key_id, packet_number, key));
                     }
                     _ => return Err(RsnFrameError::UnsupportedKeyData),
                 }

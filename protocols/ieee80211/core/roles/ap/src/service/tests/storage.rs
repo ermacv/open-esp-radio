@@ -97,7 +97,11 @@ fn exhausted_storage_refuses_every_security_constructor_without_reusing_its_fron
                 AP,
                 gtk,
                 0,
-                RsnIgtk::new(4, [0; 6], &[2; 16]).unwrap(),
+                RsnIgtk::new(
+                    oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four,
+                    [0; 6],
+                    &[2; 16],
+                ),
                 limit,
                 timeout,
                 storage.lend(),

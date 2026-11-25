@@ -67,13 +67,20 @@ fn protected_key_data_carries_the_rsnxe_and_an_igtk_the_station_reads() {
         oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[0x5a; 16],
     );
-    let igtk = RsnIgtk::new(4, [1, 0, 0, 0, 0, 0], &[0x6b; 16]).unwrap();
+    let igtk = RsnIgtk::new(
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four,
+        [1, 0, 0, 0, 0, 0],
+        &[0x6b; 16],
+    );
     let data = RsnPlainKeyData::<96>::build(&elements, &gtk, Some(&igtk)).unwrap();
     assert_eq!(data.as_bytes().len() % 8, 0);
     let keys = parse_gtk_key_data(data.as_bytes(), rsn.as_bytes(), &rsnxe, BIP).unwrap();
     assert_eq!(keys.gtk.key(), &[0x5a; 16]);
     let parsed = keys.igtk.unwrap();
-    assert_eq!(parsed.key_id(), 4);
+    assert_eq!(
+        parsed.key_id(),
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four
+    );
     assert_eq!(parsed.packet_number(), [1, 0, 0, 0, 0, 0]);
     assert_eq!(parsed.key(), &[0x6b; 16]);
 }
@@ -242,7 +249,10 @@ fn protected_management_requires_exactly_one_igtk_beside_the_gtk() {
     let keys = parse_gtk_key_data(&with_igtk, rsn.as_bytes(), &[], BIP).unwrap();
     assert_eq!(keys.gtk.key_id().get(), 1);
     let igtk = keys.igtk.expect("IGTK KDE");
-    assert_eq!(igtk.key_id(), 4);
+    assert_eq!(
+        igtk.key_id(),
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four
+    );
     assert_eq!(igtk.packet_number(), [1, 2, 3, 4, 5, 6]);
     assert_eq!(igtk.key(), &[0x77; 16]);
 
@@ -276,7 +286,10 @@ fn a_group_rekey_carries_the_igtk_of_a_protected_association() {
     body.extend_from_slice(&igtk_kde(5));
     let keys = parse_group_gtk_key_data(&body, BIP).unwrap();
     assert_eq!(keys.gtk.key_id().get(), 2);
-    assert_eq!(keys.igtk.unwrap().key_id(), 5);
+    assert_eq!(
+        keys.igtk.unwrap().key_id(),
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Five
+    );
     assert_eq!(
         parse_group_gtk_key_data(&body, None).err(),
         Some(RsnFrameError::UnexpectedIgtk)

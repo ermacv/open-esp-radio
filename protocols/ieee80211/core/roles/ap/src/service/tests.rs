@@ -1921,7 +1921,11 @@ fn wpa3_service(
             &[0x55; 16],
         ),
         TEST_GTK_GENERATION,
-        RsnIgtk::new(4, [0; 6], &[0x66; 16]).unwrap(),
+        RsnIgtk::new(
+            oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four,
+            [0; 6],
+            &[0x66; 16],
+        ),
         AccessPointClientLimit::new(2).unwrap(),
         AccessPointInactiveTimeout::default(),
         storage.lend(),
@@ -2579,7 +2583,11 @@ fn an_inconsistent_bip_owner_returns_no_management_key_without_mutating_the_fram
     use oer_protocols_ieee80211_wire::ap::{ApManagementFrame, ApManagementSubtype};
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
-    let igtk = RsnIgtk::new(4, [0; 6], &[3; 16]).unwrap();
+    let igtk = RsnIgtk::new(
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four,
+        [0; 6],
+        &[3; 16],
+    );
     service.group_management =
         Some(oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitter::new(&igtk));
     let mut frame = [0; 64];
@@ -2618,8 +2626,7 @@ fn group_management_reports_ipn_exhaustion_and_keeps_the_announced_frontier() {
         igtk.key_id(),
         [0xfe, 0xff, 0xff, 0xff, 0xff, 0xff],
         igtk.key(),
-    )
-    .unwrap();
+    );
     service.group_management = Some(BipTransmitter::new(igtk));
     let mut frame = [0; 64];
     let length = ApManagementFrame {
