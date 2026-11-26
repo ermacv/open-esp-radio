@@ -40,8 +40,9 @@ use oer_protocols_ieee80211_contracts_port::{
     GateClosed, GateOpen, GroupCommand, GroupEnd, HEADROOM, HeaderLen, IdleArena, InCommand,
     InterfaceLayout, InterfaceRights, InterfaceRole, Layout, LayoutRights, MpduLength,
     PairwiseCommand, PairwiseEnd, PhyRate, PortRate, PortSink, Ppdu, QueueRight, RadioPort,
-    RadioRights, ReceivePort, Round, Settled, SingleOutcome, StartPoll, Station, StopFrom,
-    StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome, ValueCommand, ValueEnd,
+    RadioRights, ReceiveCommand, ReceiveEnd, ReceivePort, Round, Settled, SingleOutcome, StartPoll,
+    Station, StationReceive, StopFrom, StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome,
+    ValueCommand, ValueEnd,
 };
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, HeaderSpec, Protection, RetryPlan, RetryStage, SizedFrame, TxFrame,
@@ -79,6 +80,8 @@ pub trait Harness<'id, L: Layout> {
     fn raise(&mut self, index: usize);
     /// Keep the MAC busy: the next stop's last resort runs.
     fn hold_busy(&mut self);
+    /// Let the next command expire at its bound.
+    fn expire_next(&mut self);
     /// Keep the next frames on the air until [`Self::release_air`].
     fn hold_air(&mut self);
     /// Let the air end what it holds.
@@ -270,6 +273,25 @@ where
     )
 }
 
+/// A receive rule's command.
+fn receive_command<'id, H, L: Layout, I: InterfaceRole>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    command: ReceiveCommand<'id, I, <H::Port as RadioPort<'id>>::Caps>,
+) -> (CommandPlace<'id>, ReceiveEnd<'id, I>)
+where
+    H: Harness<'id, L>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    run_command(
+        harness,
+        place,
+        command,
+        |port, place, command| port.begin_receive(place, command, NOW),
+        |port, flight, ends| port.poll_receive(flight, NOW, ends),
+    )
+}
+
 /// A pairwise key command.
 fn pairwise_command<'id, H, L: Layout, I: InterfaceRole>(
     harness: &mut H,
@@ -351,6 +373,7 @@ fn data_run<'id, H, const S: usize, const G: usize, const A: usize>(
             pairwise: [pairwise],
             groups,
             agreements,
+            receive,
         },
     ) = rights.data.take().expect("the data's rights are home");
     let peer =
@@ -414,6 +437,7 @@ fn data_run<'id, H, const S: usize, const G: usize, const A: usize>(
             pairwise: [pairwise],
             groups,
             agreements,
+            receive,
         },
     ));
 }
@@ -465,6 +489,107 @@ where
         units,
     );
     let _released = harness.port().release(retired, right);
+}
+
+/// **The receive rule is a right**: the station's rule is set with its
+/// own address, changed and ended, each end giving the right back, set or
+/// off; a setting that expires gives it back off and leaves the hardware as
+/// before it, and a change that expires gives it back off with the rule
+/// cleared. `rule` and `other` are two rules the port admits.
+pub fn the_receive_rule_is_a_right<'id, H, const S: usize, const G: usize, const A: usize>(
+    harness: &mut H,
+    mut rights: Rights<'id, StationLayout<S, G, A>>,
+    address: oer_protocols_ieee802_wire::IndividualAddress,
+    rule: StationReceive<<H::Port as RadioPort<'id>>::Caps>,
+    other: StationReceive<<H::Port as RadioPort<'id>>::Caps>,
+) where
+    H: Harness<'id, StationLayout<S, G, A>>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let running = run(harness, &mut rights);
+    let (radio, station) = rights.data.take().expect("the rights are home");
+    let off_state = harness.state();
+    // A setting that expires: the right comes back off, the hardware as
+    // before it.
+    harness.expire_next();
+    let (place, ReceiveEnd::Off(off)) = receive_command(
+        harness,
+        radio.command,
+        ReceiveCommand::Set {
+            off: station.receive,
+            address,
+            rule,
+        },
+    ) else {
+        panic!("an expired setting gives the right back off");
+    };
+    assert_eq!(
+        harness.state(),
+        off_state,
+        "an expired setting leaves the hardware as before it"
+    );
+    let (place, ReceiveEnd::Receiving(receiving)) =
+        receive_command(harness, place, ReceiveCommand::Set { off, address, rule })
+    else {
+        panic!("the rule is set");
+    };
+    let set_state = harness.state();
+    assert_ne!(
+        set_state, off_state,
+        "the hardware holds the address and the rule"
+    );
+    let (place, ReceiveEnd::Receiving(receiving)) = receive_command(
+        harness,
+        place,
+        ReceiveCommand::Change {
+            receiving,
+            rule: other,
+        },
+    ) else {
+        panic!("the rule is changed");
+    };
+    let (place, ReceiveEnd::Off(off)) =
+        receive_command(harness, place, ReceiveCommand::End(receiving))
+    else {
+        panic!("the rule ends off");
+    };
+    assert_eq!(
+        harness.state(),
+        off_state,
+        "an ended rule leaves the hardware as before its setting"
+    );
+    // A change that expires: the right comes back off, the port having
+    // cleared the address and the rule.
+    let (place, ReceiveEnd::Receiving(receiving)) =
+        receive_command(harness, place, ReceiveCommand::Set { off, address, rule })
+    else {
+        panic!("the rule is set again");
+    };
+    harness.expire_next();
+    let (command, ReceiveEnd::Off(off)) = receive_command(
+        harness,
+        place,
+        ReceiveCommand::Change {
+            receiving,
+            rule: other,
+        },
+    ) else {
+        panic!("an expired change gives the right back off");
+    };
+    assert_eq!(
+        harness.state(),
+        off_state,
+        "an expired change leaves the rule cleared"
+    );
+    rights.data = Some((
+        RadioRights { command, ..radio },
+        InterfaceRights {
+            receive: off,
+            ..station
+        },
+    ));
+    stop(harness, &mut rights, running);
+    retire_whole(harness, rights);
 }
 
 /// **A client's key goes alone**: an access point's pairwise key places,

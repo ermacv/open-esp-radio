@@ -21,7 +21,8 @@
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{
     Channel, ChannelWidth, EthernetAddresses, InterfaceRole, MpduLength, PortPools, RadioPort,
-    RegulatedChannel, Round, RxMeta, SupportedChannel,
+    ReceiveFilter, RegulatedChannel, Round, RxMeta, Station, StationReceive, SupportedChannel,
+    SupportedFilter,
 };
 use oer_protocols_ieee80211_testing_conformance as suite;
 use oer_protocols_ieee80211_testing_model::{
@@ -90,6 +91,9 @@ impl<'id, L: Served> suite::Harness<'id, L> for Model<'id, L> {
     }
     fn hold_busy(&mut self) {
         self.port.hold_busy();
+    }
+    fn expire_next(&mut self) {
+        self.port.expire_next();
     }
     fn hold_air(&mut self) {
         for category in oer_protocols_ieee80211_contracts_port::QUEUES {
@@ -279,5 +283,25 @@ fn a_units_addresses_are_written_before_its_ether_type() {
 fn a_clients_key_goes_alone() {
     installed_as::<AccessPointModel<SINGLES, 2>>(|mut model, rights| {
         suite::a_clients_key_goes_alone(&mut model, rights);
+    });
+}
+
+/// The station's receive rule, set, changed and ended, and a setting that
+/// expires.
+#[test]
+fn the_receive_rule_is_a_right() {
+    installed(|mut model, rights| {
+        let bss =
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 9]))
+                .unwrap();
+        let filter = SupportedFilter::<ModelCaps, Station>::new(ReceiveFilter::BSS_MEMBER).unwrap();
+        suite::the_receive_rule_is_a_right(
+            &mut model,
+            rights,
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1]))
+                .unwrap(),
+            StationReceive::OtherBssManagement,
+            StationReceive::Bss { bssid: bss, filter },
+        );
     });
 }

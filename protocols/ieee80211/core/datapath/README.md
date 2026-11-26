@@ -20,6 +20,8 @@ its own: every instant and every arena is its caller's. It holds today:
   point's places are `ApKeys`, a pairwise place a client held idle (its
   clients' keys are its controller's until step 16 installs them through
   the engine; its command type is empty, so the engine begins none);
+  the interface's receive rule's right is held off (`ReceiveOff`), its
+  controller asking for its rule until step 16 sets it through the engine;
   a key's command and the gate's closing stop the intake;
 - `plane`: the station's data transmission over the port's two data arenas;
 - `numbers`: the link's transmit numbers (`TxNumbers`: each TID's QoS

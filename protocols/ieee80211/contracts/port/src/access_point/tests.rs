@@ -88,3 +88,15 @@ fn only_the_declared_timestamp_rule_has_a_stamp() {
 fn a_beacon_contends_as_voice() {
     assert_eq!(BEACON_ACCESS_CATEGORY, WmmAccessCategory::Voice);
 }
+
+/// An access point's rule prints as its filter.
+#[test]
+fn an_access_points_receive_rule_prints_its_filter() {
+    let filter =
+        SupportedFilter::<Sourced, AccessPoint>::new(crate::ReceiveFilter::BSS_MEMBER).unwrap();
+    let rule = AccessPointReceive { filter };
+    assert_eq!(
+        std::format!("{rule:?}"),
+        std::format!("AccessPointReceive {{ filter: {filter:?} }}")
+    );
+}

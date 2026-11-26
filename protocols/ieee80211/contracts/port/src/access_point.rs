@@ -136,16 +136,13 @@ impl<K> core::fmt::Debug for SupportedTsfControl<K> {
     }
 }
 
-/// What the access point's interface receives. Its BSSID is its own
-/// address ([`AccessPointPort::access_point_address`]).
-pub enum AccessPointReceive<K> {
-    /// Deliver no access-point frames.
-    Off,
-    /// Receive the BSS by these rules.
-    Bss {
-        /// The receive rules supported for the access point's interface.
-        filter: SupportedFilter<K, AccessPoint>,
-    },
+/// What the access point's interface receives while its rule is set: its
+/// BSS by these rules. Its BSSID is its own address
+/// ([`AccessPointPort::access_point_address`]). Receiving nothing is the
+/// rule's right off ([`ReceiveOff`](crate::ReceiveOff)), no value.
+pub struct AccessPointReceive<K> {
+    /// The receive rules supported for the access point's interface.
+    pub filter: SupportedFilter<K, AccessPoint>,
 }
 
 impl<K> Clone for AccessPointReceive<K> {
@@ -158,13 +155,10 @@ impl<K> Copy for AccessPointReceive<K> {}
 
 impl<K> core::fmt::Debug for AccessPointReceive<K> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Off => formatter.write_str("Off"),
-            Self::Bss { filter } => formatter
-                .debug_struct("Bss")
-                .field("filter", filter)
-                .finish(),
-        }
+        formatter
+            .debug_struct("AccessPointReceive")
+            .field("filter", &self.filter)
+            .finish()
     }
 }
 

@@ -64,9 +64,9 @@ use oer_protocols_ieee80211_contracts_port::{
     GroupSlot, HeaderSpec, IdleArena, Ieee80211Capabilities, InCommand, InstalledPairwise,
     InterfaceLayout, InterfaceRights, InterfaceRole, MpduLength, PLACES, PairwiseCommand,
     PairwiseEnd, PairwiseHeld, PairwiseSlot, PortRate, PortSink, QueueRight, RadioRights,
-    ReceivePort, Received, RetryPlan, RxHeader, RxMetadata, Signal, SingleEnd, SingleOutcome,
-    SinglePlace, SizedFrame, Station as StationRole, TbttEvent, TxFacts, TxFrame, TxOutcome,
-    UnitHandle,
+    ReceiveOff, ReceivePort, Received, RetryPlan, RxHeader, RxMetadata, Signal, SingleEnd,
+    SingleOutcome, SinglePlace, SizedFrame, Station as StationRole, TbttEvent, TxFacts, TxFrame,
+    TxOutcome, UnitHandle,
 };
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_installation::{DataStop, Rest};
@@ -837,6 +837,9 @@ struct Running<
     agreements: Agreements<'id, F::Role, K, AGREEMENTS, WINDOW>,
     /// The received units the engine holds for the network.
     receive: Receive<'id>,
+    /// The interface's receive rule, off: the engine holds it idle, its
+    /// controller asks for its rule (step 16 sets it through the engine).
+    rule: ReceiveOff<'id, F::Role>,
 }
 
 /// The data's state.
@@ -2930,6 +2933,7 @@ where
                 pairwise: [pairwise],
                 groups,
                 agreements,
+                receive: rule,
             },
         ) = rights;
         // The plane is built with the arenas into the flowing variant: a
@@ -2948,6 +2952,7 @@ where
             groups,
             agreements: RxBlockAckStorage::new(agreements, self.policy.gap),
             receive: Receive::new(self.policy.late),
+            rule,
         });
     }
 
@@ -3307,6 +3312,7 @@ where
             groups,
             mut agreements,
             receive,
+            rule,
         } = running;
         match (interface, plane.idle_arenas()) {
             (
@@ -3328,6 +3334,7 @@ where
                     pairwise: [pairwise],
                     groups,
                     agreements: slots,
+                    receive: rule,
                 },
             )),
             (interface, None) => {
@@ -3341,6 +3348,7 @@ where
                     groups,
                     agreements,
                     receive,
+                    rule,
                 });
                 None
             }
@@ -3360,6 +3368,7 @@ where
                     groups,
                     agreements,
                     receive,
+                    rule,
                 });
                 None
             }
@@ -3605,6 +3614,7 @@ where
                 pairwise,
                 groups,
                 agreements,
+                receive: rule,
             },
         ) = rights;
         // QUEUES' order is voice, video, best effort, background; the lanes
@@ -3643,6 +3653,7 @@ where
             groups,
             agreements: RxBlockAckStorage::new(agreements, self.policy.gap),
             receive: Receive::new(self.policy.late),
+            rule,
         });
     }
 
@@ -3905,6 +3916,7 @@ where
                 groups,
                 agreements: _,
                 receive: _,
+                rule,
             } => Some((
                 RadioRights {
                     arenas,
@@ -3922,6 +3934,7 @@ where
                     pairwise,
                     groups,
                     agreements: slots,
+                    receive: rule,
                 },
             )),
             mut running => {

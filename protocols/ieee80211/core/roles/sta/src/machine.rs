@@ -418,7 +418,7 @@ pub enum StaAction<'a, 'id, T: StaTypes, K> {
     Upstream(UpstreamFact<K>),
     /// Set what the station's interface receives ([`StaInput::Configured`]
     /// follows).
-    Configure(StationReceive<K>),
+    Configure(StaReceive<K>),
     /// Set the EDCA parameters the station's interface contends with: the
     /// access point's, from its association on and whenever its beacons
     /// announce another set. No input follows.
@@ -2527,7 +2527,7 @@ enum Owed<'id, T: StaTypes, K> {
     /// The primary lease to give back.
     Release(Lease<'id, K, T::GatePath>),
     Upstream(UpstreamFact<K>),
-    Configure(StationReceive<K>),
+    Configure(StaReceive<K>),
     SetEdca(SupportedEdca<K>),
     SetHe(oer_protocols_ieee80211_contracts_port::StationHe),
     /// A frame in the station's buffer.
@@ -5225,11 +5225,11 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     }
 
     /// Set `receive`, while no other configuration is being set.
-    fn configure(&mut self, receive: StationReceive<K>) -> Option<Owed<'id, T, K>> {
+    fn configure(&mut self, receive: StaReceive<K>) -> Option<Owed<'id, T, K>> {
         if !matches!(*self.configuration, Configuration::Idle) {
             return None;
         }
-        let epoch = if matches!(receive, StationReceive::Off) {
+        let epoch = if matches!(receive, StaReceive::Off) {
             None
         } else {
             *self.epoch
@@ -5306,7 +5306,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                         if matches!(*self.configuration, Configuration::Idle) =>
                     {
                         scan.step = ScanStep::AwaitConfigured;
-                        self.configure(StationReceive::OtherBssManagement)
+                        self.configure(StaReceive::Rule(StationReceive::OtherBssManagement))
                     }
                     ScanStep::NeedProbe { until } => match self.encode_probe(TxPurpose::Probe) {
                         Ok(transmit) => {
@@ -5382,7 +5382,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     )),
                 )
             }
-            Reclaim::Configure => match self.configure(StationReceive::Off) {
+            Reclaim::Configure => match self.configure(StaReceive::Off) {
                 Some(owed) => (
                     Change::Reclaiming(Reclaim::AwaitConfigured),
                     ActionProgress::Action(owed),
@@ -5475,7 +5475,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             LeaveStep::NeedConfigure if matches!(*self.configuration, Configuration::Idle) => {
                 leave.step = LeaveStep::AwaitConfigured;
-                self.configure(StationReceive::Off)
+                self.configure(StaReceive::Off)
             }
             LeaveStep::NeedRelease => match core::mem::replace(&mut (*self.lease), Held::None) {
                 Held::Lease(lease) => {
@@ -6304,7 +6304,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 BackgroundStep::NeedConfigure
                     if matches!(*self.configuration, Configuration::Idle) =>
                 {
-                    owed = self.configure(StationReceive::OtherBssManagement);
+                    owed = self.configure(StaReceive::Rule(StationReceive::OtherBssManagement));
                     BackgroundStep::AwaitConfigured
                 }
                 BackgroundStep::NeedProbe if (connected.transmission == Transmission::Free) => {
@@ -7080,12 +7080,30 @@ pub fn sta_frame<K: Ieee80211Capabilities>(bytes: &[u8], plan: StaRatePlan) -> O
 }
 
 /// The network's receive rules of `filter` for `bssid`.
-fn bss_rules<K>(bssid: Bssid, filter: SupportedFilter<K, StationRole>) -> StationReceive<K> {
-    StationReceive::Bss {
+fn bss_rules<K>(bssid: Bssid, filter: SupportedFilter<K, StationRole>) -> StaReceive<K> {
+    StaReceive::Rule(StationReceive::Bss {
         bssid: bssid.individual(),
         filter,
+    })
+}
+
+/// What the station asks its interface to receive: nothing, or a rule.
+/// The port's receive right is off when nothing is received; the station,
+/// which asks through its owed value, names "off" here.
+pub enum StaReceive<K> {
+    /// Receive nothing: the interface's rule ends.
+    Off,
+    /// Receive by this rule.
+    Rule(StationReceive<K>),
+}
+
+impl<K> Clone for StaReceive<K> {
+    fn clone(&self) -> Self {
+        *self
     }
 }
+
+impl<K> Copy for StaReceive<K> {}
 
 /// Leave a network the station holds no key of: receive off, the lease
 /// back.

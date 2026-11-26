@@ -169,8 +169,9 @@ pub use data::{
     IdleArena, InCommand, InstalledGroup, InstalledPairwise, InterfaceLayout, InterfaceRights,
     Layout, LayoutRights, MIC_ROOM, Member, OnAir, PairwiseCommand, PairwiseEnd, PairwiseHeld,
     PairwiseSlot, Place, Placing, PortSink, Ppdu, PublishedSingle, QUEUES, QueueRight, RadioRights,
-    Settled, Signal, SingleOfTwo, SinglePlace, TxFacts, TxSlot, TxSlotOf, TxSlotRefused,
-    ValueCommand, ValueEnd, ValueKind, tx_slot,
+    ReceiveCommand, ReceiveEnd, ReceiveHeld, ReceiveOff, Receiving, Settled, Signal, SingleOfTwo,
+    SinglePlace, TxFacts, TxSlot, TxSlotOf, TxSlotRefused, ValueCommand, ValueEnd, ValueKind,
+    tx_slot,
 };
 pub use life::{
     Install, MintSeal, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning, Running,
