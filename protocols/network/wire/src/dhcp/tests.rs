@@ -14,7 +14,7 @@ fn offer() -> Fixed {
         hlen: 6,
         hops: 0,
         xid: 0x1234_5678,
-        secs: 3,
+        secs: ElapsedSeconds::new(3),
         flags: Flags::from_bytes([0; 2]).with_broadcast(true),
         ciaddr: Ipv4Address::new([0; 4]),
         yiaddr: Ipv4Address::new([192, 0, 2, 50]),
@@ -138,5 +138,19 @@ fn a_write_that_does_not_fit_writes_nothing() {
     assert_eq!(
         write_option(&mut writer, OptionCode::ROUTER, &[0; 256]),
         Err(Error::ValueOutOfRange)
+    );
+}
+
+#[test]
+fn elapsed_seconds_span_their_seconds_in_the_readers_domain() {
+    enum Client {}
+    assert_eq!(ElapsedSeconds::ZERO.get(), 0);
+    assert_eq!(
+        ElapsedSeconds::new(3).span::<Client>().as_micros(),
+        3_000_000
+    );
+    assert_eq!(
+        ElapsedSeconds::new(u16::MAX).span::<Client>().as_micros(),
+        u64::from(u16::MAX) * 1_000_000
     );
 }

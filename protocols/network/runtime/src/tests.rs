@@ -462,7 +462,7 @@ fn dhcp_reply(kind: MessageType, xid: u32, lease: u32) -> Vec<u8> {
             hlen: 6,
             hops: 0,
             xid,
-            secs: 0,
+            secs: oer_protocols_network_wire::dhcp::ElapsedSeconds::ZERO,
             flags: Flags::from_bytes([0; 2]),
             ciaddr: Ipv4Address::new([0; 4]),
             yiaddr: Ipv4Address::new(OUR_IP),

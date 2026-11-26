@@ -5395,7 +5395,11 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
 const NETWORK_LAYERS: [(&str, &[&str]); 5] = [
     (
         "protocols/network/wire",
-        &["oer-portable-wire", "oer-protocols-ieee802-wire"],
+        &[
+            "oer-portable-time",
+            "oer-portable-wire",
+            "oer-protocols-ieee802-wire",
+        ],
     ),
     (
         "protocols/network/port",

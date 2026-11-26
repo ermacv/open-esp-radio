@@ -28,6 +28,31 @@ const CHADDR_LEN: usize = 16;
 const SNAME_LEN: usize = 64;
 const FILE_LEN: usize = 128;
 
+/// The 'secs' field: the seconds since the client began an acquisition or
+/// a renewal (RFC 2131, 2, Table 1).
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ElapsedSeconds(u16);
+
+impl ElapsedSeconds {
+    /// None yet.
+    pub const ZERO: Self = Self(0);
+
+    /// `seconds` seconds.
+    pub const fn new(seconds: u16) -> Self {
+        Self(seconds)
+    }
+
+    /// The seconds.
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+
+    /// The span of the domain `D` the field names.
+    pub const fn span<D>(self) -> oer_portable_time::DomainDuration<D> {
+        oer_portable_time::DomainDuration::from_micros((self.0 as u64).wrapping_mul(1_000_000))
+    }
+}
+
 oer_portable_wire::bitfield! {
     /// 'op': the message op code.
     /// SOURCE: RFC 2131, 2, Table 1.
@@ -167,7 +192,7 @@ pub struct Fixed {
     /// 'xid': the transaction.
     pub xid: u32,
     /// 'secs': seconds since the client began this acquisition or renewal.
-    pub secs: u16,
+    pub secs: ElapsedSeconds,
     /// 'flags'.
     pub flags: Flags,
     /// 'ciaddr': the client's address, in BOUND, RENEW and REBINDING.
@@ -200,7 +225,7 @@ impl Fixed {
             .with_hlen(self.hlen)
             .with_hops(self.hops)
             .with_xid(self.xid)
-            .with_secs(self.secs);
+            .with_secs(self.secs.get());
         writer.write(&opening.to_bytes())?;
         writer.write(&self.flags.to_bytes())?;
         writer.write(self.ciaddr.as_octets())?;
@@ -251,7 +276,7 @@ impl<'a> DhcpMessage<'a> {
                 hlen: opening.hlen(),
                 hops: opening.hops(),
                 xid: opening.xid(),
-                secs: opening.secs(),
+                secs: ElapsedSeconds::new(opening.secs()),
                 flags,
                 ciaddr,
                 yiaddr,

@@ -211,7 +211,7 @@ impl Reply {
                 hlen: 6,
                 hops: 0,
                 xid: self.xid,
-                secs: 0,
+                secs: oer_protocols_network_wire::dhcp::ElapsedSeconds::ZERO,
                 flags: Flags::from_bytes([0; 2]),
                 ciaddr: Ipv4Address::new([0; 4]),
                 yiaddr: Ipv4Address::new(self.yiaddr),
@@ -1408,7 +1408,7 @@ fn secs_counts_from_the_start_of_the_acquisition() {
             let due = stack.poll_deadline().unwrap();
             let sent = one(stack, due);
             if due >= secs(3) {
-                late = Some((due, sent.message().fixed.secs));
+                late = Some((due, sent.message().fixed.secs.get()));
             }
         }
         let (due, seconds) = late.unwrap();
