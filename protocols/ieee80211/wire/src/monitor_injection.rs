@@ -6,21 +6,13 @@
 
 use core::fmt;
 
-use crate::frame::{FrameControlFields, FrameType};
+use crate::frame::{DataSubtype, FrameControlFields, FrameType};
 use crate::sequence::SequenceControl;
 
 /// Frame Control, Duration/ID, three addresses and Sequence Control.
 /// SOURCE: IEEE Std 802.11-2020, 9.3.2.1 (Data frame format) and 9.3.3.2
 /// (Management frame format).
 const BASE_HEADER_LENGTH: usize = 24;
-/// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Data, subtype 0000).
-const DATA_SUBTYPE: u16 = 0;
-/// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Null, subtype 0100).
-const NULL_SUBTYPE: u16 = 4;
-/// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1: subtypes 1000 to 1111
-/// of the Data type carry a QoS Control field.
-const QOS_SUBTYPE_FIRST: u16 = 8;
-const QOS_SUBTYPE_LAST: u16 = 15;
 
 /// Supported header geometry of one source-supplied monitor MPDU.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -87,18 +79,21 @@ impl<'frame> MonitorInjectionMpdu<'frame> {
                 if control.to_ds() && control.from_ds() {
                     return Err(MonitorInjectionFrameError::FourAddressData);
                 }
-                match control.subtype() {
-                    DATA_SUBTYPE => MonitorInjectionFrameType::Data,
-                    NULL_SUBTYPE if bytes.len() == BASE_HEADER_LENGTH => {
+                match control.data_subtype() {
+                    DataSubtype::Data => MonitorInjectionFrameType::Data,
+                    DataSubtype::Null if bytes.len() == BASE_HEADER_LENGTH => {
                         MonitorInjectionFrameType::NullData
                     }
-                    NULL_SUBTYPE => {
+                    DataSubtype::Null => {
                         return Err(MonitorInjectionFrameError::InvalidNullDataLength {
                             expected: BASE_HEADER_LENGTH,
                             actual: bytes.len(),
                         });
                     }
-                    QOS_SUBTYPE_FIRST..=QOS_SUBTYPE_LAST => {
+                    // SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1:
+                    // subtypes 1000 to 1111 of the Data type carry a QoS
+                    // Control field.
+                    subtype if subtype.encoding() >= DataSubtype::QosData.encoding() => {
                         return Err(MonitorInjectionFrameError::QosData);
                     }
                     subtype => {
@@ -146,7 +141,7 @@ pub enum MonitorInjectionFrameError {
     UnsupportedManagementFlags,
     FourAddressData,
     QosData,
-    UnsupportedDataSubtype(u16),
+    UnsupportedDataSubtype(DataSubtype),
     InvalidNullDataLength { expected: usize, actual: usize },
     UnsupportedFrameType(u8),
 }
@@ -184,7 +179,8 @@ impl fmt::Display for MonitorInjectionFrameError {
             }
             Self::UnsupportedDataSubtype(subtype) => write!(
                 formatter,
-                "monitor injection does not support data subtype {subtype}"
+                "monitor injection does not support data subtype {}",
+                subtype.encoding()
             ),
             Self::InvalidNullDataLength { expected, actual } => write!(
                 formatter,

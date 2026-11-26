@@ -16,26 +16,76 @@ use crate::action::{ActionCategory, PublicAction, SpectrumManagementAction};
 use crate::channel::{Band, Channel, ChannelError, ChannelWidth};
 use crate::element::ElementId;
 
-/// Whether the BSS's stations may transmit until the switch.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum ChannelSwitchMode {
-    /// Stations go on transmitting until the switch.
-    Continue,
-    /// Stations transmit nothing more on the current channel.
-    StopTransmitting,
+crate::closed_code::closed_code! {
+    /// Whether the BSS's stations may transmit until the switch: the
+    /// Channel Switch Mode field (IEEE Std 802.11-2020, 9.4.2.19).
+    #[derive(Hash)]
+    pub enum ChannelSwitchMode: 8, ChannelSwitchError::Malformed => ChannelSwitchError {
+        /// Stations go on transmitting until the switch.
+        Continue = 0,
+        /// Stations transmit nothing more on the current channel.
+        StopTransmitting = 1,
+    }
 }
 
-/// Where a 40 MHz channel's secondary 20 MHz lies.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum SecondaryChannelOffset {
-    /// No secondary channel: 20 MHz.
-    None,
-    Above,
-    Below,
+crate::closed_code::closed_code! {
+    /// Where a 40 MHz channel's secondary 20 MHz lies: the Secondary
+    /// Channel Offset field (IEEE Std 802.11-2020, 9.4.2.20).
+    #[derive(Hash)]
+    pub enum SecondaryChannelOffset: 8, ChannelSwitchError::Malformed => ChannelSwitchError {
+        /// No secondary channel: 20 MHz.
+        None = 0,
+        Above = 1,
+        Below = 3,
+    }
+}
+
+oer_portable_wire::octet_code! { "oer_protocols_ieee80211_wire::channel_switch";
+    /// A global operating class: any octet, the 20 and 40 MHz classes of
+    /// 2.4 and 5 GHz named.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, Annex E, Table E-4 (Global operating
+    /// classes).
+    OperatingClass {
+        /// 2.4 GHz, 20 MHz, channels 1 to 13.
+        GHZ2_4_MHZ20 = 81,
+        /// 2.4 GHz, 20 MHz, channel 14.
+        GHZ2_4_MHZ20_CHANNEL_14 = 82,
+        /// 2.4 GHz, 40 MHz, the secondary above.
+        GHZ2_4_MHZ40_ABOVE = 83,
+        /// 2.4 GHz, 40 MHz, the secondary below.
+        GHZ2_4_MHZ40_BELOW = 84,
+        /// 5 GHz, 20 MHz, channels 36 to 48.
+        GHZ5_36_MHZ20 = 115,
+        /// 5 GHz, 40 MHz above, channels 36 and 44.
+        GHZ5_36_MHZ40_ABOVE = 116,
+        /// 5 GHz, 40 MHz below, channels 40 and 48.
+        GHZ5_36_MHZ40_BELOW = 117,
+        /// 5 GHz, 20 MHz, channels 52 to 64.
+        GHZ5_52_MHZ20 = 118,
+        /// 5 GHz, 40 MHz above, channels 52 and 60.
+        GHZ5_52_MHZ40_ABOVE = 119,
+        /// 5 GHz, 40 MHz below, channels 56 and 64.
+        GHZ5_52_MHZ40_BELOW = 120,
+        /// 5 GHz, 20 MHz, channels 100 to 144.
+        GHZ5_100_MHZ20 = 121,
+        /// 5 GHz, 40 MHz above, channels 100 to 140.
+        GHZ5_100_MHZ40_ABOVE = 122,
+        /// 5 GHz, 40 MHz below, channels 104 to 144.
+        GHZ5_100_MHZ40_BELOW = 123,
+        /// 5 GHz, 20 MHz, channels 149 to 161.
+        GHZ5_149_MHZ20 = 124,
+        /// 5 GHz, 20 MHz, channels 149 to 177.
+        GHZ5_149_177_MHZ20 = 125,
+        /// 5 GHz, 40 MHz above, channels 149 to 173.
+        GHZ5_149_MHZ40_ABOVE = 126,
+        /// 5 GHz, 40 MHz below, channels 153 to 177.
+        GHZ5_149_MHZ40_BELOW = 127,
+    }
 }
 
 /// One channel switch announcement.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ChannelSwitch {
     pub mode: ChannelSwitchMode,
     /// The new primary channel's number.
@@ -44,7 +94,7 @@ pub struct ChannelSwitch {
     /// from now.
     pub count: u8,
     /// The new operating class, which an extended announcement names.
-    pub operating_class: Option<u8>,
+    pub operating_class: Option<OperatingClass>,
     /// The new channel's secondary offset, which a Secondary Channel Offset
     /// element beside a Channel Switch Announcement names.
     pub secondary: SecondaryChannelOffset,
@@ -56,7 +106,7 @@ pub enum ChannelSwitchError {
     /// An element's length or a reserved value is wrong.
     Malformed,
     /// An operating class of a width other than 20 or 40 MHz, or unknown.
-    UnsupportedOperatingClass(u8),
+    UnsupportedOperatingClass(OperatingClass),
     /// The channel number and width are no valid channel.
     Channel(ChannelError),
 }
@@ -116,8 +166,8 @@ impl ChannelSwitch {
             let element = [
                 ElementId::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT.value(),
                 4,
-                mode_value(self.mode),
-                class,
+                self.mode.wire().get(),
+                class.value(),
                 self.channel_number,
                 self.count,
             ];
@@ -127,7 +177,7 @@ impl ChannelSwitch {
         let announcement = [
             ElementId::CHANNEL_SWITCH_ANNOUNCEMENT.value(),
             3,
-            mode_value(self.mode),
+            self.mode.wire().get(),
             self.channel_number,
             self.count,
         ];
@@ -144,7 +194,7 @@ impl ChannelSwitch {
                     a4,
                     ElementId::SECONDARY_CHANNEL_OFFSET.value(),
                     1,
-                    offset_value(offset),
+                    offset.wire().get(),
                 ];
                 &with_offset
             }
@@ -187,12 +237,19 @@ pub fn parse_channel_switch(elements: &[u8]) -> Result<Option<ChannelSwitch>, Ch
         remaining = reader.remaining();
         match (ElementId::new(id), body) {
             (ElementId::CHANNEL_SWITCH_ANNOUNCEMENT, &[mode, channel, count]) => {
-                plain = Some((mode_of(mode)?, channel, count));
+                plain = Some((ChannelSwitchMode::from_wire(mode)?, channel, count));
             }
             (ElementId::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT, &[mode, class, channel, count]) => {
-                extended = Some((mode_of(mode)?, class, channel, count));
+                extended = Some((
+                    ChannelSwitchMode::from_wire(mode)?,
+                    OperatingClass::new(class),
+                    channel,
+                    count,
+                ));
             }
-            (ElementId::SECONDARY_CHANNEL_OFFSET, &[value]) => secondary = offset_of(value)?,
+            (ElementId::SECONDARY_CHANNEL_OFFSET, &[value]) => {
+                secondary = SecondaryChannelOffset::from_wire(value)?
+            }
             (
                 ElementId::CHANNEL_SWITCH_ANNOUNCEMENT
                 | ElementId::EXTENDED_CHANNEL_SWITCH_ANNOUNCEMENT,
@@ -247,10 +304,10 @@ pub fn parse_channel_switch_action(
                     announcement.secondary
                 });
             Ok(Some(ChannelSwitch {
-                mode: mode_of(*mode)?,
+                mode: ChannelSwitchMode::from_wire(*mode)?,
                 channel_number: *channel,
                 count: *count,
-                operating_class: Some(*class),
+                operating_class: Some(OperatingClass::new(*class)),
                 secondary,
             }))
         }
@@ -258,52 +315,36 @@ pub fn parse_channel_switch_action(
     }
 }
 
-const fn mode_value(mode: ChannelSwitchMode) -> u8 {
-    match mode {
-        ChannelSwitchMode::Continue => 0,
-        ChannelSwitchMode::StopTransmitting => 1,
-    }
-}
-
-fn mode_of(value: u8) -> Result<ChannelSwitchMode, ChannelSwitchError> {
-    match value {
-        0 => Ok(ChannelSwitchMode::Continue),
-        1 => Ok(ChannelSwitchMode::StopTransmitting),
-        _ => Err(ChannelSwitchError::Malformed),
-    }
-}
-
-const fn offset_value(offset: SecondaryChannelOffset) -> u8 {
-    match offset {
-        SecondaryChannelOffset::None => 0,
-        SecondaryChannelOffset::Above => 1,
-        SecondaryChannelOffset::Below => 3,
-    }
-}
-
-fn offset_of(value: u8) -> Result<SecondaryChannelOffset, ChannelSwitchError> {
-    match value {
-        0 => Ok(SecondaryChannelOffset::None),
-        1 => Ok(SecondaryChannelOffset::Above),
-        3 => Ok(SecondaryChannelOffset::Below),
-        _ => Err(ChannelSwitchError::Malformed),
-    }
-}
-
 /// The global operating class (IEEE Std 802.11-2020 Table E-4) of a 20 or
 /// 40 MHz `channel`.
-fn operating_class_of(channel: Channel) -> u8 {
+fn operating_class_of(channel: Channel) -> OperatingClass {
     let number = channel.number();
     match (channel.band(), channel.width()) {
-        (Band::Ghz2_4, ChannelWidth::Mhz20) => 81,
-        (Band::Ghz2_4, ChannelWidth::Mhz40Above) => 83,
-        (Band::Ghz2_4, ChannelWidth::Mhz40Below) => 84,
+        (Band::Ghz2_4, ChannelWidth::Mhz20) => OperatingClass::GHZ2_4_MHZ20,
+        (Band::Ghz2_4, ChannelWidth::Mhz40Above) => OperatingClass::GHZ2_4_MHZ40_ABOVE,
+        (Band::Ghz2_4, ChannelWidth::Mhz40Below) => OperatingClass::GHZ2_4_MHZ40_BELOW,
         (Band::Ghz5, width) => {
             let [twenty, above, below] = match number {
-                36..=48 => [115, 116, 117],
-                52..=64 => [118, 119, 120],
-                100..=144 => [121, 122, 123],
-                _ => [125, 126, 127],
+                36..=48 => [
+                    OperatingClass::GHZ5_36_MHZ20,
+                    OperatingClass::GHZ5_36_MHZ40_ABOVE,
+                    OperatingClass::GHZ5_36_MHZ40_BELOW,
+                ],
+                52..=64 => [
+                    OperatingClass::GHZ5_52_MHZ20,
+                    OperatingClass::GHZ5_52_MHZ40_ABOVE,
+                    OperatingClass::GHZ5_52_MHZ40_BELOW,
+                ],
+                100..=144 => [
+                    OperatingClass::GHZ5_100_MHZ20,
+                    OperatingClass::GHZ5_100_MHZ40_ABOVE,
+                    OperatingClass::GHZ5_100_MHZ40_BELOW,
+                ],
+                _ => [
+                    OperatingClass::GHZ5_149_177_MHZ20,
+                    OperatingClass::GHZ5_149_MHZ40_ABOVE,
+                    OperatingClass::GHZ5_149_MHZ40_BELOW,
+                ],
             };
             match width {
                 ChannelWidth::Mhz20 => twenty,
@@ -316,14 +357,26 @@ fn operating_class_of(channel: Channel) -> u8 {
 
 /// The band and width of a global operating class (IEEE Std 802.11-2020
 /// Table E-4) of 20 or 40 MHz.
-fn operating_class(class: u8) -> Result<(Band, ChannelWidth), ChannelSwitchError> {
+fn operating_class(class: OperatingClass) -> Result<(Band, ChannelWidth), ChannelSwitchError> {
     Ok(match class {
-        81 | 82 => (Band::Ghz2_4, ChannelWidth::Mhz20),
-        83 => (Band::Ghz2_4, ChannelWidth::Mhz40Above),
-        84 => (Band::Ghz2_4, ChannelWidth::Mhz40Below),
-        115 | 118 | 121 | 124 | 125 => (Band::Ghz5, ChannelWidth::Mhz20),
-        116 | 119 | 122 | 126 => (Band::Ghz5, ChannelWidth::Mhz40Above),
-        117 | 120 | 123 | 127 => (Band::Ghz5, ChannelWidth::Mhz40Below),
+        OperatingClass::GHZ2_4_MHZ20 | OperatingClass::GHZ2_4_MHZ20_CHANNEL_14 => {
+            (Band::Ghz2_4, ChannelWidth::Mhz20)
+        }
+        OperatingClass::GHZ2_4_MHZ40_ABOVE => (Band::Ghz2_4, ChannelWidth::Mhz40Above),
+        OperatingClass::GHZ2_4_MHZ40_BELOW => (Band::Ghz2_4, ChannelWidth::Mhz40Below),
+        OperatingClass::GHZ5_36_MHZ20
+        | OperatingClass::GHZ5_52_MHZ20
+        | OperatingClass::GHZ5_100_MHZ20
+        | OperatingClass::GHZ5_149_MHZ20
+        | OperatingClass::GHZ5_149_177_MHZ20 => (Band::Ghz5, ChannelWidth::Mhz20),
+        OperatingClass::GHZ5_36_MHZ40_ABOVE
+        | OperatingClass::GHZ5_52_MHZ40_ABOVE
+        | OperatingClass::GHZ5_100_MHZ40_ABOVE
+        | OperatingClass::GHZ5_149_MHZ40_ABOVE => (Band::Ghz5, ChannelWidth::Mhz40Above),
+        OperatingClass::GHZ5_36_MHZ40_BELOW
+        | OperatingClass::GHZ5_52_MHZ40_BELOW
+        | OperatingClass::GHZ5_100_MHZ40_BELOW
+        | OperatingClass::GHZ5_149_MHZ40_BELOW => (Band::Ghz5, ChannelWidth::Mhz40Below),
         class => return Err(ChannelSwitchError::UnsupportedOperatingClass(class)),
     })
 }

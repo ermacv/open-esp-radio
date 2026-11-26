@@ -123,10 +123,22 @@ fn builders_produce_classified_m1_to_m4() {
     assert_eq!(m2.key_frame().unwrap().key_length(), 0);
     assert_eq!(m3.key_frame().unwrap().key_length(), RSN_GTK_LEN as u16);
     assert_eq!(m4.key_frame().unwrap().key_length(), 0);
-    assert_eq!(m1.key_frame().unwrap().protocol_version(), 2);
-    assert_eq!(m2.key_frame().unwrap().protocol_version(), 1);
-    assert_eq!(m3.key_frame().unwrap().protocol_version(), 2);
-    assert_eq!(m4.key_frame().unwrap().protocol_version(), 1);
+    assert_eq!(
+        m1.key_frame().unwrap().protocol_version(),
+        oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion::V2004
+    );
+    assert_eq!(
+        m2.key_frame().unwrap().protocol_version(),
+        oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion::V2001
+    );
+    assert_eq!(
+        m3.key_frame().unwrap().protocol_version(),
+        oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion::V2004
+    );
+    assert_eq!(
+        m4.key_frame().unwrap().protocol_version(),
+        oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion::V2001
+    );
 }
 
 #[test]

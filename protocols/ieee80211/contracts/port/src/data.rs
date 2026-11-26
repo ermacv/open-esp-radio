@@ -22,9 +22,9 @@ use oer_protocols_radio_port::ClockError;
 
 use crate::life::{MintData, PortKey, RadioPort};
 use crate::{
-    AggregateOutcome, AmpduRate, BssColor, GateClosed, GateOpen, Ieee80211Instant, MpduLength,
-    MpduStartSpacing, PortRate, Protection, RetryPlan, SingleOutcome, StationHe, StationReceive,
-    SupportedBlockAck, SupportedEdca, TbttEvent, TxFrame,
+    AggregateOutcome, AmpduRate, GateClosed, GateOpen, Ieee80211Instant, MpduLength, PortRate,
+    Protection, RetryPlan, SingleOutcome, StationHe, StationReceive, SupportedBlockAck,
+    SupportedEdca, TbttEvent, TxFrame,
 };
 
 /// The brand of one installation, invariant in `'id`.
@@ -657,7 +657,7 @@ pub enum Ppdu<'id, K> {
         rate: AmpduRate<'id, K>,
         /// The recipient's Minimum MPDU Start Spacing, the peer's for the
         /// link's life.
-        spacing: MpduStartSpacing,
+        spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing,
         /// The control exchange that protects the aggregate, as the upper
         /// MAC's policy decided it this publication.
         protection: Protection,
@@ -852,7 +852,7 @@ pub enum ValueCommand<K> {
     /// Set the station's EDCA parameters.
     SetEdca(SupportedEdca<K>),
     /// Set the BSS color.
-    SetBssColor(BssColor),
+    SetBssColor(oer_protocols_ieee80211_wire::he::BssColor),
     /// Set the station's HE state.
     SetHe(StationHe),
 }

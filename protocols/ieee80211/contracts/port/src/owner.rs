@@ -19,7 +19,7 @@
 //! | no key slot, an unknown key | a key slot ([`Slot`](oer_protocols_radio_port::Slot) of the interface's own kind) and the installed key token an attempt names |
 //! | an invalid key | [`Ccmp128Key`](oer_protocols_ieee80211_contracts_security::Ccmp128Key), [`GroupKeyId`](oer_protocols_ieee80211_wire::ccmp::GroupKeyId), an [`IndividualAddress`] peer |
 //! | no Block Ack slot, an invalid agreement | a Block Ack slot, [`SupportedBlockAck`] and the agreement token that holds the slot |
-//! | an unsupported EDCA record or BSS color | [`SupportedEdca`], [`BssColor`] |
+//! | an unsupported EDCA record | [`SupportedEdca`] |
 //!
 //! These stay the world's outcomes: a port's
 //! [`DataPort::Fault`](crate::DataPort::Fault), a clock that could not be
@@ -150,17 +150,6 @@
 //! fn rate<'id, P: DataPort<'id>>(port: &P) -> Option<PortRate<'id, P::Caps>> {
 //!     port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
 //! }
-//! ```
-//!
-//! ```compile_fail,E0451
-//! # use oer_protocols_ieee80211_contracts_port::BssColor;
-//! let _ = BssColor { color: 64 };
-//! ```
-//!
-//! ```
-//! # use oer_protocols_ieee80211_contracts_port::BssColor;
-//! assert!(BssColor::new(64).is_none());
-//! assert!(BssColor::new(63).is_some());
 //! ```
 
 use core::marker::PhantomData;
@@ -510,31 +499,6 @@ impl<K: Ieee80211Capabilities> SupportedEdca<K> {
     /// The parameter set.
     pub const fn get(&self) -> EdcaParameterSet {
         self.parameters
-    }
-}
-
-/// The color of an HE BSS, 0-63.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BssColor {
-    color: u8,
-}
-
-impl BssColor {
-    /// Color zero: no BSS color.
-    pub const ZERO: Self = Self { color: 0 };
-
-    /// `color`, when it is a BSS color.
-    pub const fn new(color: u8) -> Option<Self> {
-        if color <= 63 {
-            Some(Self { color })
-        } else {
-            None
-        }
-    }
-
-    /// The color.
-    pub const fn get(self) -> u8 {
-        self.color
     }
 }
 
@@ -1044,7 +1008,7 @@ impl<H: FrameHeader, K: Ieee80211Capabilities> SizedFrame<H, K> {
 
 mod extensions;
 
-pub use extensions::{AmpduRate, MpduStartSpacing};
+pub use extensions::AmpduRate;
 
 #[cfg(test)]
 mod tests;

@@ -63,7 +63,7 @@ fn link(protection: LinkProtection) -> DataLink {
             attempts: 3,
         }),
         ht: Some(HtLimits {
-            spacing: MpduStartSpacing::new(0).unwrap(),
+            spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
             max_length: 65_535,
         }),
         windows: [None; 8],
@@ -219,7 +219,7 @@ impl<'id> World<'id> {
             Ppdu::Single(once(single)),
             Ppdu::Aggregate {
                 rate: aggregate,
-                spacing: MpduStartSpacing::new(0).unwrap(),
+                spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
                 protection: Protection::None,
                 alone: once(single),
             },
@@ -1191,7 +1191,7 @@ fn he_publication(link: DataLink, rate: PhyRate, frames: u8) -> Vec<Protection> 
             ),
             Ppdu::Aggregate {
                 rate: aggregate,
-                spacing: MpduStartSpacing::new(0).unwrap(),
+                spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
                 protection: Protection::None,
                 alone: once(single),
             },

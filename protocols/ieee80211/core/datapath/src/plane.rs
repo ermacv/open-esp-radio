@@ -53,9 +53,9 @@ use oer_portable_time::Instant;
 use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Arena, ArenaOutcome, ArenaSide, DataPort, FrameSet, GateOpen,
-    HEADROOM, HeaderLen, IdleArena, Ieee80211Capabilities, MpduLength, MpduStartSpacing, OnAir,
-    PhyRate, Ppdu, RxMetadata, Settled as Kept, SingleEnd, SingleOutcome, SingleResponse,
-    TxEstimate, TxFacts, TxOutcome,
+    HEADROOM, HeaderLen, IdleArena, Ieee80211Capabilities, MpduLength, OnAir, PhyRate, Ppdu,
+    RxMetadata, Settled as Kept, SingleEnd, SingleOutcome, SingleResponse, TxEstimate, TxFacts,
+    TxOutcome,
 };
 use oer_protocols_ieee80211_core_upper_mac::{
     qos::AcAdmission,
@@ -125,7 +125,7 @@ pub struct OutboundMsdu<M> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HtLimits {
     /// Its Minimum MPDU Start Spacing.
-    pub spacing: MpduStartSpacing,
+    pub spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing,
     /// Its Maximum A-MPDU Length, in octets.
     pub max_length: u32,
 }
@@ -299,7 +299,7 @@ pub enum PpduKind {
     /// An A-MPDU under the TID's agreement, at the recipient's spacing.
     Aggregate {
         /// The recipient's Minimum MPDU Start Spacing.
-        spacing: MpduStartSpacing,
+        spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing,
     },
 }
 

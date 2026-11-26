@@ -234,7 +234,7 @@ mod tests {
                 bssid: bssid(),
                 destination: fields.destination,
                 sequence_number: fields.sequence_number,
-                user_priority: fields.priority.value(),
+                user_priority: fields.priority,
                 peer_qos,
                 ccmp_header: [0; CCMP_HEADER_LEN],
                 ether_type: fields.ether_type,

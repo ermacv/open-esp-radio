@@ -97,7 +97,7 @@ fn refuses_each_geometry_the_boundary_does_not_own() {
     );
     assert_eq!(
         refuse([0x18, 0x01], [0, 0]),
-        MonitorInjectionFrameError::UnsupportedDataSubtype(1)
+        MonitorInjectionFrameError::UnsupportedDataSubtype(crate::frame::DataSubtype::Reserved(1))
     );
     assert_eq!(
         refuse([0xd4, 0x00], [0, 0]),
@@ -118,5 +118,15 @@ fn refuses_each_geometry_the_boundary_does_not_own() {
             required: BASE_HEADER_LENGTH,
             available: 23
         }
+    );
+}
+
+#[test]
+fn an_unsupported_data_subtype_is_shown_by_its_encoding() {
+    use std::string::ToString;
+    assert_eq!(
+        MonitorInjectionFrameError::UnsupportedDataSubtype(crate::frame::DataSubtype::Reserved(1))
+            .to_string(),
+        "monitor injection does not support data subtype 1"
     );
 }

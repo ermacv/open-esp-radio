@@ -82,7 +82,7 @@ fn named_codes_build_a_disabled_sm_power_save_and_the_longest_aggregate() {
         .to_bytes();
     let [ampdu] = HtAmpduParameters::from_bytes([0])
         .with_exponent(HtAmpduParameters::EXPONENT_65535_OCTETS)
-        .with_spacing(HtAmpduParameters::SPACING_4_US)
+        .with_spacing(MinimumMpduStartSpacing::Us4)
         .to_bytes();
     let below = crate::channel::Channel::ghz2_4(13, ChannelWidth::Mhz40Below).unwrap();
     let capability = ht_capability_ie(
@@ -97,10 +97,8 @@ fn named_codes_build_a_disabled_sm_power_save_and_the_longest_aggregate() {
         65_535
     );
     assert_eq!(
-        HtAmpduParameters::from_bytes([peer.ampdu_parameters()])
-            .spacing()
-            .get(),
-        5
+        HtAmpduParameters::from_bytes([peer.ampdu_parameters()]).spacing(),
+        MinimumMpduStartSpacing::Us4
     );
     assert!(peer.supports_short_guard_interval(ChannelWidth::Mhz40Below));
 }
@@ -146,6 +144,18 @@ fn peer_specific_capability_uses_vendor_ampdu_negotiation() {
     assert_eq!(
         ht_capability_ie_for_peer(TEST_HT_CAPABILITIES, channel, Some(stricter_exponent))[4],
         0x15
+    );
+
+    // A local spacing larger than the peer's is kept: 8 us over 4 us.
+    let spaced = crate::ht::HtLocalCapabilities::new(
+        crate::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+        0x1b,
+        0xff,
+        0x01,
+    );
+    assert_eq!(
+        ht_capability_ie_for_peer(spaced, channel, Some(peer))[4],
+        0x1b
     );
 }
 
@@ -247,7 +257,7 @@ fn ampdu_parameters_name_the_maximum_length_and_spacing() {
     for (exponent, length) in lengths.into_iter().enumerate() {
         let parameters = HtAmpduParameters::from_bytes([exponent as u8 | 6 << 2]);
         assert_eq!(parameters.max_ampdu_length(), length);
-        assert_eq!(parameters.spacing().get(), 6);
+        assert_eq!(parameters.spacing(), MinimumMpduStartSpacing::Us8);
     }
 }
 

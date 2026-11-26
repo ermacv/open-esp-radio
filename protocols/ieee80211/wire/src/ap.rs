@@ -8,7 +8,9 @@
 
 use crate::data::{MsduHeader, MsduParts, PeerQos};
 use crate::element::ElementId;
-use crate::frame::{FrameControlFields, FrameType, QosAckPolicy};
+use crate::frame::{
+    ControlSubtype, FrameControlFields, FrameType, ManagementSubtype, QosAckPolicy,
+};
 use crate::management::{AidField, AssociationId};
 use crate::management::{AuthenticationAlgorithm, AuthenticationTransaction};
 use crate::status::{ReasonCode, StatusCode};
@@ -61,7 +63,6 @@ pub enum ApPeerDisconnectKind {
 pub enum ApDataFrameError {
     InvalidAccessPoint,
     InvalidPeer,
-    InvalidUserPriority,
     NoAmsduFrames,
     AmsduTooLong { length: usize, maximum: usize },
     OutputTooSmall { required: usize },
@@ -130,7 +131,7 @@ pub struct ApProtectedDataFrame<'frame> {
     pub access_point: Eui48,
     pub peer: Eui48,
     pub sequence_number: SequenceNumber,
-    pub user_priority: u8,
+    pub user_priority: WmmUserPriority,
     pub peer_qos: crate::data::PeerQos,
     /// `Buffered` for a frame released from an AP power-save queue while
     /// further traffic remains buffered.
@@ -172,7 +173,7 @@ pub struct ApProtectedDataPrefix {
     pub access_point: Eui48,
     pub peer: Eui48,
     pub sequence_number: SequenceNumber,
-    pub user_priority: u8,
+    pub user_priority: WmmUserPriority,
     pub peer_qos: crate::data::PeerQos,
     pub more_data: crate::data::MoreData,
     pub msdu: MsduHeader,
@@ -237,7 +238,7 @@ impl ProtectedDataPlan {
         access_point: Eui48,
         peer: Eui48,
         sequence_number: SequenceNumber,
-        user_priority: u8,
+        user_priority: WmmUserPriority,
         peer_qos: crate::data::PeerQos,
         more_data: crate::data::MoreData,
         msdu: MsduHeader,
@@ -245,8 +246,7 @@ impl ProtectedDataPlan {
         if IndividualAddress::for_interface(access_point).is_err() {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
-        let priority =
-            WmmUserPriority::new(user_priority).ok_or(ApDataFrameError::InvalidUserPriority)?;
+        let priority = user_priority;
         let mut plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
             access_point,
@@ -293,7 +293,7 @@ pub struct ApAmsduFrame<'a> {
     pub access_point: Eui48,
     pub peer: Eui48,
     pub sequence_number: SequenceNumber,
-    pub user_priority: u8,
+    pub user_priority: WmmUserPriority,
     pub more_data: crate::data::MoreData,
     pub ccmp_header: Option<[u8; CCMP_HEADER_LEN]>,
     pub msdus: &'a [MsduParts<'a>],
@@ -348,8 +348,7 @@ impl ApAmsduFrame<'_> {
         if IndividualAddress::for_interface(self.peer).is_err() {
             return Err(ApDataFrameError::InvalidPeer);
         }
-        let priority = WmmUserPriority::new(self.user_priority)
-            .ok_or(ApDataFrameError::InvalidUserPriority)?;
+        let priority = self.user_priority;
         let Some(first) = self.msdus.first().copied() else {
             return Err(ApDataFrameError::NoAmsduFrames);
         };
@@ -517,8 +516,8 @@ pub fn parse_ap_management_request<'a>(
     if frame_control.kind() != FrameType::Management {
         return None;
     }
-    let subtype = frame_control.subtype();
-    if subtype == 4 {
+    let subtype = frame_control.management_subtype();
+    if subtype == ManagementSubtype::ProbeRequest {
         if (frame_control.version() != 0
             || frame_control.kind() != FrameType::Management
             || frame_control.ds() != 0
@@ -548,7 +547,14 @@ pub fn parse_ap_management_request<'a>(
     // Parsing is not authentication. The caller must verify the pairwise
     // integrity and replay state before acting on a protected request.
     let protected = frame_control.protected();
-    if protected && !matches!(subtype, 10 | 12 | 13) {
+    if protected
+        && !matches!(
+            subtype,
+            ManagementSubtype::Disassociation
+                | ManagementSubtype::Deauthentication
+                | ManagementSubtype::Action
+        )
+    {
         return None;
     }
     let management_body = if protected {
@@ -561,7 +567,7 @@ pub fn parse_ap_management_request<'a>(
         body
     };
     match subtype {
-        11 => {
+        ManagementSubtype::Authentication => {
             let mut reader = oer_portable_wire::Reader::new(management_body);
             let fields = crate::management::AuthenticationFields::from_bytes(reader.read().ok()?);
             let body = reader.remaining();
@@ -582,7 +588,7 @@ pub fn parse_ap_management_request<'a>(
                 _ => None,
             }
         }
-        0 => {
+        ManagementSubtype::AssociationRequest => {
             let mut reader = oer_portable_wire::Reader::new(management_body);
             let capabilities =
                 crate::management::CapabilityInformation::from_bytes(reader.read().ok()?);
@@ -606,16 +612,16 @@ pub fn parse_ap_management_request<'a>(
                 },
             })
         }
-        10 | 12 => {
+        ManagementSubtype::Disassociation | ManagementSubtype::Deauthentication => {
             let mut reader = oer_portable_wire::Reader::new(management_body);
             let reason = crate::management::ReasonCodeField::from_bytes(reader.read().ok()?).code();
-            if subtype == 10 {
+            if subtype == ManagementSubtype::Disassociation {
                 Some(ApManagementRequest::Disassociation { peer, reason })
             } else {
                 Some(ApManagementRequest::Deauthentication { peer, reason })
             }
         }
-        13 => {
+        ManagementSubtype::Action => {
             if let Some(query) = crate::management_protection::SaQuery::parse(management_body) {
                 Some(ApManagementRequest::SaQuery { peer, query })
             } else {
@@ -639,10 +645,29 @@ pub enum ApManagementSubtype {
 
 impl ApManagementSubtype {
     const fn frame_control(self) -> FrameControlFields {
+        macro_rules! of {
+            ($subtype:ident) => {
+                match FrameControlFields::management(ManagementSubtype::$subtype) {
+                    Some(fields) => fields,
+                    None => panic!("a named management subtype fits its field"),
+                }
+            };
+        }
+        const ACTION: FrameControlFields = of!(Action);
+        const DISASSOCIATION: FrameControlFields = of!(Disassociation);
+        const DEAUTHENTICATION: FrameControlFields = of!(Deauthentication);
+        const {
+            if ACTION.to_bytes()[0] != 0xd0
+                || DISASSOCIATION.to_bytes()[0] != 0xa0
+                || DEAUTHENTICATION.to_bytes()[0] != 0xc0
+            {
+                panic!("a named management subtype has its Frame Control field");
+            }
+        }
         match self {
-            Self::Action => FrameControlFields::from_bytes([0xd0, 0x00]),
-            Self::Disassociation => FrameControlFields::from_bytes([0xa0, 0x00]),
-            Self::Deauthentication => FrameControlFields::from_bytes([0xc0, 0x00]),
+            Self::Action => ACTION,
+            Self::Disassociation => DISASSOCIATION,
+            Self::Deauthentication => DEAUTHENTICATION,
         }
     }
 
@@ -654,10 +679,10 @@ impl ApManagementSubtype {
         if control.version() != 0 || control.kind() != FrameType::Management || control.ds() != 0 {
             return None;
         }
-        match control.subtype() {
-            13 => Some(Self::Action),
-            10 => Some(Self::Disassociation),
-            12 => Some(Self::Deauthentication),
+        match control.management_subtype() {
+            ManagementSubtype::Action => Some(Self::Action),
+            ManagementSubtype::Disassociation => Some(Self::Disassociation),
+            ManagementSubtype::Deauthentication => Some(Self::Deauthentication),
             _ => None,
         }
     }
@@ -1050,11 +1075,11 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, Eui48)> {
     let &[fc0, fc1] = reader.array().ok()?;
     let frame_control = FrameControlFields::from_bytes([fc0, fc1]);
     let frame_type = frame_control.kind();
-    let subtype = frame_control.subtype();
+    let subtype = frame_control.control_subtype();
 
     // PS-Poll: Frame Control, AID, Receiver and Transmitter Address.
     if frame_type == FrameType::Control
-        && subtype == 10
+        && subtype == ControlSubtype::PsPoll
         && let Ok(ps_poll) = oer_portable_wire::Reader::new(frame).array::<16>()
     {
         let [_, _, a0, a1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5] = *ps_poll;

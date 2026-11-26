@@ -19,7 +19,7 @@ pub struct StaProtectedAmsduFrame<'a> {
     pub source: OwnAddress,
     pub bssid: Bssid,
     pub sequence_number: SequenceNumber,
-    pub user_priority: u8,
+    pub user_priority: WmmUserPriority,
     pub ccmp_header: [u8; CCMP_HEADER_LEN],
     pub msdus: &'a [MsduParts<'a>],
 }
@@ -67,8 +67,7 @@ impl<'a> StaProtectedAmsduFrame<'a> {
         ),
         StationFrameError,
     > {
-        let priority = WmmUserPriority::new(self.user_priority)
-            .ok_or(StationFrameError::UserPriorityOutOfRange)?;
+        let priority = self.user_priority;
         let Some(first) = self.msdus.first().copied() else {
             return Err(StationFrameError::NoAmsduFrames);
         };

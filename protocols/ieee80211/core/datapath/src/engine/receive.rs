@@ -54,7 +54,6 @@ use pressure::{Decision, Link, Need, Pressure, Taken};
 /// The Action subtype of a management frame.
 ///
 /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Action is subtype 13).
-const ACTION_SUBTYPE: u16 = 13;
 
 /// The most MSDUs one received A-MSDU is delivered as; an aggregate of more
 /// is refused, counted ([`RxRefusal::AmsduTooLong`]). A policy value: a
@@ -731,7 +730,8 @@ fn route<M: RxMetadata>(
     if header.control.is_management_frame() {
         // A Block Ack Action of the linked peer is the agreements'.
         if from.is_some()
-            && header.control.subtype() == ACTION_SUBTYPE
+            && header.control.management_subtype()
+                == oer_protocols_ieee80211_wire::frame::ManagementSubtype::Action
             && let Some(action) = view
                 .bytes
                 .get(usize::from(header.body)..)

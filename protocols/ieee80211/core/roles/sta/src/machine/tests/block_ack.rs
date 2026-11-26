@@ -37,7 +37,10 @@ fn unsupported_addba_receives_an_explicit_decline() {
             .frames
             .iter()
             .filter_map(|frame| oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(frame))
-            .filter(|header| header.control().subtype() == 13)
+            .filter(|header| {
+                header.control().management_subtype()
+                    == oer_protocols_ieee80211_wire::frame::ManagementSubtype::Action
+            })
             .filter_map(|header| parse_block_ack_action(header.body()))
             .collect();
         assert!(matches!(

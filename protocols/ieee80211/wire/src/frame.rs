@@ -85,9 +85,20 @@ impl FrameControl {
     pub const fn ds(self) -> u16 {
         self.fields().ds()
     }
-    /// The subtype within its frame kind.
-    pub const fn subtype(self) -> u16 {
-        self.fields().subtype()
+    /// The subtype of a management frame; a frame of another kind reads its
+    /// subtype bits as one.
+    pub const fn management_subtype(self) -> ManagementSubtype {
+        self.fields().management_subtype()
+    }
+    /// The subtype of a control frame; a frame of another kind reads its
+    /// subtype bits as one.
+    pub const fn control_subtype(self) -> ControlSubtype {
+        self.fields().control_subtype()
+    }
+    /// The subtype of a data frame; a frame of another kind reads its
+    /// subtype bits as one.
+    pub const fn data_subtype(self) -> DataSubtype {
+        self.fields().data_subtype()
     }
     /// Another fragment follows.
     pub const fn more_fragments(self) -> bool {
@@ -103,9 +114,11 @@ impl FrameControl {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (data subtypes 4,
     /// Null, and 12, QoS Null).
     pub const fn is_null_data(self) -> bool {
-        const NULL: u16 = 4;
-        const QOS_NULL: u16 = 12;
-        self.is_data() && matches!(self.subtype(), NULL | QOS_NULL)
+        self.is_data()
+            && matches!(
+                self.data_subtype(),
+                DataSubtype::Null | DataSubtype::QosNull
+            )
     }
 
     pub const fn is_qos_data(self) -> bool {
@@ -787,6 +800,7 @@ oer_portable_wire::bitfield! {
         pub subtype, with_subtype: u16 = 4..8;
         pub management_subtype, with_management_subtype: [ManagementSubtype] = 4..8, view;
         pub control_subtype, with_control_subtype: [ControlSubtype] = 4..8, view;
+        pub data_subtype, with_data_subtype: [DataSubtype] = 4..8, view;
         pub type_and_subtype, with_type_and_subtype: u8 = 2..8, view;
         /// Type bit B3: set in a data (10) or extension (11) frame, clear
         /// in a management (00) or control (01) one.
@@ -899,6 +913,23 @@ oer_portable_wire::bitfield! {
         Ack = 13,
         CfEnd = 14,
         CfEndCfAck = 15
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// The subtype of a data frame.
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Valid type and
+    /// subtype combinations, type 10).
+    pub enum DataSubtype: u8 {
+        Data = 0,
+        Null = 4,
+        QosData = 8,
+        QosDataCfAck = 9,
+        QosDataCfPoll = 10,
+        QosDataCfAckCfPoll = 11,
+        QosNull = 12,
+        QosCfPoll = 14,
+        QosCfAckCfPoll = 15
     }
 }
 

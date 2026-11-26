@@ -11,25 +11,20 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::action::{ActionCategory, SaQueryAction};
+use crate::frame::ManagementSubtype;
 
-/// Management subtype byte (Frame Control byte zero) of Disassociation.
-const DISASSOCIATION: u8 = 0xa0;
-/// Management subtype byte of Deauthentication.
-const DEAUTHENTICATION: u8 = 0xc0;
-/// Management subtype byte of Action.
-const ACTION: u8 = 0xd0;
 /// SA Query Action body: category, action and transaction identifier.
 pub const SA_QUERY_BODY_LEN: usize = 4;
 
-/// Whether a management frame is robust, from Frame Control byte zero and,
-/// for an Action frame, its category.
+/// Whether a management frame of `subtype` is robust, with, for an Action
+/// frame, its category.
 pub const fn is_robust_management_frame(
-    frame_control_type: u8,
+    subtype: ManagementSubtype,
     action_category: ActionCategory,
 ) -> bool {
-    match frame_control_type {
-        DISASSOCIATION | DEAUTHENTICATION => true,
-        ACTION => action_category.is_robust(),
+    match subtype {
+        ManagementSubtype::Disassociation | ManagementSubtype::Deauthentication => true,
+        ManagementSubtype::Action => action_category.is_robust(),
         _ => false,
     }
 }

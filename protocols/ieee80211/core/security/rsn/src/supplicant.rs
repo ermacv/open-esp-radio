@@ -426,7 +426,8 @@ pub enum RsnConnectedAction<const N: usize> {
 /// Key Data, without retaining those handshake bytes after connection.
 #[derive(Zeroize, ZeroizeOnDrop)]
 struct RsnCompletedMessage3 {
-    protocol_version: u8,
+    #[zeroize(skip)]
+    protocol_version: oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion,
     #[zeroize(skip)]
     key_info: KeyInformation,
     replay_counter: u64,

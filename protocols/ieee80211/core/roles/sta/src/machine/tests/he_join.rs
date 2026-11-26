@@ -187,7 +187,7 @@ fn an_he_access_point_gets_the_he_request_and_an_he_link() {
             peer.associated.phy,
             oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
         );
-        assert_eq!(peer.associated.he_bss_color, 27);
+        assert_eq!(peer.associated.he_bss_color.get(), 27);
         assert!(
             peer.associated
                 .he_peer_state
@@ -334,8 +334,8 @@ fn the_response_s_bss_color_is_the_link_s() {
         peer.phy,
         oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
     );
-    assert_eq!(peer.he_bss_color, 5);
-    assert_eq!(peer.he_peer_state.unwrap().bss_color(), 5);
+    assert_eq!(peer.he_bss_color.get(), 5);
+    assert_eq!(peer.he_peer_state.unwrap().bss_color().get(), 5);
     // Its other HE Operation parameters are the response's too: default PE
     // 2 and ER-SU permitted where the beacon said 4 and disabled.
     let mut operation = HE_OPERATION;
@@ -448,8 +448,7 @@ fn scanned_bss() -> oer_protocols_ieee80211_contracts_port::StationHe {
     oer_protocols_ieee80211_contracts_port::StationHe::Bss(
         oer_protocols_ieee80211_contracts_port::HeBssColor::of(
             &oer_protocols_ieee80211_wire::he::parse_he_operation(&HE_OPERATION).unwrap(),
-        )
-        .unwrap(),
+        ),
     )
 }
 
@@ -545,7 +544,10 @@ fn an_he_join_sets_its_bss_before_authentication_and_its_association_before_its_
         // point's minimum MPDU start spacing (none) and its HE Operation:
         // default PE 4, ER-SU disabled, no co-hosted BSS.
         assert_eq!(association.association_id().value(), 0x2a);
-        assert_eq!(association.minimum_mpdu_start_spacing(), 0);
+        assert_eq!(
+            association.minimum_mpdu_start_spacing(),
+            oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction
+        );
         assert_eq!(
             association.default_packet_extension(),
             oer_protocols_ieee80211_wire::he::DefaultPeDuration::Us16
@@ -715,7 +717,8 @@ fn an_he_response_with_an_aid_outside_its_field_is_no_link() {
 
 #[test]
 fn the_association_carries_the_response_s_color_over_the_scan_s() {
-    use oer_protocols_ieee80211_contracts_port::{BssColor, StationHe};
+    use oer_protocols_ieee80211_contracts_port::StationHe;
+    use oer_protocols_ieee80211_wire::he::BssColor;
     // The owner's counterexample: the beacon names color 27, the
     // Association Response 5. The BSS goes with the scan's 27 before
     // authentication; the association carries the response's 5.
@@ -741,7 +744,10 @@ fn the_association_carries_the_response_s_color_over_the_scan_s() {
                 oer_protocols_ieee80211_contracts_port::BssColorScope::Full
             )
         );
-        assert_eq!(world.station.peer().unwrap().associated.he_bss_color, 5);
+        assert_eq!(
+            world.station.peer().unwrap().associated.he_bss_color.get(),
+            5
+        );
     });
 }
 

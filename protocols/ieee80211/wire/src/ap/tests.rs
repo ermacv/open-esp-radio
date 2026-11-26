@@ -65,7 +65,7 @@ fn protected_ap_frame_owns_from_ds_ccmp_and_plaintext_boundary() {
         access_point: Eui48::new(access_point),
         peer: Eui48::new(peer),
         sequence_number: seq(7),
-        user_priority: 0,
+        user_priority: crate::qos::WmmUserPriority::UP0,
         peer_qos: crate::data::PeerQos::Qos,
         more_data: crate::data::MoreData::Clear,
         ccmp_header: ccmp,
@@ -101,7 +101,7 @@ fn an_in_place_prefix_is_the_protected_frame_up_to_its_payload() {
             access_point: Eui48::new(access_point),
             peer: Eui48::new(peer),
             sequence_number: seq(7),
-            user_priority: 0,
+            user_priority: crate::qos::WmmUserPriority::UP0,
             peer_qos: qos,
             more_data: crate::data::MoreData::Clear,
             ccmp_header: [0; 8],
@@ -113,7 +113,7 @@ fn an_in_place_prefix_is_the_protected_frame_up_to_its_payload() {
             access_point: Eui48::new(access_point),
             peer: Eui48::new(peer),
             sequence_number: seq(7),
-            user_priority: 0,
+            user_priority: crate::qos::WmmUserPriority::UP0,
             peer_qos: qos,
             more_data: crate::data::MoreData::Clear,
             msdu: msdu(peer, source, 0x0800, &[]).header(),
@@ -152,7 +152,7 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
         access_point: Eui48::new(access_point),
         peer: Eui48::new(peer),
         sequence_number: seq(11),
-        user_priority: 5,
+        user_priority: crate::qos::WmmUserPriority::UP5,
         more_data: crate::data::MoreData::Buffered,
         ccmp_header: Some(ccmp),
         msdus: &frames,
@@ -194,7 +194,7 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
         access_point: Eui48::new(access_point),
         peer: Eui48::new(peer),
         sequence_number: seq(12),
-        user_priority: 0,
+        user_priority: crate::qos::WmmUserPriority::UP0,
         more_data: crate::data::MoreData::Clear,
         ccmp_header: None,
         msdus: &frames,
@@ -219,7 +219,7 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
             access_point: Eui48::new(access_point),
             peer: Eui48::new(peer),
             sequence_number: seq(0),
-            user_priority: 0,
+            user_priority: crate::qos::WmmUserPriority::UP0,
             more_data: crate::data::MoreData::Clear,
             ccmp_header: Some([0; 8]),
             msdus: &frames,
@@ -238,7 +238,7 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
             access_point: Eui48::new(access_point),
             peer: Eui48::new(peer),
             sequence_number: seq(0),
-            user_priority: 0,
+            user_priority: crate::qos::WmmUserPriority::UP0,
             more_data: crate::data::MoreData::Clear,
             ccmp_header: Some([0; 8]),
             msdus: &frames,
@@ -259,7 +259,7 @@ fn protected_ap_frame_rejects_a_destination_outside_pairwise_owner() {
             access_point: Eui48::new(access_point),
             peer: Eui48::new(peer),
             sequence_number: seq(0),
-            user_priority: 0,
+            user_priority: crate::qos::WmmUserPriority::UP0,
             peer_qos: crate::data::PeerQos::NonQos,
             more_data: crate::data::MoreData::Clear,
             ccmp_header: [0; 8],
@@ -813,18 +813,19 @@ fn protected_management_codecs_keep_the_body_after_the_ccmp_header() {
         .unwrap();
         frame[4..10].copy_from_slice(&ap);
         frame[10..16].copy_from_slice(&peer);
-        assert!(matches!(
-            parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], Eui48::new(ap)),
-            Some(
-                ApManagementRequest::Deauthentication {
-                    reason: crate::status::ReasonCode::DEAUTH_LEAVING,
-                    ..
-                } | ApManagementRequest::Disassociation {
-                    reason: crate::status::ReasonCode::DEAUTH_LEAVING,
-                    ..
+        let request =
+            parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..length], Eui48::new(ap));
+        let reason = crate::status::ReasonCode::DEAUTH_LEAVING;
+        let peer = Eui48::new(peer);
+        assert_eq!(
+            request,
+            Some(match subtype {
+                ApManagementSubtype::Deauthentication => {
+                    ApManagementRequest::Deauthentication { peer, reason }
                 }
-            )
-        ));
+                _ => ApManagementRequest::Disassociation { peer, reason },
+            })
+        );
         assert!(
             parse_ap_management_request(&TEST_ADVERTISEMENT, &frame[..31], Eui48::new(ap))
                 .is_none()
@@ -1081,7 +1082,7 @@ fn data_goes_only_from_a_nonzero_individual_access_point_to_such_a_peer() {
             access_point: Eui48::new(access_point),
             peer: Eui48::new(peer),
             sequence_number: seq(0),
-            user_priority: 0,
+            user_priority: crate::qos::WmmUserPriority::UP0,
             more_data: crate::data::MoreData::Clear,
             ccmp_header: None,
             msdus: &frames,

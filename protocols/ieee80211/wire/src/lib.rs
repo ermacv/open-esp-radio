@@ -59,6 +59,7 @@ pub mod block_ack;
 pub mod ccmp;
 pub mod channel;
 pub mod channel_switch;
+mod closed_code;
 pub mod data;
 pub mod eapol;
 pub mod element;

@@ -66,7 +66,7 @@ fn an_extended_announcement_names_its_band_and_width_and_takes_precedence() {
             mode: ChannelSwitchMode::Continue,
             channel_number: 13,
             count: 3,
-            operating_class: Some(81),
+            operating_class: Some(OperatingClass::GHZ2_4_MHZ20),
             secondary: SecondaryChannelOffset::None,
         }))
     );
@@ -105,7 +105,9 @@ fn malformed_and_unrepresentable_announcements_are_refused() {
         .unwrap();
     assert_eq!(
         wide.target(Band::Ghz5),
-        Err(ChannelSwitchError::UnsupportedOperatingClass(128))
+        Err(ChannelSwitchError::UnsupportedOperatingClass(
+            OperatingClass::new(128)
+        ))
     );
     let nowhere = parse_channel_switch(&[37, 3, 0, 15, 1]).unwrap().unwrap();
     assert!(matches!(
@@ -118,12 +120,16 @@ fn malformed_and_unrepresentable_announcements_are_refused() {
 fn an_extended_announcement_round_trips_with_its_operating_class() {
     for (target, class) in [
         (channel(Band::Ghz5, 36, ChannelWidth::Mhz20), 115),
+        (channel(Band::Ghz5, 52, ChannelWidth::Mhz20), 118),
         (channel(Band::Ghz5, 161, ChannelWidth::Mhz40Below), 127),
         (channel(Band::Ghz5, 100, ChannelWidth::Mhz40Above), 122),
         (channel(Band::Ghz2_4, 6, ChannelWidth::Mhz40Below), 84),
     ] {
         let announcement = ChannelSwitch::extended_to(target, ChannelSwitchMode::Continue, 4);
-        assert_eq!(announcement.operating_class, Some(class));
+        assert_eq!(
+            announcement.operating_class,
+            Some(OperatingClass::new(class))
+        );
         let mut elements = [0_u8; 6];
         let length = announcement.encode_elements(&mut elements).unwrap();
         assert_eq!(elements[..2], [60, 4]);

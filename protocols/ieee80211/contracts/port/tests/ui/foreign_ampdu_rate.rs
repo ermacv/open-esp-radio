@@ -1,7 +1,7 @@
 #![no_std]
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduRate, Arena, DataPort, GateOpen, MpduStartSpacing, OnAir, PortRate, Ppdu, Protection,
+    AmpduRate, Arena, DataPort, GateOpen, OnAir, PortRate, Ppdu, Protection,
     RetryPlan,
 };
 // An aggregate's rate is checked for one installation: another
@@ -12,7 +12,7 @@ pub fn publish<'a, 'b, P: DataPort<'a>>(
     own: AmpduRate<'a, P::Caps>,
     foreign: AmpduRate<'b, P::Caps>,
     alone: RetryPlan<PortRate<'a, P::Caps>>,
-    spacing: MpduStartSpacing,
+    spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing,
     gate: &GateOpen<'a>,
     now: Instant,
 ) -> OnAir<'a> {

@@ -2014,14 +2014,10 @@ fn handover_data<T: StaTypes, K>(
         .peer
         .associated
         .ht_ampdu_parameters]);
-    let ht =
-        oer_protocols_ieee80211_contracts_port::MpduStartSpacing::new(parameters.spacing().get())
-            .map(
-                |spacing| oer_protocols_ieee80211_core_datapath::plane::HtLimits {
-                    spacing,
-                    max_length: parameters.max_ampdu_length(),
-                },
-            );
+    let ht = Some(oer_protocols_ieee80211_core_datapath::plane::HtLimits {
+        spacing: parameters.spacing(),
+        max_length: parameters.max_ampdu_length(),
+    });
     Some(oer_protocols_ieee80211_core_datapath::plane::DataLink {
         header,
         admission: AcAdmission::from_edca(connected.peer.associated.edca),
@@ -6455,7 +6451,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     )
                     .ok()
                     .as_ref()
-                    .and_then(HeBssColor::of)
+                    .map(HeBssColor::of)
                     {
                         Some(color) => StationHe::Bss(color),
                         None => {
@@ -6954,7 +6950,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             bssid,
             destination: bssid.get(),
             sequence_number,
-            user_priority: priority.value(),
+            user_priority: priority,
             peer_qos,
             ccmp_header: [0; 8],
             ether_type: EtherType::EAPOL,

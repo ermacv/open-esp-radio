@@ -73,7 +73,7 @@ mod associated_peer {
             oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
         );
         assert_eq!(peer.ht_ampdu_parameters, 0x17);
-        assert_eq!(peer.he_bss_color, 5);
+        assert_eq!(peer.he_bss_color.get(), 5);
         assert!(peer.he_capabilities.is_some());
         assert!(peer.he_peer_state.is_some());
         // The response's HE Capabilities name 16 µs (Nominal Packet

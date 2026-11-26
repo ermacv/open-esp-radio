@@ -20,12 +20,30 @@ fn robust_categories_follow_the_vendor_table() {
 
 #[test]
 fn deauthentication_disassociation_and_robust_actions_are_robust() {
-    assert!(is_robust_management_frame(0xc0, ActionCategory::new(0)));
-    assert!(is_robust_management_frame(0xa0, ActionCategory::new(0)));
-    assert!(is_robust_management_frame(0xd0, ActionCategory::new(3)));
-    assert!(!is_robust_management_frame(0xd0, ActionCategory::new(4)));
-    assert!(!is_robust_management_frame(0x80, ActionCategory::new(0)));
-    assert!(!is_robust_management_frame(0xb0, ActionCategory::new(0)));
+    assert!(is_robust_management_frame(
+        crate::frame::ManagementSubtype::Deauthentication,
+        ActionCategory::new(0)
+    ));
+    assert!(is_robust_management_frame(
+        crate::frame::ManagementSubtype::Disassociation,
+        ActionCategory::new(0)
+    ));
+    assert!(is_robust_management_frame(
+        crate::frame::ManagementSubtype::Action,
+        ActionCategory::new(3)
+    ));
+    assert!(!is_robust_management_frame(
+        crate::frame::ManagementSubtype::Action,
+        ActionCategory::new(4)
+    ));
+    assert!(!is_robust_management_frame(
+        crate::frame::ManagementSubtype::Beacon,
+        ActionCategory::new(0)
+    ));
+    assert!(!is_robust_management_frame(
+        crate::frame::ManagementSubtype::Authentication,
+        ActionCategory::new(0)
+    ));
 }
 
 #[test]

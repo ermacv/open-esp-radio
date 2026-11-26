@@ -81,14 +81,32 @@ impl KeyReplayCounter {
 /// the nearest non-TPMR bridge group address 01-80-C2-00-00-03).
 pub const PAE_GROUP_ADDRESS: Eui48 = Eui48::new([0x01, 0x80, 0xc2, 0x00, 0x00, 0x03]);
 
-/// Data Type of the GTK KDE.
-///
-/// SOURCE: IEEE Std 802.11-2020, 12.7.2, Table 12-10 (KDE selectors).
-pub const GTK_KDE_TYPE: u8 = 1;
-/// Data Type of the IGTK KDE.
-///
-/// SOURCE: IEEE Std 802.11-2020, 12.7.2, Table 12-10 (KDE selectors).
-pub const IGTK_KDE_TYPE: u8 = 9;
+oer_portable_wire::octet_code! { "oer_protocols_ieee80211_wire::eapol";
+    /// A KDE's Data Type under the IEEE 802.11 OUI: any octet, some of them
+    /// named.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 12.7.2, Table 12-10 (KDE selectors).
+    KdeDataType {
+        /// The GTK KDE.
+        GTK = 1,
+        /// The IGTK KDE.
+        IGTK = 9,
+    }
+}
+
+oer_portable_wire::octet_code! { "oer_protocols_ieee80211_wire::eapol";
+    /// An EAPOL PDU's Protocol Version: any octet, some of them named.
+    ///
+    /// SOURCE: IEEE Std 802.1X-2020, 11.3.1 (Protocol Version).
+    EapolProtocolVersion {
+        /// IEEE Std 802.1X-2001.
+        V2001 = 1,
+        /// IEEE Std 802.1X-2004.
+        V2004 = 2,
+        /// IEEE Std 802.1X-2010 and later.
+        V2010 = 3,
+    }
+}
 /// Octets of a KDE before its data: Type, Length, OUI and Data Type.
 pub const KDE_HEADER_LEN: usize = 6;
 
@@ -143,7 +161,7 @@ impl GtkKdeInfo {
 
 /// The header of a KDE of `data_type` whose data has `data_len` octets;
 /// `None` when the KDE would not fit its one-octet Length.
-pub const fn kde_header(data_type: u8, data_len: usize) -> Option<[u8; KDE_HEADER_LEN]> {
+pub const fn kde_header(data_type: KdeDataType, data_len: usize) -> Option<[u8; KDE_HEADER_LEN]> {
     // Length counts the OUI, the Data Type and the data.
     let Some(length) = data_len.checked_add(4) else {
         return None;
@@ -158,14 +176,14 @@ pub const fn kde_header(data_type: u8, data_len: usize) -> Option<[u8; KDE_HEADE
         o0,
         o1,
         o2,
-        data_type,
+        data_type.value(),
     ])
 }
 
 /// One KDE of the IEEE 802.11 OUI: its Data Type and data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Kde<'a> {
-    pub data_type: u8,
+    pub data_type: KdeDataType,
     pub data: &'a [u8],
 }
 
@@ -178,7 +196,10 @@ impl<'a> Kde<'a> {
         if ElementId::new(id) != ElementId::VENDOR_SPECIFIC || [o0, o1, o2] != RSN_OUI {
             return None;
         }
-        Some(Self { data_type, data })
+        Some(Self {
+            data_type: KdeDataType::new(data_type),
+            data,
+        })
     }
 }
 
@@ -242,7 +263,7 @@ pub enum EapolParseError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EapolKey<'a> {
     bytes: &'a [u8],
-    protocol_version: u8,
+    protocol_version: EapolProtocolVersion,
     key_information: KeyInformation,
     key_length: EapolLength,
     replay_counter: KeyReplayCounter,
@@ -301,7 +322,7 @@ impl<'a> EapolKey<'a> {
         let after_mic = around_mic.remaining();
         Ok(Self {
             bytes,
-            protocol_version,
+            protocol_version: EapolProtocolVersion::new(protocol_version),
             key_information,
             key_length,
             replay_counter,
@@ -321,7 +342,7 @@ impl<'a> EapolKey<'a> {
         self.bytes
     }
 
-    pub const fn protocol_version(self) -> u8 {
+    pub const fn protocol_version(self) -> EapolProtocolVersion {
         self.protocol_version
     }
 
@@ -383,7 +404,7 @@ pub struct EapolKeyFields<'a> {
 /// The fields of an EAPOL-Key packet before its Key Data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EapolKeyFixedFields {
-    pub protocol_version: u8,
+    pub protocol_version: EapolProtocolVersion,
     pub key_information: KeyInformation,
     pub key_length: u16,
     pub replay_counter: u64,
@@ -420,7 +441,7 @@ fn fixed_part(
     key_data_len: EapolLength,
 ) -> [u8; EAPOL_KEY_PACKET_LEN] {
     let layout = [
-        &[fields.protocol_version, EAPOL_PACKET_TYPE_KEY][..],
+        &[fields.protocol_version.value(), EAPOL_PACKET_TYPE_KEY][..],
         &body_len.to_bytes(),
         &[RSN_KEY_DESCRIPTOR_TYPE],
         &fields.key_information.to_bytes(),
@@ -479,9 +500,9 @@ impl<const N: usize> EapolKeyBuffer<N> {
     /// ```compile_fail,E0080
     /// // A Key Data bound past the 16-bit body length, though the buffer
     /// // holds it.
-    /// use oer_protocols_ieee80211_wire::eapol::{EapolKeyBuffer, EapolKeyFixedFields, KeyInformation};
+    /// use oer_protocols_ieee80211_wire::eapol::{EapolKeyBuffer, EapolKeyFixedFields, EapolProtocolVersion, KeyInformation};
     /// let fields = EapolKeyFixedFields {
-    ///     protocol_version: 2,
+    ///     protocol_version: EapolProtocolVersion::V2004,
     ///     key_information: KeyInformation::from_raw(0),
     ///     key_length: 0,
     ///     replay_counter: 0,
@@ -591,7 +612,7 @@ impl<'a> GtkKde<'a> {
     /// The complete KDE.
     pub fn encode(&self) -> [u8; GTK_KDE_LEN] {
         const HEADER: [u8; KDE_HEADER_LEN] =
-            match kde_header(GTK_KDE_TYPE, GTK_KDE_LEN - KDE_HEADER_LEN) {
+            match kde_header(KdeDataType::GTK, GTK_KDE_LEN - KDE_HEADER_LEN) {
                 Some(header) => header,
                 None => panic!("GTK KDE geometry"),
             };
@@ -634,7 +655,7 @@ impl<'a> IgtkKde<'a> {
     /// The complete KDE.
     pub fn encode(&self) -> [u8; IGTK_KDE_LEN] {
         const HEADER: [u8; KDE_HEADER_LEN] =
-            match kde_header(IGTK_KDE_TYPE, IGTK_KDE_LEN - KDE_HEADER_LEN) {
+            match kde_header(KdeDataType::IGTK, IGTK_KDE_LEN - KDE_HEADER_LEN) {
                 Some(header) => header,
                 None => panic!("IGTK KDE geometry"),
             };
@@ -751,7 +772,7 @@ mod tests {
         let key_rsc = [0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98];
         let key_data = [0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda];
         let fixed = EapolKeyFixedFields {
-            protocol_version: 2,
+            protocol_version: EapolProtocolVersion::V2004,
             key_information: KeyInformation::from_raw(0x13ca),
             key_length: 0x0110,
             replay_counter: 0x0102_0304_0506_0708,
@@ -767,7 +788,7 @@ mod tests {
         assert_eq!(bytes.len(), EAPOL_KEY_PACKET_LEN + key_data.len());
         assert_eq!(bytes.get(EAPOL_KEY_PACKET_LEN..), Some(&key_data[..]));
         let key = EapolKey::parse(bytes).unwrap();
-        assert_eq!(key.protocol_version(), 2);
+        assert_eq!(key.protocol_version(), EapolProtocolVersion::V2004);
         assert_eq!(key.key_information().raw(), 0x13ca);
         assert_eq!(key.key_length(), 0x0110);
         assert_eq!(key.replay_counter(), 0x0102_0304_0506_0708);
@@ -801,7 +822,7 @@ mod tests {
     #[test]
     fn a_packet_without_key_data_is_the_encoded_one() {
         let fixed = EapolKeyFixedFields {
-            protocol_version: 2,
+            protocol_version: EapolProtocolVersion::V2004,
             key_information: KeyInformation::from_raw(0x008a),
             key_length: 16,
             replay_counter: 0x0102_0304_0506_0708,
@@ -852,25 +873,25 @@ mod tests {
 
     #[test]
     fn a_kde_round_trips_and_a_short_or_foreign_one_is_refused() {
-        let header = kde_header(GTK_KDE_TYPE, 18).unwrap();
+        let header = kde_header(KdeDataType::GTK, 18).unwrap();
         assert_eq!(header, [0xdd, 22, 0x00, 0x0f, 0xac, 1]);
         let mut element = [0_u8; 24];
         element[..6].copy_from_slice(&header);
         element[6] = 1;
         let kde = Kde::parse(&element).unwrap();
-        assert_eq!(kde.data_type, GTK_KDE_TYPE);
+        assert_eq!(kde.data_type, KdeDataType::GTK);
         assert_eq!(kde.data.len(), 18);
         assert_eq!(Kde::parse(&element[..5]), None);
         element[2] = 0x50;
         assert_eq!(Kde::parse(&element), None);
-        assert_eq!(kde_header(GTK_KDE_TYPE, 252), None);
+        assert_eq!(kde_header(KdeDataType::GTK, 252), None);
     }
     /// Message 4 of a PSK handshake: version 1, Key Information 0x030a,
     /// replay counter 9, a MIC of 0xa5 and no Key Data.
     fn message4() -> EapolKeyBuffer<128> {
         EapolKeyBuffer::encode(&EapolKeyFields {
             fixed: EapolKeyFixedFields {
-                protocol_version: 1,
+                protocol_version: EapolProtocolVersion::V2001,
                 key_information: KeyInformation::from_raw(0x030a),
                 key_length: 0,
                 replay_counter: 9,
@@ -887,7 +908,7 @@ mod tests {
     fn the_key_length_reads_back_whole() {
         let packet = EapolKeyBuffer::<128>::encode(&EapolKeyFields {
             fixed: EapolKeyFixedFields {
-                protocol_version: 2,
+                protocol_version: EapolProtocolVersion::V2004,
                 key_information: KeyInformation::from_raw(0x008a),
                 key_length: 0x0110,
                 replay_counter: 1,
@@ -913,7 +934,7 @@ mod tests {
         assert_eq!(&bytes[81..97], &[0xa5; 16]);
         assert_eq!(&bytes[97..], &[0, 0]);
         let key = packet.key().unwrap();
-        assert_eq!(key.protocol_version(), 1);
+        assert_eq!(key.protocol_version(), EapolProtocolVersion::V2001);
         assert_eq!(key.key_information().raw(), 0x030a);
         assert_eq!(key.replay_counter(), 9);
         assert_eq!(key.mic(), &[0xa5; 16]);
@@ -960,7 +981,7 @@ mod tests {
         assert_eq!(
             EapolKeyBuffer::<98>::encode(&EapolKeyFields {
                 fixed: EapolKeyFixedFields {
-                    protocol_version: 1,
+                    protocol_version: EapolProtocolVersion::V2001,
                     key_information: KeyInformation::EMPTY,
                     key_length: 0,
                     replay_counter: 0,
