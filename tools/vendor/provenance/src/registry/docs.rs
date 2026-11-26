@@ -52,15 +52,14 @@ pub(super) fn undefined_symbols(
     artifacts: &str,
 ) -> Vec<String> {
     let mut problems = vec![];
-    for (index, line) in text.lines().enumerate() {
+    for (number, line) in (1_usize..).zip(text.lines()) {
         if line.contains(HISTORICAL) {
             continue;
         }
         for symbol in obfuscated_symbols(line) {
             if !defined.contains(symbol) {
                 problems.push(format!(
-                    "{path}:{}: {symbol} is not defined by the pinned {artifacts}",
-                    index + 1
+                    "{path}:{number}: {symbol} is not defined by the pinned {artifacts}"
                 ));
             }
         }
@@ -90,6 +89,20 @@ mod tests {
         assert_eq!(
             undefined_symbols("doc.md", text, &defined(), "libble_app.a"),
             ["doc.md:3: r_sym_ble_mqh4OXzoN59kvnkKFMA1 is not defined by the pinned libble_app.a"]
+        );
+    }
+
+    #[test]
+    fn every_stale_symbol_is_reported_with_the_line_it_stands_on() {
+        let text = "r_sym_ble_mqh4OXzoN59kvnkKFMA1\n\n\
+                    sym_x_mqh4OXzoN59kvnkKFMA1 and r_sym_ble_mqh4OXzoN59kvnkKFMA1";
+        assert_eq!(
+            undefined_symbols("d.md", text, &defined(), "a"),
+            [
+                "d.md:1: r_sym_ble_mqh4OXzoN59kvnkKFMA1 is not defined by the pinned a",
+                "d.md:3: sym_x_mqh4OXzoN59kvnkKFMA1 is not defined by the pinned a",
+                "d.md:3: r_sym_ble_mqh4OXzoN59kvnkKFMA1 is not defined by the pinned a",
+            ]
         );
     }
 

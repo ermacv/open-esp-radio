@@ -80,19 +80,21 @@ impl Syntax {
 /// rustdoc, which would otherwise read the tag as a link). `RESOURCE:` and
 /// `SOURCES.md` are no markers.
 pub fn marker(line: &str) -> Option<usize> {
-    let mut offset = 0;
-    while let Some(found) = line[offset..].find(MARKER) {
-        let at = offset + found;
-        let after = &line[at + MARKER.len()..];
-        let before = line[..at].chars().next_back();
-        if !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
-            && (after.starts_with([':', '(', '[']) || after.starts_with("\\["))
-        {
-            return Some(at);
-        }
-        offset = at + MARKER.len();
-    }
-    None
+    around_marker(line).map(|(before, _)| before.len())
+}
+
+/// The text of `line` before its marker and the text after it.
+fn around_marker(line: &str) -> Option<(&str, &str)> {
+    line.match_indices(MARKER).find_map(|(at, _)| {
+        let (before, rest) = line.split_at_checked(at)?;
+        let after = rest.strip_prefix(MARKER)?;
+        let word = before
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_');
+        (!word && (after.starts_with([':', '(', '[']) || after.starts_with("\\[")))
+            .then_some((before, after))
+    })
 }
 
 /// Whether `line` is a comment of `syntax` that opens a recovered-fact
@@ -103,23 +105,20 @@ pub fn is_marker_line(line: &str, syntax: Syntax) -> bool {
 
 /// The chip list after the marker on `line`, and the line without it.
 fn marker_chips(line: &str) -> Result<(Option<Vec<String>>, String), &'static str> {
-    let Some(at) = marker(line) else {
+    let Some((before, list)) =
+        around_marker(line).and_then(|(before, after)| Some((before, after.strip_prefix('(')?)))
+    else {
         return Ok((None, line.to_owned()));
     };
-    let after = at + MARKER.len();
-    let Some(list) = line[after..].strip_prefix('(') else {
-        return Ok((None, line.to_owned()));
-    };
-    let close = list.find(')').ok_or("unclosed chip list")?;
-    let chips: Vec<String> = list[..close]
+    let (chips, rest) = list.split_once(')').ok_or("unclosed chip list")?;
+    let chips: Vec<String> = chips
         .split(',')
         .map(|chip| chip.trim().to_owned())
         .collect();
     if chips.iter().any(String::is_empty) {
         return Err("empty chip name");
     }
-    let rest = &list[close + 1..];
-    Ok((Some(chips), format!("{}{MARKER}{rest}", &line[..at])))
+    Ok((Some(chips), format!("{before}{MARKER}{rest}")))
 }
 
 /// Every recovered-fact comment block of Rust `text`, or the first
@@ -132,28 +131,28 @@ pub fn blocks(text: &str) -> Result<Vec<Block>, MalformedMarker> {
 /// malformed marker.
 pub fn blocks_in(text: &str, syntax: Syntax) -> Result<Vec<Block>, MalformedMarker> {
     let mut blocks: Vec<Block> = vec![];
-    let mut open = false;
-    for (index, line) in text.lines().enumerate() {
-        if !syntax.is_comment(line) {
-            open = false;
+    let mut lines = (1..).zip(text.lines()).peekable();
+    while let Some((number, line)) = lines.next() {
+        if !is_marker_line(line, syntax) {
             continue;
         }
-        if marker(line).is_some() {
-            let (chips, stripped) = marker_chips(line).map_err(|reason| MalformedMarker {
-                line: index + 1,
-                reason,
-            })?;
-            blocks.push(Block {
-                line: index + 1,
-                chips,
-                text: stripped,
-            });
-            open = true;
-        } else if open {
-            let block = blocks.last_mut().expect("an open block");
-            block.text.push('\n');
-            block.text.push_str(line);
+        let (chips, mut text) = marker_chips(line).map_err(|reason| MalformedMarker {
+            line: number,
+            reason,
+        })?;
+        // The block runs on through the comment lines that open no block of
+        // their own.
+        while let Some((_, more)) =
+            lines.next_if(|(_, more)| syntax.is_comment(more) && marker(more).is_none())
+        {
+            text.push('\n');
+            text.push_str(more);
         }
+        blocks.push(Block {
+            line: number,
+            chips,
+            text,
+        });
     }
     Ok(blocks)
 }
@@ -287,6 +286,82 @@ mod tests {
         // A prose line naming source files opens no block.
         let text = "// see SOURCES.md for the list\n// `phy_x` is not cited\n";
         assert!(blocks(text).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_marker_is_found_past_the_words_that_only_hold_it() {
+        // The second of two that touch follows a letter of the first.
+        assert_eq!(marker("// SOURCESOURCE: x"), None);
+        assert_eq!(marker("// SOURCE SOURCE: x"), Some(10));
+        assert_eq!(marker("// RESOURCE: SOURCE x SOURCE[T]: y"), Some(22));
+        // The offset is in bytes, after text of any width.
+        assert_eq!(marker("// \u{e9}t\u{e9} \u{2014}SOURCE: x"), Some(12));
+        assert_eq!(marker("SOURCE: x"), Some(0));
+        assert_eq!(marker("// SOURCE"), None);
+        assert_eq!(marker(""), None);
+    }
+
+    #[test]
+    fn a_block_is_its_marker_line_and_the_comment_lines_that_follow_it() {
+        let text = "// before any marker\n\
+                    // SOURCE(chip-a)[TAG]: first\n\
+                    // SOURCE: second, directly after\n\
+                    // its continuation\n\
+                    fn x() {}\n\
+                    // not a continuation\n\
+                    \n\
+                    // SOURCE( chip-a ,chip-b ): third, the last line";
+        assert_eq!(
+            blocks(text).unwrap(),
+            [
+                Block {
+                    line: 2,
+                    chips: Some(vec!["chip-a".to_owned()]),
+                    text: "// SOURCE[TAG]: first".to_owned(),
+                },
+                Block {
+                    line: 3,
+                    chips: None,
+                    text: "// SOURCE: second, directly after\n// its continuation".to_owned(),
+                },
+                Block {
+                    line: 8,
+                    chips: Some(vec!["chip-a".to_owned(), "chip-b".to_owned()]),
+                    text: "// SOURCE: third, the last line".to_owned(),
+                },
+            ]
+        );
+        // A second marker on the line is text; a list that is not directly
+        // after the marker is no list.
+        assert_eq!(
+            blocks("// SOURCE(chip-a): see SOURCE(chip-b): x\n// SOURCE: (chip-a) y").unwrap(),
+            [
+                Block {
+                    line: 1,
+                    chips: Some(vec!["chip-a".to_owned()]),
+                    text: "// SOURCE: see SOURCE(chip-b): x".to_owned(),
+                },
+                Block {
+                    line: 2,
+                    chips: None,
+                    text: "// SOURCE: (chip-a) y".to_owned(),
+                },
+            ]
+        );
+        assert_eq!(
+            blocks("// SOURCE(): x"),
+            Err(MalformedMarker {
+                line: 1,
+                reason: "empty chip name"
+            })
+        );
+        assert_eq!(
+            blocks("// SOURCE: fine\n\n// SOURCE(chip-a"),
+            Err(MalformedMarker {
+                line: 3,
+                reason: "unclosed chip list"
+            })
+        );
     }
 
     #[test]

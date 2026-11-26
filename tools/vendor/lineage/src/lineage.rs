@@ -1,9 +1,11 @@
 //! Name recovery composed over an ordered sequence of revisions.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::archive::Revision;
-use crate::correspond::{Evidence, Policy, correlate};
+use crate::correspond::{Evidence, Pair, Policy, correlate};
 
 /// Whether `name` carries a generated obfuscation token instead of a source
 /// name. A token is a final `_`-separated component, before any compiler
@@ -18,7 +20,7 @@ pub fn is_obfuscated(name: &str) -> bool {
     token.len() >= 16
         && token.bytes().all(|byte| byte.is_ascii_alphanumeric())
         && token.bytes().any(|byte| byte.is_ascii_lowercase())
-        && (token.bytes().any(|byte| byte.is_ascii_digit()) || upper * 4 >= token.len())
+        && (token.bytes().any(|byte| byte.is_ascii_digit()) || upper >= token.len().div_ceil(4))
 }
 
 /// How generated names are told apart from source names.
@@ -116,30 +118,44 @@ pub fn trace(revisions: &[Revision], policy: Policy, class: &NameClass) -> Linea
     };
     let mut current = seed(first, class);
     let mut steps = Vec::new();
-    for window in revisions.windows(2) {
-        let (left, right) = (&window[0], &window[1]);
+    for [left, right] in revisions.array_windows() {
         let pairs = correlate(left, right, policy);
-        let mut summary = StepSummary {
+        let by_left: BTreeMap<usize, &Pair> = pairs.iter().map(|pair| (pair.left, pair)).collect();
+        // What every paired function of the older revision brings to its
+        // place in the newer one.
+        let carried: BTreeMap<usize, (&Recovered, &Pair)> = current
+            .iter()
+            .enumerate()
+            .filter_map(|(place, previous)| {
+                let pair = by_left.get(&place)?;
+                Some((pair.right, (previous, *pair)))
+            })
+            .collect();
+        let count = |counted: fn(&Pair) -> bool| pairs.iter().filter(|pair| counted(pair)).count();
+        let mut next = seed(right, class);
+        steps.push(StepSummary {
             from: left.label.clone(),
             to: right.label.clone(),
-            unpaired_left: left.functions.len() - pairs.len(),
-            unpaired_right: right.functions.len() - pairs.len(),
-            ..StepSummary::default()
-        };
-        let mut next = seed(right, class);
-        for pair in &pairs {
-            match pair.evidence {
-                Evidence::SameName => summary.same_name += 1,
-                Evidence::ExactBody => summary.exact_body += 1,
-                Evidence::CallGraph => summary.call_graph += 1,
-                Evidence::Similar { .. } => summary.similar += 1,
-                Evidence::Dominant { .. } => summary.dominant += 1,
-                Evidence::Neighbourhood { .. } => summary.neighbourhood += 1,
-            }
-            summary.changed_bodies += usize::from(!pair.identical);
-            summary.dissimilar += usize::from(pair.similarity_ppm < 500_000);
-            let previous = &current[pair.left];
-            let entry = &mut next[pair.right];
+            same_name: count(|pair| pair.evidence == Evidence::SameName),
+            exact_body: count(|pair| pair.evidence == Evidence::ExactBody),
+            call_graph: count(|pair| pair.evidence == Evidence::CallGraph),
+            similar: count(|pair| matches!(pair.evidence, Evidence::Similar { .. })),
+            dominant: count(|pair| matches!(pair.evidence, Evidence::Dominant { .. })),
+            neighbourhood: count(|pair| matches!(pair.evidence, Evidence::Neighbourhood { .. })),
+            changed_bodies: count(|pair| !pair.identical),
+            dissimilar: count(|pair| pair.similarity_ppm < 500_000),
+            unpaired_left: (0..current.len())
+                .filter(|place| !by_left.contains_key(place))
+                .count(),
+            unpaired_right: (0..next.len())
+                .filter(|place| !carried.contains_key(place))
+                .count(),
+        });
+        for (place, entry) in next.iter_mut().enumerate() {
+            // A function without a pair starts its own chain.
+            let Some((previous, pair)) = carried.get(&place) else {
+                continue;
+            };
             entry.chain.clone_from(&previous.chain);
             entry.chain.push(step(right, previous, pair));
             if previous.source_name.is_none() {
@@ -161,7 +177,6 @@ pub fn trace(revisions: &[Revision], policy: Policy, class: &NameClass) -> Linea
             entry.steps.clone_from(&previous.steps);
             entry.steps.push(step(right, previous, pair));
         }
-        steps.push(summary);
         current = next;
     }
     Lineage {
@@ -178,7 +193,7 @@ pub fn trace(revisions: &[Revision], policy: Policy, class: &NameClass) -> Linea
     }
 }
 
-fn step(right: &Revision, previous: &Recovered, pair: &crate::correspond::Pair) -> Step {
+fn step(right: &Revision, previous: &Recovered, pair: &Pair) -> Step {
     Step {
         to: right.label.clone(),
         previous_name: previous.name.clone(),
@@ -216,5 +231,20 @@ mod tests {
         assert!(is_obfuscated("r_sym_ble_oDSWrKSM8tZw8SolRxrc.part.0"));
         assert!(!is_obfuscated("r_btdm_sched_insert_with_lock_modify"));
         assert!(!is_obfuscated("r_sched_txn_onSchedHwListDone"));
+    }
+
+    #[test]
+    fn a_token_without_a_digit_needs_upper_case_in_a_quarter_of_its_characters() {
+        // Sixteen characters: four in upper case are a quarter, three are not.
+        assert!(is_obfuscated("r_ABCDefghijklmnop"));
+        assert!(!is_obfuscated("r_ABCdefghijklmnop"));
+        // Seventeen: four are less than a quarter, five are more.
+        assert!(!is_obfuscated("r_ABCDefghijklmnopq"));
+        assert!(is_obfuscated("r_ABCDEfghijklmnopq"));
+        // A digit stands for the upper case; fifteen characters are too few.
+        assert!(is_obfuscated("r_abcdefghijklmno1"));
+        assert!(!is_obfuscated("r_ABCDEFGHijklmn1"));
+        // All in upper case has no lower case.
+        assert!(!is_obfuscated("r_ABCDEFGHIJKLMNOP"));
     }
 }

@@ -44,19 +44,14 @@ const CANDIDATES: usize = 8;
 
 /// Shared instructions of two sorted token multisets.
 fn overlap(a: &[u64], b: &[u64]) -> usize {
-    let (mut i, mut j, mut shared) = (0, 0, 0);
-    while i < a.len() && j < b.len() {
-        match a[i].cmp(&b[j]) {
-            std::cmp::Ordering::Less => i += 1,
-            std::cmp::Ordering::Greater => j += 1,
-            std::cmp::Ordering::Equal => {
-                shared += 1;
-                i += 1;
-                j += 1;
-            }
-        }
-    }
-    shared
+    let mut others = b.iter().peekable();
+    a.iter()
+        .filter(|token| {
+            // What `b` holds below this token is shared with nothing later.
+            while others.next_if(|other| other < token).is_some() {}
+            others.next_if_eq(token).is_some()
+        })
+        .count()
 }
 
 /// Similarity of two token sequences as a fraction.
@@ -101,47 +96,41 @@ pub fn compare(old: &[Function], new: &[Function]) -> Vec<Entry> {
     }
     let old_names: BTreeSet<&str> = old.iter().map(|f| f.name.as_str()).collect();
     let mut matched: BTreeSet<(&str, &str)> = BTreeSet::new();
-    let mut entries = vec![];
-    let mut unresolved = vec![];
+    // Every old function with the status its name or its code gives it in
+    // the new revision; one that has neither is removed, and its closest
+    // candidate is looked for once every match is known.
+    let mut found: Vec<(&Function, Option<Status>)> = vec![];
     for f in old {
         let same_name = new_by_name.get(f.name.as_str());
-        let status = if let Some(same) =
-            same_name.and_then(|list| list.iter().find(|n| n.code == f.code))
-        {
-            matched.insert((&same.member, &same.name));
-            if same.named == f.named {
-                Status::Unchanged
-            } else {
-                Status::ReferencesRenamed
-            }
-        } else if let Some(list) = same_name {
-            let best = list
-                .iter()
-                .max_by(|a, b| {
+        let status =
+            if let Some(same) = same_name.and_then(|list| list.iter().find(|n| n.code == f.code)) {
+                matched.insert((&same.member, &same.name));
+                Some(if same.named == f.named {
+                    Status::Unchanged
+                } else {
+                    Status::ReferencesRenamed
+                })
+            } else if let Some(best) = same_name.and_then(|list| {
+                list.iter().max_by(|a, b| {
                     similarity(&f.tokens, &a.tokens).total_cmp(&similarity(&f.tokens, &b.tokens))
                 })
-                .expect("a nonempty name list");
-            matched.insert((&best.member, &best.name));
-            Status::Changed {
-                similarity: similarity(&f.tokens, &best.tokens),
-            }
-        } else if let Some(renamed) = new_by_code
-            .get(f.code.as_str())
-            .and_then(|list| list.iter().find(|n| !old_names.contains(n.name.as_str())))
-        {
-            matched.insert((&renamed.member, &renamed.name));
-            Status::Renamed {
-                new: renamed.name.clone(),
-            }
-        } else {
-            unresolved.push(entries.len());
-            Status::Removed { closest: None }
-        };
-        entries.push(Entry {
-            name: f.name.clone(),
-            member: f.member.clone(),
-            status,
-        });
+            }) {
+                matched.insert((&best.member, &best.name));
+                Some(Status::Changed {
+                    similarity: similarity(&f.tokens, &best.tokens),
+                })
+            } else {
+                new_by_code
+                    .get(f.code.as_str())
+                    .and_then(|list| list.iter().find(|n| !old_names.contains(n.name.as_str())))
+                    .map(|renamed| {
+                        matched.insert((&renamed.member, &renamed.name));
+                        Status::Renamed {
+                            new: renamed.name.clone(),
+                        }
+                    })
+            };
+        found.push((f, status));
     }
     let unmatched: Vec<&Function> = new
         .iter()
@@ -149,29 +138,25 @@ pub fn compare(old: &[Function], new: &[Function]) -> Vec<Entry> {
         .filter(|f| !old_names.contains(f.name.as_str()))
         .collect();
     let multisets: Vec<Vec<u64>> = unmatched.iter().map(|f| sorted(&f.tokens)).collect();
-    for index in unresolved {
-        let f = old
-            .iter()
-            .find(|f| f.name == entries[index].name && f.member == entries[index].member)
-            .expect("an old function");
-        entries[index].status = Status::Removed {
-            closest: closest(
-                f,
-                unmatched
-                    .iter()
-                    .copied()
-                    .zip(multisets.iter().map(Vec::as_slice)),
-            ),
-        };
-    }
-    for f in unmatched {
-        entries.push(Entry {
-            name: f.name.clone(),
-            member: f.member.clone(),
-            status: Status::Added,
-        });
-    }
-    entries
+    let removed = |f: &Function| Status::Removed {
+        closest: closest(
+            f,
+            unmatched
+                .iter()
+                .copied()
+                .zip(multisets.iter().map(Vec::as_slice)),
+        ),
+    };
+    let entry = |f: &Function, status| Entry {
+        name: f.name.clone(),
+        member: f.member.clone(),
+        status,
+    };
+    found
+        .into_iter()
+        .map(|(f, status)| entry(f, status.unwrap_or_else(|| removed(f))))
+        .chain(unmatched.iter().map(|f| entry(f, Status::Added)))
+        .collect()
 }
 
 fn render(entries: &[Entry], all: bool) {
@@ -194,22 +179,27 @@ fn render(entries: &[Entry], all: bool) {
     }
 }
 
+/// The number of entries of each status that occurs, in the order of the
+/// statuses' names.
 fn summary(entries: &[Entry]) -> String {
-    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
-    for entry in entries {
-        let key = match entry.status {
-            Status::Unchanged => "unchanged",
-            Status::ReferencesRenamed => "references-renamed",
-            Status::Renamed { .. } => "renamed",
-            Status::Changed { .. } => "changed",
-            Status::Removed { .. } => "removed",
-            Status::Added => "added",
-        };
-        *counts.entry(key).or_default() += 1;
-    }
-    counts
+    let name = |status: &Status| match status {
+        Status::Unchanged => "unchanged",
+        Status::ReferencesRenamed => "references-renamed",
+        Status::Renamed { .. } => "renamed",
+        Status::Changed { .. } => "changed",
+        Status::Removed { .. } => "removed",
+        Status::Added => "added",
+    };
+    let names: BTreeSet<&str> = entries.iter().map(|entry| name(&entry.status)).collect();
+    names
         .iter()
-        .map(|(k, v)| format!("{k}={v}"))
+        .map(|kind| {
+            let count = entries
+                .iter()
+                .filter(|entry| name(&entry.status) == *kind)
+                .count();
+            format!("{kind}={count}")
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }

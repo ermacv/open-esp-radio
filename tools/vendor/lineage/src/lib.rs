@@ -16,11 +16,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 pub mod archive;
 pub mod correspond;
