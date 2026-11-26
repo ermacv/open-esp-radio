@@ -16,23 +16,25 @@
 use core::task::{Context, Poll};
 
 use oer_portable_time::Instant;
-use oer_protocols_ieee80211_contracts_port::{RadioPort, StopFrom};
+use oer_protocols_ieee80211_contracts_port::{LayoutRights, RadioPort, StopFrom};
 use oer_protocols_ieee80211_core_installation::{
     DataStop, Ended, Input, Machine, Rest, RetuneAsk, StartAsk, Step, StopAsk, Tell, Waited,
 };
 
+/// The rights of port `P`'s layout: the radio's and its interfaces'.
+pub type RightsOf<'id, P> = LayoutRights<'id, <P as RadioPort<'id>>::Layout>;
+
 /// The installation machine of port `P`.
-pub type MachineOf<'id, P> =
-    Machine<'id, <P as RadioPort<'id>>::Channel, <P as RadioPort<'id>>::Data>;
+pub type MachineOf<'id, P> = Machine<'id, <P as RadioPort<'id>>::Channel, RightsOf<'id, P>>;
 
 /// The parties a step speaks to beside the port: the data plane, the
 /// controller and the network, as the composition binds them.
 pub trait Parties<'id, P: RadioPort<'id>> {
     /// The data plane: stop the data, answered at once.
-    fn stop_data(&mut self) -> DataStop<P::Data>;
+    fn stop_data(&mut self) -> DataStop<RightsOf<'id, P>>;
     /// A message to its party: the controller's tokens' end, the network's
     /// stop, or the data plane's flow with its rights.
-    fn tell(&mut self, tell: Tell<'id, P::Data>);
+    fn tell(&mut self, tell: Tell<'id, RightsOf<'id, P>>);
     /// The controller: the one end of its open request, or the release's.
     fn ended(&mut self, ended: Ended<'id>);
     /// The controller: the run was interrupted, since the port needs a stop.

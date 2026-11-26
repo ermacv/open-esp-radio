@@ -163,18 +163,18 @@ pub mod life;
 pub mod receive;
 
 pub use data::{
-    Agreement, AgreementCommand, AgreementEnd, AgreementHeld, AgreementSlot, Arena, ArenaOutcome,
-    ArenaSide, CloseGate, CommandPlace, CommandPoll, Complete, DATA_SINGLES, DataLayout, DataPort,
-    DataRights, Ended, Facts, FrameSet, GroupCommand, GroupEnd, GroupHeld, GroupSlot, HEADROOM,
-    HeaderLen, IdleArena, InCommand, InstalledGroup, InstalledPairwise, MIC_ROOM, OnAir,
-    PairwiseCommand, PairwiseEnd, PairwiseHeld, PairwiseSlot, Place, Placing, PortSink, Ppdu,
-    QUEUES, QueueRight, Settled, Signal, SinglePlace, TxFacts, TxSlot, TxSlotOf, TxSlotRefused,
+    AccessPointData, Agreement, AgreementCommand, AgreementEnd, AgreementHeld, AgreementSlot,
+    Arena, ArenaOutcome, ArenaSide, CloseGate, CommandPlace, CommandPoll, Complete, DataPort,
+    Ended, Facts, FrameSet, GroupCommand, GroupEnd, GroupHeld, GroupSlot, HEADROOM, HeaderLen,
+    IdleArena, InCommand, InstalledGroup, InstalledPairwise, InterfaceLayout, InterfaceRights,
+    Layout, LayoutRights, MIC_ROOM, Member, OnAir, PairwiseCommand, PairwiseEnd, PairwiseHeld,
+    PairwiseSlot, Place, Placing, PortSink, Ppdu, PublishedSingle, QUEUES, QueueRight, RadioRights,
+    Settled, Signal, SingleOfTwo, SinglePlace, TxFacts, TxSlot, TxSlotOf, TxSlotRefused,
     ValueCommand, ValueEnd, ValueKind, tx_slot,
 };
 pub use life::{
-    Install, MintData, MintSeal, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning,
-    Running, StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped, Stopping,
-    UnitsHome,
+    Install, MintSeal, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning, Running,
+    StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped, Stopping, UnitsHome,
 };
 pub use receive::{
     EthernetAddresses, Lendable, OutsideTheUnit, PLACES, ReceivePort, Received, Rest, Round,

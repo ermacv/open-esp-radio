@@ -25,7 +25,8 @@ Every right of an installation is a value branded by the installation
 (`'id`) and made only by the contract, from the port's `PortKey`; a key
 comes only from an installation's mint (`PortPools`, through
 `oer-protocols-radio-port`'s `Mint`), with the radio stopped, the stop's
-right, the data's rights (`DataRights`) and the installation's closed gate
+right, the rights of the installation's layout (the radio's and each
+interface's, [Interfaces](#interfaces)) and the installation's closed gate
 (`Install`). A transition consumes the right it takes and returns the next,
 so a call with a spent, a stale or a foreign right cannot be written
 (`tests/ui/forged_right.rs`, E0451). The one door around the key is
@@ -39,13 +40,69 @@ or build dependency turns that on (`oer-tools-test-layers`,
 | `Starting`, `Retuning`, `Stopping` | `start`, `retune`, `stop` | the machine | their polls |
 | `Running` | a confirmed start or retune | the machine | `retune`, `stop` |
 | `StopRight` | the install | the machine, lent to a stop | `release` |
-| `Retired` | `retire`, with `Stopped`, the data's rights and `UnitsHome` | the machine | `release` |
+| `Retired` | `retire`, with `Stopped`, every bundle of the layout and `UnitsHome` | the machine | `release` |
 | `GateClosed` | the install; the close-gate command's end | the radio's controller | `open_gate`; lent to a retune (`GateLent`) |
 | `GateOpen` | `open_gate` | the controller, lent to a publication | the close-gate command |
-| `IdleArena`, `Arena`, `OnAir` | the install; `open`, `publish`, `settle`, `withdraw` | the engine | the next of them |
-| `SinglePlace`, `QueueRight` | the install; a single's end (`PortSink::single_ended`) | the engine; the port from a single's publication to its end | `publish_single` |
-| `CommandPlace`, `InCommand<'id, H>` | the install; a kind's `begin_*`; its end | the engine | a kind's `begin_*`, `poll_*` |
-| `PairwiseSlot`, `GroupSlot`, `AgreementSlot` and their installed forms | the install (empty); a key's or an agreement's command end | the engine | the commands that install, replace and remove them |
+| `IdleArena`, `Arena`, `OnAir` (the radio's) | the install; `open`, `publish`, `settle`, `withdraw` | the engine | the next of them |
+| `QueueRight` (the radio's) | the install; a single's end (`PortSink::single_ended`) | the engine; the port from a single's publication to its end | `publish_single` |
+| `SinglePlace<'id, I>` (an interface's) | the install; a single's end, as `I`'s | the engine; the port from a single's publication to its end | `publish_single` |
+| `CommandPlace`, `InCommand<'id, H>` (the radio's) | the install; a kind's `begin_*`; its end | the engine | a kind's `begin_*`, `poll_*` |
+| `PairwiseSlot<'id, I>`, `GroupSlot<'id, I>`, `AgreementSlot<'id, I>` and their installed forms (an interface's) | the install (empty); a key's or an agreement's command end | the engine | the commands that install, replace and remove them |
+
+## Interfaces
+
+An installation runs a closed set of interfaces of the product:
+
+| | Address | Receive rule | Keys | TSF | Agreements |
+| --- | --- | --- | --- | --- | --- |
+| station | its own | its BSS | one pairwise, its group keys | the access point's, followed | its access point's |
+| access point | its own, its BSSID | its BSS | one pairwise a client, its group keys | its own | its clients' |
+
+What differs between two interfaces of different roles is counts: pairwise
+key places, group key places, agreements' places, single places, data
+places. So the rights are two kinds of bundle:
+
+| The radio's, once (`RadioRights`) | An interface's (`InterfaceRights<'id, I, SINGLES, PAIRWISE, GROUPS, AGREEMENTS>`) |
+| --- | --- |
+| the two arenas | its single places, by purpose |
+| a right a transmit queue | its role's data places (`I::Data`: none for a station, one a queue for an access point) |
+| the command's place | `PAIRWISE` pairwise key places |
+| | its group key slots |
+| | its receive agreements' slots |
+
+The life, the channel, the gate and the receive ring are the radio's and
+have no place in a bundle.
+
+**An interface is a type.** Every right of an interface carries its role
+`I: InterfaceRole` (sealed: `Station`, `AccessPoint`), its index the
+interface's own; a command and its held and end values carry it too. A
+port reads the hardware's selector from the type: a publication names its
+interface by its place's type and takes no other argument, and an arena's
+interface is its link's (`DataPort::Link<I>`, `open::<I>`). A right of one
+interface does not build in another's call
+(`tests/ui/foreign_interface_single.rs`, `tests/ui/foreign_interface_key.rs`).
+An installation has at most one interface of a role.
+
+**The layout** is a tuple of one or two interface layouts
+(`InterfaceLayout<I, SINGLES, PAIRWISE, GROUPS, AGREEMENTS>`): its mint
+gives `(RadioRights, the bundle)` for one interface and
+`(RadioRights, (the bundles))` for two, and its one check, evaluated
+where it is named, refuses two members of one role
+(`tests/ui/one_interface_a_role.rs`). A port serves the layouts its
+`RadioPort` is implemented for (`RadioPort::Layout`); a layout it does not
+serve does not build. A single the port published ends through the sink
+as its interface's (`Layout::Single`: the place itself for one interface,
+`SingleOfTwo` for two): the port keeps what it published as a
+`PublishedSingle`, one a single on the air, and its key's end takes it and
+makes the place again.
+
+**Who holds what.** The machine holds every bundle while the data is
+stopped (the radio stopped, or running with the data stopped); the engine
+holds them while the data flows. An engine has one interface: its form
+takes the radio's bundle and its interface's at the data's start and gives
+both back at its stop. An interface's bundle, whole, is the proof that
+the interface is taken down in the hardware: its singles home, its keys
+removed, its agreements ended. `retire` takes every bundle.
 
 ## The radio's life
 
@@ -166,6 +223,7 @@ request. The access point's receive rules, TSF control and beacon timing
 ## Implementers
 
 The host model in `oer-protocols-ieee80211-testing-model` implements the
-port (`ModelPort`) and runs the shared conformance suite
+port (`ModelPort`) for the layouts it serves (`Served`: a station alone, an
+access point alone) and runs the shared conformance suite
 (`oer-protocols-ieee80211-testing-conformance`). No chip implements this
 contract yet: the S31 backend has no port.

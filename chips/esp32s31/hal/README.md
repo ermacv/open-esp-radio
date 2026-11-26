@@ -255,6 +255,31 @@ The reserved-TXOP-slot adjustment is a known vendor difference, documented in
 FE `+0x8d0[21:20]` remains opaque: its nonzero sample contributes diagnostic
 and RX-saturation observations, while estimator completion uses READY.
 
+## Wi-Fi MAC interface contexts
+
+The S31's MAC by what it has once and what it has an interface context, as
+the port contract's model of interfaces reads it
+([the contract's interfaces](../../../protocols/ieee80211/contracts/port/README.md#interfaces)).
+Each row is the HAL atom's, with its `SOURCE:`.
+
+| Thing | How many | Per what | Atom and `SOURCE:` |
+| --- | --- | --- | --- |
+| Interface contexts | three: Station, AccessPoint, Context2 | the selector (`MacInterface`) | `registers/rx/policy.rs`: SOURCE: complete pinned `libpp.a[hal_mac.o]::hal_init` and `hal_mac_rx_set_policy` |
+| Receive policies (queues) | four | queues zero to two are also interface contexts; queue three has none (`COLD_RECEIVE_QUEUE_INTERFACES`) | `registers/rx/policy.rs`: as above |
+| An address pair with its receive-policy enable | one a context | context | `registers/interface_address.rs`: SOURCE(esp32s31,esp32c5): complete pinned `libpp.a[hal_mac.o]::hal_mac_set_addr` |
+| A crypto control word (the SPP mode, the profile) | three | context; selector three has none (`MacCryptoInterface`) | `registers/crypto.rs`: SOURCE: complete `libpp[hal_crypto.o]::hal_crypto_enable`; `BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104` |
+| Key entries | a table | each records its context | `registers/crypto.rs`: SOURCE: complete `wDev_Insert_KeyEntry` (interface one for the access point's keys) |
+| Receive Block Ack entries | a table, with extra ones for the access point | each records its context | `registers/block_ack.rs`: SOURCE: complete `libpp[hal_ampdu.o]::hal_agreement_add_rx_ba` and `hal_agreement_add_extra_softap_rx_ba` |
+| The transmit descriptor | one a frame | carries the selector (`MacInterface`) | `registers/tx.rs`: SOURCE: complete `libpp[hal_mac_tx.o]::mac_tx_set_plcp0` |
+| Promiscuous reception | receive policy three | the radio | `registers/sniffer.rs`: SOURCE: `OPEN_DRIVER_PROMISCUOUS_RX_FRONTIER`, complete `BLOB_LIBPP_HAL_SNIFFER_ENABLE` |
+| TSF | the station's; the access point's | contexts zero and one | `registers/tsf.rs`: SOURCE: complete `libpp.a[hal_tsf.o]` (`hal_set_sta_tsf`, `hal_enable_sta_tsf`); `registers/softap_tsf.rs`: SOURCE: complete `libpp.a[hal_mac.o]::hal_mac_tsf_reset` |
+| Transmit queues, the DMA arenas, the channel | once | the radio | the port's design: `radio/ieee80211/dma/README.md` |
+
+Not established: whether context two has a TSF of its own, and what the
+vendor programs for it beyond its key profile; the note that the vendor's
+NAN key profile uses context two rests on
+`BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104` alone.
+
 ## Wi-Fi watchdog and interrupt evidence
 
 Baseband initialization follows ROM `phy_bb_wdg_cfg`: it sets watchdog control

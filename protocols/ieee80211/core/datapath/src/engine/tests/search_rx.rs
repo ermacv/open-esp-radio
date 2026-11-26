@@ -21,6 +21,7 @@
 //! deadline's order, and between steps no unit is late (P8).
 
 use super::*;
+use oer_protocols_ieee80211_testing_model::StationModel;
 use std::string::String;
 use std::time::Instant as Clock;
 
@@ -131,7 +132,7 @@ enum Link {
 /// `W`.
 struct World<'id, const P: usize, const W: usize> {
     engine: StationEngineOn<'id, 2, P, W>,
-    around: Around<'id, STATION_SINGLES, 0, P>,
+    around: Around<'id, StationModel<STATION_SINGLES>, P>,
     left: Bounds,
     agreement: Agreement,
     /// Each arrived frame's index of its mode's list, by its id less one.
@@ -164,7 +165,11 @@ struct World<'id, const P: usize, const W: usize> {
 }
 
 impl<'id, const P: usize, const W: usize> World<'id, P, W> {
-    fn new(run: Running<'id, STATION_SINGLES, 0, P>, bounds: Bounds, agreement: Agreement) -> Self {
+    fn new(
+        run: Running<'id, StationModel<STATION_SINGLES>, P>,
+        bounds: Bounds,
+        agreement: Agreement,
+    ) -> Self {
         let mut engine = StationEngineOn::<'_, 2, P, W>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = bounds.loans;
@@ -961,7 +966,7 @@ fn replay<const P: usize, const W: usize>(
     bounds: Bounds,
     agreement: Agreement,
 ) -> Visit {
-    crate::model::running_on::<STATION_SINGLES, 0, P, _>(|run| {
+    crate::model::running_on::<StationModel<STATION_SINGLES>, P, _>(|run| {
         let mut world = World::<P, W>::new(run, bounds, agreement);
         for (index, action) in path.iter().enumerate() {
             if index + 1 == path.len() {

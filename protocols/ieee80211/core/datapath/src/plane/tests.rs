@@ -13,6 +13,7 @@ use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, InstalledCcmpTxKey, SoftwareCcmpKey,
 };
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
+use oer_protocols_ieee80211_testing_model::StationModel;
 use oer_protocols_ieee80211_testing_model::{
     Air, MODEL_MAX_MPDU, ModelCaps, ModelLink, ModelMemory, ModelPort, Went,
 };
@@ -118,7 +119,7 @@ fn once<R>(rate: R) -> RetryPlan<R> {
 
 /// The plane over a running model installation.
 struct World<'id> {
-    port: ModelPort<'id, SINGLES, 0>,
+    port: ModelPort<'id, StationModel<SINGLES>>,
     gate: GateOpen<'id>,
     plane: DataPlane<'id, ModelCaps>,
     single: PortRate<'id, ModelCaps>,

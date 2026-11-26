@@ -20,6 +20,7 @@
 use super::*;
 use oer_protocols_ieee80211_contracts_port::{ArenaSide, GateClosed};
 use oer_protocols_ieee80211_testing_model::ModelRights;
+use oer_protocols_ieee80211_testing_model::StationModel;
 use oer_protocols_ieee80211_testing_model::Went;
 use std::string::String;
 use std::time::Instant as Clock;
@@ -149,9 +150,9 @@ enum KeyTold {
 /// The engine and everything around it.
 struct World<'id> {
     engine: StationEngine<'id, POOL>,
-    around: Around<'id, STATION_SINGLES, 0>,
+    around: Around<'id, StationModel<STATION_SINGLES>>,
     /// The data's rights, the machine's while the data is stopped.
-    stopped: Option<ModelRights<'id, STATION_SINGLES, 0>>,
+    stopped: Option<ModelRights<'id, StationModel<STATION_SINGLES>>>,
     /// The controller's, while closed.
     gate: Option<GateClosed<'id>>,
     left: Bounds,
@@ -193,7 +194,7 @@ struct World<'id> {
 }
 
 impl<'id> World<'id> {
-    fn new(run: Running<'id, STATION_SINGLES, 0>, bounds: Bounds) -> Self {
+    fn new(run: Running<'id, StationModel<STATION_SINGLES>>, bounds: Bounds) -> Self {
         let Running {
             port,
             data: rights,
@@ -1053,7 +1054,7 @@ struct Visit {
 }
 
 fn replay(path: &[Step], bounds: Bounds) -> Visit {
-    running::<STATION_SINGLES, 0, _>(|run| {
+    running::<StationModel<STATION_SINGLES>, _>(|run| {
         let mut world = World::new(run, bounds);
         let mut sent = None;
         for (index, step) in path.iter().enumerate() {

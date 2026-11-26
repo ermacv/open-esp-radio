@@ -57,19 +57,20 @@ use std::vec::Vec;
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::data::Sealed;
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateEnd, AgreementCommand, AgreementEnd, AgreementHeld, Air as OnAirAir,
+    AccessPoint, AggregateEnd, AgreementCommand, AgreementEnd, AgreementHeld, Air as OnAirAir,
     AmpduCapabilities, AmpduLengthTable, Arena, ArenaOutcome, ArenaSide, BandSet, BlockAckReport,
-    Channel, CloseGate, CommandPlace, CommandPoll, Complete, DataLayout, DataPort, DataRights,
-    Ended, EthernetAddresses, Facts, FrameSet, GateClosed, GateIssuer, GateLent, GateOpen,
-    GroupCommand, GroupEnd, GroupHeld, HEADROOM, HardwareServices, HeaderLen, IdleArena,
-    Ieee80211Capabilities, Ieee80211Instant, InCommand, IndeterminateCause, Lendable,
+    Channel, CloseGate, CommandPlace, CommandPoll, Complete, DataPort, Ended, EthernetAddresses,
+    Facts, FrameSet, GateClosed, GateIssuer, GateLent, GateOpen, GroupCommand, GroupEnd, GroupHeld,
+    HEADROOM, HardwareServices, HeaderLen, IdleArena, Ieee80211Capabilities, Ieee80211Instant,
+    InCommand, IndeterminateCause, InterfaceLayout, InterfaceRole, Layout, LayoutRights, Lendable,
     LowerMacCapabilities, MpduLength, OnAir, OutsideTheUnit, PairwiseCommand, PairwiseEnd,
-    PairwiseHeld, PhyFormatSet, Place, PortKey, PortSink, Ppdu, Protection, QueueRight, RadioPort,
-    RateSupport, ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead,
-    RxMeta, Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged,
-    StagedPlaces, StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped,
-    Stopping, SupportedChannel, TxFacts, TxFrame, TxOutcome, TxSlot, TxSlotOf, UnitsHome,
-    ValueCommand, ValueEnd, ValueKind, WidthSet, WithdrawCause,
+    PairwiseHeld, PhyFormatSet, Place, PortKey, PortSink, Ppdu, Protection, PublishedSingle,
+    QUEUES, QueueRight, RadioPort, RateSupport, ReceiveFilter, ReceivePort, Rest, Retired,
+    RetunePoll, Retuning, Running, RxHead, RxMeta, Settled, Signal, SingleEnd, SingleOutcome,
+    SinglePlace, SingleResponse, Staged, StagedPlaces, StartFailure, StartPoll, Starting, Station,
+    StopFrom, StopPoll, StopRight, Stopped, Stopping, SupportedChannel, TxFacts, TxFrame,
+    TxOutcome, TxSlot, TxSlotOf, UnitsHome, ValueCommand, ValueEnd, ValueKind, WidthSet,
+    WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -175,13 +176,41 @@ pub const MODEL_GROUPS: usize = 2;
 /// The receive agreements' slots.
 pub const MODEL_AGREEMENTS: usize = 2;
 
-/// The layout of the model's data's rights, with `SINGLES` single places.
-pub type ModelLayout<const SINGLES: usize, const DATA: usize> =
-    DataLayout<SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA>;
+/// The layout of a station alone, with `SINGLES` single places.
+pub type StationModel<const SINGLES: usize> =
+    (InterfaceLayout<Station, SINGLES, 1, MODEL_GROUPS, MODEL_AGREEMENTS>,);
 
-/// The model's data's rights.
-pub type ModelRights<'id, const SINGLES: usize, const DATA: usize> =
-    DataRights<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA>;
+/// The layout of an access point alone, with `SINGLES` single places of its
+/// controller.
+pub type AccessPointModel<const SINGLES: usize> =
+    (InterfaceLayout<AccessPoint, SINGLES, 1, MODEL_GROUPS, MODEL_AGREEMENTS>,);
+
+/// The model's rights of the layout `L`.
+pub type ModelRights<'id, L> = LayoutRights<'id, L>;
+
+mod served {
+    /// The layouts the model serves, of this crate alone.
+    pub trait Sealed {}
+}
+
+/// A layout the model serves: a port serves the layouts its `RadioPort` is
+/// implemented for, and the model is implemented for these.
+pub trait Served: served::Sealed + Layout {
+    /// The single places of the layout's interface: its controller's and
+    /// its data's.
+    const SINGLE_PLACES: usize;
+}
+
+impl<const SINGLES: usize> served::Sealed for StationModel<SINGLES> {}
+impl<const SINGLES: usize> served::Sealed for AccessPointModel<SINGLES> {}
+
+impl<const SINGLES: usize> Served for StationModel<SINGLES> {
+    const SINGLE_PLACES: usize = SINGLES;
+}
+
+impl<const SINGLES: usize> Served for AccessPointModel<SINGLES> {
+    const SINGLE_PLACES: usize = SINGLES + QUEUES.len();
+}
 
 /// The network's memory of one MSDU, by its handle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -463,9 +492,9 @@ pub enum Went {
 }
 
 /// A queue of the model: the single on its air.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Debug, Default)]
 struct Queue {
-    single: Option<u8>,
+    single: Option<PublishedSingle>,
     air: Air,
     rate: Option<PhyRate>,
     /// The stop disabled the queue with its single on it.
@@ -508,14 +537,12 @@ impl Drop for ModelLent {
     }
 }
 
-/// The model port of one installation, with `SINGLES` single places of
-/// its controller and `DATA` of an access point's data, staging received
+/// The model port of one installation of the layout `L`, staging received
 /// units into `PLACES` places ([`MODEL_PLACES`] unless a search names
 /// fewer).
 pub struct ModelPort<
     'id,
-    const SINGLES: usize,
-    const DATA: usize,
+    L,
     const PLACES: usize = MODEL_PLACES,
     const TX_FRONT: usize = MODEL_TX_FRONT,
 > {
@@ -554,6 +581,7 @@ pub struct ModelPort<
     counts: Counts,
     /// The transmit slots' geometry, checked at build.
     tx: TxSlot<Self>,
+    layout: core::marker::PhantomData<fn() -> L>,
 }
 
 const fn queue_index(category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory) -> usize {
@@ -616,8 +644,8 @@ const fn side_index(side: ArenaSide) -> usize {
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
-    ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
+impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
+    ModelPort<'id, L, PLACES, TX_FRONT>
 {
     /// The model of one installation, from what its mint gave the port, on
     /// `channel` before its first start.
@@ -637,10 +665,8 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
             agreements: [false; MODEL_AGREEMENTS],
             anomaly: None,
             arenas: [ArenaBuffer::default(), ArenaBuffer::default()],
-            queues: [Queue::default(); 4],
-            singles: (0..SINGLES.saturating_add(DATA))
-                .map(|_| Vec::new())
-                .collect(),
+            queues: core::array::from_fn(|_| Queue::default()),
+            singles: (0..L::SINGLE_PLACES).map(|_| Vec::new()).collect(),
             ring: VecDeque::new(),
             places: (0..PLACES).map(|_| None).collect(),
             frontier: PLACES,
@@ -654,6 +680,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
             record: Vec::new(),
             counts: Counts::default(),
             tx: TxSlotOf::<'id, Self, MODEL_TX_BODY, MODEL_TX_SLOT>::SLOT,
+            layout: core::marker::PhantomData,
         }
     }
 
@@ -933,12 +960,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
-    RadioPort<'id> for ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
+impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> RadioPort<'id>
+    for ModelPort<'id, L, PLACES, TX_FRONT>
 {
     type Caps = ModelCaps;
     type Channel = SupportedChannel<ModelCaps>;
-    type Data = ModelRights<'id, SINGLES, DATA>;
+    type Layout = L;
     type Released<'a>
         = ()
     where
@@ -1054,7 +1081,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
     fn retire(
         &mut self,
         stopped: Stopped<'id>,
-        data: Self::Data,
+        data: LayoutRights<'id, L>,
         units: UnitsHome<'id>,
     ) -> Retired<'id> {
         self.call();
@@ -1071,10 +1098,10 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
-    DataPort<'id> for ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
+impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
+    for ModelPort<'id, L, PLACES, TX_FRONT>
 {
-    type Link = ModelLink;
+    type Link<I: InterfaceRole> = ModelLink;
     type Memory = ModelMemory;
     const TX_FRONT: usize = TX_FRONT;
     const TX_BEHIND: usize = MODEL_TX_BEHIND;
@@ -1129,7 +1156,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         }
     }
 
-    fn open(&mut self, idle: IdleArena<'id>, _link: &Self::Link, _tid: Tid) -> Arena<'id> {
+    fn open<I: InterfaceRole>(
+        &mut self,
+        idle: IdleArena<'id>,
+        _link: &Self::Link<I>,
+        _tid: Tid,
+    ) -> Arena<'id> {
         self.call();
         if let Some(arena) = self.arenas.get_mut(side_index(idle.side())) {
             *arena = ArenaBuffer::default();
@@ -1432,19 +1464,14 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         // The model has no station TBTT schedule.
         _tbtt: Signal,
         _now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink<'id, L, Self::Ack, Self::Denial>,
     ) {
         self.call();
-        for (index, category) in oer_protocols_ieee80211_contracts_port::QUEUES
-            .iter()
-            .enumerate()
-        {
-            let Some(queue) = self.queues.get_mut(index) else {
+        // In QUEUES' order: the published single names its own queue.
+        for queue in &mut self.queues {
+            if queue.single.is_none() {
                 continue;
-            };
-            let Some(place) = queue.single else {
-                continue;
-            };
+            }
             let rate = queue.rate.unwrap_or(PhyRate::Legacy(LegacyRate::Ofdm6M));
             let outcome: SingleOutcome<(), ()> = match queue.air {
                 _ if queue.withdrawn => TxOutcome::Withdrawn(WithdrawCause::Disabled),
@@ -1460,16 +1487,19 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
                     air: None,
                 }),
             };
-            queue.single = None;
             queue.withdrawn = false;
-            let (place, right) = self.key.single_end(place, *category);
+            // The published single leaves its queue's slot for its end.
+            let Some(published) = queue.single.take() else {
+                continue;
+            };
+            let (place, right) = self.key.single_end::<L>(published);
             sink.single_ended(outcome, place, right);
         }
     }
 
-    fn write_single(
+    fn write_single<I: InterfaceRole>(
         &mut self,
-        place: &mut SinglePlace<'id>,
+        place: &mut SinglePlace<'id, I>,
         fill: impl FnOnce(&mut [u8]) -> MpduLength<Self::Caps>,
     ) {
         self.call();
@@ -1481,9 +1511,9 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         }
     }
 
-    fn publish_single(
+    fn publish_single<I: InterfaceRole>(
         &mut self,
-        place: SinglePlace<'id>,
+        place: SinglePlace<'id, I>,
         queue: QueueRight<'id>,
         _gate: &GateOpen<'id>,
         frame: &TxFrame<'id, Self::Caps>,
@@ -1496,11 +1526,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
             TxFrame::Group { rate, .. } => Some(rate.get()),
             TxFrame::BlockAckRequest { plan, .. } => Some(plan.first().rate.rate().get()),
         };
-        if let Some(slot) = self.queues.get_mut(queue_index(queue.category())) {
-            slot.single = Some(place.index());
+        let index = queue_index(queue.category());
+        let published = self.key.single_published(place, queue);
+        if let Some(slot) = self.queues.get_mut(index) {
+            slot.single = Some(published);
             slot.rate = rate;
         }
-        self.key.single_published(place, queue);
     }
 
     fn begin_close(
@@ -1517,7 +1548,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         &mut self,
         command: InCommand<'id, GateOpen<'id>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink<'id, L, Self::Ack, Self::Denial>,
     ) -> CommandPoll<'id, GateOpen<'id>, GateClosed<'id>> {
         self.polled(now, sink);
         if self.queues.iter().any(|queue| queue.single.is_some())
@@ -1532,12 +1563,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         CommandPoll::Ended(place, self.issuer.close(open))
     }
 
-    fn begin_pairwise(
+    fn begin_pairwise<I: InterfaceRole>(
         &mut self,
         place: CommandPlace<'id>,
-        command: PairwiseCommand<'id>,
+        command: PairwiseCommand<'id, I>,
         _now: Instant,
-    ) -> InCommand<'id, PairwiseHeld<'id>> {
+    ) -> InCommand<'id, PairwiseHeld<'id, I>> {
         // The model programs none of the key's values: they end here.
         let held = match command {
             PairwiseCommand::Install { slot, .. } => PairwiseHeld::Installing(slot),
@@ -1546,12 +1577,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         self.begin(place, held)
     }
 
-    fn poll_pairwise(
+    fn poll_pairwise<I: InterfaceRole>(
         &mut self,
-        command: InCommand<'id, PairwiseHeld<'id>>,
+        command: InCommand<'id, PairwiseHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, PairwiseHeld<'id>, PairwiseEnd<'id>> {
+        sink: &mut impl PortSink<'id, L, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, PairwiseHeld<'id, I>, PairwiseEnd<'id, I>> {
         self.polled(now, sink);
         // A key's command waits, as the gate's closing does, for the arena
         // on the air: what it misses would be retried under another key.
@@ -1581,12 +1612,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         CommandPoll::Ended(place, end)
     }
 
-    fn begin_group(
+    fn begin_group<I: InterfaceRole>(
         &mut self,
         place: CommandPlace<'id>,
-        command: GroupCommand<'id>,
+        command: GroupCommand<'id, I>,
         _now: Instant,
-    ) -> InCommand<'id, GroupHeld<'id>> {
+    ) -> InCommand<'id, GroupHeld<'id, I>> {
         let held = match command {
             GroupCommand::Install { slot, .. } => GroupHeld::Installing(slot),
             GroupCommand::Replace { installed, .. } => GroupHeld::Replacing(installed),
@@ -1596,12 +1627,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         self.begin(place, held)
     }
 
-    fn poll_group(
+    fn poll_group<I: InterfaceRole>(
         &mut self,
-        command: InCommand<'id, GroupHeld<'id>>,
+        command: InCommand<'id, GroupHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, GroupHeld<'id>, GroupEnd<'id>> {
+        sink: &mut impl PortSink<'id, L, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, GroupHeld<'id, I>, GroupEnd<'id, I>> {
         self.polled(now, sink);
         let expire = self.parts.take(Part::Expire);
         let (place, running) = self.ended(command);
@@ -1635,12 +1666,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         CommandPoll::Ended(place, end)
     }
 
-    fn begin_agreement(
+    fn begin_agreement<I: InterfaceRole>(
         &mut self,
         place: CommandPlace<'id>,
-        command: AgreementCommand<'id, Self::Caps>,
+        command: AgreementCommand<'id, I, Self::Caps>,
         _now: Instant,
-    ) -> InCommand<'id, AgreementHeld<'id>> {
+    ) -> InCommand<'id, AgreementHeld<'id, I>> {
         let held = match command {
             AgreementCommand::Add { slot, .. } => AgreementHeld::Adding(slot),
             AgreementCommand::End(agreement) => AgreementHeld::Ending(agreement),
@@ -1648,12 +1679,12 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         self.begin(place, held)
     }
 
-    fn poll_agreement(
+    fn poll_agreement<I: InterfaceRole>(
         &mut self,
-        command: InCommand<'id, AgreementHeld<'id>>,
+        command: InCommand<'id, AgreementHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, AgreementHeld<'id>, AgreementEnd<'id>> {
+        sink: &mut impl PortSink<'id, L, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, AgreementHeld<'id, I>, AgreementEnd<'id, I>> {
         self.polled(now, sink);
         let expire = self.parts.take(Part::Expire);
         let (place, running) = self.ended(command);
@@ -1695,7 +1726,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         &mut self,
         command: InCommand<'id, ValueKind>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink<'id, L, Self::Ack, Self::Denial>,
     ) -> CommandPoll<'id, ValueKind, ValueEnd> {
         self.polled(now, sink);
         let end = if self.parts.take(Part::Expire) {
@@ -1723,8 +1754,8 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
-    ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
+impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
+    ModelPort<'id, L, PLACES, TX_FRONT>
 {
     fn set_group(&mut self, index: u8, slot: Slot) {
         let installed = matches!(slot, Slot::Held);
@@ -1750,7 +1781,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
     }
 
     /// A command's poll: the singles' ends first, when the lever says so.
-    fn polled(&mut self, now: Instant, sink: &mut impl PortSink<'id, (), ()>) {
+    fn polled(&mut self, now: Instant, sink: &mut impl PortSink<'id, L, (), ()>) {
         self.call();
         if core::mem::take(&mut self.serve_in_poll) {
             self.serve(TxFacts::DUE, Signal::Quiet, now, sink);
@@ -1764,8 +1795,8 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
-    ReceivePort<'id> for ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
+impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> ReceivePort<'id>
+    for ModelPort<'id, L, PLACES, TX_FRONT>
 {
     type Meta = RxMeta;
     type Lent = ModelLent;
@@ -1883,7 +1914,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
 mod tx_slot {
     use super::*;
 
-    type Port = ModelPort<'static, 0, 0>;
+    type Port = ModelPort<'static, StationModel<0>>;
     const SLOT: TxSlot<Port> = TxSlotOf::<'static, Port, MODEL_TX_BODY, MODEL_TX_SLOT>::SLOT;
 
     fn memory(len: u16) -> ModelMemory {
@@ -1976,12 +2007,28 @@ mod tx_slot {
             Some(TxSlotRefused::MpduTooLong)
         );
         assert_eq!(
-            TxSlot::<ModelPort<'static, 0, 0, MODEL_PLACES, 14>>::new(100, 4_096).err(),
+            TxSlot::<ModelPort<'static, StationModel<0>, MODEL_PLACES, 14>>::new(100, 4_096).err(),
             Some(TxSlotRefused::BodyOffWord)
         );
         assert_eq!(
             TxSlot::<Port>::new(usize::MAX, usize::MAX).err(),
             Some(TxSlotRefused::Overflow)
+        );
+    }
+}
+
+#[cfg(test)]
+mod places {
+    use super::*;
+
+    /// The model holds a single's place for each of its layout's: an access
+    /// point's controller's, then one a queue, and none past them.
+    #[test]
+    fn the_model_holds_every_single_place_of_its_layout() {
+        assert_eq!(<StationModel<3> as Served>::SINGLE_PLACES, 3);
+        assert_eq!(
+            <AccessPointModel<2> as Served>::SINGLE_PLACES,
+            2 + QUEUES.len()
         );
     }
 }

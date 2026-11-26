@@ -2918,7 +2918,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             DataLink, DataPlane, Intake, OutboundMsdu,
         };
         use oer_protocols_ieee80211_testing_model::{
-            ModelCaps, ModelLayout, ModelLink, ModelMemory, ModelPort,
+            ModelCaps, ModelLink, ModelMemory, ModelPort, StationModel,
         };
         use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 
@@ -2940,14 +2940,15 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
         )
         .unwrap();
         let model = core::pin::pin!(branded(
-            async |mint: Mint<'_, PortPools<ModelLayout<8, 0>>>| {
+            async |mint: Mint<'_, PortPools<StationModel<8>>>| {
                 let install = mint.into_pools();
-                let mut port = ModelPort::<'_, 8, 0>::new(
+                let (radio, _station) = install.data;
+                let mut port = ModelPort::<'_, StationModel<8>>::new(
                     install.key,
                     install.issuer,
                     channel::<ModelCaps>(1),
                 );
-                let mut plane = DataPlane::<'_, ModelCaps>::new(install.data.arenas);
+                let mut plane = DataPlane::<'_, ModelCaps>::new(radio.arenas);
                 plane.link(DataLink {
                     header,
                     admission: AcAdmission::default(),

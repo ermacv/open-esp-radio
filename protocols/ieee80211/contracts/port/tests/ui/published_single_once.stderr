@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `PublishedSingle` in the current scope
+ --> tests/ui/published_single_once.rs:7:30
+  |
+7 |     let _another = published.clone(); // ui-error: E0599
+  |                              ^^^^^ method not found in `PublishedSingle`

@@ -2,16 +2,16 @@ error[E0599]: no method named `change` found for struct `ChangingKey<'a, E>` in 
   --> tests/ui/key_change_while_a_command_runs.rs:22:21
    |
 22 |                 key.change(change); // ui-error: E0599
-   |                     ^^^^^^ method not found in `ChangingKey<'_, Engine<'_, ModelPort<'_, 8, 0, 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
+   |                     ^^^^^^ method not found in `ChangingKey<'_, Engine<'_, ModelPort<'_, (oer_protocols_ieee80211_contracts_port::data::layout::InterfaceLayout<oer_protocols_ieee80211_contracts_port::owner::Station, 8, 1, 2, 2>,), 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
 
 error[E0599]: no method named `change` found for struct `BusyKey<'a, E>` in the current scope
   --> tests/ui/key_change_while_a_command_runs.rs:27:21
    |
 27 |                 key.change(change); // ui-error: E0599
-   |                     ^^^^^^ method not found in `BusyKey<'_, Engine<'_, ModelPort<'_, 8, 0, 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
+   |                     ^^^^^^ method not found in `BusyKey<'_, Engine<'_, ModelPort<'_, (oer_protocols_ieee80211_contracts_port::data::layout::InterfaceLayout<oer_protocols_ieee80211_contracts_port::owner::Station, 8, 1, 2, 2>,), 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
 
 error[E0599]: no method named `change` found for struct `AgreeingKey<'a, E>` in the current scope
   --> tests/ui/key_change_while_a_command_runs.rs:32:21
    |
 32 |                 key.change(change); // ui-error: E0599
-   |                     ^^^^^^ method not found in `AgreeingKey<'_, Engine<'_, ModelPort<'_, 8, 0, 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
+   |                     ^^^^^^ method not found in `AgreeingKey<'_, Engine<'_, ModelPort<'_, (oer_protocols_ieee80211_contracts_port::data::layout::InterfaceLayout<oer_protocols_ieee80211_contracts_port::owner::Station, 8, 1, 2, 2>,), 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
