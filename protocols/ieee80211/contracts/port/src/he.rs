@@ -105,8 +105,8 @@ pub struct HeAssociation {
     color: HeBssColor,
     association_id: AssociationId,
     minimum_mpdu_start_spacing: u8,
-    packet_padding_eight_us: u8,
-    default_packet_extension: u8,
+    packet_padding: oer_protocols_ieee80211_wire::he::HePacketPadding,
+    default_packet_extension: oer_protocols_ieee80211_wire::he::DefaultPeDuration,
     max_co_hosted_bssid_indicator: Option<u8>,
     extended_range_single_user_disabled: bool,
 }
@@ -119,12 +119,6 @@ pub enum HeAssociationError {
     /// The minimum MPDU start spacing code is above 7 (IEEE Std
     /// 802.11-2020, 9.4.2.55.3).
     MinimumMpduStartSpacing(u8),
-    /// The nominal packet padding is above 16 us (code 2, IEEE Std
-    /// 802.11ax-2021, 9.4.2.248.3, clause number as Linux cites it).
-    PacketPadding(u8),
-    /// The default PE duration code is above 7 (IEEE Std 802.11ax-2021,
-    /// 9.4.2.249, clause number as Linux cites it).
-    DefaultPacketExtension(u8),
     /// The BSS color is above 63.
     BssColor(u8),
     /// The Max Co-Hosted BSSID Indicator is above 8: a co-hosted set of
@@ -136,10 +130,6 @@ pub enum HeAssociationError {
 impl HeAssociation {
     /// The largest minimum MPDU start spacing code.
     pub const MAX_MINIMUM_MPDU_START_SPACING: u8 = 7;
-    /// The largest nominal packet padding, in 8 us units.
-    pub const MAX_PACKET_PADDING_EIGHT_US: u8 = 2;
-    /// The largest default PE duration code.
-    pub const MAX_DEFAULT_PACKET_EXTENSION: u8 = 7;
     /// The largest Max Co-Hosted BSSID Indicator.
     pub const MAX_CO_HOSTED_BSSID_INDICATOR: u8 = 8;
 
@@ -156,16 +146,6 @@ impl HeAssociation {
         if minimum_mpdu_start_spacing > Self::MAX_MINIMUM_MPDU_START_SPACING {
             return Err(HeAssociationError::MinimumMpduStartSpacing(
                 minimum_mpdu_start_spacing,
-            ));
-        }
-        if peer.packet_padding_eight_us > Self::MAX_PACKET_PADDING_EIGHT_US {
-            return Err(HeAssociationError::PacketPadding(
-                peer.packet_padding_eight_us,
-            ));
-        }
-        if peer.default_packet_extension_duration() > Self::MAX_DEFAULT_PACKET_EXTENSION {
-            return Err(HeAssociationError::DefaultPacketExtension(
-                peer.default_packet_extension_duration(),
             ));
         }
         if let Some(indicator) = peer.max_co_hosted_bssid_indicator
@@ -192,7 +172,7 @@ impl HeAssociation {
             },
             association_id,
             minimum_mpdu_start_spacing,
-            packet_padding_eight_us: peer.packet_padding_eight_us,
+            packet_padding: peer.packet_padding,
             default_packet_extension: peer.default_packet_extension_duration(),
             max_co_hosted_bssid_indicator: peer.max_co_hosted_bssid_indicator,
             extended_range_single_user_disabled: peer.extended_range_single_user_disabled(),
@@ -214,13 +194,15 @@ impl HeAssociation {
         self.minimum_mpdu_start_spacing
     }
 
-    /// The access point's nominal packet padding in 8 us units, 0 to 2.
-    pub const fn packet_padding_eight_us(&self) -> u8 {
-        self.packet_padding_eight_us
+    /// The access point's packet padding.
+    pub const fn packet_padding(&self) -> oer_protocols_ieee80211_wire::he::HePacketPadding {
+        self.packet_padding
     }
 
-    /// The HE Operation's default PE duration code, 0 to 7.
-    pub const fn default_packet_extension(&self) -> u8 {
+    /// The HE Operation's default PE duration.
+    pub const fn default_packet_extension(
+        &self,
+    ) -> oer_protocols_ieee80211_wire::he::DefaultPeDuration {
         self.default_packet_extension
     }
 

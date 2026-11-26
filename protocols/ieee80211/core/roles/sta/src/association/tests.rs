@@ -1,6 +1,7 @@
 mod associated_peer {
     use oer_protocols_ieee802_wire::Eui48;
-    use oer_protocols_ieee80211_core_upper_mac::protection::{BasicRates, HePacketPadding};
+    use oer_protocols_ieee80211_core_upper_mac::protection::BasicRates;
+    use oer_protocols_ieee80211_wire::he::HePacketPadding;
 
     use oer_protocols_ieee80211_wire::{
         ht::{HT_CAPABILITY_IE_LEN, HT_OPERATION_IE_LEN},
@@ -58,24 +59,13 @@ mod associated_peer {
         }
     }
 
-    fn eight_microseconds(_: &[u8]) -> HePacketPadding {
-        HePacketPadding::Us8
-    }
-
     #[test]
     fn an_he_association_keeps_the_peer_s_he_state() {
-        let padding = std::boxed::Box::new(HePacketPadding::Us8);
         let peer = StaAssociatedPeer::derive(
             &he_access_point(),
             oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
             oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
-            move |capability| {
-                assert_eq!(capability, HE20_MCS9_CAPABILITY);
-                let result = *padding;
-                drop(padding);
-                result
-            },
         )
         .unwrap();
         assert_eq!(
@@ -86,7 +76,9 @@ mod associated_peer {
         assert_eq!(peer.he_bss_color, 5);
         assert!(peer.he_capabilities.is_some());
         assert!(peer.he_peer_state.is_some());
-        assert_eq!(peer.protection.he_packet_padding, HePacketPadding::Us8);
+        // The response's HE Capabilities name 16 µs (Nominal Packet
+        // Padding code 2, element byte 18 bits 7:6).
+        assert_eq!(peer.protection.he_packet_padding, HePacketPadding::Us16);
         // An HT association keeps the HE capabilities but no HE state.
         let ht = StaAssociatedPeer::derive(
             &he_access_point(),
@@ -96,10 +88,62 @@ mod associated_peer {
                 width: oer_protocols_ieee80211_contracts_port::Width::Mhz20,
             }
             .mode(),
-            eight_microseconds,
         )
         .unwrap();
         assert!(ht.he_capabilities.is_some() && ht.he_peer_state.is_none());
+    }
+
+    /// The HE Capabilities element with Nominal Packet Padding code 3, the
+    /// reserved one (IEEE Std 802.11ax-2021, 9.4.2.248.3): element byte 18,
+    /// bits 7:6, without PPE Thresholds.
+    fn reserved_padding_capability() -> [u8; 24] {
+        let mut capability = HE20_MCS9_CAPABILITY;
+        capability[18] |= 0xc0;
+        capability
+    }
+
+    fn reserved_padding_peer(
+        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode,
+    ) -> Result<StaAssociatedPeer, StaAssociatedPeerError> {
+        let capability = reserved_padding_capability();
+        let mut access_point = he_access_point();
+        access_point.set_he_capability_ie(&capability).unwrap();
+        let mut response = response(0);
+        response.he = oer_protocols_ieee80211_wire::station::ResponseHeElements::new(
+            &capability,
+            &HE20_OPERATION,
+        )
+        .unwrap();
+        StaAssociatedPeer::derive(&access_point, ErpProtection::NONE, &response, phy)
+    }
+
+    fn he_mode() -> oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+        oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He {
+            power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20)
+                .unwrap(),
+            he_ul_mu_power:
+                oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices(
+                    [20; 10],
+                )
+                .unwrap(),
+        }
+        .mode()
+    }
+
+    fn ht_mode() -> oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+        oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::Ht {
+            width: oer_protocols_ieee80211_contracts_port::Width::Mhz20,
+        }
+        .mode()
+    }
+
+    /// A reserved nominal packet padding refuses an HE association; an HT
+    /// association with the same access point reads no padding.
+    #[test]
+    fn a_reserved_packet_padding_refuses_he_and_is_not_read_without_it() {
+        assert!(reserved_padding_peer(he_mode()).is_err());
+        let ht = reserved_padding_peer(ht_mode()).unwrap();
+        assert_eq!(ht.protection.he_packet_padding, HePacketPadding::None);
     }
 
     #[test]
@@ -110,7 +154,6 @@ mod associated_peer {
                 oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
                 &response(17),
                 oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
-                eight_microseconds,
             ),
             Err(StaAssociatedPeerError::Rejected(oer_protocols_ieee80211_wire::status::StatusCode::DENIED_NO_MORE_STAS))
         );
@@ -147,7 +190,6 @@ mod associated_peer {
                 width: oer_protocols_ieee80211_contracts_port::Width::Mhz20,
             }
             .mode(),
-            eight_microseconds,
         )
         .unwrap();
         let rate_peer = peer.rate_peer();

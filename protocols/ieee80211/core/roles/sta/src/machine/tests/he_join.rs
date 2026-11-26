@@ -343,7 +343,10 @@ fn the_response_s_bss_color_is_the_link_s() {
     operation[5] = 0x00;
     let Answer { peer, .. } = answered(&[&HE_CAPABILITY, &operation]);
     let state = peer.unwrap().he_peer_state.unwrap();
-    assert_eq!(state.default_packet_extension_duration(), 2);
+    assert_eq!(
+        state.default_packet_extension_duration(),
+        oer_protocols_ieee80211_wire::he::DefaultPeDuration::Us8
+    );
     assert!(state.extended_range_single_user_permitted());
 }
 
@@ -543,7 +546,10 @@ fn an_he_join_sets_its_bss_before_authentication_and_its_association_before_its_
         // default PE 4, ER-SU disabled, no co-hosted BSS.
         assert_eq!(association.association_id().value(), 0x2a);
         assert_eq!(association.minimum_mpdu_start_spacing(), 0);
-        assert_eq!(association.default_packet_extension(), 4);
+        assert_eq!(
+            association.default_packet_extension(),
+            oer_protocols_ieee80211_wire::he::DefaultPeDuration::Us16
+        );
         assert_eq!(association.max_co_hosted_bssid_indicator(), None);
         assert!(association.extended_range_single_user_disabled());
 

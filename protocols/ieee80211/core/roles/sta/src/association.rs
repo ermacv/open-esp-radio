@@ -5,9 +5,7 @@ use oer_protocols_ieee80211_contracts_port::{
     Ieee80211Capabilities, PhyFormat, PhyFormatSet, SupportedChannel, Width,
 };
 use oer_protocols_ieee80211_core_upper_mac::phy_mode::{NegotiatedPhy, PhyMode};
-use oer_protocols_ieee80211_core_upper_mac::protection::{
-    BasicRates, BssProtection, HePacketPadding,
-};
+use oer_protocols_ieee80211_core_upper_mac::protection::{BasicRates, BssProtection};
 use oer_protocols_ieee80211_wire::status::StatusCode;
 
 /// Whether `access_point` admits an HE association: it advertises HT
@@ -318,22 +316,18 @@ impl StaAssociatedPeer {
     /// The peer `access_point`, whose ERP elements ask for `erp`, became by
     /// `response` to an association with `phy`. An HE20 association takes
     /// its HE facts from the response's HE elements, which must admit HE20
-    /// as the scanned ones did; the scan's HE elements serve other modes. `he_packet_padding` reads the nominal packet padding from the
-    /// access point's HE Capabilities element, an integrator's policy (the
-    /// Espressif stack's is `oer-chips-family-radio-ieee80211-policy`'s).
+    /// as the scanned ones did; the scan's HE elements serve other modes. The
+    /// packet padding is the HE association's, read with its peer state; an
+    /// association without HE reads none.
     pub fn derive(
         access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord,
         erp: oer_protocols_ieee80211_wire::protection::ErpProtection,
         response: &oer_protocols_ieee80211_wire::station::AssociationResponse,
         phy: PhyMode,
-        he_packet_padding: impl FnOnce(
-            &[u8],
-        )
-            -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding,
     ) -> Result<Self, StaAssociatedPeerError> {
         use oer_protocols_ieee80211_wire::{
             extensions::wmm::WmmParameterSet,
-            he::{parse_he_capabilities, parse_he_operation, parse_he_peer_state},
+            he::{HePacketPadding, parse_he_capabilities, parse_he_operation, parse_he_peer_state},
             protection::HtProtectionMode,
         };
         if response.status_code != StatusCode::SUCCESS {
@@ -344,7 +338,7 @@ impl StaAssociatedPeer {
         let ht_ampdu_parameters = access_point
             .ht_capability_ie_bytes()
             .map_or(0, |capability| capability[4]);
-        let (he_capability, he_capabilities, he_peer_state, he_bss_color) =
+        let (he_capabilities, he_peer_state, he_bss_color) =
             if phy.format() == oer_protocols_ieee80211_contracts_port::PhyFormat::He {
                 let he = &response.he;
                 if he.unusable() {
@@ -364,12 +358,10 @@ impl StaAssociatedPeer {
                     .effective_bss_color();
                 let state = parse_he_peer_state(capability, operation)
                     .map_err(StaAssociatedPeerError::HePeer)?;
-                (capability, Some(capabilities), Some(state), bss_color)
+                (Some(capabilities), Some(state), bss_color)
             } else {
-                let capability = access_point.he_capability_ie_bytes();
                 (
-                    capability,
-                    parse_he_capabilities(capability).ok(),
+                    parse_he_capabilities(access_point.he_capability_ie_bytes()).ok(),
                     None,
                     parse_he_operation(access_point.he_operation_ie_bytes())
                         .map_or(0, |operation| operation.effective_bss_color()),
@@ -416,11 +408,8 @@ impl StaAssociatedPeer {
                 erp,
                 ht: HtProtectionMode::from_operation_ie(access_point.ht_operation_ie_bytes()),
                 he_txop_rts_threshold: he_peer_state.and_then(|state| state.rts_threshold()),
-                he_packet_padding: if he_capability.is_empty() {
-                    HePacketPadding::None
-                } else {
-                    he_packet_padding(he_capability)
-                },
+                he_packet_padding: he_peer_state
+                    .map_or(HePacketPadding::None, |state| state.packet_padding),
                 basic_rates: BasicRates::from_rate_elements(
                     access_point.supported_rates_bytes(),
                     access_point.extended_supported_rates_bytes(),

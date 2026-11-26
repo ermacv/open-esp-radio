@@ -99,7 +99,6 @@ use oer_protocols_ieee80211_core_security_rsn::{
         RsnStaKeyInstallRequest, RsnStaResponseDeadline, RsnStaResponseWait,
     },
 };
-use oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding;
 use oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission;
 use oer_protocols_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
@@ -948,8 +947,6 @@ pub trait StaCallbacks {
     fn nonce(&mut self) -> [u8; 32];
     /// The engine for the next AES operation.
     fn aes_engine(&mut self) -> &mut Self::AesEngine;
-    /// Composition policy for the peer's complete HE Capabilities element.
-    fn he_packet_padding(&self, capability: &[u8]) -> HePacketPadding;
 }
 
 /// What the station connects to and how.
@@ -5049,9 +5046,6 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                                     join.erp,
                                     &response,
                                     join.phy.mode(),
-                                    |capability| {
-                                        self.config.callbacks.he_packet_padding(capability)
-                                    },
                                 ) {
                                     Ok(associated) => {
                                         join.step = JoinStep::NotifyAssociated {

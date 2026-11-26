@@ -2,34 +2,11 @@
 use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
 use oer_protocols_ieee80211_contracts_port::Protection;
 use oer_protocols_ieee80211_wire::{
-    he::HeTxopDurationRtsThreshold,
+    he::{HePacketPadding, HeTxopDurationRtsThreshold},
     phy::{LegacyRate, PhyRate},
     protection::{ErpProtection, HtProtectionMode},
     rates::{LEGACY_RATES, LegacyRateSet, RateSelection},
 };
-
-/// The peer's nominal packet padding (HE Capabilities).
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum HePacketPadding {
-    #[default]
-    /// No additional packet padding or protection exchange.
-    None,
-    /// Eight microseconds of nominal packet padding.
-    Us8,
-    /// Sixteen microseconds of nominal packet padding.
-    Us16,
-}
-
-impl HePacketPadding {
-    /// Nominal packet padding in microseconds.
-    pub const fn micros(self) -> u8 {
-        match self {
-            Self::None => 0,
-            Self::Us8 => 8,
-            Self::Us16 => 16,
-        }
-    }
-}
 
 /// Non-HT rates in one BSSBasicRateSet.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

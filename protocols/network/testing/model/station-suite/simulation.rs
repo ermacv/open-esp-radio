@@ -224,12 +224,6 @@ impl StaCallbacks for Callbacks {
     fn aes_engine(&mut self) -> &mut SoftwareAes128 {
         &mut self.aes
     }
-    fn he_packet_padding(
-        &self,
-        _: &[u8],
-    ) -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding {
-        oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding::None
-    }
 }
 
 /// A legacy station: no HT, HE or WMM advertisement.

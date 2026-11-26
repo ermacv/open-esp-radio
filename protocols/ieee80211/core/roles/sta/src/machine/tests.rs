@@ -125,12 +125,6 @@ impl StaCallbacks for Callbacks {
     fn aes_engine(&mut self) -> &mut CountingBlocks {
         &mut self.blocks
     }
-    fn he_packet_padding(
-        &self,
-        _: &[u8],
-    ) -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding {
-        oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding::None
-    }
 }
 
 const SSID: &[u8] = b"open-net";
