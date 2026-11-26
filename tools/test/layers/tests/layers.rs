@@ -11817,12 +11817,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "tools/test/ui-cases/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/test/ui-cases/src/lib.rs",
         "clippy::panic",
         1,
         "a test runner reports a broken case by panicking with its name",
