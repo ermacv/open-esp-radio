@@ -11,14 +11,6 @@
 //! dependency.
 //!
 //! Encodings: the unprivileged ISA, <https://docs.riscv.org/reference/isa/unpriv/>.
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
-#![expect(
-    clippy::cast_possible_wrap,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
 #![cfg_attr(
     test,
     expect(
@@ -36,12 +28,6 @@
         clippy::unreachable,
         clippy::arithmetic_side_effects
     )
-)]
-#![expect(
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::unreachable,
-    reason = "host tool: the ban covers the code an image reaches"
 )]
 
 use core::fmt;

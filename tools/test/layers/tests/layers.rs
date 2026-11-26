@@ -11006,36 +11006,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the ban covers the code an image reaches",
     ),
     (
-        "tools/analysis/elf/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/analysis/elf/src/lib.rs",
-        "clippy::cast_possible_wrap",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/analysis/elf/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/analysis/elf/src/lib.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/analysis/elf/src/lib.rs",
-        "clippy::indexing_slicing",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
         "tools/analysis/riscv-analysis/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -11148,36 +11118,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::too_many_arguments",
         5,
         "unknown, to read",
-    ),
-    (
-        "tools/analysis/riscv-decode/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/analysis/riscv-decode/src/lib.rs",
-        "clippy::cast_possible_wrap",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/analysis/riscv-decode/src/lib.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/analysis/riscv-decode/src/lib.rs",
-        "clippy::indexing_slicing",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/analysis/riscv-decode/src/lib.rs",
-        "clippy::unreachable",
-        1,
-        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/analysis/riscv-lift/src/lib.rs",
@@ -11730,12 +11670,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "dead_code",
         1,
         "the test assembles each suite for it",
-    ),
-    (
-        "tools/registers/contracts/src/lib.rs",
-        "clippy::indexing_slicing",
-        1,
-        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/registers/generate/src/lib.rs",
