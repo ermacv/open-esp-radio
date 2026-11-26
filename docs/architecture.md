@@ -1342,7 +1342,7 @@ its model and conformance case.
   installation's mint hands out; a transition consumes the right it takes
   and returns the next, so a call with a stale or a foreign right cannot be
   written. The installation's rights are two kinds of bundle: the radio's,
-  once (the arenas, the queues, the command's place), and one an interface
+  once (the chains, the queues, the command's place), and one an interface
   of its layout (its singles, its data places, its keys' and agreements'
   places), each right of an interface typed by its interface, so that it
   reaches only that interface's calls; the machine holds every bundle
@@ -1351,9 +1351,11 @@ its model and conformance case.
   the installation machine, which alone holds the radio's rights and the
   stop's right; the gate is closed at each start and opened only on a
   running radio.
-- An arena is a place filled and published once: its publication sends a
-  prefix, the longest its rate admits, one frame at least, and the frames
-  that did not go stay in their places with no attempt spent. A single's
+- A chain is a place filled and published once: its publication takes its
+  queue's right, which the chain on the air holds until its settlement
+  gives it back, so a queue carries one chain; it sends a prefix, the
+  longest its rate admits, one frame at least, and the frames that did not
+  go stay in their places with no attempt spent. A single's
   place is its purpose's, so a role's frame always has one. Receive is a
   round that services the ring once and returns, at its close, every unit
   not taken.

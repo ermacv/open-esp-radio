@@ -2918,7 +2918,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             DataLink, DataPlane, Intake, OutboundMsdu,
         };
         use oer_protocols_ieee80211_testing_model::{
-            ModelCaps, ModelLink, ModelMemory, ModelPort, StationModel,
+            MODEL_CHAIN_SLOTS, ModelCaps, ModelLink, ModelMemory, ModelPort, StationModel,
         };
         use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 
@@ -2948,7 +2948,8 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
                     install.issuer,
                     channel::<ModelCaps>(1),
                 );
-                let mut plane = DataPlane::<'_, ModelCaps>::new(radio.arenas);
+                let mut plane =
+                    DataPlane::<'_, ModelCaps, MODEL_CHAIN_SLOTS>::new(radio.chains, radio.queues);
                 plane.link(DataLink {
                     header,
                     admission: AcAdmission::default(),

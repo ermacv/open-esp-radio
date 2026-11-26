@@ -15,7 +15,7 @@ use oer_protocols_ieee80211_core_upper_mac::ccmp::{
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_testing_model::StationModel;
 use oer_protocols_ieee80211_testing_model::{
-    Air, MODEL_MAX_MPDU, ModelCaps, ModelLink, ModelMemory, ModelPort, Went,
+    Air, MODEL_CHAIN_SLOTS, MODEL_MAX_MPDU, ModelCaps, ModelLink, ModelMemory, ModelPort, Went,
 };
 use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 use oer_protocols_ieee80211_wire::{
@@ -121,7 +121,7 @@ fn once<R>(rate: R) -> RetryPlan<R> {
 struct World<'id> {
     port: ModelPort<'id, StationModel<SINGLES>>,
     gate: GateOpen<'id>,
-    plane: DataPlane<'id, ModelCaps>,
+    plane: DataPlane<'id, ModelCaps, MODEL_CHAIN_SLOTS>,
     single: PortRate<'id, ModelCaps>,
     aggregate: AmpduRate<'id, ModelCaps>,
     /// The link's QoS sequence spaces, which each intake draws from.
@@ -142,9 +142,12 @@ impl<'id> World<'id> {
     /// The plane whose aggregates go at `rate`, its singles at 24 Mb/s.
     fn at(model: Installed<'id>, link: DataLink, rate: PhyRate) -> Self {
         let Installed {
-            port, arenas, gate, ..
+            port,
+            arenas,
+            queues,
+            gate,
         } = model;
-        let mut plane = DataPlane::new(arenas);
+        let mut plane = DataPlane::new(arenas, queues);
         plane.link(link);
         plane.aggregate_rate(Some(AggregateRate {
             rate,
@@ -345,7 +348,7 @@ cases! {
     a_lone_frame_under_an_agreement_goes_alone_and_owes_a_block_ack_request_when_dropped => lone_frame,
     an_ended_agreement_drains_its_arenas_as_single_mpdus_without_drops => agreement_end,
     the_standby_room_counts_down_to_the_tids_bound_while_an_arena_is_on_the_air => standby_room,
-    a_whole_block_ack_puts_the_standby_on_the_air_before_the_settlement => ahead_whole,
+    a_whole_block_ack_puts_the_standby_on_the_air_at_once_after_the_settlement => ahead_whole,
     a_partial_block_ack_leaves_the_order_to_the_settlement => ahead_partial,
     nothing_goes_ahead_of_a_settlement_without_frames_in_the_other_arena => ahead_empty,
     each_attempt_is_charged_once_whole_for_its_tid => cost_split,

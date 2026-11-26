@@ -164,14 +164,14 @@ pub mod receive;
 
 pub use data::{
     AccessPointData, Agreement, AgreementCommand, AgreementEnd, AgreementHeld, AgreementSlot,
-    Arena, ArenaOutcome, ArenaSide, CloseGate, CommandPlace, CommandPoll, Complete, DataPort,
-    Ended, Facts, FrameSet, GroupCommand, GroupEnd, GroupHeld, GroupSlot, HEADROOM, HeaderLen,
-    IdleArena, InCommand, InstalledGroup, InstalledPairwise, InterfaceLayout, InterfaceRights,
+    ArenaOutcome, Chain, CloseGate, CommandPlace, CommandPoll, Complete, DataPort, Ended, Facts,
+    FrameSet, GroupCommand, GroupEnd, GroupHeld, GroupSlot, HEADROOM, HeaderLen, IdleChain,
+    InCommand, InstalledGroup, InstalledPairwise, InterfaceLayout, InterfaceRights, Interfaces,
     Layout, LayoutRights, MIC_ROOM, Member, OnAir, PairwiseCommand, PairwiseEnd, PairwiseHeld,
-    PairwiseSlot, Place, Placing, PortSink, Ppdu, PublishedSingle, QUEUES, QueueRight, RadioRights,
-    ReceiveCommand, ReceiveEnd, ReceiveHeld, ReceiveOff, Receiving, Settled, Signal, SingleOfTwo,
-    SinglePlace, TxFacts, TxSlot, TxSlotOf, TxSlotRefused, ValueCommand, ValueEnd, ValueKind,
-    tx_slot,
+    PairwiseSlot, Place, Placing, PortSink, Ppdu, PublishedSingle, QUEUES, QueueRight, RadioLayout,
+    RadioRights, ReceiveCommand, ReceiveEnd, ReceiveHeld, ReceiveOff, Receiving, Settled, Signal,
+    SingleOfTwo, SinglePlace, TxFacts, TxSlot, TxSlotOf, TxSlotRefused, ValueCommand, ValueEnd,
+    ValueKind, tx_slot,
 };
 pub use life::{
     Install, MintSeal, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning, Running,

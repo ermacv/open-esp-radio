@@ -2,4 +2,4 @@ error[E0599]: no method named `close` found for struct `AgreeingGate<'a, E>` in 
   --> tests/ui/close_while_an_agreement_changes.rs:17:14
    |
 17 |         gate.close(); // ui-error: E0599
-   |              ^^^^^ method not found in `AgreeingGate<'_, Engine<'_, ModelPort<'_, (oer_protocols_ieee80211_contracts_port::data::layout::InterfaceLayout<oer_protocols_ieee80211_contracts_port::owner::Station, 8, 1, 2, 2>,), 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
+   |              ^^^^^ method not found in `AgreeingGate<'_, Engine<'_, ModelPort<'_, oer_protocols_ieee80211_contracts_port::data::layout::RadioLayout<2, 32, (oer_protocols_ieee80211_contracts_port::data::layout::InterfaceLayout<oer_protocols_ieee80211_contracts_port::owner::Station, 8, 1, 2, 2>,)>, 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 32, 7>>`

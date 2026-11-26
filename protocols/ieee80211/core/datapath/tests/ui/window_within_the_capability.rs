@@ -1,7 +1,7 @@
 #![no_std]
 use oer_protocols_ieee80211_core_datapath::engine::{Arenas, Engine, EngineAgreements};
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckStorage;
-use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelPort, StationModel};
+use oer_protocols_ieee80211_testing_model::{MODEL_CHAIN_SLOTS, MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelPort, StationModel};
 
 pub type Station<const WINDOW: usize> = Engine<
     'static,
@@ -13,6 +13,7 @@ pub type Station<const WINDOW: usize> = Engine<
     8,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
+    MODEL_CHAIN_SLOTS,
     WINDOW,
 >;
 pub type Agreements<const FRAMES: usize, const WINDOW: usize> =

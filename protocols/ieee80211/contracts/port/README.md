@@ -43,8 +43,8 @@ or build dependency turns that on (`oer-tools-test-layers`,
 | `Retired` | `retire`, with `Stopped`, every bundle of the layout and `UnitsHome` | the machine | `release` |
 | `GateClosed` | the install; the close-gate command's end | the radio's controller | `open_gate`; lent to a retune (`GateLent`) |
 | `GateOpen` | `open_gate` | the controller, lent to a publication | the close-gate command |
-| `IdleArena`, `Arena`, `OnAir` (the radio's) | the install; `open`, `publish`, `settle`, `withdraw` | the engine | the next of them |
-| `QueueRight` (the radio's) | the install; a single's end (`PortSink::single_ended`) | the engine; the port from a single's publication to its end | `publish_single` |
+| `IdleChain<'id, S>`, `Chain<'id, S>`, `OnAir<'id, S>` (the radio's) | the install; `open`, `publish`, `settle`, `withdraw` | the engine; a chain on the air holds its queue's right | the next of them |
+| `QueueRight` (the radio's) | the install; a chain's settlement; a single's end (`PortSink::single_ended`) | the engine; a chain on the air, or the port from a single's publication to its end | `publish`, `publish_single` |
 | `SinglePlace<'id, I>` (an interface's) | the install; a single's end, as `I`'s | the engine; the port from a single's publication to its end | `publish_single` |
 | `CommandPlace`, `InCommand<'id, H>` (the radio's) | the install; a kind's `begin_*`; its end | the engine | a kind's `begin_*`, `poll_*` |
 | `PairwiseSlot<'id, I>`, `GroupSlot<'id, I>`, `AgreementSlot<'id, I>` and their installed forms (an interface's) | the install (empty); a key's or an agreement's command end | the engine | the commands that install, replace and remove them |
@@ -64,7 +64,7 @@ places. So the rights are two kinds of bundle:
 
 | The radio's, once (`RadioRights`) | An interface's (`InterfaceRights<'id, I, SINGLES, PAIRWISE, GROUPS, AGREEMENTS>`) |
 | --- | --- |
-| the two arenas | its single places, by purpose |
+| `LONG` chains of `SLOTS` descriptors (an aggregate's) and a chain of one a queue | its single places, by purpose |
 | a right a transmit queue | its role's data places (`I::Data`: none for a station, one a queue for an access point) |
 | the command's place | `PAIRWISE` pairwise key places: one for a station, one a client for an access point |
 | | its group key slots |
@@ -78,7 +78,7 @@ have no place in a bundle.
 `I: InterfaceRole` (sealed: `Station`, `AccessPoint`), its index the
 interface's own; a command and its held and end values carry it too. A
 port reads the hardware's selector from the type: a publication names its
-interface by its place's type and takes no other argument, and an arena's
+interface by its place's type and takes no other argument, and a chain's
 interface is its link's (`DataPort::Link<I>`, `open::<I>`). A right of one
 interface does not build in another's call
 (`tests/ui/foreign_interface_single.rs`, `tests/ui/foreign_interface_key.rs`).
@@ -134,9 +134,13 @@ reinstall: a port is installed once.
 the rates the port sends and aggregates at, checked once and branded by the
 installation (`rate` gives a `PortRate`, `ampdu_rate` an `AmpduRate`).
 
-**An aggregate is a place, filled and published once.** `open` opens an
-idle arena for the link (which carries its key) and a TID; `place` gives
-the next frame's `Place`, or `Complete` when the arena's slots are full,
+**A chain is a place, filled and published once.** The radio's bundle
+holds `LONG` chains of `SLOTS` descriptors (`RadioLayout<LONG, SLOTS, _>`),
+an aggregate's, and four chains of one descriptor, one a queue, so a free
+queue always finds a chain. The radio numbers its chains once: the long
+ones from 0, then the chains of one from `LONG`, every number a byte. `open::<I>` opens an idle chain for the link
+of the interface `I` (which carries its key) and a TID; `place` gives the
+next frame's `Place`, or `Complete` when the chain's descriptors are full,
 the one answer of the path that is not an outcome. `Place::write` takes the
 MSDU's memory by its handle, in place, and lends the headroom in front of
 the body (`HEADROOM`: a QoS data header of three addresses, the CCMP header
@@ -163,19 +167,27 @@ engine's longest front, 42, and the body) is longer than the capability's
 802.11-2020, 9.2.3, 12.5.3.2); the headroom holds each role's longest front
 by the role's own const check. A geometry it refuses does not build.
 
-`publish(arena, how, gate, now)` puts the arena on the air as its `Ppdu`
-says: `Single(plan)` its first frame as one MPDU, acknowledged, by the
-plan; `Aggregate { rate, spacing, protection, alone }` the longest prefix
-of its frames the rate admits (the per-rate length, the TXOP's airtime) as
-an A-MPDU at the recipient's spacing behind the protection, and a prefix of
-one frame alone by `alone`. Nothing is refused; the frames that did not go
-stay in their places with no attempt spent. `aggregate_ended` reads the end
-in place (`Ended`: an `ArenaOutcome` that says what went, `Single` or
-`Aggregate`, the frames sent and those acknowledged); `settle` keeps the
-frames the engine names for a retry and sends every other body home
-(`Settled::Kept` or `Settled::Idle`); `withdraw` sends an arena's bodies
-home. The transmit section's order is the end, the standby published at
-once, then the settlement, then `serve`.
+`publish(chain, queue, how, gate, now)` puts the chain on the queue whose
+right it takes, as its `Ppdu` says: `Single(plan)` its first frame as one
+MPDU, acknowledged, by the plan; `Aggregate { rate, spacing, protection,
+alone }` the longest prefix of its frames the rate admits (the per-rate
+length, the TXOP's airtime) as an A-MPDU at the recipient's spacing behind
+the protection, and a prefix of one frame alone by `alone`; `NoAck`,
+`Group` and `BlockAckRequest` its first frame as one MPDU that solicits no
+ACK, no response or a BlockAck, each with the checked header or the
+fields its response follows from, as a buffer request's `TxFrame` has
+them. Nothing is refused; the frames that did not go stay in their places
+with no attempt spent. **A queue carries one chain:** the chain on the air
+(`OnAir`) holds its queue's right, so a second publication on that queue
+cannot be written (`tests/ui/publish_on_a_busy_queue.rs`, E0382), and the
+port cannot give another queue's right back. `ended` reads every chain's
+end in place, pulled (`Ended`: an `ArenaOutcome` that says what went,
+`Single` or `Aggregate`, the frames sent and those acknowledged); `settle`
+keeps the frames the engine names for a retry, sends every other body
+home and gives the queue's right back (`(Settled::Kept or Idle, the
+right)`); `withdraw` sends a chain's bodies home. The transmit section's
+order is the end, the settlement, the other chain published at once when
+the end allows it, then `serve`.
 
 **A single MPDU** (management, EAPOL, Null, a beacon) is written into its
 purpose's place (`write_single`) and published on a free queue

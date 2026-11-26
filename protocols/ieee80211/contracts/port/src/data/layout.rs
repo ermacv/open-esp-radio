@@ -1,7 +1,8 @@
 //! The two bundles of an installation's rights and the layout that names
-//! them: the radio's, once, and one an interface. A layout is a tuple of
-//! one or two interface layouts ([`InterfaceLayout`]), at most one a role;
-//! its mint gives the radio's bundle and the interfaces'.
+//! them: the radio's, once, and one an interface. A layout is the radio's
+//! chains and a tuple of one or two interface layouts ([`InterfaceLayout`]),
+//! at most one a role ([`RadioLayout`]); its mint gives the radio's bundle
+//! and the interfaces'.
 
 use core::marker::PhantomData;
 
@@ -9,20 +10,24 @@ use oer_portable_bounded::Index;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 use super::{
-    AgreementSlot, ArenaSide, CommandPlace, GroupSlot, IdleArena, PairwiseSlot, QUEUES, QueueRight,
+    AgreementSlot, CommandPlace, GroupSlot, IdleChain, PairwiseSlot, QUEUES, QueueRight,
     ReceiveOff, SinglePlace,
 };
 use crate::life::{MintSeal, sealed};
 use crate::{AccessPoint, InterfaceRole, Station, VifRole};
 
-/// The radio's rights, once an installation: the two arenas, a right a
-/// transmit queue and the command's place. The machine holds them while
+/// The radio's rights, once an installation: `LONG` chains of `SLOTS`
+/// descriptors for aggregates, a chain of one descriptor a transmit queue,
+/// a right a queue and the command's place. The machine holds them while
 /// the data is stopped, the engine while it flows; a retirement takes them.
 #[must_use = "the radio's rights each have one holder"]
 #[derive(Debug)]
-pub struct RadioRights<'id> {
-    /// The two arenas.
-    pub arenas: [IdleArena<'id>; 2],
+pub struct RadioRights<'id, const LONG: usize, const SLOTS: usize> {
+    /// The chains of `SLOTS` descriptors: an aggregate's.
+    pub chains: [IdleChain<'id, SLOTS>; LONG],
+    /// The chains of one descriptor, one a queue: a free queue always finds
+    /// one.
+    pub ones: [IdleChain<'id, 1>; QUEUES.len()],
     /// A right a queue, in the order of [`QUEUES`].
     pub queues: [QueueRight<'id>; 4],
     /// The command's place.
@@ -216,21 +221,18 @@ pub enum SingleOfTwo<'id, A: InterfaceRole, B: InterfaceRole> {
     Second(SinglePlace<'id, B>),
 }
 
-/// The layout of an installation: a closed set of interfaces, a tuple of
-/// one or two interface layouts with at most one of a role, which
-/// its mint checks at build. Only this crate implements it, and only its
-/// installation's mint calls [`Self::mint`]: it takes a seal no other
-/// crate can make. A port serves the layouts its `RadioPort` is
-/// implemented for.
-pub trait Layout: sealed::Sealed {
-    /// The rights: the radio's, and its interfaces' (one bundle for one
-    /// interface, a tuple of them for more), branded with the installation.
+/// The interfaces of an installation: a closed set, a tuple of one or two
+/// interface layouts with at most one of a role, which its mint checks at
+/// build. Only this crate implements it.
+pub trait Interfaces: sealed::Sealed {
+    /// The interfaces' rights: one bundle for one interface, a tuple of
+    /// them for two, branded with the installation.
     type Rights<'id>;
     /// A single's place at its end, as the interface it was published as.
     type Single<'id>;
-    /// The one check of the layout, evaluated where it is named (its
-    /// mint): its members are of distinct roles. A layout with two
-    /// interfaces of one role does not build.
+    /// The one check of the set, evaluated where it is named (its mint):
+    /// its members are of distinct roles. A set with two interfaces of one
+    /// role does not build.
     const CHECKED: ();
     /// Build the rights, for the installation's mint alone.
     fn mint<'id>(seal: MintSeal) -> Self::Rights<'id>;
@@ -238,15 +240,77 @@ pub trait Layout: sealed::Sealed {
     fn single<'id>(seal: MintSeal, published: &PublishedSingle) -> Self::Single<'id>;
 }
 
+/// The layout of an installation: the radio's `LONG` chains of `SLOTS`
+/// descriptors and its interfaces `M`.
+pub struct RadioLayout<const LONG: usize, const SLOTS: usize, M>(PhantomData<fn() -> M>);
+
+/// The layout of an installation ([`RadioLayout`]). Only this crate
+/// implements it, and only its installation's mint calls [`Self::mint`]:
+/// it takes a seal no other crate can make. A port serves the layouts its
+/// `RadioPort` is implemented for.
+pub trait Layout: sealed::Sealed {
+    /// The rights: the radio's, and its interfaces' (one bundle for one
+    /// interface, a tuple of them for more), branded with the installation.
+    type Rights<'id>;
+    /// A single's place at its end, as the interface it was published as.
+    type Single<'id>;
+    /// The checks of the layout, evaluated where it is named (its mint):
+    /// its interfaces' ([`Interfaces::CHECKED`]), and a chain's
+    /// descriptors from one to a frame set's 64, its chains counted in a
+    /// byte.
+    const CHECKED: ();
+    /// Build the rights, for the installation's mint alone.
+    fn mint<'id>(seal: MintSeal) -> Self::Rights<'id>;
+    /// The place of a single the port published, made again at its end.
+    fn single<'id>(seal: MintSeal, published: &PublishedSingle) -> Self::Single<'id>;
+}
+
+impl<const LONG: usize, const SLOTS: usize, M: Interfaces> sealed::Sealed
+    for RadioLayout<LONG, SLOTS, M>
+{
+}
+
+impl<const LONG: usize, const SLOTS: usize, M: Interfaces> Layout for RadioLayout<LONG, SLOTS, M> {
+    type Rights<'id> = (RadioRights<'id, LONG, SLOTS>, M::Rights<'id>);
+    type Single<'id> = M::Single<'id>;
+    const CHECKED: () = {
+        let () = M::CHECKED;
+        if SLOTS == 0 || SLOTS > 64 || LONG.saturating_add(QUEUES.len()) > 1 << 8 {
+            panic!(
+                "a chain has one to 64 descriptors, and an installation's chains, the long ones and one a queue, are counted in a byte"
+            )
+        }
+    };
+
+    fn mint<'id>(seal: MintSeal) -> Self::Rights<'id> {
+        const { Self::CHECKED };
+        let MintSeal(()) = seal;
+        (radio(MintSeal(())), M::mint(MintSeal(())))
+    }
+
+    fn single<'id>(seal: MintSeal, published: &PublishedSingle) -> Self::Single<'id> {
+        M::single(seal, published)
+    }
+}
+
 /// The rights of an installation of the layout `L`.
 pub type LayoutRights<'id, L> = <L as Layout>::Rights<'id>;
 
 /// The radio's rights, as the mint makes them.
-fn radio<'id>(seal: MintSeal) -> RadioRights<'id> {
+fn radio<'id, const LONG: usize, const SLOTS: usize>(
+    seal: MintSeal,
+) -> RadioRights<'id, LONG, SLOTS> {
     let MintSeal(()) = seal;
     RadioRights {
-        arenas: [ArenaSide::First, ArenaSide::Second].map(|side| IdleArena {
-            side,
+        chains: Index::<LONG>::every().map(|index| IdleChain {
+            index: index.to_u8(),
+            brand: PhantomData,
+        }),
+        // The radio's chains are numbered once: the long ones, then the
+        // chains of one from `LONG`. `CHECKED` holds every number in a
+        // byte, so the sum neither saturates nor leaves its residue.
+        ones: Index::<{ QUEUES.len() }>::every().map(|index| IdleChain {
+            index: Index::<{ 1 << 8 }>::residue(LONG.saturating_add(index.get())).to_u8(),
             brand: PhantomData,
         }),
         queues: QUEUES.map(|category| QueueRight {
@@ -282,14 +346,13 @@ const fn one_role(first: VifRole, second: VifRole) -> bool {
 impl<A: Member> sealed::Sealed for (A,) {}
 impl<A: Member, B: Member> sealed::Sealed for (A, B) {}
 
-impl<A: Member> Layout for (A,) {
-    type Rights<'id> = (RadioRights<'id>, A::Rights<'id>);
+impl<A: Member> Interfaces for (A,) {
+    type Rights<'id> = A::Rights<'id>;
     type Single<'id> = SinglePlace<'id, A::Role>;
     const CHECKED: () = ();
 
     fn mint<'id>(seal: MintSeal) -> Self::Rights<'id> {
-        let MintSeal(()) = seal;
-        (radio(MintSeal(())), A::mint(MintSeal(())))
+        A::mint(seal)
     }
 
     /// The layout's one interface: every single it publishes is its.
@@ -298,8 +361,8 @@ impl<A: Member> Layout for (A,) {
     }
 }
 
-impl<A: Member, B: Member> Layout for (A, B) {
-    type Rights<'id> = (RadioRights<'id>, (A::Rights<'id>, B::Rights<'id>));
+impl<A: Member, B: Member> Interfaces for (A, B) {
+    type Rights<'id> = (A::Rights<'id>, B::Rights<'id>);
     type Single<'id> = SingleOfTwo<'id, A::Role, B::Role>;
     const CHECKED: () = if one_role(A::Role::ROLE, B::Role::ROLE) {
         panic!("a layout has at most one interface of a role")
@@ -308,10 +371,7 @@ impl<A: Member, B: Member> Layout for (A, B) {
     fn mint<'id>(seal: MintSeal) -> Self::Rights<'id> {
         const { Self::CHECKED };
         let MintSeal(()) = seal;
-        (
-            radio(MintSeal(())),
-            (A::mint(MintSeal(())), B::mint(MintSeal(()))),
-        )
+        (A::mint(MintSeal(())), B::mint(MintSeal(())))
     }
 
     /// The two members are of two roles (the mint's check), so the role

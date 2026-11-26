@@ -1,26 +1,27 @@
 #![no_std]
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduRate, Arena, DataPort, GateOpen, OnAir, PortRate, Ppdu, Protection,
+    AmpduRate, Chain, DataPort, QueueRight, GateOpen, OnAir, PortRate, Ppdu, Protection,
     RetryPlan,
 };
 // An aggregate's rate is checked for one installation: another
 // installation's goes to none of this port's publications.
-pub fn publish<'a, 'b, P: DataPort<'a>>(
+pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
     port: &mut P,
-    arena: Arena<'a>,
+    arena: Chain<'a, S>,
+    queue: QueueRight<'a>,
     own: AmpduRate<'a, P::Caps>,
     foreign: AmpduRate<'b, P::Caps>,
     alone: RetryPlan<PortRate<'a, P::Caps>>,
     spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing,
     gate: &GateOpen<'a>,
     now: Instant,
-) -> OnAir<'a> {
+) -> OnAir<'a, S> {
     let _ = (&own, &foreign);
     #[cfg(ui_reject)]
     let rate = foreign; // ui-error: lifetime may not live long enough
     #[cfg(not(ui_reject))]
     let rate = own;
     let how = Ppdu::Aggregate { rate, spacing, protection: Protection::None, alone }; // ui-error: lifetime may not live long enough
-    port.publish(arena, how, gate, now)
+    port.publish(arena, queue, how, gate, now)
 }

@@ -11,7 +11,7 @@ portable support alone.
 A backend's test implements `Harness<L>` for each layout it serves (its
 port, a channel, network memory and an interface's link, frames landed on
 the receive ring, the anomalies it can raise, a MAC held busy, the next
-command made to expire, the air held and released, what the hardware was asked to
+command made to expire, the chains a queue carries, the air held and released, what the hardware was asked to
 program and its state, whether its own octets of its transmit slots are
 whole) and calls each property with an installation's
 rights (`Rights`). The suite keeps the rights in its own places and checks
@@ -31,6 +31,8 @@ the port's answers against them; it reads no bookkeeping of the port's.
 | `an_unclassifiable_frame_goes_back_at_its_staging` | A unit that is no data, management or control frame is counted and returned to the ring; the round hands the others |
 | `a_round_services_the_ring_once` | A round services the ring once and hands what that service staged |
 | `no_call_returns_an_error` | The data path's calls, as the trait declares them, answer outcomes |
+| `chains_on_two_queues_end_each_with_its_queue` | A chain on best effort and a chain of one on voice are on the air together, each on the queue it was published on; each ends and its settlement returns its own queue's right, its frames' memory home |
+| `a_stop_returns_every_chain_and_queue` | With chains on two queues on the air, a stop ends both; their settlements return each queue's right and every frame's memory, and a retirement takes every right |
 | `a_clients_key_goes_alone` | On an access point of two clients: each client's key is installed in its own place; the first's removal leaves the hardware with the second client's key alone |
 | `the_receive_rule_is_a_right` | The station's rule is set with its address, changed and ended, each end giving the right back; a setting that expires gives it back off and leaves the hardware as before it; a change that expires gives it back off with the rule cleared |
 

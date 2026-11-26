@@ -29,7 +29,8 @@
 //!
 //! - a ring of descriptors a test lands units on ([`ModelPort::land`]) and
 //!   staging places a round stages them into;
-//! - four transmit queues and two arenas, with an air a test sets for each
+//! - four transmit queues, its long chains and a chain of one a queue, a
+//!   chain on the queue its right names, with an air a test sets for each
 //!   queue: it acknowledges, does not, times out or denies ([`Air`]);
 //! - a MAC a test can tell not to go idle ([`ModelPort::hold_busy`]), so
 //!   that the stop's last resort runs: its block reset, then the
@@ -50,7 +51,7 @@ use core::cell::Cell;
 use core::num::NonZeroU16;
 use core::task::{Context, Poll};
 use oer_protocols_ieee802_wire::IndividualAddress;
-use oer_protocols_ieee80211_wire::qos::Tid;
+use oer_protocols_ieee80211_wire::qos::{Tid, WmmAccessCategory};
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::vec::Vec;
@@ -59,19 +60,19 @@ use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::data::Sealed;
 use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AggregateEnd, AgreementCommand, AgreementEnd, AgreementHeld, Air as OnAirAir,
-    AmpduCapabilities, AmpduLengthTable, Arena, ArenaOutcome, ArenaSide, BandSet, BlockAckReport,
-    Channel, CloseGate, CommandPlace, CommandPoll, Complete, DataPort, Ended, EthernetAddresses,
-    Facts, FrameSet, GateClosed, GateIssuer, GateLent, GateOpen, GroupCommand, GroupEnd, GroupHeld,
-    HEADROOM, HardwareServices, HeaderLen, IdleArena, Ieee80211Capabilities, Ieee80211Instant,
+    AmpduCapabilities, AmpduLengthTable, ArenaOutcome, BandSet, BlockAckReport, Chain, Channel,
+    CloseGate, CommandPlace, CommandPoll, Complete, DataPort, Ended, EthernetAddresses, Facts,
+    FrameSet, GateClosed, GateIssuer, GateLent, GateOpen, GroupCommand, GroupEnd, GroupHeld,
+    HEADROOM, HardwareServices, HeaderLen, IdleChain, Ieee80211Capabilities, Ieee80211Instant,
     InCommand, IndeterminateCause, InterfaceLayout, InterfaceRole, Layout, LayoutRights, Lendable,
     LowerMacCapabilities, MpduLength, OnAir, OutsideTheUnit, PairwiseCommand, PairwiseEnd,
     PairwiseHeld, PhyFormatSet, Place, PortKey, PortSink, Ppdu, Protection, PublishedSingle,
-    QUEUES, QueueRight, RadioPort, RateSupport, ReceiveCommand, ReceiveEnd, ReceiveFilter,
-    ReceiveHeld, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead, RxMeta,
-    Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces,
-    StartFailure, StartPoll, Starting, Station, StopFrom, StopPoll, StopRight, Stopped, Stopping,
-    SupportedChannel, TxFacts, TxFrame, TxOutcome, TxSlot, TxSlotOf, UnitsHome, ValueCommand,
-    ValueEnd, ValueKind, WidthSet, WithdrawCause,
+    QUEUES, QueueRight, RadioLayout, RadioPort, RateSupport, ReceiveCommand, ReceiveEnd,
+    ReceiveFilter, ReceiveHeld, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead,
+    RxMeta, Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged,
+    StagedPlaces, StartFailure, StartPoll, Starting, Station, StopFrom, StopPoll, StopRight,
+    Stopped, Stopping, SupportedChannel, TxFacts, TxFrame, TxOutcome, TxSlot, TxSlotOf, UnitsHome,
+    ValueCommand, ValueEnd, ValueKind, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -177,14 +178,29 @@ pub const MODEL_GROUPS: usize = 2;
 /// The receive agreements' slots.
 pub const MODEL_AGREEMENTS: usize = 2;
 
+/// The model's chains of [`MODEL_CHAIN_SLOTS`] descriptors: an aggregate's.
+pub const MODEL_CHAINS: usize = 2;
+/// The descriptors of one of the model's long chains.
+pub const MODEL_CHAIN_SLOTS: usize = MODEL_ARENA_SLOTS as usize;
+
+/// The layout of a station alone, with `SINGLES` single places and long
+/// chains of `SLOTS` descriptors.
+pub type StationModelOf<const SINGLES: usize, const SLOTS: usize> = RadioLayout<
+    MODEL_CHAINS,
+    SLOTS,
+    (InterfaceLayout<Station, SINGLES, 1, MODEL_GROUPS, MODEL_AGREEMENTS>,),
+>;
+
 /// The layout of a station alone, with `SINGLES` single places.
-pub type StationModel<const SINGLES: usize> =
-    (InterfaceLayout<Station, SINGLES, 1, MODEL_GROUPS, MODEL_AGREEMENTS>,);
+pub type StationModel<const SINGLES: usize> = StationModelOf<SINGLES, MODEL_CHAIN_SLOTS>;
 
 /// The layout of an access point alone, with `SINGLES` single places of its
 /// controller and `PAIRWISE` pairwise key places, one a client.
-pub type AccessPointModel<const SINGLES: usize, const PAIRWISE: usize> =
-    (InterfaceLayout<AccessPoint, SINGLES, PAIRWISE, MODEL_GROUPS, MODEL_AGREEMENTS>,);
+pub type AccessPointModel<const SINGLES: usize, const PAIRWISE: usize> = RadioLayout<
+    MODEL_CHAINS,
+    MODEL_CHAIN_SLOTS,
+    (InterfaceLayout<AccessPoint, SINGLES, PAIRWISE, MODEL_GROUPS, MODEL_AGREEMENTS>,),
+>;
 
 /// The model's rights of the layout `L`.
 pub type ModelRights<'id, L> = LayoutRights<'id, L>;
@@ -204,13 +220,13 @@ pub trait Served: served::Sealed + Layout {
     const PAIRWISE: usize;
 }
 
-impl<const SINGLES: usize> served::Sealed for StationModel<SINGLES> {}
+impl<const SINGLES: usize, const SLOTS: usize> served::Sealed for StationModelOf<SINGLES, SLOTS> {}
 impl<const SINGLES: usize, const PAIRWISE: usize> served::Sealed
     for AccessPointModel<SINGLES, PAIRWISE>
 {
 }
 
-impl<const SINGLES: usize> Served for StationModel<SINGLES> {
+impl<const SINGLES: usize, const SLOTS: usize> Served for StationModelOf<SINGLES, SLOTS> {
     const SINGLE_PLACES: usize = SINGLES;
     const PAIRWISE: usize = 1;
 }
@@ -481,16 +497,44 @@ impl Frame {
     }
 }
 
-/// One arena of the model.
+/// One chain of the model.
 #[derive(Debug, Default)]
 struct ArenaBuffer {
     frames: Vec<Frame>,
     sent: u8,
     went: Went,
+    /// The queue the chain went on.
+    queue: Option<WmmAccessCategory>,
+    /// The response its first frame solicits, when it goes alone.
+    solicits: Solicits,
     /// The rate the publication went at.
     rate: Option<PhyRate>,
     air: Option<Air>,
     ended: Option<Ended<(), (), ()>>,
+}
+
+/// The response a chain's frame solicits when it goes alone.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Solicits {
+    /// An ACK.
+    #[default]
+    Ack,
+    /// Nothing: a group frame or one sent without acknowledgement.
+    Nothing,
+    /// A BlockAck: a BlockAckReq.
+    BlockAck,
+}
+
+/// A fault of the modelled hardware a test switches on, to show a case of
+/// the suite fails on it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Fault {
+    /// Every chain goes on the best effort queue whatever the right it was
+    /// published with: a second chain on a busy queue.
+    ChainsOnBestEffort,
+    /// A stop leaves the chains on the air as they were: their ends never
+    /// come.
+    StopLeavesChains,
 }
 
 /// What an arena's publication put on the air.
@@ -576,7 +620,9 @@ pub struct ModelPort<
     groups: [bool; MODEL_GROUPS],
     agreements: [bool; MODEL_AGREEMENTS],
     anomaly: Option<Anomaly>,
-    arenas: [ArenaBuffer; 2],
+    /// The long chains, then the chains of one, one a queue.
+    arenas: [ArenaBuffer; MODEL_CHAINS + QUEUES.len()],
+    fault: Option<Fault>,
     queues: [Queue; 4],
     singles: Vec<Vec<u8>>,
     ring: VecDeque<(Vec<u8>, RxMeta)>,
@@ -658,13 +704,6 @@ fn whole<P>(tx: TxSlot<P>, slot: &[u8], body: u16) -> bool {
     front && behind
 }
 
-const fn side_index(side: ArenaSide) -> usize {
-    match side {
-        ArenaSide::First => 0,
-        ArenaSide::Second => 1,
-    }
-}
-
 impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
     ModelPort<'id, L, PLACES, TX_FRONT>
 {
@@ -687,7 +726,8 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
             groups: [false; MODEL_GROUPS],
             agreements: [false; MODEL_AGREEMENTS],
             anomaly: None,
-            arenas: [ArenaBuffer::default(), ArenaBuffer::default()],
+            arenas: core::array::from_fn(|_| ArenaBuffer::default()),
+            fault: None,
             queues: core::array::from_fn(|_| Queue::default()),
             singles: (0..L::SINGLE_PLACES).map(|_| Vec::new()).collect(),
             ring: VecDeque::new(),
@@ -754,8 +794,8 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
         }
     }
 
-    /// Set the air of a queue for its next frames; an arena goes on the
-    /// best effort queue's air.
+    /// Set the air of a queue for its next frames; a chain goes on its
+    /// queue's air.
     pub fn set_air(
         &mut self,
         category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
@@ -895,30 +935,38 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
         std::format!("{ring:?}|{places:?}|{}", self.returns.get())
     }
 
-    /// The arena on the air.
-    pub fn on_air_side(&self) -> Option<ArenaSide> {
-        [ArenaSide::First, ArenaSide::Second]
-            .into_iter()
-            .find(|side| {
+    /// The long chain on the air, by its index.
+    pub fn on_air_chain(&self) -> Option<u8> {
+        (0..MODEL_CHAINS)
+            .find(|index| {
                 self.arenas
-                    .get(side_index(*side))
+                    .get(*index)
                     .is_some_and(|arena| arena.air.is_some())
             })
+            .and_then(|index| u8::try_from(index).ok())
     }
 
-    /// The network's names of the memories an arena holds, in its order.
-    pub fn arena_memories(&self, side: ArenaSide) -> Vec<u32> {
+    /// The network's names of the memories a long chain holds, in its
+    /// order.
+    pub fn arena_memories(&self, index: u8) -> Vec<u32> {
         self.arenas
-            .get(side_index(side))
+            .get(usize::from(index))
             .map(|arena| arena.frames.iter().map(|frame| frame.memory.id).collect())
             .unwrap_or_default()
     }
 
-    /// The frames an arena holds.
-    pub fn arena_frames(&self, side: ArenaSide) -> usize {
+    /// The chains the hardware queue of `category` carries: one at most,
+    /// but under a fault.
+    pub fn chains_on(&self, category: WmmAccessCategory) -> usize {
         self.arenas
-            .get(side_index(side))
-            .map_or(0, |arena| arena.frames.len())
+            .iter()
+            .filter(|arena| arena.air.is_some() && arena.queue == Some(category))
+            .count()
+    }
+
+    /// Switch `fault` on: the model misbehaves so from now on.
+    pub const fn fault(&mut self, fault: Fault) {
+        self.fault = Some(fault);
     }
 
     /// The start's programming, in order.
@@ -947,7 +995,8 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
 
     /// Withdraw what is queued and end what is on the air, as a stop does.
     fn withdraw_air(&mut self) {
-        for arena in &mut self.arenas {
+        let chains = self.fault != Some(Fault::StopLeavesChains);
+        for arena in self.arenas.iter_mut().filter(|_| chains) {
             if arena.air.take().is_some() && arena.ended.is_none() {
                 let cause = WithdrawCause::Disabled;
                 arena.ended = Some(Ended {
@@ -1182,36 +1231,36 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         }
     }
 
-    fn open<I: InterfaceRole>(
+    fn open<I: InterfaceRole, const S: usize>(
         &mut self,
-        idle: IdleArena<'id>,
+        idle: IdleChain<'id, S>,
         _link: &Self::Link<I>,
         _tid: Tid,
-    ) -> Arena<'id> {
+    ) -> Chain<'id, S> {
         self.call();
-        if let Some(arena) = self.arenas.get_mut(side_index(idle.side())) {
+        if let Some(arena) = self.arenas.get_mut(usize::from(idle.index())) {
             *arena = ArenaBuffer::default();
         }
         self.key.open(idle)
     }
 
-    fn place<'a>(
+    fn place<'a, const S: usize>(
         &'a mut self,
-        arena: &'a mut Arena<'id>,
+        arena: &'a mut Chain<'id, S>,
         _length: MpduLength<Self::Caps>,
-    ) -> Result<Place<'a, 'id, Self>, Complete> {
+    ) -> Result<Place<'a, 'id, Self, S>, Complete> {
         self.call();
-        if arena.frames() >= MODEL_ARENA_SLOTS {
+        if usize::from(arena.frames()) >= S {
             return Err(Complete);
         }
         let placing = self.key.placing();
         Ok(Place::new(placing, self, arena))
     }
 
-    fn write_frame(
+    fn write_frame<const S: usize>(
         &mut self,
         _token: Sealed,
-        arena: &mut Arena<'id>,
+        arena: &mut Chain<'id, S>,
         body: Self::Memory,
         header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen,
     ) {
@@ -1249,7 +1298,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
                 .copied()
                 .collect(),
         ));
-        if let Some(buffer) = self.arenas.get_mut(side_index(arena.side())) {
+        if let Some(buffer) = self.arenas.get_mut(usize::from(arena.index())) {
             buffer.frames.push(Frame {
                 memory: body,
                 header,
@@ -1260,25 +1309,40 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         }
     }
 
-    fn publish(
+    fn publish<const S: usize>(
         &mut self,
-        arena: Arena<'id>,
+        arena: Chain<'id, S>,
+        queue: QueueRight<'id>,
         how: Ppdu<'id, Self::Caps>,
         _gate: &GateOpen<'id>,
         _now: Instant,
-    ) -> OnAir<'id> {
+    ) -> OnAir<'id, S> {
         self.call();
         // A single goes alone: no second frame fits its limit.
         let limit = match how {
-            Ppdu::Single(_) => 0,
+            Ppdu::Single(_)
+            | Ppdu::NoAck { .. }
+            | Ppdu::Group { .. }
+            | Ppdu::BlockAckRequest { .. } => 0,
             Ppdu::Aggregate { rate, .. } => MODEL_AMPDU_LENGTHS
                 .at(rate.rate().get())
                 .map_or(0, core::num::NonZeroU32::get),
         };
+        let solicits = match how {
+            Ppdu::Single(_) | Ppdu::Aggregate { .. } => Solicits::Ack,
+            Ppdu::NoAck { .. } | Ppdu::Group { .. } => Solicits::Nothing,
+            Ppdu::BlockAckRequest { .. } => Solicits::BlockAck,
+        };
+        // The chain goes on its right's queue; the fault puts every chain on
+        // best effort.
+        let on = match self.fault {
+            Some(Fault::ChainsOnBestEffort) => WmmAccessCategory::BestEffort,
+            None | Some(Fault::StopLeavesChains) => queue.category(),
+        };
         let mut record = None;
-        let air = self.air_of(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort);
+        let air = self.air_of(on);
         let prefix = self.prefix.take();
-        let buffer = self.arenas.get_mut(side_index(arena.side()));
+        let buffer = self.arenas.get_mut(usize::from(arena.index()));
         let mut sent: u8 = 0;
         if let Some(buffer) = buffer {
             let mut length: u32 = 0;
@@ -1313,6 +1377,8 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
                 Went::Single
             };
             buffer.air = Some(air);
+            buffer.queue = Some(on);
+            buffer.solicits = solicits;
             buffer.ended = None;
             let went_at = match (how, buffer.went) {
                 (Ppdu::Single(plan) | Ppdu::Aggregate { alone: plan, .. }, Went::Single) => {
@@ -1320,6 +1386,9 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
                 }
                 (Ppdu::Aggregate { rate, .. }, Went::Aggregate) => rate.rate().get(),
                 (Ppdu::Single(plan), Went::Aggregate) => plan.first().rate.get(),
+                (Ppdu::NoAck { rate, .. }, _) => rate.rate().get(),
+                (Ppdu::Group { rate, .. }, _) => rate.get(),
+                (Ppdu::BlockAckRequest { plan, .. }, _) => plan.first().rate.rate().get(),
             };
             buffer.rate = Some(went_at);
             let frames = buffer
@@ -1337,6 +1406,10 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
                 (Ppdu::Single(plan) | Ppdu::Aggregate { alone: plan, .. }, _) => {
                     plan.stages().map(|stage| stage.protection).collect()
                 }
+                (Ppdu::BlockAckRequest { plan, .. }, _) => {
+                    plan.stages().map(|stage| stage.protection).collect()
+                }
+                (Ppdu::NoAck { .. } | Ppdu::Group { .. }, _) => std::vec![Protection::None],
             };
             record = Some(Publication {
                 single: buffer.went,
@@ -1346,16 +1419,16 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
             });
         }
         self.published.extend(record);
-        self.key.publish(arena, sent)
+        self.key.publish(arena, queue, sent)
     }
 
-    fn withdraw(
+    fn withdraw<const S: usize>(
         &mut self,
-        arena: Arena<'id>,
+        arena: Chain<'id, S>,
         home: &mut impl FnMut(Self::Memory),
-    ) -> IdleArena<'id> {
+    ) -> IdleChain<'id, S> {
         self.call();
-        if let Some(buffer) = self.arenas.get_mut(side_index(arena.side())) {
+        if let Some(buffer) = self.arenas.get_mut(usize::from(arena.index())) {
             for frame in buffer.frames.drain(..) {
                 home(frame.memory);
             }
@@ -1364,17 +1437,20 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         self.key.withdraw(arena)
     }
 
-    fn aggregate_ended(
+    fn ended<const S: usize>(
         &mut self,
         _facts: TxFacts,
-        on_air: &OnAir<'id>,
+        on_air: &OnAir<'id, S>,
         _now: Instant,
     ) -> Option<&Ended<Self::Ack, Self::BlockAck, Self::Denial>> {
         self.call();
         let acknowledge = self.acknowledge;
-        // The air answers at the end, as it is set then.
-        let now_air = self.air_of(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort);
-        let buffer = self.arenas.get_mut(side_index(on_air.side()))?;
+        let slot = usize::from(on_air.index());
+        // The air of the chain's queue answers at the end, as it is set
+        // then.
+        let queue = self.arenas.get(slot)?.queue?;
+        let now_air = self.air_of(queue);
+        let buffer = self.arenas.get_mut(slot)?;
         let rate = buffer.rate?;
         if buffer.ended.is_none() {
             let air = match (buffer.air, now_air) {
@@ -1398,7 +1474,14 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
                 (Went::Single, Air::Ack) => (
                     ArenaOutcome::Single(TxOutcome::Ended(SingleEnd::Delivered {
                         air: Self::rate_air(rate),
-                        response: SingleResponse::Ack(()),
+                        response: match buffer.solicits {
+                            Solicits::Ack => SingleResponse::Ack(()),
+                            Solicits::Nothing => SingleResponse::Unsolicited,
+                            Solicits::BlockAck => SingleResponse::BlockAck {
+                                report: BlockAckReport::new(SequenceNumber::ZERO, 1),
+                                ack: (),
+                            },
+                        },
                     })),
                     on_air.sent(),
                 ),
@@ -1455,16 +1538,16 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         buffer.ended.as_ref()
     }
 
-    fn settle(
+    fn settle<const S: usize>(
         &mut self,
-        on_air: OnAir<'id>,
+        on_air: OnAir<'id, S>,
         keep: FrameSet,
         home: &mut impl FnMut(Self::Memory),
-    ) -> Settled<'id> {
+    ) -> (Settled<'id, S>, QueueRight<'id>) {
         self.call();
         let sent = on_air.sent();
         let mut kept: u8 = 0;
-        if let Some(buffer) = self.arenas.get_mut(side_index(on_air.side())) {
+        if let Some(buffer) = self.arenas.get_mut(usize::from(on_air.index())) {
             let mut stay = Vec::new();
             for (position, frame) in buffer.frames.drain(..).enumerate() {
                 let position = u8::try_from(position).unwrap_or(u8::MAX);

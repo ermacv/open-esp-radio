@@ -1,5 +1,5 @@
 error[E0599]: no method named `peer` found for struct `StoppedData<'a, E>` in the current scope
-  --> tests/ui/request_on_stopped_data.rs:28:22
+  --> tests/ui/request_on_stopped_data.rs:29:22
    |
-28 |         let _ = data.peer(ACCESS_POINT); // ui-error: E0599
-   |                      ^^^^ method not found in `StoppedData<'_, Engine<'_, ModelPort<'_, (oer_protocols_ieee80211_contracts_port::data::layout::InterfaceLayout<oer_protocols_ieee80211_contracts_port::owner::Station, 8, 1, 2, 2>,), 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
+29 |         let _ = data.peer(ACCESS_POINT); // ui-error: E0599
+   |                      ^^^^ method not found in `StoppedData<'_, Engine<'_, ModelPort<'_, oer_protocols_ieee80211_contracts_port::data::layout::RadioLayout<2, 32, (oer_protocols_ieee80211_contracts_port::data::layout::InterfaceLayout<oer_protocols_ieee80211_contracts_port::owner::Station, 8, 1, 2, 2>,)>, 8, 12>, Arenas, T, 1, 8, 8, 2, 2, 32, 7>>`

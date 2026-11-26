@@ -1,0 +1,56 @@
+error[E0080]: evaluation panicked: a chain has one to 64 descriptors, and an installation's chains, the long ones and one a queue, are counted in a byte
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `<oer_protocols_ieee80211_contracts_port::RadioLayout<2, 0, (oer_protocols_ieee80211_contracts_port::InterfaceLayout<oer_protocols_ieee80211_contracts_port::Station, 1, 1, 0, 0>,)> as oer_protocols_ieee80211_contracts_port::Layout>::CHECKED` failed here
+  |
+ ::: src/data/layout.rs
+  |
+  | / ...   panic!(
+  | | ...       "a chain has one to 64 descriptors, and an installation's chains, the long ones and one a queue, are counted in a byte"
+  | | ...   )
+  | |_______- in this macro invocation
+
+note: erroneous constant encountered
+ --> tests/ui/radio_counts.rs:9:31
+  |
+9 | pub const NO_DESCRIPTOR: () = <RadioLayout<2, 0, One> as Layout>::CHECKED; // ui-error@outside: E0080: evaluation panicked: a chain h...
+  |                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0080]: evaluation panicked: a chain has one to 64 descriptors, and an installation's chains, the long ones and one a queue, are counted in a byte
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `<oer_protocols_ieee80211_contracts_port::RadioLayout<2, 65, (oer_protocols_ieee80211_contracts_port::InterfaceLayout<oer_protocols_ieee80211_contracts_port::Station, 1, 1, 0, 0>,)> as oer_protocols_ieee80211_contracts_port::Layout>::CHECKED` failed here
+  |
+ ::: src/data/layout.rs
+  |
+  | / ...   panic!(
+  | | ...       "a chain has one to 64 descriptors, and an installation's chains, the long ones and one a queue, are counted in a byte"
+  | | ...   )
+  | |_______- in this macro invocation
+
+note: erroneous constant encountered
+  --> tests/ui/radio_counts.rs:11:26
+   |
+11 | pub const TOO_LONG: () = <RadioLayout<2, 65, One> as Layout>::CHECKED;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0080]: evaluation panicked: a chain has one to 64 descriptors, and an installation's chains, the long ones and one a queue, are counted in a byte
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `<oer_protocols_ieee80211_contracts_port::RadioLayout<253, 32, (oer_protocols_ieee80211_contracts_port::InterfaceLayout<oer_protocols_ieee80211_contracts_port::Station, 1, 1, 0, 0>,)> as oer_protocols_ieee80211_contracts_port::Layout>::CHECKED` failed here
+  |
+ ::: src/data/layout.rs
+  |
+  | / ...   panic!(
+  | | ...       "a chain has one to 64 descriptors, and an installation's chains, the long ones and one a queue, are counted in a byte"
+  | | ...   )
+  | |_______- in this macro invocation
+
+note: erroneous constant encountered
+  --> tests/ui/radio_counts.rs:13:26
+   |
+13 | pub const TOO_MANY: () = <RadioLayout<253, 32, One> as Layout>::CHECKED;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
