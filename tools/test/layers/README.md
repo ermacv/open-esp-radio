@@ -49,7 +49,7 @@ or transitive, reaches a protocol core, runtime or core-side policy. Only
 service reaches no chip adapter by any path.
 
 `portable/settle`, the one busy-wait a driver may make, is hardware code's: the
-chip crates, the family's drivers and radio crates, the probes and
+chip's HAL, drivers and radio crates, the family's drivers and radio crates, the probes and
 `portable/time-virtual` may depend on it, and no other package does, a
 protocol package among them.
 
