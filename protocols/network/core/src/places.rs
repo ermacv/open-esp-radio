@@ -225,11 +225,6 @@ impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
         self.serial() == Some(serial)
     }
 
-    /// Whether someone holds the right to its command's result.
-    fn observed(&self) -> bool {
-        self.occupied().is_some_and(|occupied| occupied.observed)
-    }
-
     /// The chain it is on.
     const fn chain(&self) -> Option<Chain> {
         match self.link {
@@ -435,16 +430,15 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         state: &PlaceState<'m, B, SIZE, T>,
     ) -> Option<Option<Chain>> {
         let close = number.index() == CREDITS;
-        let place = self.get(number)?;
-        let was_running = place.running();
+        self.get(number)?;
+        // A result is written only where a command ran, and on the close:
+        // its end is told from the ended chain.
         Some(match state {
             PlaceState::Free if close => None,
             PlaceState::Free => Some(Chain::Free),
             PlaceState::Occupied(occupied) => match occupied.run {
                 Run::Sending(_) | Run::Declared(_) => Some(Chain::Running),
-                Run::Finished(_) | Run::Ended { .. } if was_running || close => Some(Chain::Ended),
-                // Told already, or never told: its chain stays.
-                Run::Finished(_) | Run::Ended { .. } => place.chain(),
+                Run::Finished(_) | Run::Ended { .. } => Some(Chain::Ended),
             },
         })
     }
@@ -547,13 +541,12 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> (bool, Option<T>) {
-        let given = self
-            .get(number)
-            .filter(|place| place.observed())
-            .and_then(|place| match place.run() {
-                Some(Run::Declared(declared)) => Some(declared.tag),
-                _ => None,
-            });
+        // A declared work is observed from its declaration to its end: it has
+        // no command whose observer could leave.
+        let given = self.get(number).and_then(|place| match place.run() {
+            Some(Run::Declared(declared)) => Some(declared.tag),
+            _ => None,
+        });
         let Some(tag) = given else {
             return (self.end(number, outcome, pool), None);
         };
