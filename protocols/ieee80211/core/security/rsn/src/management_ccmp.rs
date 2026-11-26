@@ -36,15 +36,15 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 /// The receive state of protected management frames under one pairwise key.
 /// Why a received protected management frame is refused.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ManagementCcmpReceiveError {
+pub enum ManagementCcmpReceiveError<S> {
     /// The frame failed CCMP.
-    Frame(ManagementCcmpError),
+    Frame(ManagementCcmpError<S>),
     /// The packet number does not exceed the last accepted one.
     Replay,
 }
 
-impl From<ManagementCcmpError> for ManagementCcmpReceiveError {
-    fn from(error: ManagementCcmpError) -> Self {
+impl<S> From<ManagementCcmpError<S>> for ManagementCcmpReceiveError<S> {
+    fn from(error: ManagementCcmpError<S>) -> Self {
         Self::Frame(error)
     }
 }
@@ -77,7 +77,7 @@ impl ManagementCcmpReceiver {
         &mut self,
         engine: &mut E,
         frame: &'a mut [u8],
-    ) -> Result<&'a [u8], ManagementCcmpReceiveError> {
+    ) -> Result<&'a [u8], ManagementCcmpReceiveError<E::Stop>> {
         let frame = ManagementCcmpFrame::parse(frame)?;
         let candidate = self
             .replay

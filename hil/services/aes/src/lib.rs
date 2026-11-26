@@ -18,7 +18,7 @@
 
 use oer_portable_crypto::{
     Aes128Key, KeyData, KeyUnwrapError, KeyUnwrapRequest,
-    block::{Aes128Engine, BlockError, unwrap_now},
+    block::{Aes128Engine, EngineStopped, unwrap_now},
 };
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
@@ -54,25 +54,20 @@ pub enum UnwrapError {
     InvalidLength,
     /// The initial value did not verify (RFC 3394 §2.2.3).
     IntegrityCheckFailed,
-    /// A block did not complete within the engine's budget.
-    EngineTimeout { observation: u32 },
-    /// The engine observed a status outside the operation's domain.
-    EngineInvalidState { observation: u32 },
+    /// The engine stopped. `last` is what its driver's record holds of the
+    /// last stop: a stop the driver did not record reads `None`.
+    EngineStopped { last: Option<EngineObservation> },
 }
 
-impl From<KeyUnwrapError> for UnwrapError {
-    fn from(error: KeyUnwrapError) -> Self {
-        match error {
-            KeyUnwrapError::InvalidLength => Self::InvalidLength,
-            KeyUnwrapError::IntegrityCheckFailed => Self::IntegrityCheckFailed,
-            KeyUnwrapError::Engine(BlockError::Timeout { observation }) => {
-                Self::EngineTimeout { observation }
-            }
-            KeyUnwrapError::Engine(BlockError::InvalidState { observation }) => {
-                Self::EngineInvalidState { observation }
-            }
-        }
-    }
+/// What an engine's driver observed when it stopped: the record the image
+/// reads from its engine and the service answers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum EngineObservation {
+    /// A block did not complete within the engine's budget; the status it
+    /// last read.
+    Timeout { observation: u32 },
+    /// A status outside the operation's domain.
+    InvalidState { observation: u32 },
 }
 
 oer_protocols_hil_agent::service! {
@@ -83,18 +78,24 @@ oer_protocols_hil_agent::service! {
 }
 
 /// The handler of the service over a product AES-128 engine `E`, which it
-/// lends to each unwrap for the length of the call.
-pub struct Engine<E> {
+/// lends to each unwrap for the length of the call, and `record`, which
+/// reads what `E`'s driver observed at its last stop.
+pub struct Engine<E, R> {
     engine: E,
+    record: R,
 }
 
-impl<E> Engine<E> {
-    pub const fn new(engine: E) -> Self {
-        Self { engine }
+impl<E, R: Fn(&E) -> Option<EngineObservation>> Engine<E, R> {
+    pub const fn new(engine: E, record: R) -> Self {
+        Self { engine, record }
     }
 }
 
-impl<E: Aes128Engine> Commander for Engine<E> {
+impl<E, R> Commander for Engine<E, R>
+where
+    E: Aes128Engine<Stop = EngineStopped>,
+    R: Fn(&E) -> Option<EngineObservation>,
+{
     async fn unwrap_key(&mut self, request: UnwrapKey) -> Unwrapped {
         // A request never exceeds the buffer: both hold MAX_WRAPPED bytes.
         let Ok(wrapped) = KeyData::<MAX_WRAPPED>::try_copy(&request.wrapped) else {
@@ -107,7 +108,15 @@ impl<E: Aes128Engine> Commander for Engine<E> {
                 Ok(plaintext) => Unwrapped::Plaintext(plaintext),
                 Err(_) => Unwrapped::Refused(UnwrapError::InvalidLength),
             },
-            Err(error) => Unwrapped::Refused(error.into()),
+            Err(KeyUnwrapError::InvalidLength) => Unwrapped::Refused(UnwrapError::InvalidLength),
+            Err(KeyUnwrapError::IntegrityCheckFailed) => {
+                Unwrapped::Refused(UnwrapError::IntegrityCheckFailed)
+            }
+            Err(KeyUnwrapError::Engine(EngineStopped)) => {
+                Unwrapped::Refused(UnwrapError::EngineStopped {
+                    last: (self.record)(&self.engine),
+                })
+            }
         }
     }
 }

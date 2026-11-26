@@ -24,7 +24,7 @@ use oer_chips_esp32s31_hal::peripherals::aes::{
 };
 use oer_portable_crypto::{
     Aes128Key,
-    block::{Aes128Engine, Block, BlockEngine, BlockError},
+    block::{Aes128Engine, Block, BlockEngine, EngineStopped},
 };
 use oer_portable_settle::{Settle, SettleCounter, SettleLimit, settle};
 use oer_portable_time::Duration;
@@ -43,9 +43,22 @@ pub const BLOCK_SETTLE: SettleLimit = match SettleLimit::new(Duration::from_micr
     None => panic!("a block's settle lies within the longest a settle may wait"),
 };
 
+/// What the accelerator showed when it stopped an operation: the driver's
+/// record, which its holder reads ([`AesBlocks::last_stop`]). The engine's
+/// callers see only [`EngineStopped`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AesStop {
+    /// A block was still working at the end of [`BLOCK_SETTLE`]; `STATE`
+    /// last read `observation`.
+    Timeout { observation: u32 },
+    /// `STATE` read `observation`, outside the operation's domain.
+    InvalidState { observation: u32 },
+}
+
 /// The accelerator as one owner's synchronous AES-128 engine, its settles
 /// counted on `counter`. Nothing of a failure outlives the keyed run that met
-/// it: the next `load` starts the block as the first did.
+/// it: the next `load` starts the block as the first did. What the last stop
+/// observed stays in the engine for its holder.
 pub struct AesBlocks<R: Registers, K: SettleCounter> {
     registers: R,
     counter: K,
@@ -53,6 +66,8 @@ pub struct AesBlocks<R: Registers, K: SettleCounter> {
     /// without its drop, whose stop the next `load` or the engine's drop
     /// then performs.
     active: bool,
+    /// What the last stop observed; absent until the engine first stops.
+    last_stop: Option<AesStop>,
 }
 
 /// One keyed run: the direction the mode word holds, or the failure that
@@ -64,9 +79,9 @@ enum KeyedRun {
     Unset,
     /// The mode word holds this direction.
     Directed(Direction),
-    /// A block failed; later blocks of this run answer this, touching
+    /// A block failed; later blocks of this run answer the stop, touching
     /// nothing.
-    Ended(BlockError),
+    Ended,
 }
 
 /// A block's direction, which the mode word selects.
@@ -82,7 +97,19 @@ impl<R: Registers, K: SettleCounter> AesBlocks<R, K> {
             registers,
             counter,
             active: false,
+            last_stop: None,
         }
+    }
+
+    /// What the engine's last stop observed, if it ever stopped.
+    pub const fn last_stop(&self) -> Option<AesStop> {
+        self.last_stop
+    }
+
+    /// Record what a stop observed, and answer the stop.
+    fn stop(&mut self, observed: AesStop) -> EngineStopped {
+        self.last_stop = Some(observed);
+        EngineStopped
     }
 
     /// Erase the key and the blocks and gate the clock.
@@ -100,7 +127,7 @@ impl<R: Registers, K: SettleCounter> AesBlocks<R, K> {
         }
     }
 
-    fn initialize(&mut self, key: &Aes128Key) -> Result<(), BlockError> {
+    fn initialize(&mut self, key: &Aes128Key) -> Result<(), EngineStopped> {
         self.active = true;
         self.registers.enable_clock();
         self.registers.assert_reset();
@@ -112,9 +139,9 @@ impl<R: Registers, K: SettleCounter> AesBlocks<R, K> {
         self.registers.hold();
         let observation = self.registers.state();
         if state(observation) != Some(AesState::Idle) {
-            return Err(BlockError::InvalidState {
+            return Err(self.stop(AesStop::InvalidState {
                 observation: observation.get(),
-            });
+            }));
         }
         let mut block = to_words(key.as_bytes());
         let mut words = KeyWords::default();
@@ -135,12 +162,13 @@ impl<R: Registers, K: SettleCounter> Drop for AesBlocks<R, K> {
 }
 
 impl<R: Registers, K: SettleCounter> Aes128Engine for AesBlocks<R, K> {
+    type Stop = EngineStopped;
     type Keyed<'a>
         = Keyed<'a, R, K>
     where
         Self: 'a;
 
-    fn load(&mut self, key: &Aes128Key) -> Result<Keyed<'_, R, K>, BlockError> {
+    fn load(&mut self, key: &Aes128Key) -> Result<Keyed<'_, R, K>, EngineStopped> {
         if let Err(error) = self.initialize(key) {
             self.clear();
             return Err(error);
@@ -163,9 +191,9 @@ pub struct Keyed<'a, R: Registers, K: SettleCounter> {
 impl<R: Registers, K: SettleCounter> Keyed<'_, R, K> {
     /// Select `direction` for the next block, writing the mode word only
     /// when it changes, or answer the run's failure.
-    fn enter(&mut self, direction: Direction) -> Result<(), BlockError> {
+    fn enter(&mut self, direction: Direction) -> Result<(), EngineStopped> {
         match self.run {
-            KeyedRun::Ended(error) => Err(error),
+            KeyedRun::Ended => Err(EngineStopped),
             KeyedRun::Directed(current) if current == direction => Ok(()),
             KeyedRun::Unset | KeyedRun::Directed(_) => {
                 match direction {
@@ -180,10 +208,10 @@ impl<R: Registers, K: SettleCounter> Keyed<'_, R, K> {
 
     /// Run `block` in the selected direction; a failure ends the run and is
     /// returned by this call.
-    fn block(&mut self, block: &mut Block) -> Result<(), BlockError> {
+    fn block(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         let result = self.engine.run(block);
-        if let Err(error) = result {
-            self.run = KeyedRun::Ended(error);
+        if result.is_err() {
+            self.run = KeyedRun::Ended;
         }
         result
     }
@@ -193,7 +221,7 @@ impl<R: Registers, K: SettleCounter> AesBlocks<R, K> {
     /// Write `block`, start it and wait for it on `STATE` within
     /// [`BLOCK_SETTLE`]; the output replaces `block`, or the block is erased
     /// and the failure returned.
-    fn run(&mut self, block: &mut Block) -> Result<(), BlockError> {
+    fn run(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         let engine = self;
         let mut words = to_words(block);
         engine.registers.write_block(&words);
@@ -205,32 +233,34 @@ impl<R: Registers, K: SettleCounter> AesBlocks<R, K> {
             observation = registers.state();
             (state(observation) != Some(AesState::Work)).then_some(())
         });
-        let result = match settled {
+        let observed = match settled {
             Ok(()) if state(observation) == Some(AesState::Idle) => {
                 let mut words = engine.registers.read_block();
                 from_words(&words, block);
                 words.zeroize();
                 return Ok(());
             }
-            Ok(()) => BlockError::InvalidState {
+            Ok(()) => AesStop::InvalidState {
                 observation: observation.get(),
             },
-            Err(_unsettled) => BlockError::Timeout {
+            Err(_unsettled) => AesStop::Timeout {
                 observation: observation.get(),
             },
         };
         block.zeroize();
-        Err(result)
+        Err(engine.stop(observed))
     }
 }
 
 impl<R: Registers, K: SettleCounter> BlockEngine for Keyed<'_, R, K> {
-    fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+    type Stop = EngineStopped;
+
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         self.enter(Direction::Encrypt)?;
         self.block(block)
     }
 
-    fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         self.enter(Direction::Decrypt)?;
         self.block(block)
     }

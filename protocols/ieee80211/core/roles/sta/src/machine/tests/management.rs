@@ -219,12 +219,11 @@ fn a_refused_engine_drops_a_protected_disconnect_without_advancing_its_replay_st
             let (mut world, _, _) = connected(mint);
             let valid = wire(vector);
             let loads = world.station.config.callbacks.blocks.loads;
-            world.station.config.callbacks.blocks.refuse =
-                Some(oer_portable_crypto::block::BlockError::Timeout { observation: 1 });
+            world.station.config.callbacks.blocks.refuse = true;
             world.receive_verified(at(40), &valid);
             assert!(world.station.is_connected(), "a refused CCMP or BIP key");
             assert_eq!(world.station.config.callbacks.blocks.loads, loads + 1);
-            world.station.config.callbacks.blocks.refuse = None;
+            world.station.config.callbacks.blocks.refuse = false;
             world.receive(at(50), &valid);
             assert!(
                 !world.station.is_connected(),

@@ -1,93 +1,44 @@
-//! The synchronous AES-128 block primitives under the mode algorithms, and the
-//! engine of a primitive that completes each block at once: an infallible
-//! one ([`Aes128Blocks`], software) and one that may refuse a key or a block
-//! ([`Aes128Engine`], hardware), which every infallible one also is.
+//! The synchronous AES-128 engine under the mode algorithms: one pair of
+//! traits, the engine ([`Aes128Engine`]) and its keyed view
+//! ([`BlockEngine`]), each block finished on return. An engine names what a
+//! block may answer besides its result: nothing for software
+//! ([`core::convert::Infallible`]), [`EngineStopped`] for an engine that may
+//! stop.
 
 use crate::{Aes128Key, KeyUnwrapRequest, KeyUnwrapResponse, rfc3394};
 
 /// One 128-bit cipher block.
 pub type Block = [u8; 16];
 
-/// A block engine's refusal, independent of the mode's input errors.
+/// The one refusal of an engine that may stop: it stopped, mid-operation or
+/// before it. It carries nothing: what the engine observed is its driver's
+/// record, which the driver's holder reads.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BlockError {
-    /// Completion did not arrive within the engine's policy budget.
-    Timeout { observation: u32 },
-    /// A status outside the selected operation's domain was observed.
-    InvalidState { observation: u32 },
-}
+pub struct EngineStopped;
 
-/// A keyed block cipher: one block in place per call, finished on return.
-pub trait BlockCipher {
-    fn encrypt_block(&mut self, block: &mut Block);
-    fn decrypt_block(&mut self, block: &mut Block);
-}
-
-/// An AES-128 block primitive that loads a key for a run of blocks.
-pub trait Aes128Blocks {
-    /// The primitive with its key loaded. Dropping it erases the key from
-    /// the primitive.
-    type Keyed<'a>: BlockCipher
-    where
-        Self: 'a;
-
-    fn load_key(&mut self, key: &Aes128Key) -> Self::Keyed<'_>;
-}
-
-/// A borrowed primitive is one: an engine over `&mut P` leaves `P` with its
-/// owner, which runs it again for the next request.
-impl<P: Aes128Blocks> Aes128Blocks for &mut P {
-    type Keyed<'a>
-        = P::Keyed<'a>
-    where
-        Self: 'a;
-
-    fn load_key(&mut self, key: &Aes128Key) -> Self::Keyed<'_> {
-        (**self).load_key(key)
-    }
-}
-
-/// A keyed block engine that may refuse a block: one block in place per call,
-/// finished on return, or the engine's [`BlockError`].
+/// A keyed block engine: one block in place per call, finished on return,
+/// or the engine's [`Self::Stop`]. A software engine's is
+/// [`core::convert::Infallible`], so its callers have no error path.
 pub trait BlockEngine {
-    fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError>;
-    fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError>;
+    /// What a block may answer besides its result.
+    type Stop: Copy;
+
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), Self::Stop>;
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), Self::Stop>;
 }
 
-/// Every infallible block cipher is an engine that never refuses.
-impl<C: BlockCipher> BlockEngine for C {
-    fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        self.encrypt_block(block);
-        Ok(())
-    }
-    fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        self.decrypt_block(block);
-        Ok(())
-    }
-}
-
-/// An AES-128 block engine that loads a key for a run of blocks and may
-/// refuse the key or a block (a hardware engine's state or timeout).
+/// An AES-128 block engine that loads a key for a run of blocks.
 pub trait Aes128Engine {
+    /// What loading a key or a block may answer besides its result.
+    type Stop: Copy;
+
     /// The engine with its key loaded. Dropping it erases the key from the
     /// engine.
-    type Keyed<'a>: BlockEngine
+    type Keyed<'a>: BlockEngine<Stop = Self::Stop>
     where
         Self: 'a;
 
-    fn load(&mut self, key: &Aes128Key) -> Result<Self::Keyed<'_>, BlockError>;
-}
-
-/// Every infallible primitive is an engine that never refuses.
-impl<P: Aes128Blocks> Aes128Engine for P {
-    type Keyed<'a>
-        = P::Keyed<'a>
-    where
-        Self: 'a;
-
-    fn load(&mut self, key: &Aes128Key) -> Result<Self::Keyed<'_>, BlockError> {
-        Ok(self.load_key(key))
-    }
+    fn load(&mut self, key: &Aes128Key) -> Result<Self::Keyed<'_>, Self::Stop>;
 }
 
 /// Wrap `request` to completion over `engine` ([`rfc3394::wrap`]): each
@@ -98,7 +49,7 @@ impl<P: Aes128Blocks> Aes128Engine for P {
 pub fn wrap_now<E: Aes128Engine, const N: usize>(
     engine: &mut E,
     request: crate::KeyWrapRequest<N>,
-) -> crate::KeyWrapResponse<N> {
+) -> crate::KeyWrapResponse<N, E::Stop> {
     let (kek, plaintext) = request.into_parts();
     crate::rfc3394::wrap(plaintext, move || engine.load(&kek))
 }
@@ -111,7 +62,7 @@ pub fn wrap_now<E: Aes128Engine, const N: usize>(
 pub fn unwrap_now<E: Aes128Engine, const N: usize>(
     engine: &mut E,
     request: KeyUnwrapRequest<N>,
-) -> KeyUnwrapResponse<N> {
+) -> KeyUnwrapResponse<N, E::Stop> {
     let (kek, wrapped) = request.into_parts();
     rfc3394::unwrap(wrapped, move || engine.load(&kek))
 }

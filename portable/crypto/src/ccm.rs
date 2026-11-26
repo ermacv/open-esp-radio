@@ -12,7 +12,7 @@
 //! encrypts erases the partly encrypted body. Intermediate blocks are erased
 //! on every exit.
 
-use crate::block::{Block, BlockEngine, BlockError};
+use crate::block::{Block, BlockEngine};
 use zeroize::Zeroize;
 
 const BLOCK: usize = 16;
@@ -28,15 +28,15 @@ const AAD_LIMIT: usize = 0xff00;
 
 /// Why a CCM operation produced no result.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CcmError {
+pub enum CcmError<S> {
     /// The associated data is `0xff00` bytes or longer.
     AadTooLong,
     /// The body exceeds the two-byte length field.
     BodyTooLong,
     /// The MIC does not verify; the body is erased.
     InvalidMic,
-    /// The engine refused a block; the body is erased.
-    Engine(BlockError),
+    /// The engine stopped; the body is erased.
+    Engine(S),
 }
 
 /// Encrypt `body` in place and return its MIC.
@@ -45,8 +45,8 @@ pub fn seal<E: BlockEngine, const M: usize>(
     nonce: &[u8; NONCE_LEN],
     aad: &[u8],
     body: &mut [u8],
-) -> Result<[u8; M], CcmError> {
-    let lengths = admit::<M>(aad, body)?;
+) -> Result<[u8; M], CcmError<E::Stop>> {
+    let lengths = admit::<M, E::Stop>(aad, body)?;
     let mut tag = [0; BLOCK];
     // A refusal before the body is encrypted leaves it as it was.
     if let Err(error) = cbc_mac::<E, M>(engine, nonce, aad, body, lengths, &mut tag) {
@@ -69,8 +69,8 @@ pub fn open<E: BlockEngine, const M: usize>(
     aad: &[u8],
     body: &mut [u8],
     mic: &[u8; M],
-) -> Result<(), CcmError> {
-    let lengths = admit::<M>(aad, body)?;
+) -> Result<(), CcmError<E::Stop>> {
+    let lengths = admit::<M, E::Stop>(aad, body)?;
     let mut tag = [0; BLOCK];
     let expected = counter_pass(engine, nonce, body)
         .and_then(|()| cbc_mac::<E, M>(engine, nonce, aad, body, lengths, &mut tag))
@@ -96,7 +96,7 @@ struct Lengths {
 }
 
 /// Check the MIC length at compile time and the lengths of this call.
-fn admit<const M: usize>(aad: &[u8], body: &[u8]) -> Result<Lengths, CcmError> {
+fn admit<const M: usize, S>(aad: &[u8], body: &[u8]) -> Result<Lengths, CcmError<S>> {
     const {
         if M < 4 || M > BLOCK || !M.is_multiple_of(2) {
             panic!("a CCM MIC is 4, 6, 8, 10, 12, 14 or 16 bytes");
@@ -119,7 +119,7 @@ fn cbc_mac<E: BlockEngine, const M: usize>(
     body: &[u8],
     lengths: Lengths,
     tag: &mut Block,
-) -> Result<(), BlockError> {
+) -> Result<(), E::Stop> {
     // The flags' MIC field `(M - 2) / 2` (RFC 3610 §2.2), three bits,
     // counted at build.
     let mic_field: u8 = const {
@@ -150,7 +150,7 @@ fn absorb<'a, E: BlockEngine>(
     engine: &mut E,
     state: &mut Block,
     mut bytes: impl Iterator<Item = &'a u8>,
-) -> Result<(), BlockError> {
+) -> Result<(), E::Stop> {
     loop {
         let mut absorbed = false;
         for (out, byte) in state.iter_mut().zip(&mut bytes) {
@@ -170,7 +170,7 @@ fn counter_pass<E: BlockEngine>(
     engine: &mut E,
     nonce: &[u8; NONCE_LEN],
     body: &mut [u8],
-) -> Result<(), BlockError> {
+) -> Result<(), E::Stop> {
     let mut stream: Block = [0; BLOCK];
     let mut result = Ok(());
     let mut bytes = body.iter_mut();
@@ -199,7 +199,7 @@ fn mask<E: BlockEngine, const M: usize>(
     engine: &mut E,
     nonce: &[u8; NONCE_LEN],
     tag: &Block,
-) -> Result<[u8; M], BlockError> {
+) -> Result<[u8; M], E::Stop> {
     let mut s0 = block(LENGTH_FIELD, nonce, 0);
     let result = engine.encrypt(&mut s0).map(|()| {
         let mut mic = [0; M];

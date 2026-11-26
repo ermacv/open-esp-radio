@@ -47,7 +47,10 @@ fn request<const N: usize>(wrapped: &[u8]) -> KeyUnwrapRequest<N> {
 /// # Panics
 ///
 /// The engine breaks a case.
-pub fn key_unwrap_rfc3394<E: Aes128Engine, const N: usize>(engine: &mut E) {
+pub fn key_unwrap_rfc3394<E: Aes128Engine, const N: usize>(engine: &mut E)
+where
+    E::Stop: core::fmt::Debug + PartialEq,
+{
     const {
         if N < 32 {
             panic!("the conformance cases need 32-byte buffers");

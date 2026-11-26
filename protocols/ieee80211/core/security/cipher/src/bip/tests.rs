@@ -24,16 +24,20 @@ fn a_protected_frame_verifies_under_its_own_identifier_and_key_alone() {
         LENGTH + oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN
     );
     let frame = &frame[..protected];
-    let parsed = BipFrame::parse(frame, IgtkKeyId::Five).ok().unwrap();
+    let parsed = BipFrame::parse::<core::convert::Infallible>(frame, IgtkKeyId::Five)
+        .ok()
+        .unwrap();
     assert_eq!(parsed.packet_number(), ipn);
     assert_eq!(parsed.verify(&mut SoftwareAes128, &KEY), Ok(()));
-    let parsed = BipFrame::parse(frame, IgtkKeyId::Five).ok().unwrap();
+    let parsed = BipFrame::parse::<core::convert::Infallible>(frame, IgtkKeyId::Five)
+        .ok()
+        .unwrap();
     assert_eq!(
         parsed.verify(&mut SoftwareAes128, &Aes128Key::copy_from(&[0x78; 16])),
         Err(BipError::InvalidMic)
     );
     assert_eq!(
-        BipFrame::parse(frame, IgtkKeyId::Four).err(),
+        BipFrame::parse::<core::convert::Infallible>(frame, IgtkKeyId::Four).err(),
         Some(BipError::UnknownKeyId)
     );
 }

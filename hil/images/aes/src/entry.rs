@@ -26,7 +26,16 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         // The AES service is commands alone: nothing observes, and the
         // engine commands, each unwrap to completion on the library's
         // synchronous AES engine.
-        let mut commander = Engine::new(engine);
+        let mut commander = Engine::new(engine, |engine: &oer::AesEngine| {
+            engine.last_stop().map(|stop| match stop {
+                oer::AesStop::Timeout { observation } => {
+                    oer_hil_services_aes::EngineObservation::Timeout { observation }
+                }
+                oer::AesStop::InvalidState { observation } => {
+                    oer_hil_services_aes::EngineObservation::InvalidState { observation }
+                }
+            })
+        });
         oer_hil_agent::serve::<_, Request, _, _, _>(
             console,
             oer::boot_id(),

@@ -105,10 +105,10 @@ impl DeferredEapol {
         }
     }
 
-    pub(super) fn message3(
+    pub(super) fn message3<S>(
         self,
         incoming: PendingM3,
-    ) -> (Self, Result<(), RsnConnectedSupplicantError>) {
+    ) -> (Self, Result<(), RsnConnectedSupplicantError<S>>) {
         match self {
             Self::Message3(ref held)
             | Self::Both {
@@ -127,10 +127,10 @@ impl DeferredEapol {
         }
     }
 
-    pub(super) fn group(
+    pub(super) fn group<S>(
         self,
         incoming: PendingGroupM1,
-    ) -> (Self, Result<(), RsnConnectedSupplicantError>) {
+    ) -> (Self, Result<(), RsnConnectedSupplicantError<S>>) {
         match self {
             Self::GroupMessage1(ref held)
             | Self::Both {

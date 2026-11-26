@@ -13,7 +13,7 @@ pub(crate) fn seal<E: Aes128Engine>(
     nonce: &[u8; NONCE_LEN],
     aad: &Aad,
     body: &mut [u8],
-) -> Result<[u8; MIC_LEN], CcmError> {
+) -> Result<[u8; MIC_LEN], CcmError<E::Stop>> {
     let mut keyed = engine.load(key).map_err(CcmError::Engine)?;
     oer_portable_crypto::ccm::seal(&mut keyed, nonce, aad.as_bytes(), body)
 }
@@ -25,7 +25,7 @@ pub(crate) fn open<E: Aes128Engine>(
     aad: &Aad,
     body: &mut [u8],
     mic: &[u8; MIC_LEN],
-) -> Result<(), CcmError> {
+) -> Result<(), CcmError<E::Stop>> {
     let mut keyed = engine.load(key).map_err(CcmError::Engine)?;
     oer_portable_crypto::ccm::open(&mut keyed, nonce, aad.as_bytes(), body, mic)
 }

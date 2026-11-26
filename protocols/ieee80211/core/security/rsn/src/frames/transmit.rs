@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::AkmKeys;
-use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_portable_crypto::block::Aes128Engine;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::{
     EapolEncodeError, EapolKeyBuffer, EapolKeyFields, EapolKeyFixedFields, EapolProtocolVersion,
@@ -312,7 +312,7 @@ impl<const N: usize> RsnTxFrame<N> {
         mut self,
         ptk: &Ptk,
         engine: &mut E,
-    ) -> Result<Self, BlockError> {
+    ) -> Result<Self, E::Stop> {
         self.authenticate_with_kck(ptk.akm(), ptk.kck(), engine)?;
         Ok(self)
     }
@@ -321,7 +321,7 @@ impl<const N: usize> RsnTxFrame<N> {
         mut self,
         key: &RsnKeyConfirmationKey,
         engine: &mut E,
-    ) -> Result<Self, BlockError> {
+    ) -> Result<Self, E::Stop> {
         self.authenticate_with_kck(key.akm(), key.kck(), engine)?;
         Ok(self)
     }
@@ -331,11 +331,10 @@ impl<const N: usize> RsnTxFrame<N> {
         akm: Akm,
         kck: &Kck,
         engine: &mut E,
-    ) -> Result<(), BlockError> {
+    ) -> Result<(), E::Stop> {
         self.set_mic(&[0; RSN_MIC_LEN]);
-        let mut mac = akm.mic(kck, engine)?;
-        mac.update(self.as_bytes())?;
-        self.set_mic(&mac.finalize()?);
+        let mic = akm.mic(kck, engine, [self.as_bytes()])?;
+        self.set_mic(&mic);
         Ok(())
     }
 

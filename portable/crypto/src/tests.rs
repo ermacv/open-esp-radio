@@ -1,6 +1,6 @@
 use crate::{
     Aes128Key, KeyData, KeyDataCapacityError, KeyUnwrapError, KeyUnwrapRequest, KeyWrapRequest,
-    block::{Aes128Blocks, Block, BlockCipher, unwrap_now, wrap_now},
+    block::{Aes128Engine, Block, BlockEngine, EngineStopped, unwrap_now, wrap_now},
     conformance::{self, RFC3394_4_1_CIPHERTEXT, RFC3394_4_1_KEK, RFC3394_4_1_KEY_DATA},
     rfc3394::{self, KeyWrapError},
     test_engine,
@@ -12,24 +12,36 @@ use zeroize::ZeroizeOnDrop;
 struct Rust;
 struct RustKeyed(aes::Aes128);
 
-impl BlockCipher for RustKeyed {
-    fn encrypt_block(&mut self, block: &mut Block) {
+impl BlockEngine for RustKeyed {
+    type Stop = core::convert::Infallible;
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), Self::Stop> {
         let mut array = GenericArray::from(*block);
         self.0.encrypt_block(&mut array);
         *block = array.into();
+        Ok(())
     }
-    fn decrypt_block(&mut self, block: &mut Block) {
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), Self::Stop> {
         let mut array = GenericArray::from(*block);
         self.0.decrypt_block(&mut array);
         *block = array.into();
+        Ok(())
     }
 }
 
-impl Aes128Blocks for Rust {
+impl Aes128Engine for Rust {
+    type Stop = core::convert::Infallible;
     type Keyed<'a> = RustKeyed;
-    fn load_key(&mut self, key: &Aes128Key) -> RustKeyed {
-        RustKeyed(aes::Aes128::new(&GenericArray::from(*key.as_bytes())))
+    fn load(&mut self, key: &Aes128Key) -> Result<RustKeyed, Self::Stop> {
+        Ok(RustKeyed(aes::Aes128::new(&GenericArray::from(
+            *key.as_bytes(),
+        ))))
     }
+}
+
+/// The software engine's key, loaded: it cannot refuse.
+fn rust_keyed(key: &Aes128Key) -> RustKeyed {
+    let Ok(keyed) = Rust.load(key);
+    keyed
 }
 
 #[test]
@@ -164,7 +176,7 @@ fn refused_unwraps_return_the_cleared_buffer() {
 /// A hardware-like engine: RustCrypto blocks until it refuses, either the
 /// key or the block numbered `refuse_block`.
 struct Refusing {
-    refuse_key: Option<crate::block::BlockError>,
+    refuse_key: bool,
     refuse_block: usize,
     blocks: usize,
 }
@@ -172,26 +184,28 @@ struct RefusingKeyed<'a> {
     engine: &'a mut Refusing,
     cipher: RustKeyed,
 }
-impl crate::block::BlockEngine for RefusingKeyed<'_> {
-    fn encrypt(&mut self, block: &mut Block) -> Result<(), crate::block::BlockError> {
+impl BlockEngine for RefusingKeyed<'_> {
+    type Stop = EngineStopped;
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         self.decrypt(block)
     }
-    fn decrypt(&mut self, block: &mut Block) -> Result<(), crate::block::BlockError> {
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         self.engine.blocks += 1;
         if self.engine.blocks == self.engine.refuse_block {
-            return Err(crate::block::BlockError::Timeout { observation: 1 });
+            return Err(EngineStopped);
         }
-        self.cipher.decrypt_block(block);
+        let Ok(()) = self.cipher.decrypt(block);
         Ok(())
     }
 }
-impl crate::block::Aes128Engine for Refusing {
+impl Aes128Engine for Refusing {
+    type Stop = EngineStopped;
     type Keyed<'a> = RefusingKeyed<'a>;
-    fn load(&mut self, key: &Aes128Key) -> Result<RefusingKeyed<'_>, crate::block::BlockError> {
-        if let Some(error) = self.refuse_key {
-            return Err(error);
+    fn load(&mut self, key: &Aes128Key) -> Result<RefusingKeyed<'_>, EngineStopped> {
+        if self.refuse_key {
+            return Err(EngineStopped);
         }
-        let cipher = Rust.load_key(key);
+        let cipher = rust_keyed(key);
         Ok(RefusingKeyed {
             engine: self,
             cipher,
@@ -209,7 +223,7 @@ fn rfc3394_request() -> KeyUnwrapRequest<32> {
 #[test]
 fn a_fallible_engine_unwraps_in_place_and_its_refusals_are_typed_engine_failures() {
     let mut engine = Refusing {
-        refuse_key: None,
+        refuse_key: false,
         refuse_block: usize::MAX,
         blocks: 0,
     };
@@ -218,30 +232,26 @@ fn a_fallible_engine_unwraps_in_place_and_its_refusals_are_typed_engine_failures
     assert_eq!(engine.blocks, 12, "two 64-bit blocks: six rounds of two");
 
     let mut engine = Refusing {
-        refuse_key: None,
+        refuse_key: false,
         refuse_block: 3,
         blocks: 0,
     };
     let response = crate::block::unwrap_now(&mut engine, rfc3394_request());
     assert_eq!(
         response.plaintext(),
-        Err(KeyUnwrapError::Engine(crate::block::BlockError::Timeout {
-            observation: 1
-        }))
+        Err(KeyUnwrapError::Engine(EngineStopped))
     );
     assert_eq!(engine.blocks, 3, "no block after the refused one");
 
     let mut engine = Refusing {
-        refuse_key: Some(crate::block::BlockError::InvalidState { observation: 2 }),
+        refuse_key: true,
         refuse_block: usize::MAX,
         blocks: 0,
     };
     let response = crate::block::unwrap_now(&mut engine, rfc3394_request());
     assert_eq!(
         response.plaintext(),
-        Err(KeyUnwrapError::Engine(
-            crate::block::BlockError::InvalidState { observation: 2 }
-        ))
+        Err(KeyUnwrapError::Engine(EngineStopped))
     );
     assert_eq!(engine.blocks, 0);
 }
@@ -266,19 +276,19 @@ fn keys_and_key_data_erase_themselves_when_dropped() {
 struct RecordingRefusal {
     first: Option<Block>,
 }
-impl crate::block::BlockEngine for &mut RecordingRefusal {
-    fn encrypt(&mut self, block: &mut Block) -> Result<(), crate::block::BlockError> {
+impl BlockEngine for &mut RecordingRefusal {
+    type Stop = EngineStopped;
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         self.decrypt(block)
     }
-    fn decrypt(&mut self, block: &mut Block) -> Result<(), crate::block::BlockError> {
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         self.first = Some(*block);
-        Err(crate::block::BlockError::Timeout { observation: 1 })
+        Err(EngineStopped)
     }
 }
 
 #[test]
 fn an_engine_error_terminates_the_mode_without_exposing_key_data() {
-    use crate::block::BlockError;
     let wrapped = KeyData::<32>::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap();
     let mut engine = RecordingRefusal { first: None };
     let response = crate::rfc3394::unwrap(wrapped, || Ok(&mut engine));
@@ -287,8 +297,10 @@ fn an_engine_error_terminates_the_mode_without_exposing_key_data() {
     expected[7] ^= 12; // n*j+i = 2*5+2, big endian.
     expected[8..].copy_from_slice(&RFC3394_4_1_CIPHERTEXT[16..]);
     assert_eq!(engine.first, Some(expected));
-    let error = BlockError::Timeout { observation: 1 };
-    assert_eq!(response.plaintext(), Err(KeyUnwrapError::Engine(error)));
+    assert_eq!(
+        response.plaintext(),
+        Err(KeyUnwrapError::Engine(EngineStopped))
+    );
     assert_eq!(response.data.len, 0);
     assert!(response.data.bytes.iter().all(|byte| *byte == 0));
 }
@@ -299,13 +311,13 @@ fn a_length_refusal_loads_no_key() {
     let mut loads = 0;
     let response = crate::rfc3394::unwrap(wrapped, || {
         loads += 1;
-        Ok(Rust.load_key(&Aes128Key::copy_from(&RFC3394_4_1_KEK)))
+        Rust.load(&Aes128Key::copy_from(&RFC3394_4_1_KEK))
     });
     assert_eq!(response.plaintext(), Err(KeyUnwrapError::InvalidLength));
     assert_eq!(loads, 0);
 }
 
 /// Whether a response's whole buffer, beyond its length too, is zero.
-fn erased<const N: usize>(response: &crate::KeyWrapResponse<N>) -> bool {
+fn erased<const N: usize, S>(response: &crate::KeyWrapResponse<N, S>) -> bool {
     response.data.len == 0 && response.data.bytes.iter().all(|byte| *byte == 0)
 }

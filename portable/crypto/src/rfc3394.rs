@@ -6,10 +6,7 @@
 //! the caller's buffer. Received data reaches the unwrap; nothing here panics
 //! on it.
 
-use crate::{
-    KeyData, KeyUnwrapError, KeyUnwrapResponse, KeyWrapResponse,
-    block::{BlockEngine, BlockError},
-};
+use crate::{KeyData, KeyUnwrapError, KeyUnwrapResponse, KeyWrapResponse, block::BlockEngine};
 use zeroize::Zeroize;
 
 /// The default initial value (RFC 3394 §2.2.3.1).
@@ -83,8 +80,8 @@ fn last_step(semiblocks: &mut Semiblocks<'_>) -> u64 {
 /// block is erased on every exit, and a refusal clears the buffer.
 pub fn unwrap<K: BlockEngine, const N: usize>(
     wrapped: KeyData<N>,
-    load: impl FnOnce() -> Result<K, BlockError>,
-) -> KeyUnwrapResponse<N> {
+    load: impl FnOnce() -> Result<K, K::Stop>,
+) -> KeyUnwrapResponse<N, K::Stop> {
     let mut data = wrapped;
     match unwrap_in_place(data.held_mut(), load) {
         Ok(()) => {
@@ -101,8 +98,8 @@ pub fn unwrap<K: BlockEngine, const N: usize>(
 
 fn unwrap_in_place<K: BlockEngine>(
     bytes: &mut [u8],
-    load: impl FnOnce() -> Result<K, BlockError>,
-) -> Result<(), KeyUnwrapError> {
+    load: impl FnOnce() -> Result<K, K::Stop>,
+) -> Result<(), KeyUnwrapError<K::Stop>> {
     let Some(mut semiblocks) = semiblocks(bytes) else {
         return Err(KeyUnwrapError::InvalidLength);
     };
@@ -126,7 +123,7 @@ fn unwrap_blocks<K: BlockEngine>(
     cipher: &mut K,
     semiblocks: &mut Semiblocks<'_>,
     block: &mut [u8; 16],
-) -> Result<(), BlockError> {
+) -> Result<(), K::Stop> {
     let mut step = last_step(semiblocks);
     for _ in 0..=LAST_ROUND {
         for register in Registers(&mut *semiblocks.registers).rev() {
@@ -167,7 +164,10 @@ fn shift_plaintext(mut semiblocks: Semiblocks<'_>) {
 }
 
 /// The refusal: the buffer cleared, with `error`.
-fn refuse<const N: usize>(mut data: KeyData<N>, error: KeyUnwrapError) -> KeyUnwrapResponse<N> {
+fn refuse<const N: usize, S>(
+    mut data: KeyData<N>,
+    error: KeyUnwrapError<S>,
+) -> KeyUnwrapResponse<N, S> {
     data.zeroize();
     KeyUnwrapResponse {
         data,
@@ -177,13 +177,13 @@ fn refuse<const N: usize>(mut data: KeyData<N>, error: KeyUnwrapError) -> KeyUnw
 
 /// Why [`wrap`] refused its plaintext.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum KeyWrapError {
+pub enum KeyWrapError<S> {
     /// Not 64-bit blocks, or fewer than two (RFC 3394 §2).
     InvalidLength,
     /// The ciphertext, one semiblock longer, does not fit `N`.
     CapacityExceeded,
-    /// A block engine failed; the buffer and intermediate state are erased.
-    Engine(BlockError),
+    /// The engine stopped; the buffer and intermediate state are erased.
+    Engine(S),
 }
 
 /// Wrap `plaintext` (`n >= 2` semiblocks, RFC 3394 §2.2.1, index-based
@@ -197,8 +197,8 @@ pub enum KeyWrapError {
 /// buffer.
 pub fn wrap<K: BlockEngine, const N: usize>(
     plaintext: KeyData<N>,
-    load: impl FnOnce() -> Result<K, BlockError>,
-) -> KeyWrapResponse<N> {
+    load: impl FnOnce() -> Result<K, K::Stop>,
+) -> KeyWrapResponse<N, K::Stop> {
     let mut data = plaintext;
     // The bytes after the held ones are zero: the grown semiblock is.
     let Some(len) = data.len.checked_add(SEMIBLOCK).filter(|len| *len <= N) else {
@@ -216,8 +216,8 @@ pub fn wrap<K: BlockEngine, const N: usize>(
 
 fn wrap_in_place<K: BlockEngine>(
     bytes: &mut [u8],
-    load: impl FnOnce() -> Result<K, BlockError>,
-) -> Result<(), KeyWrapError> {
+    load: impl FnOnce() -> Result<K, K::Stop>,
+) -> Result<(), KeyWrapError<K::Stop>> {
     let Some(mut semiblocks) = semiblocks(bytes) else {
         return Err(KeyWrapError::InvalidLength);
     };
@@ -244,7 +244,7 @@ fn wrap_blocks<K: BlockEngine>(
     cipher: &mut K,
     semiblocks: &mut Semiblocks<'_>,
     block: &mut [u8; 16],
-) -> Result<(), BlockError> {
+) -> Result<(), K::Stop> {
     let mut step: u64 = 0;
     for _ in 0..=LAST_ROUND {
         for register in Registers(&mut *semiblocks.registers) {
@@ -273,7 +273,10 @@ fn wrap_blocks<K: BlockEngine>(
 }
 
 /// The wrap's refusal: the buffer cleared, with `error`.
-fn refuse_wrap<const N: usize>(mut data: KeyData<N>, error: KeyWrapError) -> KeyWrapResponse<N> {
+fn refuse_wrap<const N: usize, S>(
+    mut data: KeyData<N>,
+    error: KeyWrapError<S>,
+) -> KeyWrapResponse<N, S> {
     data.zeroize();
     KeyWrapResponse {
         data,

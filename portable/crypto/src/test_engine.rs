@@ -1,10 +1,10 @@
 //! Block engines of the mode tests: RustCrypto AES-128 and one that refuses
 //! from a chosen block on.
 
-use crate::block::{Block, BlockEngine, BlockError};
+use crate::block::{Block, BlockEngine, EngineStopped};
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 
-pub(crate) const REFUSAL: BlockError = BlockError::Timeout { observation: 7 };
+pub(crate) const REFUSAL: EngineStopped = EngineStopped;
 
 /// RustCrypto AES-128 under `key`, counting its blocks; it refuses every block
 /// from `refuse_from` on.
@@ -27,7 +27,7 @@ impl Engine {
         }
     }
 
-    fn admit(&mut self) -> Result<(), BlockError> {
+    fn admit(&mut self) -> Result<(), EngineStopped> {
         if self.blocks >= self.refuse_from {
             return Err(REFUSAL);
         }
@@ -37,7 +37,9 @@ impl Engine {
 }
 
 impl BlockEngine for Engine {
-    fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+    type Stop = EngineStopped;
+
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         self.admit()?;
         let mut array = GenericArray::from(*block);
         self.cipher.encrypt_block(&mut array);
@@ -45,7 +47,7 @@ impl BlockEngine for Engine {
         Ok(())
     }
 
-    fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         self.admit()?;
         let mut array = GenericArray::from(*block);
         self.cipher.decrypt_block(&mut array);
@@ -55,11 +57,13 @@ impl BlockEngine for Engine {
 }
 
 impl BlockEngine for &mut Engine {
-    fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+    type Stop = EngineStopped;
+
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         (**self).encrypt(block)
     }
 
-    fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
         (**self).decrypt(block)
     }
 }

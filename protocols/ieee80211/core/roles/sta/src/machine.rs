@@ -820,19 +820,23 @@ pub enum StaTraffic {
 
 /// A frame refused by admission or by the authenticated RSN protocol.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StaRxError {
+pub enum StaRxError<S> {
     Frame(oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason),
-    Security(RsnConnectedProcessError),
+    Security(RsnConnectedProcessError<S>),
 }
 
-impl From<oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason> for StaRxError {
+/// What the station's AES engine answers when it stops.
+pub type AesStop<C> =
+    <<C as StaCallbacks>::AesEngine as oer_portable_crypto::block::Aes128Engine>::Stop;
+
+impl<S> From<oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason> for StaRxError<S> {
     fn from(reason: oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason) -> Self {
         Self::Frame(reason)
     }
 }
 
-impl From<RsnConnectedSupplicantError> for StaRxError {
-    fn from(reason: RsnConnectedSupplicantError) -> Self {
+impl<S> From<RsnConnectedSupplicantError<S>> for StaRxError<S> {
+    fn from(reason: RsnConnectedSupplicantError<S>) -> Self {
         Self::Security(RsnConnectedProcessError::Supplicant(reason))
     }
 }
@@ -2098,7 +2102,7 @@ impl ConnectedRsn {
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
         engine: &mut E,
-    ) -> Result<(), StaRxError> {
+    ) -> Result<(), StaRxError<E::Stop>> {
         if self.fault.is_some() {
             return Ok(());
         }
@@ -2119,7 +2123,7 @@ impl ConnectedRsn {
         eapol: OwnedEapolFrame<DEFAULT_EAPOL_FRAME_CAPACITY>,
         protection: EapolProtection,
         engine: &mut E,
-    ) -> Result<(), RsnConnectedSupplicantError> {
+    ) -> Result<(), RsnConnectedSupplicantError<E::Stop>> {
         use oer_protocols_ieee80211_core_security_rsn::EapolKeyMessage;
         let message = eapol
             .key_frame()
@@ -2303,7 +2307,7 @@ fn sae_derivation_failure(
     })
 }
 
-fn connected_rsn_fault(error: RsnConnectedSupplicantError) -> Option<StaDisconnectReason> {
+fn connected_rsn_fault<S>(error: RsnConnectedSupplicantError<S>) -> Option<StaDisconnectReason> {
     match error {
         RsnConnectedSupplicantError::InvalidFrame(error) => {
             Some(StaDisconnectReason::InvalidEapol(error))
@@ -3025,7 +3029,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         &mut self,
         payload: &[u8],
         protection: EapolProtection,
-    ) -> Result<StaEapol, StaRxError> {
+    ) -> Result<StaEapol, StaRxError<AesStop<C>>> {
         let result = (|| {
             let State::Connected(connected) = &mut self.state else {
                 return Err(
@@ -3215,7 +3219,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         frame: &[u8],
         meta: T::RxMeta,
         events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaReceived, StaRxError> {
+    ) -> Result<StaReceived, StaRxError<AesStop<C>>> {
         let (mut context, state) = self.transition();
         let result = context.receive_frame(state, now, frame, meta, events);
         context.report_step(state, now, events);
@@ -4896,7 +4900,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         frame: &[u8],
         meta: T::RxMeta,
         events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaReceived, StaRxError> {
+    ) -> Result<StaReceived, StaRxError<AesStop<C>>> {
         use oer_protocols_ieee80211_core_upper_mac::receive::{AdmittedData, RxDropReason};
         let header = match crate::receive::classify(frame)? {
             Received::Management(management) => {
@@ -7116,10 +7120,10 @@ fn leave_keyed<T: StaTypes, K>(
     }
 }
 /// The handshake's state after the supplicant's resolved effect.
-fn handshake_ready<T: StaTypes, K>(
+fn handshake_ready<T: StaTypes, K, S>(
     handshake: &mut Handshake<T, K>,
     now: Instant,
-    action: RsnStaEapol<DEFAULT_EAPOL_FRAME_CAPACITY>,
+    action: RsnStaEapol<DEFAULT_EAPOL_FRAME_CAPACITY, S>,
     protection: EapolProtection,
 ) -> Change<T, K> {
     match action {

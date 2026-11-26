@@ -19,8 +19,11 @@ A block waits on `STATE` in the named settle `BLOCK_SETTLE`
 no block latency; the bound comes from the `esp32s31-aes-timing` probe (removed; last built at 6ef20cfb2),
 which measured 270–279 cycles (0.87 µs) from the start to `STATE` reading
 idle over 256 blocks at 320 MHz. A block still working at the end of the
-settle is `BlockError::Timeout`; any status but idle or working is
-`BlockError::InvalidState`. No AES IRQ55 is bound: the HAL retains its DMA
+settle stops the engine as `AesStop::Timeout`; any status but idle or
+working stops it as `AesStop::InvalidState`. The engine's callers see only
+`EngineStopped` (`oer_portable_crypto::block`): what the stop observed stays
+in the engine's record, which its holder reads with `last_stop` (the HIL
+`aes` service answers it). No AES IRQ55 is bound: the HAL retains its DMA
 interrupt part with `Silent`, and the engine disables DMA and AES interrupts
 explicitly.
 

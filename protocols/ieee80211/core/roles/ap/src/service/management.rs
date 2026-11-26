@@ -84,8 +84,6 @@ pub enum ApGroupManagementError {
     OutputTooSmall,
     /// The IGTK's 48-bit IPN space is exhausted; replace the key.
     PacketNumbersExhausted,
-    /// The AES engine refused the IGTK or a block.
-    Engine(oer_portable_crypto::block::BlockError),
 }
 
 impl<S: SppScope> AccessPointService<'_, S> {
@@ -214,8 +212,8 @@ impl<S: SppScope> AccessPointService<'_, S> {
                 oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitError::InvalidFrame => {
                     ApGroupManagementError::InvalidFrame
                 }
-                oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitError::Engine(error) => {
-                    ApGroupManagementError::Engine(error)
+                oer_protocols_ieee80211_core_security_rsn::bip::BipTransmitError::Engine(never) => {
+                    match never {}
                 }
             })?;
         // New associations receive the current frontier in Message 3,

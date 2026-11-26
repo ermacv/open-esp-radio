@@ -23,7 +23,7 @@ use crate::{
 use crate::{AkmKeys, MicFailure};
 use oer_portable_crypto::{
     KeyData, KeyWrapRequest,
-    block::{Aes128Engine, BlockError, wrap_now},
+    block::{Aes128Engine, wrap_now},
     rfc3394::KeyWrapError,
 };
 use oer_protocols_ieee802_wire::Eui48;
@@ -96,7 +96,7 @@ impl AwaitedAnswers {
 /// Why a step of the authenticator refused its input; the handshake is as
 /// it was.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RsnApError {
+pub enum RsnApError<S> {
     /// The received EAPOL-Key frame was refused on admission: unsupported,
     /// stale or otherwise unauthenticated peer input, local to that peer.
     Rejected(RsnStateError),
@@ -105,24 +105,18 @@ pub enum RsnApError {
     /// The frame could not be built; its counter stays spent and unawaited.
     Frame(RsnFrameError),
     /// The retransmitted Message 3's key data could not be wrapped.
-    KeyWrap(KeyWrapError),
-    /// The AES engine refused a MIC's key or block.
-    Engine(BlockError),
+    KeyWrap(KeyWrapError<S>),
+    /// The AES engine stopped.
+    Engine(S),
 }
 
-impl From<RsnFrameError> for RsnApError {
+impl<S> From<RsnFrameError> for RsnApError<S> {
     fn from(error: RsnFrameError) -> Self {
         Self::Frame(error)
     }
 }
 
-impl From<BlockError> for RsnApError {
-    fn from(error: BlockError) -> Self {
-        Self::Engine(error)
-    }
-}
-
-impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnApError {
+impl<S> From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnApError<S> {
     fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::Rejected(RsnStateError::from(error))
     }
@@ -131,12 +125,12 @@ impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnApError {
 /// Why a handshake ended. Its holder drops the machine and deauthenticates
 /// the peer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RsnApEnd {
+pub enum RsnApEnd<S> {
     /// The authenticated Message 2 names other security elements than the
     /// association.
     SecurityIesMismatch,
     /// Message 3's key data could not be wrapped.
-    KeyWrap(KeyWrapError),
+    KeyWrap(KeyWrapError<S>),
 }
 
 /// What Message 3 carries beside its PTK: the key data the access point
@@ -148,7 +142,7 @@ pub struct Message3Material<'a, const K: usize> {
 }
 
 /// What a received EAPOL-Key frame did.
-pub enum RsnApEapol<const N: usize> {
+pub enum RsnApEapol<const N: usize, S> {
     /// Nothing: a frame the handshake ignores (a forged one, a repeat).
     None,
     /// A verified Message 2: Message 3, built, to transmit.
@@ -156,7 +150,7 @@ pub enum RsnApEapol<const N: usize> {
     /// A verified Message 4: the peer is authorized.
     Authorized,
     /// The handshake ended.
-    End(RsnApEnd),
+    End(RsnApEnd<S>),
 }
 
 /// What a retransmission built.
@@ -362,7 +356,7 @@ impl RsnApHandshake {
         frame: OwnedEapolFrame<N>,
         material: Message3Material<'_, K>,
         engine: &mut E,
-    ) -> Result<RsnApEapol<N>, RsnApError> {
+    ) -> Result<RsnApEapol<N, E::Stop>, RsnApError<E::Stop>> {
         if frame.interface() != RsnInterface::AccessPoint {
             return Err(RsnApError::Rejected(RsnStateError::WrongInterface));
         }
@@ -388,7 +382,7 @@ impl RsnApHandshake {
         frame: &OwnedEapolFrame<N>,
         material: Message3Material<'_, K>,
         engine: &mut E,
-    ) -> Result<RsnApEapol<N>, RsnApError> {
+    ) -> Result<RsnApEapol<N, E::Stop>, RsnApError<E::Stop>> {
         let key = frame.key_frame()?;
         let replay = key.replay_counter();
         let supplicant_nonce = key.nonce();
@@ -490,7 +484,7 @@ impl RsnApHandshake {
         &mut self,
         frame: &OwnedEapolFrame<N>,
         engine: &mut E,
-    ) -> Result<RsnApEapol<N>, RsnApError> {
+    ) -> Result<RsnApEapol<N, E::Stop>, RsnApError<E::Stop>> {
         let key = frame.key_frame()?;
         let Phase::Keyed { ptk, stage } = &mut self.phase else {
             return Err(RsnApError::Rejected(RsnStateError::UnexpectedMessage));
@@ -522,7 +516,7 @@ impl RsnApHandshake {
         &mut self,
         material: Message3Material<'_, K>,
         engine: &mut E,
-    ) -> Result<RsnApRetransmit<N>, RsnApError> {
+    ) -> Result<RsnApRetransmit<N>, RsnApError<E::Stop>> {
         let Self {
             akm,
             supplicant,
@@ -617,7 +611,7 @@ fn message3<const N: usize, const K: usize, E: Aes128Engine>(
     facts: Message3Facts<'_>,
     material: &Message3Material<'_, K>,
     engine: &mut E,
-) -> Result<RsnTxFrame<N>, Message3Failure> {
+) -> Result<RsnTxFrame<N>, Message3Failure<E::Stop>> {
     let Message3Facts {
         akm,
         supplicant,
@@ -650,9 +644,9 @@ fn message3<const N: usize, const K: usize, E: Aes128Engine>(
 
 /// Why Message 3 was not built: a wrap failure, which ends a first build,
 /// or a step's error.
-enum Message3Failure {
-    Wrap(KeyWrapError),
-    Step(RsnApError),
+enum Message3Failure<S> {
+    Wrap(KeyWrapError<S>),
+    Step(RsnApError<S>),
 }
 
 #[cfg(test)]

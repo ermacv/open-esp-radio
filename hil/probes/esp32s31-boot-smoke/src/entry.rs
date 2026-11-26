@@ -123,7 +123,7 @@ const RFC3394_4_1_CIPHERTEXT: [u8; 24] = [
 /// the second takes the response back.
 struct AesExchange {
     request: Option<KeyUnwrapRequest<AES_CAPACITY>>,
-    response: Option<KeyUnwrapResponse<AES_CAPACITY>>,
+    response: Option<KeyUnwrapResponse<AES_CAPACITY, oer_portable_crypto::block::EngineStopped>>,
 }
 
 /// The boot hart's end of the exchange.

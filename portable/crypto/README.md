@@ -22,17 +22,21 @@ become `KeyUnwrapError::Engine`.
 
 `block::unwrap_now` runs it through a synchronous `Aes128Engine`, which loads
 a key for the run and erases it when its keyed view drops; the request's key
-is erased right after the load, before the first block. A refused key or
-block (`BlockError`) ends the operation as `KeyUnwrapError::Engine`. Every infallible `Aes128Blocks`
-primitive (software, its `BlockCipher` blocks) is an engine that never
-refuses; a hardware engine implements `Aes128Engine` itself. `wrap` uses the
-infallible primitive.
+is erased right after the load, before the first block. The engine and its
+keyed view (`Aes128Engine`, `BlockEngine`) name what a key or a block may
+answer besides its result, `Stop`: `core::convert::Infallible` for a
+software engine, whose callers then have no engine error path, and
+`EngineStopped` for one that may stop. The stop carries nothing; what the
+engine observed is its driver's record. A stop ends the operation as its
+`Engine` error (`KeyUnwrapError::Engine`, `KeyWrapError::Engine`).
 
 `ccm` (RFC 3610, thirteen-byte nonce, MIC length checked at compile time) and
-`cmac` (RFC 4493, fed in pieces) run over the same keyed `BlockEngine`, so a
-software block and a hardware accelerator share one copy of each mode. A
-refused block is the typed error of the operation: CCM erases the body it
-was decrypting or encrypting, and the first refusal poisons a CMAC. Both
+`cmac` (RFC 4493, `tag` and `verify` over a message given in pieces) run
+over the same keyed `BlockEngine`, so a software block and a hardware
+accelerator share one copy of each mode. A stop is the operation's `Engine`
+error: CCM erases the body it was decrypting or encrypting, and a CMAC
+computation ends with the call that holds it, so nothing of it is fed
+again. Both
 compare tags in constant time and erase their chaining values on every exit.
 The host tests check them against RustCrypto's `ccm` and `cmac`, RFC 4493's
 examples and a refusal at every block.

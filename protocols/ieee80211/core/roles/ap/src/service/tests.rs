@@ -2,7 +2,7 @@
 fn software_key_unwrap(
     kek: &oer_protocols_ieee80211_core_security_rsn::Kek,
     wrapped: &[u8],
-) -> Result<RsnKeyData, oer_portable_crypto::KeyUnwrapError> {
+) -> Result<RsnKeyData, oer_portable_crypto::KeyUnwrapError<core::convert::Infallible>> {
     oer_portable_crypto::block::unwrap_now(
         &mut SoftwareAes128,
         oer_portable_crypto::KeyUnwrapRequest::new(
