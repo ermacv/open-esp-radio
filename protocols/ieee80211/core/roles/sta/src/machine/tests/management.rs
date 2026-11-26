@@ -14,7 +14,7 @@ fn sa_query_requests_fresh_entropy_only_for_a_new_procedure() {
         management
             .start_query(at(50), || {
                 calls.set(calls.get() + 1);
-                SNONCE
+                *SNONCE.octets()
             })
             .unwrap();
     };
@@ -100,7 +100,7 @@ fn associated<'id>(mint: Mint<'id, TestPools>) -> (World<'id>, Ptk, Vec<u8>) {
     let m3 = RsnTxFrame::<512>::message3(
         Akm::Psk,
         Eui48::new(LOCAL),
-        2,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
         ANONCE,
         [0; 8],
         wrapped.as_bytes(),
@@ -124,7 +124,7 @@ fn rekey(ptk: &Ptk, counter: u64, gtk: u8, igtk: u8) -> Vec<u8> {
     let message = RsnTxFrame::<512>::group_message1(
         Akm::Psk,
         Eui48::new(LOCAL),
-        counter,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
         [0; 8],
         wrapped.as_bytes(),
     )

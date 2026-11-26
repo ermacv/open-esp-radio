@@ -16,7 +16,7 @@ fn message3(ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk, counter: u64) 
     let message3 = RsnTxFrame::<512>::message3(
         Akm::Psk,
         Eui48::new(LOCAL),
-        counter,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
         ANONCE,
         [0; 8],
         wrapped.as_bytes(),
@@ -56,11 +56,16 @@ fn group_message1_at(
     if key_data == KeyData::Corrupt {
         wrapped[0] ^= 1;
     }
-    let message =
-        RsnTxFrame::<512>::group_message1(Akm::Psk, Eui48::new(LOCAL), replay, [0; 8], &wrapped)
-            .unwrap()
-            .authenticate(ptk, &mut SoftwareAes128)
-            .unwrap();
+    let message = RsnTxFrame::<512>::group_message1(
+        Akm::Psk,
+        Eui48::new(LOCAL),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(replay),
+        [0; 8],
+        &wrapped,
+    )
+    .unwrap()
+    .authenticate(ptk, &mut SoftwareAes128)
+    .unwrap();
     protected_received(eapol_frame(message.as_bytes()), pn)
 }
 

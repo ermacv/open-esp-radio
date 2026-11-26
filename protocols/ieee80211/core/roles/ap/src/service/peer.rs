@@ -206,8 +206,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             akm,
             Eui48::new(access_point),
             Eui48::new(peer),
-            authenticator_nonce,
-            initial_replay_counter,
+            oer_protocols_ieee80211_wire::eapol::Nonce::new(authenticator_nonce),
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(initial_replay_counter),
             association_security_binding,
         )?);
         existing.phase = ApPeerPhase::Securing;

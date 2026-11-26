@@ -18,7 +18,7 @@ use crate::{
     Akm, AssociationSecurityBinding, EapolKeyMessage, OwnedEapolFrame, Pmk, Ptk, PtkContext,
     RsnInterface,
     frames::{RsnFrameError, RsnPlainKeyData, RsnTxFrame},
-    state::{RSN_NONCE_LEN, RsnStateError, RsnTransmit, RsnTxMessage},
+    state::{RsnStateError, RsnTransmit, RsnTxMessage},
 };
 use crate::{AkmKeys, MicFailure};
 use oer_portable_crypto::{
@@ -47,20 +47,21 @@ pub const RSN_AP_REPLAY_WINDOW: usize = 4;
 /// replaced once all slots hold one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct AwaitedAnswers {
-    counters: [u64; RSN_AP_REPLAY_WINDOW],
+    counters: [oer_protocols_ieee80211_wire::eapol::ReplayCounter; RSN_AP_REPLAY_WINDOW],
     filled: u8,
     next: u8,
 }
 
 impl AwaitedAnswers {
     /// The history holding the one built transmission `first`.
-    const fn first(first: u64) -> Self {
+    const fn first(first: oer_protocols_ieee80211_wire::eapol::ReplayCounter) -> Self {
         const {
             if RSN_AP_REPLAY_WINDOW == 0 || RSN_AP_REPLAY_WINDOW > u8::MAX as usize {
                 panic!("the awaited window holds between one and 255 transmissions");
             }
         }
-        let mut counters = [0; RSN_AP_REPLAY_WINDOW];
+        let mut counters =
+            [oer_protocols_ieee80211_wire::eapol::ReplayCounter::ZERO; RSN_AP_REPLAY_WINDOW];
         if let Some(slot) = counters.first_mut() {
             *slot = first;
         }
@@ -71,13 +72,13 @@ impl AwaitedAnswers {
         }
     }
 
-    fn contains(&self, counter: u64) -> bool {
+    fn contains(&self, counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter) -> bool {
         self.counters
             .get(..usize::from(self.filled))
             .is_some_and(|counters| counters.contains(&counter))
     }
 
-    fn record(&mut self, counter: u64) {
+    fn record(&mut self, counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter) {
         if let Some(slot) = self.counters.get_mut(usize::from(self.next)) {
             *slot = counter;
         }
@@ -182,9 +183,9 @@ pub struct RsnApHandshake {
     akm: Akm,
     authenticator: Eui48,
     supplicant: Eui48,
-    authenticator_nonce: [u8; RSN_NONCE_LEN],
+    authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
     /// The last replay counter handed out; none is handed out twice.
-    last_counter: u64,
+    last_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
     phase: Phase,
 }
 
@@ -205,7 +206,7 @@ enum Phase {
 enum KeyedStage {
     /// Message 3 is built; Message 4 is awaited.
     AwaitingMessage4 {
-        supplicant_nonce: [u8; RSN_NONCE_LEN],
+        supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
         awaited: AwaitedAnswers,
         latest: RsnTransmit,
     },
@@ -221,8 +222,8 @@ pub struct RsnApStart {
     akm: Akm,
     authenticator: Eui48,
     supplicant: Eui48,
-    authenticator_nonce: [u8; RSN_NONCE_LEN],
-    initial_replay_counter: u64,
+    authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
+    initial_replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
     binding: AssociationSecurityBinding,
 }
 
@@ -232,15 +233,15 @@ impl RsnApStart {
         akm: Akm,
         authenticator: Eui48,
         supplicant: Eui48,
-        authenticator_nonce: [u8; RSN_NONCE_LEN],
-        initial_replay_counter: u64,
+        authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
+        initial_replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
         binding: AssociationSecurityBinding,
     ) -> Result<Self, RsnStateError> {
-        if authenticator_nonce.iter().all(|byte| *byte == 0) {
+        if authenticator_nonce.is_zero() {
             return Err(RsnStateError::ZeroNonce);
         }
         // Message 3 takes the counter after Message 1's.
-        if initial_replay_counter == u64::MAX {
+        if initial_replay_counter.next().is_none() {
             return Err(RsnStateError::ReplayCounterExhausted);
         }
         Ok(Self {
@@ -390,7 +391,7 @@ impl RsnApHandshake {
     ) -> Result<RsnApEapol<N>, RsnApError> {
         let key = frame.key_frame()?;
         let replay = key.replay_counter();
-        let supplicant_nonce = *key.nonce();
+        let supplicant_nonce = key.nonce();
         let (binding, awaited) = match &self.phase {
             Phase::AwaitingMessage2 {
                 binding, awaited, ..
@@ -420,7 +421,7 @@ impl RsnApHandshake {
         if !awaited.contains(replay) {
             return Err(RsnApError::Rejected(RsnStateError::ReplayCounterMismatch));
         }
-        if supplicant_nonce.iter().all(|byte| *byte == 0) {
+        if supplicant_nonce.is_zero() {
             return Err(RsnApError::Rejected(RsnStateError::ZeroNonce));
         }
         let ptk = pmk.derive_ptk(
@@ -446,7 +447,7 @@ impl RsnApHandshake {
         }
         let replay_counter = self
             .last_counter
-            .checked_add(1)
+            .next()
             .ok_or(RsnApError::ReplayCounterExhausted)?;
         let transmit = RsnTransmit {
             message: RsnTxMessage::PairwiseMessage3,
@@ -536,8 +537,8 @@ impl RsnApHandshake {
             } => {
                 // The counter after this one stays free for Message 3.
                 let replay_counter = last_counter
-                    .checked_add(1)
-                    .filter(|counter| *counter != u64::MAX)
+                    .next()
+                    .filter(|counter| counter.next().is_some())
                     .ok_or(RsnApError::ReplayCounterExhausted)?;
                 *last_counter = replay_counter;
                 let transmit = RsnTransmit {
@@ -564,7 +565,7 @@ impl RsnApHandshake {
                     },
             } => {
                 let replay_counter = last_counter
-                    .checked_add(1)
+                    .next()
                     .ok_or(RsnApError::ReplayCounterExhausted)?;
                 let transmit = RsnTransmit {
                     message: RsnTxMessage::PairwiseMessage3,
@@ -605,7 +606,7 @@ impl RsnApHandshake {
 struct Message3Facts<'a> {
     akm: Akm,
     supplicant: Eui48,
-    authenticator_nonce: [u8; RSN_NONCE_LEN],
+    authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
     ptk: &'a Ptk,
     transmit: RsnTransmit,
 }

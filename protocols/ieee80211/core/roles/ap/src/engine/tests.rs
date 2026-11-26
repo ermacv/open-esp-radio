@@ -513,8 +513,10 @@ mod handshake {
     };
     use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
 
-    const ANONCE: [u8; 32] = [7; 32];
-    const SNONCE: [u8; 32] = [8; 32];
+    const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]);
+    const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]);
 
     fn ptk() -> Ptk {
         let mut derivation =
@@ -542,7 +544,7 @@ mod handshake {
         RsnTxFrame::<512>::message2_with_security_ies(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
             Eui48::new(AP),
-            replay,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(replay),
             SNONCE,
             &ies,
         )
@@ -556,7 +558,7 @@ mod handshake {
         RsnTxFrame::<512>::message4(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
             Eui48::new(AP),
-            replay,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(replay),
         )
         .authenticate(&ptk(), &mut SoftwareAes128)
         .unwrap()
@@ -583,7 +585,7 @@ mod handshake {
 
     fn replay_counter(transmit: ApEapolTransmit<AP_EAPOL_CAPACITY>) -> u64 {
         let (frame, _) = transmit.into_parts();
-        frame.key_frame().unwrap().replay_counter()
+        frame.key_frame().unwrap().replay_counter().get()
     }
 
     #[test]
@@ -592,7 +594,7 @@ mod handshake {
         let mut engine = engine(&mut storage, &mut beacon);
         associate(&mut engine);
         let (message1, context) = engine.begin_wpa2(PEER).unwrap().into_parts();
-        let replay1 = message1.key_frame().unwrap().replay_counter();
+        let replay1 = message1.key_frame().unwrap().replay_counter().get();
         engine
             .eapol_sent(
                 context,
@@ -620,7 +622,7 @@ mod handshake {
         assert!(engine.authorize(PEER, at(11)).is_err());
         engine.pairwise_installed(PEER).unwrap();
         let (message3, context) = message3.into_parts();
-        let replay3 = message3.key_frame().unwrap().replay_counter();
+        let replay3 = message3.key_frame().unwrap().replay_counter().get();
         engine
             .eapol_sent(
                 context,

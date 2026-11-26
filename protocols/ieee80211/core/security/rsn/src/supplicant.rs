@@ -22,7 +22,7 @@ use crate::{
         parse_group_gtk_key_data, parse_gtk_key_data,
     },
     keys::RsnKeyInstall,
-    state::{RSN_NONCE_LEN, RsnStateError},
+    state::RsnStateError,
 };
 use oer_portable_crypto::{
     Aes128Key, KeyUnwrapError, KeyUnwrapRequest,
@@ -180,7 +180,7 @@ pub struct RsnStaKeyInstallRequest {
 }
 
 impl RsnStaKeyInstallRequest {
-    pub const fn replay_counter(&self) -> u64 {
+    pub const fn replay_counter(&self) -> oer_protocols_ieee80211_wire::eapol::ReplayCounter {
         self.group.replay_counter()
     }
     pub const fn plain_key_data_len(&self) -> usize {
@@ -206,14 +206,14 @@ impl RsnStaKeyInstallRequest {
 /// The group half of a Message 3's installation. It holds no pairwise key.
 #[must_use]
 pub struct RsnStaGroupInstall {
-    replay_counter: u64,
+    replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
     plain_key_data_len: usize,
     group: RsnKeyInstall,
     igtk: Option<RsnIgtk>,
 }
 
 impl RsnStaGroupInstall {
-    pub const fn replay_counter(&self) -> u64 {
+    pub const fn replay_counter(&self) -> oer_protocols_ieee80211_wire::eapol::ReplayCounter {
         self.replay_counter
     }
     pub const fn plain_key_data_len(&self) -> usize {
@@ -358,7 +358,7 @@ impl From<RsnFrameError> for RsnConnectedProcessError {
 
 /// Exact connected-state GTK publication ticket.
 pub struct RsnGroupKeyInstallRequest<const N: usize> {
-    replay_counter: u64,
+    replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
     commitment: RsnCompletedKeyMessage,
     group: RsnKeyInstall,
     igtk: Option<RsnIgtk>,
@@ -366,7 +366,7 @@ pub struct RsnGroupKeyInstallRequest<const N: usize> {
 }
 
 impl<const N: usize> RsnGroupKeyInstallRequest<N> {
-    pub const fn replay_counter(&self) -> u64 {
+    pub const fn replay_counter(&self) -> oer_protocols_ieee80211_wire::eapol::ReplayCounter {
         self.replay_counter
     }
 
@@ -389,7 +389,7 @@ impl<const N: usize> RsnGroupKeyInstallRequest<N> {
 /// frontier.
 pub struct RsnGroupKeyFrame<const N: usize> {
     frame: crate::OwnedEapolFrame<N>,
-    replay_counter: u64,
+    replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
 }
 
 impl<const N: usize> RsnGroupKeyFrame<N> {
@@ -398,7 +398,7 @@ impl<const N: usize> RsnGroupKeyFrame<N> {
         self.frame.invalidate_for_test();
     }
 
-    pub fn replay_counter(&self) -> u64 {
+    pub fn replay_counter(&self) -> oer_protocols_ieee80211_wire::eapol::ReplayCounter {
         self.replay_counter
     }
 
@@ -430,8 +430,14 @@ struct RsnCompletedMessage3 {
     protocol_version: oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion,
     #[zeroize(skip)]
     key_info: KeyInformation,
-    replay_counter: u64,
-    authenticator_nonce: [u8; 32],
+    /// Sent in clear in every EAPOL-Key frame (IEEE Std 802.11-2020,
+    /// 12.7.2): erasing it guards nothing.
+    #[zeroize(skip)]
+    replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+    /// The ANonce, sent in clear in Messages 1 and 3 (IEEE Std 802.11-2020,
+    /// 12.7.2, 12.7.6.2, 12.7.6.4): erasing it guards nothing.
+    #[zeroize(skip)]
+    authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
     mic: [u8; 16],
 }
 
@@ -441,7 +447,7 @@ impl RsnCompletedMessage3 {
             protocol_version: frame.protocol_version(),
             key_info: frame.key_info(),
             replay_counter: frame.replay_counter(),
-            authenticator_nonce: *frame.nonce(),
+            authenticator_nonce: frame.nonce(),
             mic: *frame.mic(),
         }
     }
@@ -462,7 +468,7 @@ impl RsnCompletedMessage3 {
         {
             return Err(RsnConnectedSupplicantError::UnsupportedMessage);
         }
-        if frame.nonce() != &self.authenticator_nonce {
+        if frame.nonce() != self.authenticator_nonce {
             return Err(RsnConnectedSupplicantError::AuthenticatorNonceMismatch);
         }
         Ok(())
@@ -517,7 +523,7 @@ enum Frontier {
     Message3,
     /// A Group Message 1 after it, which a repeat must match.
     Group {
-        replay_counter: u64,
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
         completed: RsnCompletedGroupMessage1,
     },
 }
@@ -530,7 +536,7 @@ impl RsnConnectedSupplicant {
 
     /// The replay frontier: the counter of the last key message whose keys
     /// were installed.
-    pub const fn replay_counter(&self) -> u64 {
+    pub const fn replay_counter(&self) -> oer_protocols_ieee80211_wire::eapol::ReplayCounter {
         match &self.frontier {
             Frontier::Message3 => self.completed_message3.replay_counter,
             Frontier::Group { replay_counter, .. } => *replay_counter,
@@ -770,7 +776,7 @@ pub struct RsnStaHandshake {
     akm: Akm,
     local: Eui48,
     authenticator: Eui48,
-    supplicant_nonce: [u8; RSN_NONCE_LEN],
+    supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
     /// The station's Association RSN element and RSNXE, which Message 2
     /// echoes.
     association_security_ies: OwnedAssociationSecurityIes,
@@ -790,8 +796,8 @@ enum Phase {
     /// installation.
     Keyed {
         ptk: Ptk,
-        authenticator_nonce: [u8; RSN_NONCE_LEN],
-        message1_replay: u64,
+        authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
+        message1_replay: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
         stage: Stage,
     },
 }
@@ -817,12 +823,12 @@ impl RsnStaHandshake {
     pub fn new(
         local: Eui48,
         authenticator: Eui48,
-        supplicant_nonce: [u8; RSN_NONCE_LEN],
+        supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
         association_security_ies: &[u8],
         authenticator_rsn_ie: &[u8],
         authenticator_rsnxe: &[u8],
     ) -> Result<Self, RsnStaNewError> {
-        if supplicant_nonce.iter().all(|byte| *byte == 0) {
+        if supplicant_nonce.is_zero() {
             return Err(RsnStaNewError::ZeroNonce);
         }
         let association_security_ies =
@@ -908,8 +914,8 @@ impl RsnStaHandshake {
         engine: &mut E,
     ) -> Result<RsnStaEapol<N>, RsnStaError> {
         let replay = key.replay_counter();
-        let nonce = *key.nonce();
-        if nonce.iter().all(|byte| *byte == 0) {
+        let nonce = key.nonce();
+        if nonce.is_zero() {
             return Err(RsnStaError::Rejected(RsnStateError::ZeroNonce));
         }
         match &self.phase {
@@ -1088,7 +1094,10 @@ impl RsnStaHandshake {
     }
 
     /// What Message 2 of `replay` is built from beside its PTK.
-    fn facts(&self, replay: u64) -> Message2Facts<'_> {
+    fn facts(
+        &self,
+        replay: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+    ) -> Message2Facts<'_> {
         Message2Facts {
             akm: self.akm,
             authenticator: self.authenticator,
@@ -1103,8 +1112,8 @@ impl RsnStaHandshake {
 struct Message2Facts<'a> {
     akm: Akm,
     authenticator: Eui48,
-    supplicant_nonce: [u8; RSN_NONCE_LEN],
-    replay: u64,
+    supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
+    replay: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
     security_ies: &'a OwnedAssociationSecurityIes,
 }
 
@@ -1130,7 +1139,7 @@ fn message2<const N: usize, E: Aes128Engine>(
 fn check_message3_fields(
     akm: Akm,
     key: EapolKeyFrame<'_>,
-    authenticator_nonce: &[u8; RSN_NONCE_LEN],
+    authenticator_nonce: &oer_protocols_ieee80211_wire::eapol::Nonce,
 ) -> Result<(), RsnStateError> {
     if key.key_info() != crate::state::pairwise_message3_key_info(akm) {
         return Err(RsnStateError::InvalidMessage3KeyInfo);
@@ -1138,7 +1147,7 @@ fn check_message3_fields(
     if key.key_length() != crate::state::RSN_CCMP_TEMPORAL_KEY_LEN {
         return Err(RsnStateError::InvalidKeyLength);
     }
-    if key.nonce() != authenticator_nonce {
+    if key.nonce() != *authenticator_nonce {
         return Err(RsnStateError::AuthenticatorNonceMismatch);
     }
     if key.key_iv().iter().any(|byte| *byte != 0) {

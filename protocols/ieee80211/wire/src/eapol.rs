@@ -69,9 +69,72 @@ impl EapolLength {
 }
 
 impl KeyReplayCounter {
-    /// The field holding `value`.
-    pub const fn of(value: u64) -> Self {
-        Self::from_bytes([0; 8]).with_value(value)
+    /// The field holding `counter`.
+    pub const fn of(counter: ReplayCounter) -> Self {
+        Self::from_bytes([0; 8]).with_value(counter.get())
+    }
+
+    /// The counter the field holds.
+    pub const fn counter(self) -> ReplayCounter {
+        ReplayCounter::new(self.value())
+    }
+}
+
+/// The Key Replay Counter of an EAPOL-Key frame: the sender's count of the
+/// frames it sent in one key handshake, which the receiver compares with
+/// the last it accepted (IEEE Std 802.11-2020, 12.7.2).
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ReplayCounter(u64);
+
+impl ReplayCounter {
+    /// The counter before a handshake's first frame.
+    pub const ZERO: Self = Self(0);
+
+    /// The counter `value`.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Its value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// The counter after this one; `None` when it has no successor.
+    pub const fn next(self) -> Option<Self> {
+        match self.0.checked_add(1) {
+            Some(next) => Some(Self(next)),
+            None => None,
+        }
+    }
+}
+
+/// The Key Nonce of an EAPOL-Key frame: the ANonce of the authenticator or
+/// the SNonce of the supplicant (IEEE Std 802.11-2020, 12.7.2, Figure
+/// 12-32; 12.7.6). It is sent in clear.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Nonce([u8; NONCE_LEN]);
+
+/// The Key Nonce's octet count.
+pub const NONCE_LEN: usize = 32;
+
+impl Nonce {
+    /// The field's zero value: no nonce.
+    pub const ZERO: Self = Self([0; NONCE_LEN]);
+
+    /// The nonce `octets`.
+    pub const fn new(octets: [u8; NONCE_LEN]) -> Self {
+        Self(octets)
+    }
+
+    /// Its octets.
+    pub const fn octets(&self) -> &[u8; NONCE_LEN] {
+        &self.0
+    }
+
+    /// Whether every octet is zero.
+    pub fn is_zero(&self) -> bool {
+        self.0.iter().all(|octet| *octet == 0)
     }
 }
 
@@ -267,7 +330,7 @@ pub struct EapolKey<'a> {
     key_information: KeyInformation,
     key_length: EapolLength,
     replay_counter: KeyReplayCounter,
-    nonce: &'a [u8; 32],
+    nonce: &'a [u8; NONCE_LEN],
     key_iv: &'a [u8; 16],
     key_rsc: &'a [u8; 8],
     key_identifier: &'a [u8; 8],
@@ -293,7 +356,7 @@ impl<'a> EapolKey<'a> {
         let key_information = KeyInformation::from_bytes(reader.read::<2>().map_err(truncated)?);
         let key_length = EapolLength::from_bytes(reader.read().map_err(truncated)?);
         let replay_counter = KeyReplayCounter::from_bytes(reader.read().map_err(truncated)?);
-        let nonce = reader.array::<32>().map_err(truncated)?;
+        let nonce = reader.array::<NONCE_LEN>().map_err(truncated)?;
         let key_iv = reader.array::<16>().map_err(truncated)?;
         let key_rsc = reader.array::<8>().map_err(truncated)?;
         let key_identifier = reader.array::<8>().map_err(truncated)?;
@@ -354,12 +417,12 @@ impl<'a> EapolKey<'a> {
         self.key_length.value()
     }
 
-    pub const fn replay_counter(self) -> u64 {
-        self.replay_counter.value()
+    pub const fn replay_counter(self) -> ReplayCounter {
+        self.replay_counter.counter()
     }
 
-    pub const fn nonce(self) -> &'a [u8; 32] {
-        self.nonce
+    pub const fn nonce(self) -> Nonce {
+        Nonce::new(*self.nonce)
     }
 
     pub const fn key_iv(self) -> &'a [u8; 16] {
@@ -407,8 +470,8 @@ pub struct EapolKeyFixedFields {
     pub protocol_version: EapolProtocolVersion,
     pub key_information: KeyInformation,
     pub key_length: u16,
-    pub replay_counter: u64,
-    pub nonce: [u8; 32],
+    pub replay_counter: ReplayCounter,
+    pub nonce: Nonce,
     pub key_rsc: [u8; 8],
 }
 
@@ -447,7 +510,7 @@ fn fixed_part(
         &fields.key_information.to_bytes(),
         &EapolLength::of(fields.key_length).to_bytes(),
         &KeyReplayCounter::of(fields.replay_counter).to_bytes(),
-        &fields.nonce,
+        fields.nonce.octets(),
         &[0; 16],
         &fields.key_rsc,
         &[0; 8],
@@ -505,8 +568,8 @@ impl<const N: usize> EapolKeyBuffer<N> {
     ///     protocol_version: EapolProtocolVersion::V2004,
     ///     key_information: KeyInformation::from_raw(0),
     ///     key_length: 0,
-    ///     replay_counter: 0,
-    ///     nonce: [0; 32],
+    ///     replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter::ZERO,
+    ///     nonce: oer_protocols_ieee80211_wire::eapol::Nonce::ZERO,
     ///     key_rsc: [0; 8],
     /// };
     /// let key_data = [0; 65_500];
@@ -758,6 +821,29 @@ impl<'a> Iterator for KeyDataElements<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::{Nonce, ReplayCounter};
+
+    #[test]
+    fn a_replay_counter_counts_up_to_its_last_value() {
+        assert_eq!(ReplayCounter::ZERO.next(), Some(ReplayCounter::new(1)));
+        assert_eq!(
+            ReplayCounter::new(u64::MAX - 1).next(),
+            Some(ReplayCounter::new(u64::MAX))
+        );
+        assert_eq!(ReplayCounter::new(u64::MAX).next(), None);
+        assert!(ReplayCounter::new(2) > ReplayCounter::new(1));
+        assert_eq!(ReplayCounter::new(7).get(), 7);
+    }
+
+    #[test]
+    fn a_nonce_is_zero_only_with_every_octet_zero() {
+        assert!(Nonce::ZERO.is_zero());
+        let mut octets = [0; 32];
+        octets[31] = 1;
+        assert!(!Nonce::new(octets).is_zero());
+        assert_eq!(Nonce::new(octets).octets(), &octets);
+    }
+
     use super::*;
 
     /// The encoder lays out every field where the parser reads it: each
@@ -775,8 +861,8 @@ mod tests {
             protocol_version: EapolProtocolVersion::V2004,
             key_information: KeyInformation::from_raw(0x13ca),
             key_length: 0x0110,
-            replay_counter: 0x0102_0304_0506_0708,
-            nonce,
+            replay_counter: ReplayCounter::new(0x0102_0304_0506_0708),
+            nonce: Nonce::new(nonce),
             key_rsc,
         };
         let packet = EapolKeyBuffer::<160>::encode(&EapolKeyFields {
@@ -791,8 +877,11 @@ mod tests {
         assert_eq!(key.protocol_version(), EapolProtocolVersion::V2004);
         assert_eq!(key.key_information().raw(), 0x13ca);
         assert_eq!(key.key_length(), 0x0110);
-        assert_eq!(key.replay_counter(), 0x0102_0304_0506_0708);
-        assert_eq!(key.nonce(), &nonce);
+        assert_eq!(
+            key.replay_counter(),
+            ReplayCounter::new(0x0102_0304_0506_0708)
+        );
+        assert_eq!(key.nonce(), Nonce::new(nonce));
         assert_eq!(key.key_iv(), &[0; 16]);
         assert_eq!(key.key_rsc(), &key_rsc);
         assert_eq!(key.key_identifier(), &[0; 8]);
@@ -825,8 +914,8 @@ mod tests {
             protocol_version: EapolProtocolVersion::V2004,
             key_information: KeyInformation::from_raw(0x008a),
             key_length: 16,
-            replay_counter: 0x0102_0304_0506_0708,
-            nonce: [0x5a; 32],
+            replay_counter: ReplayCounter::new(0x0102_0304_0506_0708),
+            nonce: Nonce::new([0x5a; 32]),
             key_rsc: [0x3c; 8],
         };
         let encoded = EapolKeyBuffer::<EAPOL_KEY_PACKET_LEN>::encode(&EapolKeyFields {
@@ -894,8 +983,8 @@ mod tests {
                 protocol_version: EapolProtocolVersion::V2001,
                 key_information: KeyInformation::from_raw(0x030a),
                 key_length: 0,
-                replay_counter: 9,
-                nonce: [0; 32],
+                replay_counter: ReplayCounter::new(9),
+                nonce: Nonce::new([0; 32]),
                 key_rsc: [0; 8],
             },
             key_data: &[],
@@ -911,8 +1000,8 @@ mod tests {
                 protocol_version: EapolProtocolVersion::V2004,
                 key_information: KeyInformation::from_raw(0x008a),
                 key_length: 0x0110,
-                replay_counter: 1,
-                nonce: [0; 32],
+                replay_counter: ReplayCounter::new(1),
+                nonce: Nonce::new([0; 32]),
                 key_rsc: [0; 8],
             },
             key_data: &[],
@@ -936,7 +1025,7 @@ mod tests {
         let key = packet.key().unwrap();
         assert_eq!(key.protocol_version(), EapolProtocolVersion::V2001);
         assert_eq!(key.key_information().raw(), 0x030a);
-        assert_eq!(key.replay_counter(), 9);
+        assert_eq!(key.replay_counter(), ReplayCounter::new(9));
         assert_eq!(key.mic(), &[0xa5; 16]);
         assert!(key.key_data().is_empty());
         // The MIC input is the packet with a zero MIC.
@@ -984,8 +1073,8 @@ mod tests {
                     protocol_version: EapolProtocolVersion::V2001,
                     key_information: KeyInformation::EMPTY,
                     key_length: 0,
-                    replay_counter: 0,
-                    nonce: [0; 32],
+                    replay_counter: ReplayCounter::new(0),
+                    nonce: Nonce::new([0; 32]),
                     key_rsc: [0; 8],
                 },
                 key_data: &[],

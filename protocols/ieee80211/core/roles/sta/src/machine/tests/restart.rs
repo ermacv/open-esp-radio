@@ -67,7 +67,7 @@ fn a_finished_station_restarts_in_place_reclaims_old_keys_then_connects() {
         let m1 = RsnTxFrame::<512>::message1(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
             Eui48::new(LOCAL),
-            1,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
             ANONCE,
         )
         .unwrap();

@@ -26,6 +26,7 @@ fn response_counters(world: &World<'_>, from: usize) -> Vec<u64> {
             oer_protocols_ieee80211_core_security_rsn::EapolKeyFrame::parse(&frame[start..end])
                 .unwrap()
                 .replay_counter()
+                .get()
         })
         .collect()
 }
@@ -138,6 +139,45 @@ fn deferred_kinds_follow_the_shared_replay_order_without_dropping_either_frame()
             });
         }
     }
+}
+
+/// The responses from `from` on: whether each answers a pairwise message
+/// (Message 4) or a group one (Group Message 2).
+fn response_kinds(world: &World<'_>, from: usize) -> Vec<bool> {
+    world.frames[from..]
+        .iter()
+        .map(|frame| {
+            let protected = frame[1] & 0x40 != 0;
+            let qos = frame[0] & 0x80 != 0;
+            let start = 32 + usize::from(qos) * 2 + usize::from(protected) * 8;
+            oer_protocols_ieee80211_core_security_rsn::EapolKeyFrame::parse(&frame[start..])
+                .unwrap()
+                .key_info()
+                .pairwise()
+        })
+        .collect()
+}
+
+/// A deferred Message 3 and Group Message 1 under one counter: the pairwise
+/// one is answered, as an equal counter is no older, and the group one is
+/// then no newer than what was installed.
+#[test]
+fn deferred_kinds_under_one_counter_answer_the_pairwise_first() {
+    installed(|mint| {
+        let (mut world, ptk) = wpa2_connected::<2>(mint);
+        world.switches.on(Switch::HoldTransmissions);
+        world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
+        let before = world.frames.len();
+        world.receive_verified(at(51), &group_message1(&ptk, 4, 2));
+        world.receive(at(51), &retry_message3(&ptk, 4, 0x99));
+        for step in [52, 53] {
+            world.outcomes.push_back((ended(End::Delivered), true));
+            world.end_transmissions(at(step));
+            world.run(at(step));
+        }
+        assert_eq!(response_counters(&world, before), [4]);
+        assert_eq!(response_kinds(&world, before), [true]);
+    });
 }
 
 fn security_drops(world: &World<'_>) -> u32 {
@@ -331,7 +371,7 @@ fn disabled_returns_both_deferred_frame_owners_at_finish() {
                 panic!("disable must return both affine owners")
             };
             for (frame, counter) in [(message3.into_frame(), 4), (group.into_frame(), 5)] {
-                assert_eq!(frame.key_frame().unwrap().replay_counter(), counter);
+                assert_eq!(frame.key_frame().unwrap().replay_counter().get(), counter);
                 assert!(
                     frame
                         .key_frame()
@@ -395,7 +435,7 @@ fn authenticated_higher_m3_keeps_ptk_and_answers_with_matching_mac_protection() 
                     panic!()
                 };
                 let rsn = connected.rsn.as_mut().unwrap();
-                assert_eq!(rsn.supplicant.replay_counter(), 3);
+                assert_eq!(rsn.supplicant.replay_counter().get(), 3);
                 if material == 0x99 {
                     assert!(
                         world

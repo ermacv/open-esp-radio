@@ -71,8 +71,8 @@ pub enum PskDerivationError {
 pub struct PtkContext {
     pub authenticator_address: Eui48,
     pub supplicant_address: Eui48,
-    pub authenticator_nonce: [u8; 32],
-    pub supplicant_nonce: [u8; 32],
+    pub authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
+    pub supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
 }
 
 /// Pairwise master key. The bytes cannot be formatted and are cleared on drop.
@@ -128,8 +128,10 @@ impl Pmk {
             context.supplicant_address.as_octets(),
         );
 
-        let (first_nonce, second_nonce) =
-            ordered(&context.authenticator_nonce, &context.supplicant_nonce);
+        let (first_nonce, second_nonce) = ordered(
+            context.authenticator_nonce.octets(),
+            context.supplicant_nonce.octets(),
+        );
         for (target, source) in canonical.iter_mut().zip(
             first_address
                 .iter()

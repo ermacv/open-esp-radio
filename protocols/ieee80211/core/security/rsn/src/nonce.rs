@@ -22,10 +22,13 @@ impl SNonceSource {
 
     /// Fails closed if the stream's finite counter is exhausted. The caller
     /// must stop the association rather than substitute a repeated nonce.
-    pub fn next_nonce(&mut self) -> Result<[u8; 32], chacha20::cipher::StreamCipherError> {
-        let mut nonce = [0; 32];
+    pub fn next_nonce(
+        &mut self,
+    ) -> Result<oer_protocols_ieee80211_wire::eapol::Nonce, chacha20::cipher::StreamCipherError>
+    {
+        let mut nonce = [0; oer_protocols_ieee80211_wire::eapol::NONCE_LEN];
         self.0.try_apply_keystream(&mut nonce)?;
-        Ok(nonce)
+        Ok(oer_protocols_ieee80211_wire::eapol::Nonce::new(nonce))
     }
 }
 
@@ -52,7 +55,7 @@ mod tests {
         let second = source.next_nonce().unwrap();
         assert_eq!(seeds, 1);
         assert_ne!(first, second);
-        assert_ne!(first, [0; 32]);
+        assert_ne!(first, oer_protocols_ieee80211_wire::eapol::Nonce::ZERO);
         fn wipes_on_drop<T: zeroize::ZeroizeOnDrop>() {}
         wipes_on_drop::<ChaCha20>();
     }

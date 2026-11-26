@@ -11,8 +11,10 @@ use oer_protocols_ieee80211_wire::{
 
 const AP: [u8; 6] = [0x02, 0, 0, 0, 0, 1];
 const PEER: [u8; 6] = [0x02, 0, 0, 0, 0, 2];
-const ANONCE: [u8; 32] = [0x11; 32];
-const SNONCE: [u8; 32] = [0x22; 32];
+const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+    oer_protocols_ieee80211_wire::eapol::Nonce::new([0x11; 32]);
+const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+    oer_protocols_ieee80211_wire::eapol::Nonce::new([0x22; 32]);
 const REPLAY: u64 = 9;
 const STATION_RSN: [u8; 22] = [
     0x30, 20, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 2, 0x0c, 0,
@@ -45,7 +47,7 @@ fn handshake(association_rsn: &[u8]) -> RsnApHandshake {
         Eui48::new(AP),
         Eui48::new(PEER),
         ANONCE,
-        REPLAY,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(REPLAY),
         pmk().bind_association_security_ies(association_rsn),
     )
     .unwrap();
@@ -54,17 +56,23 @@ fn handshake(association_rsn: &[u8]) -> RsnApHandshake {
         message1.key_frame().unwrap().message(),
         EapolKeyMessage::PairwiseMessage1
     );
-    assert_eq!(transmit.replay_counter, REPLAY);
+    assert_eq!(transmit.replay_counter.get(), REPLAY);
     assert_eq!(handshake.latest(), Some(transmit));
     handshake
 }
 
 fn message2_at(rsn: &[u8], ptk: &Ptk, replay: u64) -> OwnedEapolFrame<512> {
     let rsn = OwnedRsnIe::<64>::try_copy(rsn).unwrap();
-    let frame = RsnTxFrame::<512>::message2(Akm::Psk, Eui48::new(AP), replay, SNONCE, &rsn)
-        .unwrap()
-        .authenticate(ptk, &mut SoftwareAes128)
-        .unwrap();
+    let frame = RsnTxFrame::<512>::message2(
+        Akm::Psk,
+        Eui48::new(AP),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(replay),
+        SNONCE,
+        &rsn,
+    )
+    .unwrap()
+    .authenticate(ptk, &mut SoftwareAes128)
+    .unwrap();
     OwnedEapolFrame::try_copy(
         RsnInterface::AccessPoint,
         Eui48::new(PEER),
@@ -78,9 +86,13 @@ fn message2(rsn: &[u8], ptk: &Ptk) -> OwnedEapolFrame<512> {
 }
 
 fn signed_message4(replay: u64) -> OwnedEapolFrame<512> {
-    let answer = RsnTxFrame::<512>::message4(Akm::Psk, Eui48::new(AP), replay)
-        .authenticate(&ptk(), &mut SoftwareAes128)
-        .unwrap();
+    let answer = RsnTxFrame::<512>::message4(
+        Akm::Psk,
+        Eui48::new(AP),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(replay),
+    )
+    .authenticate(&ptk(), &mut SoftwareAes128)
+    .unwrap();
     OwnedEapolFrame::try_copy(
         RsnInterface::AccessPoint,
         Eui48::new(PEER),
@@ -159,8 +171,8 @@ fn a_verified_message2_builds_message3_and_message4_authorizes() {
     assert_eq!(handshake.latest(), Some(transmit));
     let key_frame = message3.key_frame().unwrap();
     assert_eq!(key_frame.message(), EapolKeyMessage::PairwiseMessage3);
-    assert_eq!(key_frame.replay_counter(), REPLAY + 1);
-    assert_eq!(transmit.replay_counter, REPLAY + 1);
+    assert_eq!(key_frame.replay_counter().get(), REPLAY + 1);
+    assert_eq!(transmit.replay_counter.get(), REPLAY + 1);
     assert!(!transmit.retransmission);
     assert_eq!(key_frame.key_receive_sequence(), &[1, 2, 3, 4, 5, 6, 0, 0]);
     assert!(key_frame.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
@@ -178,8 +190,8 @@ fn a_verified_message2_builds_message3_and_message4_authorizes() {
     assert!(again_transmit.retransmission);
     assert!(again.retransmission());
     let again_frame = again.key_frame().unwrap();
-    assert_eq!(again_frame.replay_counter(), REPLAY + 2);
-    assert_eq!(again_transmit.replay_counter, REPLAY + 2);
+    assert_eq!(again_frame.replay_counter().get(), REPLAY + 2);
+    assert_eq!(again_transmit.replay_counter.get(), REPLAY + 2);
     assert_eq!(handshake.latest(), Some(again_transmit));
     assert_eq!(
         again_frame.key_receive_sequence(),
@@ -319,7 +331,10 @@ fn message4_before_message3_is_refused_and_a_retry_is_message1() {
         Err(RsnApError::Rejected(RsnStateError::UnexpectedMessage))
     ));
     // The refusal spent no counter: Message 1 is still awaited under its own.
-    assert_eq!(handshake.latest().map(|t| t.replay_counter), Some(REPLAY));
+    assert_eq!(
+        handshake.latest().map(|t| t.replay_counter.get()),
+        Some(REPLAY)
+    );
     let RsnApRetransmit::Message1(retry, transmit) = handshake
         .retransmit::<512, _, _>(material(&key_data, 0), &mut SoftwareAes128)
         .unwrap()
@@ -328,8 +343,11 @@ fn message4_before_message3_is_refused_and_a_retry_is_message1() {
     };
     assert!(transmit.retransmission);
     assert!(retry.retransmission());
-    assert_eq!(retry.key_frame().unwrap().replay_counter(), REPLAY + 1);
-    assert_eq!(retry.key_frame().unwrap().nonce(), &ANONCE);
+    assert_eq!(
+        retry.key_frame().unwrap().replay_counter().get(),
+        REPLAY + 1
+    );
+    assert_eq!(retry.key_frame().unwrap().nonce(), ANONCE);
     assert_eq!(handshake.latest(), Some(transmit));
 }
 
@@ -363,7 +381,10 @@ fn an_earlier_message1_stays_awaited_after_a_retransmission() {
     else {
         panic!("Message 2 answering an awaited Message 1 builds Message 3");
     };
-    assert_eq!(message3.key_frame().unwrap().replay_counter(), REPLAY + 2);
+    assert_eq!(
+        message3.key_frame().unwrap().replay_counter().get(),
+        REPLAY + 2
+    );
     // A repeat of the verified Message 2 builds nothing; another SNonce is
     // refused.
     assert!(matches!(
@@ -389,7 +410,7 @@ fn a_message3_that_failed_to_build_is_not_awaited_and_its_counter_stays_spent() 
         Some(RsnApError::Frame(RsnFrameError::CapacityExceeded))
     );
     assert_eq!(
-        handshake.latest().map(|t| t.replay_counter),
+        handshake.latest().map(|t| t.replay_counter.get()),
         Some(REPLAY + 1)
     );
     assert!(matches!(
@@ -408,8 +429,11 @@ fn a_message3_that_failed_to_build_is_not_awaited_and_its_counter_stays_spent() 
     else {
         panic!("Message 3 is retransmitted");
     };
-    assert_eq!(transmit.replay_counter, REPLAY + 3);
-    assert_eq!(retry.key_frame().unwrap().replay_counter(), REPLAY + 3);
+    assert_eq!(transmit.replay_counter.get(), REPLAY + 3);
+    assert_eq!(
+        retry.key_frame().unwrap().replay_counter().get(),
+        REPLAY + 3
+    );
     assert!(matches!(
         handshake.on_eapol(
             &pmk(),
@@ -456,14 +480,14 @@ fn a_first_message3_that_failed_to_build_awaits_message2_again() {
         Some(RsnApError::Frame(RsnFrameError::CapacityExceeded))
     );
     assert!(small.ptk().is_none());
-    assert_eq!(small.latest().map(|t| t.replay_counter), Some(REPLAY));
+    assert_eq!(small.latest().map(|t| t.replay_counter.get()), Some(REPLAY));
     let RsnApRetransmit::Message1(_, retry) = small
         .retransmit::<512, _, _>(material(&key_data, 0), &mut SoftwareAes128)
         .unwrap()
     else {
         panic!("Message 1 is retransmitted while Message 2 is awaited");
     };
-    assert_eq!(retry.replay_counter, REPLAY + 2);
+    assert_eq!(retry.replay_counter.get(), REPLAY + 2);
     let RsnApEapol::Message3(_, transmit) = small
         .on_eapol(
             &pmk(),
@@ -475,7 +499,7 @@ fn a_first_message3_that_failed_to_build_awaits_message2_again() {
     else {
         panic!("Message 2 of the retransmitted Message 1 builds Message 3");
     };
-    assert_eq!(transmit.replay_counter, REPLAY + 3);
+    assert_eq!(transmit.replay_counter.get(), REPLAY + 3);
 }
 
 #[test]
@@ -552,7 +576,10 @@ fn a_forged_message2_builds_no_message3_and_the_real_one_still_does() {
         Ok(RsnApEapol::None)
     ));
     assert!(handshake.ptk().is_none());
-    assert_eq!(handshake.latest().map(|t| t.replay_counter), Some(REPLAY));
+    assert_eq!(
+        handshake.latest().map(|t| t.replay_counter.get()),
+        Some(REPLAY)
+    );
     assert!(matches!(
         handshake.on_eapol(&pmk(), genuine, material(&key_data, 0), &mut SoftwareAes128),
         Ok(RsnApEapol::Message3(..))
@@ -616,8 +643,8 @@ fn foreign_input_and_exhausted_counters_are_refused() {
             Akm::Psk,
             Eui48::new(AP),
             Eui48::new(PEER),
-            [0; 32],
-            REPLAY,
+            oer_protocols_ieee80211_wire::eapol::Nonce::new([0; 32]),
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(REPLAY),
             binding()
         ),
         Err(RsnStateError::ZeroNonce)
@@ -628,7 +655,7 @@ fn foreign_input_and_exhausted_counters_are_refused() {
             Eui48::new(AP),
             Eui48::new(PEER),
             ANONCE,
-            u64::MAX,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(u64::MAX),
             binding()
         ),
         Err(RsnStateError::ReplayCounterExhausted)
@@ -639,7 +666,7 @@ fn foreign_input_and_exhausted_counters_are_refused() {
         Eui48::new(AP),
         Eui48::new(PEER),
         ANONCE,
-        u64::MAX - 1,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(u64::MAX - 1),
         binding(),
     )
     .unwrap();
@@ -731,10 +758,16 @@ fn a_second_message2_is_ignored_with_its_snonce_and_refused_with_another() {
         Ok(RsnApEapol::None)
     ));
     let rsn = OwnedRsnIe::<64>::try_copy(&STATION_RSN).unwrap();
-    let other = RsnTxFrame::<512>::message2(Akm::Psk, Eui48::new(AP), REPLAY, [0x23; 32], &rsn)
-        .unwrap()
-        .authenticate(&ptk(), &mut SoftwareAes128)
-        .unwrap();
+    let other = RsnTxFrame::<512>::message2(
+        Akm::Psk,
+        Eui48::new(AP),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(REPLAY),
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([0x23; 32]),
+        &rsn,
+    )
+    .unwrap()
+    .authenticate(&ptk(), &mut SoftwareAes128)
+    .unwrap();
     let other = OwnedEapolFrame::<512>::try_copy(
         RsnInterface::AccessPoint,
         Eui48::new(PEER),
@@ -747,7 +780,7 @@ fn a_second_message2_is_ignored_with_its_snonce_and_refused_with_another() {
     ));
     // Message 3's window is as it was.
     assert_eq!(
-        handshake.latest().map(|t| t.replay_counter),
+        handshake.latest().map(|t| t.replay_counter.get()),
         Some(REPLAY + 1)
     );
 }

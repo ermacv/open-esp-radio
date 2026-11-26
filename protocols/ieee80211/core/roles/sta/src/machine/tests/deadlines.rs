@@ -184,7 +184,7 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
                 let frame = RsnTxFrame::<512>::message1(
                     oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
                     Eui48::new(LOCAL),
-                    1,
+                    oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
                     ANONCE,
                 )
                 .unwrap();

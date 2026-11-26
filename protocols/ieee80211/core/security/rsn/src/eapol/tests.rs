@@ -27,7 +27,7 @@ fn parses_and_classifies_pairwise_messages() {
     let parsed = EapolKeyFrame::parse(&message1).unwrap();
     assert_eq!(parsed.message(), EapolKeyMessage::PairwiseMessage1);
     assert_eq!(parsed.key_info().descriptor_version().get(), 2);
-    assert_eq!(parsed.replay_counter(), 7);
+    assert_eq!(parsed.replay_counter().get(), 7);
 
     let message3 = key_packet(
         KEY_INFO_PAIRWISE | KEY_INFO_ACK | KEY_INFO_MIC | KEY_INFO_INSTALL | KEY_INFO_SECURE | 2,

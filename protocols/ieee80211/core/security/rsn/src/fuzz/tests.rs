@@ -50,7 +50,7 @@ fn message3() -> (crate::Ptk, Vec<u8>) {
         PtkContext {
             authenticator_address: Eui48::new([0xbe, 0xfc, 0xe7, 0xae, 0xbb, 0xd4]),
             supplicant_address: Eui48::new([0x1c, 0xed, 0x6f, 0xb9, 0xba, 0x3c]),
-            authenticator_nonce: *frame.nonce(),
+            authenticator_nonce: frame.nonce(),
             supplicant_nonce: SNONCE,
         },
     );
@@ -68,7 +68,7 @@ fn eapol(count: usize) {
                 frame.key_info(),
                 frame.message(),
                 frame.key_length(),
-                frame.replay_counter(),
+                frame.replay_counter().get(),
                 frame.nonce(),
                 frame.key_iv(),
                 frame.mic(),
@@ -85,7 +85,7 @@ fn eapol(count: usize) {
         ) {
             let _ = (
                 owned.as_bytes(),
-                owned.key_frame().unwrap().replay_counter(),
+                owned.key_frame().unwrap().replay_counter().get(),
             );
         }
     });

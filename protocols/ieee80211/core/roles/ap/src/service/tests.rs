@@ -113,8 +113,8 @@ fn association_security_with_rsnxe<'a>(
 fn signed_message2(
     rsn_ie: &[u8],
     rsnxe: &[u8],
-    authenticator_nonce: [u8; 32],
-    supplicant_nonce: [u8; 32],
+    authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
+    supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
 ) -> OwnedEapolFrame<512> {
     let ptk = {
         let mut derivation =
@@ -140,7 +140,7 @@ fn signed_message2(
     let message2 = RsnTxFrame::<512>::message2_with_security_ies(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        9,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(9),
         supplicant_nonce,
         &security_ies,
     )
@@ -807,8 +807,10 @@ fn association_rejects_a_peer_without_a_common_legacy_rate() {
 
 #[test]
 fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
-    const ANONCE: [u8; 32] = [7; 32];
-    const SNONCE: [u8; 32] = [8; 32];
+    const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]);
+    const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]);
 
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
@@ -822,7 +824,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
             PEER,
             association_security(&SUPPLICANT_RSN),
             ht_capabilities(),
-            ANONCE,
+            *ANONCE.octets(),
             9,
             oer_portable_time::Instant::from_micros(1),
         )
@@ -858,9 +860,9 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     // The retransmission takes the next replay counter; only the counter
     // differs from the original.
     let retried_key = retried_message1.frame().key_frame().unwrap();
-    assert_eq!(message1.key_frame().unwrap().replay_counter(), 9);
-    assert_eq!(retried_key.replay_counter(), 10);
-    assert_eq!(retried_key.nonce(), &ANONCE);
+    assert_eq!(message1.key_frame().unwrap().replay_counter().get(), 9);
+    assert_eq!(retried_key.replay_counter().get(), 10);
+    assert_eq!(retried_key.nonce(), ANONCE);
 
     let ptk = {
         let mut derivation =
@@ -886,7 +888,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     let message2 = RsnTxFrame::<512>::message2(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        10,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(10),
         SNONCE,
         &rsn,
     )
@@ -950,13 +952,14 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     };
     assert_eq!(retried_message3.frame().peer().octets(), PEER);
     assert!(retried_message3.frame().retransmission());
-    assert_eq!(message3.key_frame().unwrap().replay_counter(), 11);
+    assert_eq!(message3.key_frame().unwrap().replay_counter().get(), 11);
     assert_eq!(
         retried_message3
             .frame()
             .key_frame()
             .unwrap()
-            .replay_counter(),
+            .replay_counter()
+            .get(),
         12
     );
     assert!(matches!(
@@ -967,7 +970,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     let message4 = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        12,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(12),
     )
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
@@ -998,8 +1001,10 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
 
 #[test]
 fn message2_must_echo_the_exact_association_rsn() {
-    const ANONCE: [u8; 32] = [7; 32];
-    const SNONCE: [u8; 32] = [8; 32];
+    const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]);
+    const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]);
 
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
@@ -1011,7 +1016,7 @@ fn message2_must_echo_the_exact_association_rsn() {
             PEER,
             association_security(&SUPPLICANT_RSN),
             ht_capabilities(),
-            ANONCE,
+            *ANONCE.octets(),
             9,
             oer_portable_time::Instant::from_micros(1),
         )
@@ -1044,8 +1049,10 @@ fn message2_must_echo_the_exact_association_rsn() {
 
 #[test]
 fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
-    const ANONCE: [u8; 32] = [7; 32];
-    const SNONCE: [u8; 32] = [8; 32];
+    const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]);
+    const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]);
 
     let mut storage = AccessPointPeerStorage::new();
     let mut service = service(&mut storage);
@@ -1057,7 +1064,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
             PEER,
             association_security(&SUPPLICANT_RSN),
             ht_capabilities(),
-            ANONCE,
+            *ANONCE.octets(),
             9,
             oer_portable_time::Instant::from_micros(1),
         )
@@ -1069,7 +1076,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
     let replay_mismatch = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        77,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(77),
     );
     let replay_mismatch = OwnedEapolFrame::<512>::try_copy(
         RsnInterface::AccessPoint,
@@ -1087,7 +1094,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
     let unsupported = RsnTxFrame::<512>::message1(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        9,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(9),
         ANONCE,
     )
     .unwrap();
@@ -1158,7 +1165,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
     let valid_m4 = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        10,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(10),
     )
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
@@ -1184,8 +1191,10 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
 
 #[test]
 fn message2_must_echo_the_exact_association_rsnxe() {
-    const ANONCE: [u8; 32] = [7; 32];
-    const SNONCE: [u8; 32] = [8; 32];
+    const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]);
+    const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]);
     const RSNXE: [u8; 3] = [0xf4, 1, 0x20];
 
     let mut rejected_storage = AccessPointPeerStorage::new();
@@ -1198,7 +1207,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
             PEER,
             association_security_with_rsnxe(&SUPPLICANT_RSN, Some(&RSNXE)),
             ht_capabilities(),
-            ANONCE,
+            *ANONCE.octets(),
             9,
             oer_portable_time::Instant::from_micros(1),
         )
@@ -1226,7 +1235,7 @@ fn message2_must_echo_the_exact_association_rsnxe() {
             PEER,
             association_security_with_rsnxe(&SUPPLICANT_RSN, Some(&RSNXE)),
             ht_capabilities(),
-            ANONCE,
+            *ANONCE.octets(),
             9,
             oer_portable_time::Instant::from_micros(1),
         )
@@ -1980,8 +1989,10 @@ fn association_status(action: ApMlmeAction) -> StatusCode {
 
 #[test]
 fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
-    const ANONCE: [u8; 32] = [7; 32];
-    const SNONCE: [u8; 32] = [8; 32];
+    const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]);
+    const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]);
     let mut storage = AccessPointPeerStorage::new();
     let mut service = wpa3_service(&mut storage);
     assert_eq!(
@@ -1998,7 +2009,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
             PEER,
             association_security(&SAE_STATION_RSN),
             ht_capabilities(),
-            ANONCE,
+            *ANONCE.octets(),
             9,
             oer_portable_time::Instant::from_micros(1),
         )
@@ -2027,7 +2038,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     let message2 = RsnTxFrame::<512>::message2(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
         Eui48::new(AP),
-        9,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(9),
         SNONCE,
         &rsn,
     )
@@ -2204,16 +2215,16 @@ fn begin_management_handshake(
         PtkContext {
             authenticator_address: Eui48::new(AP),
             supplicant_address: Eui48::new(peer),
-            authenticator_nonce: [7; 32],
-            supplicant_nonce: [8; 32],
+            authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]),
+            supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]),
         },
     );
     let rsn = OwnedRsnIe::<64>::try_copy(&SAE_STATION_RSN).unwrap();
     let message2 = RsnTxFrame::<512>::message2(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
         Eui48::new(AP),
-        9,
-        [8; 32],
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(9),
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]),
         &rsn,
     )
     .unwrap()
@@ -2250,7 +2261,7 @@ fn authorize_management_peer(
     let message4 = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Sae,
         Eui48::new(AP),
-        10,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(10),
     )
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
@@ -2467,8 +2478,8 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     assert!(repeated.frame().retransmission());
     let repeated_key = repeated.frame().key_frame().unwrap();
     assert_eq!(
-        repeated_key.replay_counter(),
-        message3.key_frame().unwrap().replay_counter() + 1
+        repeated_key.replay_counter().get(),
+        message3.key_frame().unwrap().replay_counter().get() + 1
     );
     let repeated_plaintext = software_key_unwrap(ptk.kek(), repeated_key.key_data()).unwrap();
     assert_eq!(repeated_plaintext.as_bytes(), plaintext.as_bytes());
