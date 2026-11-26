@@ -581,6 +581,41 @@ fn a_local_reference_is_its_offset_from_the_function_or_a_refusal() {
         reference(i64::MIN).unwrap_err().to_string(),
         "a.o: f: the relocation at 0xc names a position outside the address space"
     );
+    // A local symbol twelve bytes into the section: its position with the
+    // greatest addend passes an `i64` before the function's start is taken.
+    let bytes = wide_object(|writer, text| {
+        let local = writer.add_symbol(WriteSymbol {
+            name: b"local".to_vec(),
+            value: 12,
+            size: 0,
+            kind: object::SymbolKind::Data,
+            scope: SymbolScope::Compilation,
+            weak: false,
+            section: SymbolSection::Section(text),
+            flags: SymbolFlags::None,
+        });
+        writer
+            .add_relocation(
+                text,
+                WriteRelocation {
+                    offset: 12,
+                    symbol: local,
+                    addend: i64::MAX,
+                    flags: object::RelocationFlags::Elf {
+                        r_type: rv32::R_RISCV_32,
+                    },
+                },
+            )
+            .unwrap();
+    });
+    assert_eq!(
+        Elf::parse(&bytes)
+            .unwrap()
+            .code("a.o")
+            .unwrap_err()
+            .to_string(),
+        "a.o: f: the relocation at 0xc names a position outside the address space"
+    );
 }
 
 #[test]
