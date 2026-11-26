@@ -558,3 +558,49 @@ fn best_expected(
     }
     Some((candidate, support, ppm))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{comparable, jaccard_ppm};
+    use std::collections::HashSet;
+
+    #[test]
+    fn the_shared_part_of_two_sets_is_held_in_parts_per_million() {
+        let set = |tokens: &[u64]| tokens.iter().copied().collect::<HashSet<u64>>();
+        for (left, right, expected) in [
+            (&[1, 2, 3][..], &[2, 3, 4][..], 500_000),
+            (&[1, 2, 3], &[1, 2, 3], 1_000_000),
+            (&[1, 2, 3], &[3], 333_333),
+            (&[1, 2], &[3, 4], 0),
+            (&[1], &[], 0),
+            // Nothing to compare.
+            (&[], &[], 0),
+        ] {
+            assert_eq!(
+                jaccard_ppm(&set(left), &set(right)),
+                expected,
+                "{left:?} {right:?}"
+            );
+            assert_eq!(
+                jaccard_ppm(&set(right), &set(left)),
+                expected,
+                "{right:?} {left:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sizes_are_comparable_up_to_twice_the_smaller_and_sixteen_bytes() {
+        for (left, right, expected) in [
+            (10, 36, true),
+            (10, 37, false),
+            (0, 16, true),
+            (0, 17, false),
+            (5, 5, true),
+            (0, 0, true),
+        ] {
+            assert_eq!(comparable(left, right), expected, "{left} {right}");
+            assert_eq!(comparable(right, left), expected, "{right} {left}");
+        }
+    }
+}

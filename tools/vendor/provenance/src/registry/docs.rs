@@ -94,6 +94,20 @@ mod tests {
     }
 
     #[test]
+    fn every_stale_symbol_is_reported_with_the_line_it_stands_on() {
+        let text = "r_sym_ble_mqh4OXzoN59kvnkKFMA1\n\n\
+                    sym_x_mqh4OXzoN59kvnkKFMA1 and r_sym_ble_mqh4OXzoN59kvnkKFMA1";
+        assert_eq!(
+            undefined_symbols("d.md", text, &defined(), "a"),
+            [
+                "d.md:1: r_sym_ble_mqh4OXzoN59kvnkKFMA1 is not defined by the pinned a",
+                "d.md:3: sym_x_mqh4OXzoN59kvnkKFMA1 is not defined by the pinned a",
+                "d.md:3: r_sym_ble_mqh4OXzoN59kvnkKFMA1 is not defined by the pinned a",
+            ]
+        );
+    }
+
+    #[test]
     fn a_historical_line_and_ordinary_names_are_not_checked() {
         let text = format!(
             "Earlier `r_sym_ble_mqh4OXzoN59kvnkKFMA1` {HISTORICAL}\n\

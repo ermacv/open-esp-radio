@@ -294,6 +294,64 @@ fn a_qualified_citation_names_one_copy_and_leaves_the_rest_of_the_text_bare() {
     assert!(!words.contains("pm_tbtt_process"));
 }
 
+#[test]
+fn the_text_without_its_qualified_citations_is_held() {
+    let citations = |text: &str| {
+        let (bare, copies) = qualified_citations(text);
+        let copies: Vec<String> = copies
+            .iter()
+            .map(|(artifact, member, symbol)| format!("{artifact}[{member}]::{symbol}"))
+            .collect();
+        (bare, copies.join(" "))
+    };
+    for (text, bare, copies) in [
+        // The whole text, its start and its end.
+        ("rom[]::f", " ", "rom[]::f"),
+        ("see `libpp[pm.o]::f`.", "see ` `.", "libpp[pm.o]::f"),
+        ("lib-a.b[m.o]::f g", "  g", "lib-a.b[m.o]::f"),
+        // Two that touch, and one whose symbol ends at the next form.
+        ("a[b]::c,d[e]::f", " , ", "a[b]::c d[e]::f"),
+        ("a[b]::c]::d", " ]::d", "a[b]::c"),
+        // No form: no artifact, no symbol, a member with a space, no bracket.
+        ("[m]::s", "[m]::s", ""),
+        ("x [m]::s", "x [m]::s", ""),
+        ("a[m]:: s", "a[m]:: s", ""),
+        ("a[m n]::s", "a[m n]::s", ""),
+        ("a]::s", "a]::s", ""),
+        // The last bracket before the mark opens the member.
+        ("a[b[c]::s", "a[ ", "b[c]::s"),
+        ("no form at all", "no form at all", ""),
+        ("", "", ""),
+    ] {
+        assert_eq!(
+            citations(text),
+            (bare.to_owned(), copies.to_owned()),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn a_word_before_a_one_letter_extension_is_a_file_only_where_the_name_ends_there() {
+    let words = |text: &str| {
+        let mut words = BTreeSet::new();
+        identifiers(text, &mut words);
+        words.into_iter().collect::<Vec<_>>().join(" ")
+    };
+    // The extension at the end of the text, before punctuation, and before
+    // more of a name.
+    assert_eq!(words("phy_init.o"), "");
+    assert_eq!(words("phy_init.c:399 phy_init.h, phy_init.o)"), "");
+    assert_eq!(
+        words("phy_init.old phy_init.c_xy phy_init.o2"),
+        "c_xy phy_init"
+    );
+    assert_eq!(words("phy_init. phy_init.x phy_init"), "phy_init");
+    assert_eq!(words("phy_init."), "phy_init");
+    assert_eq!(words("phy_init"), "phy_init");
+    assert_eq!(words(""), "");
+}
+
 /// A survey of one function with a library and a ROM copy, both registered.
 fn two_copies(references: &[&str], qualified: &[(&str, &str)]) -> Survey {
     let code = |copy: &str| format!("code of {copy}");

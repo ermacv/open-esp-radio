@@ -217,4 +217,19 @@ mod tests {
         assert!(!is_obfuscated("r_btdm_sched_insert_with_lock_modify"));
         assert!(!is_obfuscated("r_sched_txn_onSchedHwListDone"));
     }
+
+    #[test]
+    fn a_token_without_a_digit_needs_upper_case_in_a_quarter_of_its_characters() {
+        // Sixteen characters: four in upper case are a quarter, three are not.
+        assert!(is_obfuscated("r_ABCDefghijklmnop"));
+        assert!(!is_obfuscated("r_ABCdefghijklmnop"));
+        // Seventeen: four are less than a quarter, five are more.
+        assert!(!is_obfuscated("r_ABCDefghijklmnopq"));
+        assert!(is_obfuscated("r_ABCDEfghijklmnopq"));
+        // A digit stands for the upper case; fifteen characters are too few.
+        assert!(is_obfuscated("r_abcdefghijklmno1"));
+        assert!(!is_obfuscated("r_ABCDEFGHijklmn1"));
+        // All in upper case has no lower case.
+        assert!(!is_obfuscated("r_ABCDEFGHIJKLMNOP"));
+    }
 }

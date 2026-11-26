@@ -290,6 +290,82 @@ mod tests {
     }
 
     #[test]
+    fn a_marker_is_found_past_the_words_that_only_hold_it() {
+        // The second of two that touch follows a letter of the first.
+        assert_eq!(marker("// SOURCESOURCE: x"), None);
+        assert_eq!(marker("// SOURCE SOURCE: x"), Some(10));
+        assert_eq!(marker("// RESOURCE: SOURCE x SOURCE[T]: y"), Some(22));
+        // The offset is in bytes, after text of any width.
+        assert_eq!(marker("// \u{e9}t\u{e9} \u{2014}SOURCE: x"), Some(12));
+        assert_eq!(marker("SOURCE: x"), Some(0));
+        assert_eq!(marker("// SOURCE"), None);
+        assert_eq!(marker(""), None);
+    }
+
+    #[test]
+    fn a_block_is_its_marker_line_and_the_comment_lines_that_follow_it() {
+        let text = "// before any marker\n\
+                    // SOURCE(chip-a)[TAG]: first\n\
+                    // SOURCE: second, directly after\n\
+                    // its continuation\n\
+                    fn x() {}\n\
+                    // not a continuation\n\
+                    \n\
+                    // SOURCE( chip-a ,chip-b ): third, the last line";
+        assert_eq!(
+            blocks(text).unwrap(),
+            [
+                Block {
+                    line: 2,
+                    chips: Some(vec!["chip-a".to_owned()]),
+                    text: "// SOURCE[TAG]: first".to_owned(),
+                },
+                Block {
+                    line: 3,
+                    chips: None,
+                    text: "// SOURCE: second, directly after\n// its continuation".to_owned(),
+                },
+                Block {
+                    line: 8,
+                    chips: Some(vec!["chip-a".to_owned(), "chip-b".to_owned()]),
+                    text: "// SOURCE: third, the last line".to_owned(),
+                },
+            ]
+        );
+        // A second marker on the line is text; a list that is not directly
+        // after the marker is no list.
+        assert_eq!(
+            blocks("// SOURCE(chip-a): see SOURCE(chip-b): x\n// SOURCE: (chip-a) y").unwrap(),
+            [
+                Block {
+                    line: 1,
+                    chips: Some(vec!["chip-a".to_owned()]),
+                    text: "// SOURCE: see SOURCE(chip-b): x".to_owned(),
+                },
+                Block {
+                    line: 2,
+                    chips: None,
+                    text: "// SOURCE: (chip-a) y".to_owned(),
+                },
+            ]
+        );
+        assert_eq!(
+            blocks("// SOURCE(): x"),
+            Err(MalformedMarker {
+                line: 1,
+                reason: "empty chip name"
+            })
+        );
+        assert_eq!(
+            blocks("// SOURCE: fine\n\n// SOURCE(chip-a"),
+            Err(MalformedMarker {
+                line: 3,
+                reason: "unclosed chip list"
+            })
+        );
+    }
+
+    #[test]
     fn a_malformed_chip_list_is_rejected_with_its_line() {
         assert_eq!(
             blocks("fn x() {}\n// SOURCE(chip-a: open\n"),
