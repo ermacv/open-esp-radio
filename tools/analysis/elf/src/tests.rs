@@ -387,9 +387,9 @@ fn every_symbol_type_matches_the_object_reader_and_both_symbol_views() {
     let bytes = writer.write().unwrap();
     let file = object::File::parse(bytes.as_slice()).unwrap();
     let elf = Elf::parse(&bytes).unwrap();
-    for (st_type, expected) in expected.into_iter().enumerate() {
+    for (st_type, expected) in (0_u8..).zip(expected) {
         let name = format!("type_{st_type}");
-        assert_eq!(SymbolKind::of_type(st_type as u8), expected, "{name}");
+        assert_eq!(SymbolKind::of_type(st_type), expected, "{name}");
         let parsed = file.symbols().find(|s| s.name() == Ok(&*name)).unwrap();
         let from_object = match parsed.kind() {
             object::SymbolKind::Text => SymbolKind::Text,
@@ -410,4 +410,185 @@ fn every_symbol_type_matches_the_object_reader_and_both_symbol_views() {
             "raw symbol: {name}",
         );
     }
+}
+
+/// `bytes` with the address of its section `name` set to `address`: what a
+/// file may say that no linker writes.
+fn at_address(mut bytes: Vec<u8>, name: &str, address: u64) -> Vec<u8> {
+    let index = Elf::parse(&bytes)
+        .unwrap()
+        .section_by_name(name)
+        .unwrap()
+        .index;
+    let field = |bytes: &[u8], at: usize, width: usize| {
+        let mut value = [0; 8];
+        value[..width].copy_from_slice(&bytes[at..at + width]);
+        usize::try_from(u64::from_le_bytes(value)).unwrap()
+    };
+    // ELF32 and ELF64: e_shoff, e_shentsize, sh_addr and its width.
+    let (table, entry, sh_addr, width) = match bytes[4] {
+        1 => (field(&bytes, 0x20, 4), field(&bytes, 0x2e, 2), 0x0c, 4),
+        _ => (field(&bytes, 0x28, 8), field(&bytes, 0x3a, 2), 0x10, 8),
+    };
+    let at = table + index * entry + sh_addr;
+    bytes[at..at + width].copy_from_slice(&address.to_le_bytes()[..width]);
+    bytes
+}
+
+/// A relocatable 64-bit object whose `.text` (sixteen bytes) holds `f` at
+/// offset 8, eight bytes long, a sizeless `entry` at 0, and what `more` adds.
+fn wide_object(more: impl FnOnce(&mut Writer<'_>, object::write::SectionId)) -> Vec<u8> {
+    let mut writer = Writer::new(BinaryFormat::Elf, Architecture::Riscv64, Endianness::Little);
+    let text = writer.section_id(StandardSection::Text);
+    writer.append_section_data(text, &[0; 16], 4);
+    for (name, value, size) in [("f", 8, 8), ("entry", 0, 0)] {
+        writer.add_symbol(WriteSymbol {
+            name: name.as_bytes().to_vec(),
+            value,
+            size,
+            kind: object::SymbolKind::Text,
+            scope: SymbolScope::Linkage,
+            weak: false,
+            section: SymbolSection::Section(text),
+            flags: SymbolFlags::None,
+        });
+    }
+    more(&mut writer, text);
+    writer.write().unwrap()
+}
+
+#[test]
+fn a_section_holds_the_addresses_and_words_of_its_range_alone() {
+    let bytes = executable();
+    let elf = Elf::parse(&bytes).unwrap();
+    let data = elf.section_by_name(".dat").unwrap();
+    assert_eq!((data.address, data.size), (0x2000, 4));
+    for (address, inside) in [
+        (0x1fff, false),
+        (0x2000, true),
+        (0x2003, true),
+        (0x2004, false),
+        (0, false),
+        (u64::MAX, false),
+    ] {
+        assert_eq!(data.contains(address), inside, "{address:#x}");
+    }
+    assert_eq!(data.word(0x2000), Some(0x4433_2211));
+    // A word that starts before the section, or ends past its bytes, is not held.
+    for address in [0x1fff, 0x2001, 0x2004, u64::MAX] {
+        assert_eq!(data.word(address), None, "{address:#x}");
+    }
+}
+
+#[test]
+fn a_function_whose_extent_passes_the_address_space_is_refused_by_name() {
+    let bytes = wide_object(|writer, text| {
+        writer.add_symbol(WriteSymbol {
+            name: b"far".to_vec(),
+            value: u64::MAX - 1,
+            size: 4,
+            kind: object::SymbolKind::Text,
+            scope: SymbolScope::Linkage,
+            weak: false,
+            section: SymbolSection::Section(text),
+            flags: SymbolFlags::None,
+        });
+    });
+    assert_eq!(
+        Elf::parse(&bytes)
+            .unwrap()
+            .functions()
+            .unwrap_err()
+            .to_string(),
+        "function symbol far: its address 0xfffffffffffffffe and size 0x4 pass the address space"
+    );
+    // Without it the object's functions are read.
+    let bytes = wide_object(|_, _| {});
+    let functions = Elf::parse(&bytes).unwrap().functions().unwrap();
+    assert_eq!(
+        functions
+            .iter()
+            .map(|function| (function.label(), function.address, function.size))
+            .collect::<Vec<_>>(),
+        [("entry".to_owned(), 0, 8), ("f".to_owned(), 8, 8)]
+    );
+}
+
+#[test]
+fn a_section_whose_extent_passes_the_address_space_is_refused_by_name() {
+    // The sizeless `entry` extends to its section's end, which the file puts
+    // past the last address.
+    let bytes = at_address(wide_object(|_, _| {}), ".text", u64::MAX - 7);
+    assert_eq!(
+        Elf::parse(&bytes)
+            .unwrap()
+            .functions()
+            .unwrap_err()
+            .to_string(),
+        "section .text: its address 0xfffffffffffffff8 and size 0x10 pass the address space"
+    );
+}
+
+#[test]
+fn a_function_below_its_section_is_refused_by_both_names() {
+    let bytes = at_address(object(), ".text", 0x1000);
+    assert_eq!(
+        Elf::parse(&bytes)
+            .unwrap()
+            .code("a.o")
+            .unwrap_err()
+            .to_string(),
+        "a.o: f at 0x0 lies below its section .text at 0x1000"
+    );
+}
+
+#[test]
+fn a_local_reference_is_its_offset_from_the_function_or_a_refusal() {
+    // A relocation in `f` (at 8) against its own section's symbol.
+    let reference = |addend: i64| {
+        let bytes = wide_object(|writer, text| {
+            let section = writer.section_symbol(text);
+            writer
+                .add_relocation(
+                    text,
+                    WriteRelocation {
+                        offset: 12,
+                        symbol: section,
+                        addend,
+                        flags: object::RelocationFlags::Elf {
+                            r_type: rv32::R_RISCV_32,
+                        },
+                    },
+                )
+                .unwrap();
+        });
+        let elf = Elf::parse(&bytes).unwrap();
+        elf.code("a.o").map(|code| {
+            let f = code.iter().find(|code| code.name == "f").unwrap();
+            f.sites.clone()
+        })
+    };
+    let site = |local| Site {
+        offset: 4,
+        r_type: rv32::R_RISCV_32,
+        reference: Reference::Local(local),
+    };
+    // The section's start is eight bytes before the function.
+    assert_eq!(reference(0).unwrap(), [site(-8)]);
+    assert_eq!(reference(12).unwrap(), [site(4)]);
+    assert_eq!(reference(i64::MIN + 8).unwrap(), [site(i64::MIN)]);
+    assert_eq!(
+        reference(i64::MIN).unwrap_err().to_string(),
+        "a.o: f: the relocation at 0xc names a position outside the address space"
+    );
+}
+
+#[test]
+fn addresses_differ_by_what_an_i64_holds_or_by_nothing() {
+    assert_eq!(signed_difference(8, 3), Some(5));
+    assert_eq!(signed_difference(3, 8), Some(-5));
+    assert_eq!(signed_difference(u64::MAX, u64::MAX - 1), Some(1));
+    assert_eq!(signed_difference(0, 1 << 63), Some(i64::MIN));
+    assert_eq!(signed_difference(1 << 63, 0), None);
+    assert_eq!(signed_difference(0, u64::MAX), None);
 }
