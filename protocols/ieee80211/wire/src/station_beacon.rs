@@ -75,7 +75,7 @@ pub struct StaBeaconObservation {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct StaBeaconProtection {
     pub ht: HtProtectionMode,
-    pub he_txop_rts_threshold: Option<u16>,
+    pub he_txop_rts_threshold: Option<crate::he::HeTxopDurationRtsThreshold>,
 }
 
 impl StaBeaconProtection {
@@ -230,10 +230,10 @@ pub fn parse_sta_beacon(
             (ElementId::EXTENSION, [extension, low, high, ..])
                 if ElementIdExtension::new(*extension) == ElementIdExtension::HE_OPERATION =>
             {
-                let threshold = crate::he::HeOperationFields::from_bytes([*low, *high, 0, 0, 0, 0])
-                    .rts_threshold();
-                protection.he_txop_rts_threshold =
-                    (!matches!(threshold, 0 | 0x03ff)).then_some(threshold);
+                protection.he_txop_rts_threshold = crate::he::HeTxopDurationRtsThreshold::new(
+                    crate::he::HeOperationFields::from_bytes([*low, *high, 0, 0, 0, 0])
+                        .rts_threshold(),
+                );
             }
             _ => {}
         }

@@ -193,3 +193,15 @@ fn a_plan_s_protection_follows_each_stage_s_rate_and_keeps_the_rest() {
     assert_eq!(stages, expected);
     assert_eq!(protected.transmissions(), plan().transmissions());
 }
+
+#[test]
+fn estimates_add_as_durations_and_an_overflow_or_an_unknown_is_unknown() {
+    use oer_portable_time::Duration;
+    let micros = |micros| TxEstimate::Estimated(Duration::from_micros(micros));
+    assert_eq!(micros(40).add(micros(2)), micros(42));
+    assert_eq!(TxEstimate::NONE.add(micros(7)), micros(7));
+    assert_eq!(micros(u64::MAX).add(micros(0)), micros(u64::MAX));
+    assert_eq!(micros(u64::MAX).add(micros(1)), TxEstimate::Unknown);
+    assert_eq!(micros(1).add(TxEstimate::Unknown), TxEstimate::Unknown);
+    assert_eq!(TxEstimate::Unknown.add(micros(1)), TxEstimate::Unknown);
+}

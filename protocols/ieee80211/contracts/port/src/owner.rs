@@ -84,7 +84,7 @@
 //! #         rx_amsdu_in_ampdu: true,
 //! #         edca_max_aifsn: 15,
 //! #         edca_max_cw_exponent: 10,
-//! #         edca_max_txop_limit_units_32_us: u16::MAX,
+//! #         edca_max_txop_limit: oer_protocols_ieee80211_wire::extensions::wmm::TxopLimit::new(u16::MAX),
 //! #     };
 //! # }
 //! let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
@@ -127,7 +127,7 @@
 //! #         rx_amsdu_in_ampdu: true,
 //! #         edca_max_aifsn: 15,
 //! #         edca_max_cw_exponent: 10,
-//! #         edca_max_txop_limit_units_32_us: u16::MAX,
+//! #         edca_max_txop_limit: oer_protocols_ieee80211_wire::extensions::wmm::TxopLimit::new(u16::MAX),
 //! #     };
 //! # }
 //! let permitted = oer_protocols_radio_regulatory::TEST_DOMAIN
@@ -489,7 +489,7 @@ impl<K: Ieee80211Capabilities> SupportedEdca<K> {
             let record = parameters.access_category(category);
             record.wmm.aifsn.get() <= K::CAPS.edca_max_aifsn
                 && record.wmm.ecw_max.get() <= K::CAPS.edca_max_cw_exponent
-                && record.wmm.txop_limit_units_32_us <= K::CAPS.edca_max_txop_limit_units_32_us
+                && record.wmm.txop_limit.units() <= K::CAPS.edca_max_txop_limit.units()
                 && record.msdu_lifetime.as_micros()
                     <= EdcaParameterSet::DEFAULT_MSDU_LIFETIME.as_micros()
                 && record.wmm.ecw_min.get() <= record.wmm.ecw_max.get()

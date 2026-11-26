@@ -652,13 +652,15 @@ fn association_response_retains_complete_wmm_parameters() {
     assert_eq!(
         parameters
             .access_category(crate::qos::WmmAccessCategory::Video)
-            .txop_limit_units_32_us,
+            .txop_limit
+            .units(),
         94
     );
     assert_eq!(
         parameters
             .access_category(crate::qos::WmmAccessCategory::Voice)
-            .txop_limit_units_32_us,
+            .txop_limit
+            .units(),
         47
     );
 }

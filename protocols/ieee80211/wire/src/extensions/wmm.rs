@@ -23,8 +23,37 @@ pub struct WmmAcParameters {
     pub aifsn: oer_portable_wire::U8<4>,
     pub ecw_min: oer_portable_wire::U8<4>,
     pub ecw_max: oer_portable_wire::U8<4>,
-    /// TXOP limit in the element's native 32-us units.
-    pub txop_limit_units_32_us: u16,
+    /// The record's TXOP limit.
+    pub txop_limit: TxopLimit,
+}
+
+/// A TXOP limit in units of 32 µs; zero allows one frame per access.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.4.2.28 (EDCA Parameter Set element,
+/// TXOP Limit subfield, Figure 9-286), which the WMM AC Parameter Record
+/// repeats (Wi-Fi Alliance WMM Specification 1.2, 2.2.2).
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct TxopLimit(u16);
+
+impl TxopLimit {
+    /// The limit of one frame per access.
+    pub const ONE_FRAME: Self = Self(0);
+
+    /// The limit of `units` 32 µs.
+    pub const fn new(units: u16) -> Self {
+        Self(units)
+    }
+
+    /// The count of 32 µs units.
+    pub const fn units(self) -> u16 {
+        self.0
+    }
+
+    /// The span of the domain `D` the limit lasts: every count fits, as
+    /// `u16::MAX * 32` is below `2^21`.
+    pub const fn span<D>(self) -> oer_portable_time::DomainDuration<D> {
+        oer_portable_time::DomainDuration::from_micros((self.0 as u64).wrapping_mul(32))
+    }
 }
 
 /// The U-APSD bit of a WMM Parameter Element's QoS Info field: the access
@@ -76,28 +105,28 @@ impl WmmParameterSet {
                 oer_portable_wire::U8::constant::<3>(),
                 oer_portable_wire::U8::constant::<4>(),
                 oer_portable_wire::U8::constant::<10>(),
-                0,
+                TxopLimit::ONE_FRAME,
             ),
             // AC_BK: aCWmin, aCWmax, AIFSN 7.
             WmmAcParameters::contention(
                 oer_portable_wire::U8::constant::<7>(),
                 oer_portable_wire::U8::constant::<4>(),
                 oer_portable_wire::U8::constant::<10>(),
-                0,
+                TxopLimit::ONE_FRAME,
             ),
             // AC_VI: (aCWmin+1)/2-1, aCWmin, AIFSN 2, TXOP 3.008 ms.
             WmmAcParameters::contention(
                 oer_portable_wire::U8::constant::<2>(),
                 oer_portable_wire::U8::constant::<3>(),
                 oer_portable_wire::U8::constant::<4>(),
-                94,
+                TxopLimit::new(94),
             ),
             // AC_VO: (aCWmin+1)/4-1, (aCWmin+1)/2-1, AIFSN 2, TXOP 1.504 ms.
             WmmAcParameters::contention(
                 oer_portable_wire::U8::constant::<2>(),
                 oer_portable_wire::U8::constant::<2>(),
                 oer_portable_wire::U8::constant::<3>(),
-                47,
+                TxopLimit::new(47),
             ),
         ],
     );
@@ -112,7 +141,7 @@ impl WmmParameterSet {
             oer_portable_wire::U8::constant::<2>(),
             oer_portable_wire::U8::constant::<4>(),
             oer_portable_wire::U8::constant::<10>(),
-            0,
+            TxopLimit::ONE_FRAME,
         ); 4],
     );
 }
@@ -123,14 +152,14 @@ impl WmmAcParameters {
         aifsn: oer_portable_wire::U8<4>,
         ecw_min: oer_portable_wire::U8<4>,
         ecw_max: oer_portable_wire::U8<4>,
-        txop_limit_units_32_us: u16,
+        txop_limit: TxopLimit,
     ) -> Self {
         Self {
             admission_control_mandatory: false,
             aifsn,
             ecw_min,
             ecw_max,
-            txop_limit_units_32_us,
+            txop_limit,
         }
     }
 }
@@ -157,7 +186,7 @@ pub(crate) const fn encode_wmm_parameter_element(
             })
             .with_ecw_min(parameters.ecw_min)
             .with_ecw_max(parameters.ecw_max)
-            .with_txop(parameters.txop_limit_units_32_us)
+            .with_txop(parameters.txop_limit.units())
             .to_bytes()
     }
     let [be, bk, vi, vo] = categories;
@@ -257,7 +286,7 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
             aifsn: fields.aifsn(),
             ecw_min: fields.ecw_min(),
             ecw_max: fields.ecw_max(),
-            txop_limit_units_32_us: fields.txop(),
+            txop_limit: TxopLimit::new(fields.txop()),
         };
     }
     if seen != ALL_ACCESS_CATEGORIES {

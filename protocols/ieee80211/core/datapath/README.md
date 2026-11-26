@@ -39,7 +39,7 @@ its own: every instant and every arena is its caller's. It holds today:
 - the A-MPDU limits (`PpduLimit`: the port's subframes, the lower of the
   access point's Maximum A-MPDU Length and the port's length at the
   aggregate's rate, and the rate's PPDU time limit,
-  `PhyRate::max_txtime_micros`) and the retry policy (`AggregateRetry`)
+  `PhyRate::max_txtime`) and the retry policy (`AggregateRetry`)
   under the station's transmit agreements, and where the network places an
   MSDU in its memory: its Ethernet header the headroom's last octets
   (`MSDU_ETHERNET_OFFSET`), its payload after the headroom

@@ -6,7 +6,7 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_core_upper_mac::phy_mode::{NegotiatedPhy, PhyMode};
 use oer_protocols_ieee80211_core_upper_mac::protection::{
-    BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
+    BasicRates, BssProtection, HePacketPadding,
 };
 use oer_protocols_ieee80211_wire::status::StatusCode;
 
@@ -415,9 +415,7 @@ impl StaAssociatedPeer {
             protection: BssProtection {
                 erp,
                 ht: HtProtectionMode::from_operation_ie(access_point.ht_operation_ie_bytes()),
-                he_txop_rts_threshold: he_peer_state
-                    .and_then(|state| state.rts_threshold())
-                    .and_then(HeTxopDurationRtsThreshold::new),
+                he_txop_rts_threshold: he_peer_state.and_then(|state| state.rts_threshold()),
                 he_packet_padding: if he_capability.is_empty() {
                     HePacketPadding::None
                 } else {

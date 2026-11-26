@@ -25,21 +25,21 @@ impl PpduLimit {
     /// At most `subframes` subframes (and [`MAX_AGGREGATE`]) and
     /// `max_length` octets (the recipient's Maximum A-MPDU Length and the
     /// port's at the aggregate's rate, the lower), within `rate`'s PPDU time
-    /// limit ([`PhyRate::max_txtime_micros`](oer_protocols_ieee80211_contracts_port::PhyRate::max_txtime_micros));
+    /// limit ([`PhyRate::max_txtime`](oer_protocols_ieee80211_contracts_port::PhyRate::max_txtime));
     /// `None` checks no time. The time bound counts the whole aggregate at
     /// the rate (IEEE Std 802.11-2020 19.4.3, through
-    /// `PhyRate::max_ppdu_duration_micros`), which grows with the octets:
+    /// `PhyRate::max_ppdu_duration`), which grows with the octets:
     /// the bound is the longest aggregate within it.
     pub fn new(
         subframes: usize,
         max_length: u32,
         rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
     ) -> Self {
-        let timed = rate.and_then(|rate| rate.max_txtime_micros().map(|limit| (rate, limit)));
+        let timed = rate.and_then(|rate| rate.max_txtime().map(|limit| (rate, limit)));
         let octets = match timed {
             None => max_length,
             Some((rate, limit)) => longest_within(max_length, |octets| {
-                rate.max_ppdu_duration_micros(octets)
+                rate.max_ppdu_duration(octets)
                     .is_some_and(|duration| duration <= limit)
             }),
         };
@@ -148,8 +148,8 @@ mod tests {
     fn fits_in_time(max_length: u32, rate: Option<PhyRate>, octets: u32) -> bool {
         octets <= max_length
             && rate.is_none_or(|rate| {
-                rate.max_txtime_micros().is_none_or(|limit| {
-                    rate.max_ppdu_duration_micros(octets)
+                rate.max_txtime().is_none_or(|limit| {
+                    rate.max_ppdu_duration(octets)
                         .is_some_and(|duration| duration <= limit)
                 })
             })

@@ -745,11 +745,8 @@ impl HePeerState {
 
     /// The HE Operation's TXOP Duration RTS Threshold; `None` for 0 and
     /// 1023, which disable it.
-    pub const fn rts_threshold(self) -> Option<u16> {
-        match self.operation.rts_threshold() {
-            0 | 0x03ff => None,
-            threshold => Some(threshold),
-        }
+    pub const fn rts_threshold(self) -> Option<HeTxopDurationRtsThreshold> {
+        HeTxopDurationRtsThreshold::new(self.operation.rts_threshold())
     }
 
     /// Raw HE Operation `ER-SU-Disable` bit.
@@ -794,6 +791,36 @@ pub struct HeLocalCapabilities {
 /// numbers as Linux `include/linux/ieee80211-he.h` cites them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeChannelWidthSet(ChannelWidthSetField);
+
+/// Finite HE TXOP Duration RTS Threshold in the element's native 32-µs
+/// units (IEEE Std 802.11ax-2021, 9.4.2.249, HE Operation Parameters).
+///
+/// Encodings zero and 1023 disable the rule and do not construct this type.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct HeTxopDurationRtsThreshold(core::num::NonZeroU16);
+
+impl HeTxopDurationRtsThreshold {
+    /// Admit an enabled threshold in the range 1 through 1022.
+    pub const fn new(units_32_us: u16) -> Option<Self> {
+        if units_32_us >= 0x03ff {
+            return None;
+        }
+        match core::num::NonZeroU16::new(units_32_us) {
+            Some(units) => Some(Self(units)),
+            None => None,
+        }
+    }
+
+    /// Threshold in native 32 microsecond units.
+    pub const fn units_32_us(self) -> u16 {
+        self.0.get()
+    }
+
+    /// The span of the domain `D` the threshold lasts: at most 1022 * 32 µs.
+    pub const fn span<D>(self) -> oer_portable_time::DomainDuration<D> {
+        oer_portable_time::DomainDuration::from_micros((self.0.get() as u64).wrapping_mul(32))
+    }
+}
 
 oer_portable_wire::bitfield! {
     /// The Supported Channel Width Set subfield's bits this element names,

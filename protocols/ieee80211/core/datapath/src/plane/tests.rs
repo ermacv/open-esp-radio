@@ -378,7 +378,10 @@ fn cost_split(model: Installed<'_>) {
     let whole = transmission_micros(ht(), aggregate_octets(3), Response::BlockAck).unwrap();
     assert_eq!(
         (settled.tid, settled.cost),
-        (BE, TxEstimate::Estimated { micros: whole })
+        (
+            BE,
+            TxEstimate::Estimated(oer_portable_time::Duration::from_micros(u64::from(whole)))
+        )
     );
     world.taken(3, BE);
     let (retry, _) = world.publish();
@@ -388,7 +391,7 @@ fn cost_split(model: Installed<'_>) {
     let alone = transmission_micros(world.single.get(), PSDU, Response::Ack).unwrap();
     assert_eq!(
         settled.cost,
-        TxEstimate::Estimated { micros: alone },
+        TxEstimate::Estimated(oer_portable_time::Duration::from_micros(u64::from(alone))),
         "the retry's own attempt"
     );
     assert_eq!(world.costs.len(), 2);
@@ -401,7 +404,12 @@ fn cost_single(model: Installed<'_>) {
     world.settle();
     assert_eq!(world.returned_sequences(), [0]);
     let once = transmission_micros(world.single.get(), PSDU, Response::Ack).unwrap();
-    assert_eq!(world.costs, [TxEstimate::Estimated { micros: once }]);
+    assert_eq!(
+        world.costs,
+        [TxEstimate::Estimated(
+            oer_portable_time::Duration::from_micros(u64::from(once))
+        )]
+    );
     world.costs.clear();
     // Withdrawn frames that never went leave with no attempt to charge.
     world.taken(1, BE);
@@ -435,7 +443,10 @@ fn cost_unknown(model: Installed<'_>) {
     let whole = transmission_micros(ht(), aggregate_octets(2), Response::BlockAck).unwrap();
     assert_eq!(
         world.costs,
-        [TxEstimate::Unknown, TxEstimate::Estimated { micros: whole }]
+        [
+            TxEstimate::Unknown,
+            TxEstimate::Estimated(oer_portable_time::Duration::from_micros(u64::from(whole)))
+        ]
     );
 }
 
@@ -1140,9 +1151,8 @@ fn he() -> PhyRate {
 /// The link of an access point whose HE Operation names the HE TXOP
 /// Duration RTS Threshold `threshold` (64 is 2 ms), or none.
 fn he_link(threshold: Option<u16>) -> DataLink {
-    use oer_protocols_ieee80211_core_upper_mac::protection::{
-        BasicRates, BssProtection, HeTxopDurationRtsThreshold,
-    };
+    use oer_protocols_ieee80211_core_upper_mac::protection::{BasicRates, BssProtection};
+    use oer_protocols_ieee80211_wire::he::HeTxopDurationRtsThreshold;
     DataLink {
         protection: BssProtection {
             he_txop_rts_threshold: threshold.and_then(HeTxopDurationRtsThreshold::new),

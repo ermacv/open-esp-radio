@@ -18,7 +18,7 @@ fn the_standard_default_is_the_records_of_table_9_155() {
             record.aifsn.get(),
             record.ecw_min.get(),
             record.ecw_max.get(),
-            record.txop_limit_units_32_us,
+            record.txop_limit.units(),
         )
     };
     for category in WmmAccessCategory::ALL {
@@ -43,17 +43,17 @@ fn parses_all_four_access_categories_and_complete_txop() {
     assert_eq!(best_effort.aifsn.get(), 3);
     assert_eq!(best_effort.ecw_min.get(), 4);
     assert_eq!(best_effort.ecw_max.get(), 10);
-    assert_eq!(best_effort.txop_limit_units_32_us, 0);
+    assert_eq!(best_effort.txop_limit.units(), 0);
 
     let video = parameters.access_category(WmmAccessCategory::Video);
     assert_eq!(video.aifsn.get(), 2);
     assert_eq!(video.ecw_min.get(), 3);
     assert_eq!(video.ecw_max.get(), 4);
-    assert_eq!(video.txop_limit_units_32_us, 94);
+    assert_eq!(video.txop_limit.units(), 94);
 
     let voice = parameters.access_category(WmmAccessCategory::Voice);
     assert!(voice.admission_control_mandatory);
-    assert_eq!(voice.txop_limit_units_32_us, 47);
+    assert_eq!(voice.txop_limit.units(), 47);
 }
 
 #[test]
@@ -64,7 +64,8 @@ fn retains_the_standard_txop_high_byte_that_the_blob_drops() {
         parse_wmm_parameter_element(&element)
             .unwrap()
             .access_category(WmmAccessCategory::Video)
-            .txop_limit_units_32_us,
+            .txop_limit
+            .units(),
         350
     );
 }

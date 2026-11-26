@@ -257,7 +257,7 @@ pub struct MacTxStatus<Rate = PhyRate> {
     /// Signed ACK SNR sample when the hardware reports a valid one.
     pub ack_snr_db: Option<i8>,
     /// Measured on-air duration when the backend can report it.
-    pub airtime_micros: Option<u32>,
+    pub airtime: Option<oer_portable_time::Duration>,
 }
 
 impl MacServiceCapabilities {

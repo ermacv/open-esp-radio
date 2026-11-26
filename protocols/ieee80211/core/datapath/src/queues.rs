@@ -315,12 +315,18 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
     /// take it once. An attempt of unknown cost takes the dearest known
     /// one, never nothing.
     pub fn charge(&mut self, queue: QueueId, cost: TxEstimate) {
-        let micros = match cost {
-            TxEstimate::Estimated { micros } => {
+        // The counters hold microseconds in a `u32`: an estimate past it
+        // is charged as an unknown one.
+        let known = match cost {
+            TxEstimate::Estimated(airtime) => u32::try_from(airtime.as_micros()).ok(),
+            TxEstimate::Unknown => None,
+        };
+        let micros = match known {
+            Some(micros) => {
                 self.dearest = self.dearest.max(micros);
                 micros
             }
-            TxEstimate::Unknown => self.dearest.max(1),
+            None => self.dearest.max(1),
         };
         let peer = usize::from(queue.peer());
         if let Some(served) = self

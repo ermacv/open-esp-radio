@@ -29,7 +29,7 @@ fn msdu(tag: u32, priority: WmmUserPriority) -> OutboundMsdu<u32> {
 }
 
 fn estimated(micros: u32) -> TxEstimate {
-    TxEstimate::Estimated { micros }
+    TxEstimate::Estimated(oer_portable_time::Duration::from_micros(u64::from(micros)))
 }
 
 /// Each queue keeps its order; nothing of one is taken from another.
@@ -390,4 +390,27 @@ fn the_least_served_peer_goes_first_and_then_its_least_served_queue() {
     assert_eq!(queues.select(None), Some(of(1, BE3)));
     queues.charge(of(1, BE3), estimated(100));
     assert_eq!(queues.select(None), Some(of(0, BE)), "peer 1 took 130");
+}
+
+/// The counters hold a `u32` of microseconds: an estimate of `u32::MAX`
+/// is charged as itself, one a microsecond longer as an unknown one, the
+/// dearest known.
+#[test]
+fn an_estimate_past_a_u32_is_charged_as_an_unknown_one() {
+    let largest = oer_portable_time::Duration::from_micros(u64::from(u32::MAX));
+    let past = oer_portable_time::Duration::from_micros(u64::from(u32::MAX) + 1);
+
+    let mut queues = Access::new();
+    queues.charge(of(1, BE), estimated(100));
+    queues.charge(of(1, VO), TxEstimate::Estimated(past));
+    assert_eq!(queues.air(of(1, VO)), 100, "the dearest known");
+
+    let mut known = Access::new();
+    known.charge(of(0, BE), TxEstimate::Estimated(largest));
+    known.charge(of(2, BE), TxEstimate::Unknown);
+    assert_eq!(
+        known.air(of(2, BE)),
+        u32::MAX >> 1,
+        "the dearest known is u32::MAX, halved with its queue"
+    );
 }
