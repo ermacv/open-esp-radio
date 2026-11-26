@@ -23,7 +23,10 @@ use crate::{
     keys::RsnKeyInstall,
     state::RsnStateError,
 };
-use oer_portable_crypto::{KeyUnwrapError, KeyUnwrapRequest, block::Aes128Engine};
+use oer_portable_crypto::{
+    block::Aes128Engine,
+    rfc3394::{self, KeyUnwrapError},
+};
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
@@ -254,19 +257,18 @@ pub enum RsnStaEapol<const N: usize, S> {
     End(RsnStaEnd<S>),
 }
 
-/// Unwrap `wrapped` under `kek` to completion over `engine`.
-fn unwrap_key_data<E: Aes128Engine>(
+/// Unwrap `wrapped` under `kek` to completion over `engine`, in the step's
+/// `buffer`: the plaintext key data, a slice of it.
+fn unwrap_key_data<'b, E: Aes128Engine>(
     engine: &mut E,
     kek: &Kek,
     wrapped: &[u8],
-) -> Result<RsnKeyData, KeyDataError<E::Stop>> {
-    let wrapped = RsnKeyData::try_copy(wrapped).map_err(|_| KeyDataError::TooLong)?;
-    oer_portable_crypto::block::unwrap_now(
-        engine,
-        KeyUnwrapRequest::new(kek.request_key(), wrapped),
-    )
-    .into_plaintext()
-    .map_err(KeyDataError::Unwrap)
+    buffer: &'b mut RsnKeyData,
+) -> Result<&'b [u8], KeyDataError<E::Stop>> {
+    let wrapped = buffer.wrapped(wrapped).map_err(|_| KeyDataError::TooLong)?;
+    let plaintext =
+        rfc3394::unwrap(engine, kek.aes_key(), wrapped).map_err(KeyDataError::Unwrap)?;
+    Ok(plaintext)
 }
 
 /// Why authenticated key data yields no plaintext.
@@ -685,12 +687,14 @@ impl RsnConnectedSupplicant {
         }
         let key = frame.key_frame()?;
         let replay_counter = key.replay_counter();
-        let plain = unwrap_key_data(engine, &self.key_encryption, key.key_data())
+        // The step's own place for the key data, lent to the unwrap.
+        let mut buffer = RsnKeyData::new();
+        let plain = unwrap_key_data(engine, &self.key_encryption, key.key_data(), &mut buffer)
             .map_err(KeyDataError::into_connected)?;
         let (keys, commitment, response) = match key.message() {
             crate::EapolKeyMessage::PairwiseMessage3 => (
                 parse_gtk_key_data(
-                    plain.as_bytes(),
+                    plain,
                     self.authenticator_security_ies
                         .rsn_ie()
                         .map_err(RsnConnectedSupplicantError::RetainedSecurityIes)?,
@@ -707,7 +711,7 @@ impl RsnConnectedSupplicant {
                 ),
             ),
             crate::EapolKeyMessage::GroupMessage1 => (
-                parse_group_gtk_key_data(plain.as_bytes(), self.group_management),
+                parse_group_gtk_key_data(plain, self.group_management),
                 RsnCompletedKeyMessage::Group(RsnCompletedGroupMessage1::capture(key)),
                 RsnTxFrame::group_message2(
                     self.key_confirmation.akm(),
@@ -1018,12 +1022,14 @@ impl RsnStaHandshake {
         let rsnxe = authenticator_security_ies
             .rsnxe()
             .map_err(RsnStaError::RetainedSecurityIes)?;
-        let plain = match unwrap_key_data(engine, ptk.kek(), key.key_data()) {
+        // The step's own place for the key data, lent to the unwrap.
+        let mut buffer = RsnKeyData::new();
+        let plain = match unwrap_key_data(engine, ptk.kek(), key.key_data(), &mut buffer) {
             Ok(plain) => plain,
             Err(error) => return Ok(RsnStaEapol::End(error.into_end())),
         };
         let RsnGroupKeys { gtk, igtk } =
-            match parse_gtk_key_data(plain.as_bytes(), rsn_ie, rsnxe, *group_management) {
+            match parse_gtk_key_data(plain, rsn_ie, rsnxe, *group_management) {
                 Ok(keys) => keys,
                 Err(error) => return Ok(RsnStaEapol::End(RsnStaEnd::KeyData(error))),
             };
@@ -1031,7 +1037,7 @@ impl RsnStaHandshake {
             pairwise: RsnKeyInstall::pairwise(RsnInterface::Station, *authenticator, [0; 8], ptk),
             group: RsnStaGroupInstall {
                 replay_counter: replay,
-                plain_key_data_len: plain.as_bytes().len(),
+                plain_key_data_len: plain.len(),
                 group: RsnKeyInstall::group(
                     RsnInterface::Station,
                     &gtk,

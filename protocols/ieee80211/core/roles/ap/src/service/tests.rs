@@ -1,16 +1,25 @@
+/// Key data a test helper made: its bytes.
+struct KeyBytes(std::vec::Vec<u8>);
+
+impl KeyBytes {
+    fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// Unwrap `wrapped` under `kek` in the software engine, as a station would.
 fn software_key_unwrap(
     kek: &oer_protocols_ieee80211_core_security_rsn::Kek,
     wrapped: &[u8],
-) -> Result<RsnKeyData, oer_portable_crypto::KeyUnwrapError<core::convert::Infallible>> {
-    oer_portable_crypto::block::unwrap_now(
+) -> Result<KeyBytes, oer_portable_crypto::rfc3394::KeyUnwrapError<core::convert::Infallible>> {
+    let mut buffer = RsnKeyData::new();
+    let wrapped = buffer.wrapped(wrapped).unwrap();
+    oer_portable_crypto::rfc3394::unwrap(
         &mut SoftwareAes128,
-        oer_portable_crypto::KeyUnwrapRequest::new(
-            oer_portable_crypto::Aes128Key::copy_from(kek.as_bytes()),
-            RsnKeyData::try_copy(wrapped).unwrap(),
-        ),
+        &oer_portable_crypto::Aes128Key::copy_from(kek.as_bytes()),
+        wrapped,
     )
-    .into_plaintext()
+    .map(|plaintext| KeyBytes(plaintext.to_vec()))
 }
 
 /// A GTK whose only owner is software, numbered as the installed group key

@@ -2,12 +2,35 @@
 //! block engine.
 //!
 //! [`unwrap`] is the index-based unwrap (RFC 3394 §2.2.2, second form) and
-//! [`wrap`] the index-based wrap (§2.2.1), each to completion, in place in
-//! the caller's buffer. Received data reaches the unwrap; nothing here panics
-//! on it.
+//! [`wrap`] the index-based wrap (§2.2.1), each to completion on the
+//! caller's engine, under the caller's key, in place in the caller's buffer:
+//! all three are lent for the call and are the caller's again on return.
+//! The buffer has RFC 3394's own layout in both directions: the integrity
+//! register's semiblock, then the registers, which hold the key data.
+//! Nothing moves: the unwrap answers the plaintext as the registers' slice,
+//! and the wrap takes its plaintext after a semiblock of room. The buffer is
+//! split once, at admission; a length refusal loads no key and touches no
+//! byte. After admission the key is in the engine from its load to the keyed
+//! view's drop, before the call returns, and a refusal clears the whole
+//! buffer. Received data reaches the unwrap; nothing here panics on it.
 
-use crate::{KeyData, KeyUnwrapError, KeyUnwrapResponse, KeyWrapResponse, block::BlockEngine};
+use crate::{
+    Aes128Key,
+    block::{Aes128Engine, BlockEngine},
+};
 use zeroize::Zeroize;
+
+/// Why an RFC 3394 unwrap refused its input or its engine stopped.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KeyUnwrapError<S> {
+    /// The wrapped data is not 64-bit blocks with at least two blocks of
+    /// key data (RFC 3394 §2).
+    InvalidLength,
+    /// The initial value did not verify (RFC 3394 §2.2.3).
+    IntegrityCheckFailed,
+    /// The engine stopped; the plaintext and intermediate state are erased.
+    Engine(S),
+}
 
 /// The default initial value (RFC 3394 §2.2.3.1).
 const IV: [u8; 8] = [0xa6; 8];
@@ -73,47 +96,46 @@ fn last_step(semiblocks: &mut Semiblocks<'_>) -> u64 {
     })
 }
 
-/// Unwrap `wrapped` (`n + 1` semiblocks with `n >= 2`) in place, decrypting
-/// each block over the engine `load` returns. A length refusal returns before
-/// `load` runs; a refused key or block ends the operation with
-/// [`KeyUnwrapError::Engine`]. The engine is dropped after the last block, the
-/// block is erased on every exit, and a refusal clears the buffer.
-pub fn unwrap<K: BlockEngine, const N: usize>(
-    wrapped: KeyData<N>,
-    load: impl FnOnce() -> Result<K, K::Stop>,
-) -> KeyUnwrapResponse<N, K::Stop> {
-    let mut data = wrapped;
-    match unwrap_in_place(data.held_mut(), load) {
-        Ok(()) => {
-            // The shift left the last semiblock clear.
-            data.len = data.len.saturating_sub(SEMIBLOCK);
-            KeyUnwrapResponse {
-                data,
-                outcome: Ok(()),
-            }
+/// Unwrap `wrapped` (`n + 1` semiblocks with `n >= 2`, the whole buffer)
+/// in place under `kek` on `engine`: the `Ok` is the plaintext key data, the
+/// `n` semiblocks after the first, which holds the verified initial value.
+/// A length refusal decrypts nothing and leaves the buffer as it was; an
+/// integrity failure or the engine's stop clears the whole buffer.
+pub fn unwrap<'b, E: Aes128Engine>(
+    engine: &mut E,
+    kek: &Aes128Key,
+    wrapped: &'b mut [u8],
+) -> Result<&'b mut [u8], KeyUnwrapError<E::Stop>> {
+    let Some(mut semiblocks) = semiblocks(wrapped) else {
+        return Err(KeyUnwrapError::InvalidLength);
+    };
+    match unwrap_semiblocks(engine, kek, &mut semiblocks) {
+        Ok(()) => Ok(semiblocks.registers),
+        Err(error) => {
+            semiblocks.first.zeroize();
+            semiblocks.registers.zeroize();
+            Err(error)
         }
-        Err(error) => refuse(data, error),
     }
 }
 
-fn unwrap_in_place<K: BlockEngine>(
-    bytes: &mut [u8],
-    load: impl FnOnce() -> Result<K, K::Stop>,
-) -> Result<(), KeyUnwrapError<K::Stop>> {
-    let Some(mut semiblocks) = semiblocks(bytes) else {
-        return Err(KeyUnwrapError::InvalidLength);
-    };
-    let mut cipher = load().map_err(KeyUnwrapError::Engine)?;
+/// The passes over admitted semiblocks, then the integrity check.
+fn unwrap_semiblocks<E: Aes128Engine>(
+    engine: &mut E,
+    kek: &Aes128Key,
+    semiblocks: &mut Semiblocks<'_>,
+) -> Result<(), KeyUnwrapError<E::Stop>> {
+    let mut cipher = engine.load(kek).map_err(KeyUnwrapError::Engine)?;
     let mut block = [0; 16];
-    let blocks = unwrap_blocks(&mut cipher, &mut semiblocks, &mut block);
+    let blocks = unwrap_blocks(&mut cipher, semiblocks, &mut block);
     drop(cipher);
     block.zeroize();
     blocks.map_err(KeyUnwrapError::Engine)?;
-    if !crate::compare::constant_time_eq(semiblocks.first.iter(), IV.iter()) {
-        return Err(KeyUnwrapError::IntegrityCheckFailed);
+    if crate::compare::constant_time_eq(semiblocks.first.iter(), IV.iter()) {
+        Ok(())
+    } else {
+        Err(KeyUnwrapError::IntegrityCheckFailed)
     }
-    shift_plaintext(semiblocks);
-    Ok(())
 }
 
 /// The six passes: for `j` from 5 down to 0 and `i` from `n` down to 1,
@@ -152,86 +174,46 @@ fn unwrap_blocks<K: BlockEngine>(
     Ok(())
 }
 
-/// Move the plaintext `R[1..=n]` one semiblock towards the start, over the
-/// verified integrity register, leaving the last semiblock clear.
-fn shift_plaintext(mut semiblocks: Semiblocks<'_>) {
-    let mut carry = [0; SEMIBLOCK];
-    for register in semiblocks.registers().rev() {
-        core::mem::swap(register, &mut carry);
-    }
-    *semiblocks.first = carry;
-    carry.zeroize();
-}
-
-/// The refusal: the buffer cleared, with `error`.
-fn refuse<const N: usize, S>(
-    mut data: KeyData<N>,
-    error: KeyUnwrapError<S>,
-) -> KeyUnwrapResponse<N, S> {
-    data.zeroize();
-    KeyUnwrapResponse {
-        data,
-        outcome: Err(error),
-    }
-}
-
 /// Why [`wrap`] refused its plaintext.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KeyWrapError<S> {
     /// Not 64-bit blocks, or fewer than two (RFC 3394 §2).
     InvalidLength,
-    /// The ciphertext, one semiblock longer, does not fit `N`.
-    CapacityExceeded,
     /// The engine stopped; the buffer and intermediate state are erased.
     Engine(S),
 }
 
-/// Wrap `plaintext` (`n >= 2` semiblocks, RFC 3394 §2.2.1, index-based
-/// form) in place in its buffer of capacity `N`, encrypting each block over
-/// the engine `load` returns. The buffer first grows by the integrity
-/// register's semiblock, so a plaintext that does not fit with it is refused
-/// as [`KeyWrapError::CapacityExceeded`] before its length is examined. A
-/// refusal returns before `load` runs; a refused key or block ends the
-/// operation with [`KeyWrapError::Engine`]. The engine is dropped after the
-/// last block, the block is erased on every exit, and a refusal clears the
-/// buffer.
-pub fn wrap<K: BlockEngine, const N: usize>(
-    plaintext: KeyData<N>,
-    load: impl FnOnce() -> Result<K, K::Stop>,
-) -> KeyWrapResponse<N, K::Stop> {
-    let mut data = plaintext;
-    // The bytes after the held ones are zero: the grown semiblock is.
-    let Some(len) = data.len.checked_add(SEMIBLOCK).filter(|len| *len <= N) else {
-        return refuse_wrap(data, KeyWrapError::CapacityExceeded);
-    };
-    data.len = len;
-    match wrap_in_place(data.held_mut(), load) {
-        Ok(()) => KeyWrapResponse {
-            data,
-            outcome: Ok(()),
-        },
-        Err(error) => refuse_wrap(data, error),
-    }
-}
-
-fn wrap_in_place<K: BlockEngine>(
-    bytes: &mut [u8],
-    load: impl FnOnce() -> Result<K, K::Stop>,
-) -> Result<(), KeyWrapError<K::Stop>> {
-    let Some(mut semiblocks) = semiblocks(bytes) else {
+/// Wrap the plaintext key data that follows a semiblock of room in `buffer`
+/// (`n >= 2` semiblocks after the first, RFC 3394 §2.2.1, index-based form)
+/// in place under `kek` on `engine`: on `Ok` the whole buffer is the
+/// ciphertext, its first semiblock the integrity register. A length refusal
+/// leaves the buffer as it was; the engine's stop clears the whole buffer.
+pub fn wrap<E: Aes128Engine>(
+    engine: &mut E,
+    kek: &Aes128Key,
+    buffer: &mut [u8],
+) -> Result<(), KeyWrapError<E::Stop>> {
+    let Some(mut semiblocks) = semiblocks(buffer) else {
         return Err(KeyWrapError::InvalidLength);
     };
-    // Make room for the integrity register: `R[1..=n]` one semiblock on.
-    let mut carry = IV;
-    core::mem::swap(semiblocks.first, &mut carry);
-    for register in semiblocks.registers() {
-        core::mem::swap(register, &mut carry);
+    *semiblocks.first = IV;
+    let outcome = wrap_semiblocks(engine, kek, &mut semiblocks);
+    if outcome.is_err() {
+        semiblocks.first.zeroize();
+        semiblocks.registers.zeroize();
     }
-    // `carry` holds the grown semiblock's zeros.
-    carry.zeroize();
-    let mut cipher = load().map_err(KeyWrapError::Engine)?;
+    outcome
+}
+
+/// The passes over admitted semiblocks, the integrity register set.
+fn wrap_semiblocks<E: Aes128Engine>(
+    engine: &mut E,
+    kek: &Aes128Key,
+    semiblocks: &mut Semiblocks<'_>,
+) -> Result<(), KeyWrapError<E::Stop>> {
+    let mut cipher = engine.load(kek).map_err(KeyWrapError::Engine)?;
     let mut block = [0; 16];
-    let blocks = wrap_blocks(&mut cipher, &mut semiblocks, &mut block);
+    let blocks = wrap_blocks(&mut cipher, semiblocks, &mut block);
     drop(cipher);
     block.zeroize();
     blocks.map_err(KeyWrapError::Engine)
@@ -270,16 +252,4 @@ fn wrap_blocks<K: BlockEngine>(
         }
     }
     Ok(())
-}
-
-/// The wrap's refusal: the buffer cleared, with `error`.
-fn refuse_wrap<const N: usize, S>(
-    mut data: KeyData<N>,
-    error: KeyWrapError<S>,
-) -> KeyWrapResponse<N, S> {
-    data.zeroize();
-    KeyWrapResponse {
-        data,
-        outcome: Err(error),
-    }
 }

@@ -22,12 +22,11 @@ use crate::{
 };
 use crate::{AkmKeys, MicFailure};
 use oer_portable_crypto::{
-    KeyData, KeyWrapRequest,
-    block::{Aes128Engine, wrap_now},
-    rfc3394::KeyWrapError,
+    block::Aes128Engine,
+    rfc3394::{self, KeyWrapError},
 };
 use oer_protocols_ieee802_wire::Eui48;
-use oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY;
+use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
 use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 
 /// How many built transmissions of one handshake message stay awaited.
@@ -106,6 +105,9 @@ pub enum RsnApError<S> {
     Frame(RsnFrameError),
     /// The retransmitted Message 3's key data could not be wrapped.
     KeyWrap(KeyWrapError<S>),
+    /// The retransmitted Message 3's key data and the wrap's semiblock of
+    /// room exceed the key-data buffer.
+    KeyDataTooLong,
     /// The AES engine stopped.
     Engine(S),
 }
@@ -131,6 +133,9 @@ pub enum RsnApEnd<S> {
     SecurityIesMismatch,
     /// Message 3's key data could not be wrapped.
     KeyWrap(KeyWrapError<S>),
+    /// Message 3's key data and the wrap's semiblock of room exceed the
+    /// key-data buffer.
+    KeyDataTooLong,
 }
 
 /// What Message 3 carries beside its PTK: the key data the access point
@@ -466,6 +471,9 @@ impl RsnApHandshake {
             Err(Message3Failure::Wrap(error)) => {
                 return Ok(RsnApEapol::End(RsnApEnd::KeyWrap(error)));
             }
+            Err(Message3Failure::TooLong) => {
+                return Ok(RsnApEapol::End(RsnApEnd::KeyDataTooLong));
+            }
             // The handshake awaits Message 2 again.
             Err(Message3Failure::Step(error)) => return Err(error),
         };
@@ -582,6 +590,7 @@ impl RsnApHandshake {
                 let frame = match built {
                     Ok(frame) => frame,
                     Err(Message3Failure::Wrap(error)) => return Err(RsnApError::KeyWrap(error)),
+                    Err(Message3Failure::TooLong) => return Err(RsnApError::KeyDataTooLong),
                     Err(Message3Failure::Step(error)) => return Err(error),
                 };
                 awaited.record(replay_counter);
@@ -619,21 +628,19 @@ fn message3<const N: usize, const K: usize, E: Aes128Engine>(
         ptk,
         transmit,
     } = facts;
-    let plaintext = KeyData::<RSN_KEY_DATA_CAPACITY>::try_copy(material.key_data.as_bytes())
-        .map_err(|_| Message3Failure::Wrap(KeyWrapError::CapacityExceeded))?;
-    let wrapped = wrap_now(
-        engine,
-        KeyWrapRequest::new(ptk.kek().request_key(), plaintext),
-    )
-    .into_wrapped()
-    .map_err(Message3Failure::Wrap)?;
+    // The step's own place for the key data, lent to the wrap.
+    let mut buffer = RsnKeyData::new();
+    let wrapped = buffer
+        .plaintext(material.key_data.as_bytes())
+        .map_err(|_| Message3Failure::TooLong)?;
+    rfc3394::wrap(engine, ptk.kek().aes_key(), wrapped).map_err(Message3Failure::Wrap)?;
     let mut frame = RsnTxFrame::message3(
         akm,
         supplicant,
         transmit.replay_counter,
         authenticator_nonce,
         material.group_packet_number.receive_sequence(),
-        wrapped.as_bytes(),
+        wrapped,
     )
     .map_err(|error| Message3Failure::Step(RsnApError::Frame(error)))?;
     frame.retransmission = transmit.retransmission;
@@ -642,10 +649,11 @@ fn message3<const N: usize, const K: usize, E: Aes128Engine>(
         .map_err(|error| Message3Failure::Step(RsnApError::Engine(error)))
 }
 
-/// Why Message 3 was not built: a wrap failure, which ends a first build,
-/// or a step's error.
+/// Why Message 3 was not built: a wrap failure or key data too long for its
+/// buffer, which end a first build, or a step's error.
 enum Message3Failure<S> {
     Wrap(KeyWrapError<S>),
+    TooLong,
     Step(RsnApError<S>),
 }
 

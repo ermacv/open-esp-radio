@@ -5,7 +5,7 @@
 //! ([`core::convert::Infallible`]), [`EngineStopped`] for an engine that may
 //! stop.
 
-use crate::{Aes128Key, KeyUnwrapRequest, KeyUnwrapResponse, rfc3394};
+use crate::Aes128Key;
 
 /// One 128-bit cipher block.
 pub type Block = [u8; 16];
@@ -39,30 +39,4 @@ pub trait Aes128Engine {
         Self: 'a;
 
     fn load(&mut self, key: &Aes128Key) -> Result<Self::Keyed<'_>, Self::Stop>;
-}
-
-/// Wrap `request` to completion over `engine` ([`rfc3394::wrap`]): each
-/// block is encrypted at once, and a refused key or block ends the operation
-/// with [`crate::rfc3394::KeyWrapError::Engine`]. The key is erased from the
-/// request right after the engine loads it, before the first block, and from
-/// the engine after the last; plaintext of an invalid length loads no key.
-pub fn wrap_now<E: Aes128Engine, const N: usize>(
-    engine: &mut E,
-    request: crate::KeyWrapRequest<N>,
-) -> crate::KeyWrapResponse<N, E::Stop> {
-    let (kek, plaintext) = request.into_parts();
-    crate::rfc3394::wrap(plaintext, move || engine.load(&kek))
-}
-
-/// Unwrap `request` to completion over `engine` ([`rfc3394::unwrap`]): each
-/// block is decrypted at once, and a refused key or block ends the operation
-/// with [`crate::KeyUnwrapError::Engine`]. The key is erased from the request
-/// right after the engine loads it, before the first block, and from the
-/// engine after the last; wrapped data of an invalid length loads no key.
-pub fn unwrap_now<E: Aes128Engine, const N: usize>(
-    engine: &mut E,
-    request: KeyUnwrapRequest<N>,
-) -> KeyUnwrapResponse<N, E::Stop> {
-    let (kek, wrapped) = request.into_parts();
-    rfc3394::unwrap(wrapped, move || engine.load(&kek))
 }

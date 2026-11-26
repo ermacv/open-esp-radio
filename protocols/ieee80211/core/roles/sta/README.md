@@ -425,7 +425,7 @@ M3's MAC protection; an open M3 produces an open M4 even with an installed PTK.
 Every AES operation of the station runs in the step over the synchronous
 AES-128 engine the composition supplies through its callbacks
 (`StaCallbacks::AesEngine`, lent by `aes_engine`): the key-data unwrap
-(RFC 3394, `oer-portable-crypto`'s `block::unwrap_now`), Message 3's when the
+(RFC 3394, `oer-portable-crypto`'s `rfc3394::unwrap`), Message 3's when the
 handshake takes it and a connected rekey's in the action turn that follows;
 the AES-CMAC EAPOL-Key MIC of PSK-SHA256 and SAE; and the CCMP and BIP of
 received protected management frames. A refusal drops such a frame like one

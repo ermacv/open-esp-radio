@@ -176,14 +176,13 @@ management frames keep the Voice queue. A changed ACM applies to the next
 MSDU; a numbered one keeps its TID.
 
 Cryptographic operations shared by protocols have one contract each in
-`portable/crypto` (`oer-portable-crypto`). One operation is one request: the request
-owns its key and buffers and runs to completion in one call over a
-synchronous engine the caller lends for that call (`block::unwrap_now`),
-which returns the response and the same buffers; no operation outlives the
-call, and consuming the request erases the key. Mode algorithms
-(RFC 3394) have one copy there, run to completion in place in the request's
-buffer over a synchronous block engine that finishes each block on return or
-refuses it with a typed error. A protocol's synchronous software primitive
+`portable/crypto` (`oer-portable-crypto`). An operation is a function over what
+its caller lends it for the call: a synchronous engine, the key and the
+buffer it works in place (`rfc3394::unwrap`, which answers the plaintext as
+a slice of that buffer); no operation outlives the call. Mode algorithms (CCM, CMAC, RFC 3394) have one copy there, over a
+synchronous block engine that finishes each block on return or answers its
+stop, which carries nothing (`EngineStopped`; a software engine cannot stop,
+its stop is `Infallible`). A protocol's synchronous software primitive
 lives in its `cipher`. The chip composition chooses the engine as a static type.
 The S31 Typical AES engine lives in `chips/esp32s31/drivers/aes`, over the HAL's
 `peripherals::aes` atoms and exclusive crypto clock/reset word. The shared
@@ -199,10 +198,12 @@ is a synchronous AES-128 engine: it owns AES by value, retains IRQ55 with
 `Silent`, waits for each Typical block on its `STATE` flag within a named
 settle and erases the hardware key and intermediates when its keyed view
 drops. A block that times out or ends in an unsupported status ends its
-keyed run with a typed error; nothing of the failure outlives the keyed
-view, and the next key starts the accelerator as the first did. Its one owner is the image that takes it from the library
+keyed run with the engine's stop, and what the stop observed stays in the
+engine's record for its holder (`last_stop`); nothing else of the failure
+outlives the keyed view, and the next key starts the accelerator as the first
+did. Its one owner is the image that takes it from the library
 (`AesPeripheral::engine`) or boot-smoke's hart-1 task. An
-operation borrows it for the length of its call (`oer_portable_crypto::block::unwrap_now`),
+operation borrows it for the length of its call (`oer_portable_crypto::rfc3394::unwrap`),
 so no operation outlives the call and no AES service, client or async
 operation exists.
 

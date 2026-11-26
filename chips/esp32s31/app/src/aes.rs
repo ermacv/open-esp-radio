@@ -7,7 +7,7 @@ use super::{AesPeripheral, Boot, Error};
 /// The accelerator as a synchronous AES-128 engine
 /// (`oer_portable_crypto::block::Aes128Engine`): each block waits on its `STATE`
 /// flag within its settle, and the AES interrupt stays silent. An operation
-/// borrows it for the length of its call (`oer_portable_crypto::block::unwrap_now`),
+/// borrows it for the length of its call (`oer_portable_crypto::rfc3394::unwrap`),
 /// so it is free again on return.
 pub type AesEngine = oer_chips_esp32s31_platform_runtime::crypto::AesEngine;
 

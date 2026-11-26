@@ -52,37 +52,25 @@ mod fuzz;
 #[cfg(test)]
 mod test_engine;
 
-/// Unwrap `request` in the software engine.
-#[cfg(test)]
-fn test_unwrap(
-    request: oer_portable_crypto::KeyUnwrapRequest<
-        { oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY },
-    >,
-) -> Result<
-    oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
-    oer_portable_crypto::KeyUnwrapError<core::convert::Infallible>,
-> {
-    oer_portable_crypto::block::unwrap_now(
-        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
-        request,
-    )
-    .into_plaintext()
-}
-
-/// Unwrap `wrapped` under `kek` in the software engine.
+/// Unwrap `wrapped` under `kek` in the software engine: the plaintext.
 #[cfg(test)]
 pub(crate) fn test_unwrap_bytes(
     kek: &Kek,
     wrapped: &[u8],
 ) -> Result<
-    oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
-    oer_portable_crypto::KeyUnwrapError<core::convert::Infallible>,
+    std::vec::Vec<u8>,
+    oer_portable_crypto::rfc3394::KeyUnwrapError<core::convert::Infallible>,
 > {
-    test_unwrap(oer_portable_crypto::KeyUnwrapRequest::new(
-        kek.request_key(),
-        oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::try_copy(wrapped)
-            .map_err(|_| oer_portable_crypto::KeyUnwrapError::InvalidLength)?,
-    ))
+    let mut buffer = oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::new();
+    let wrapped = buffer
+        .wrapped(wrapped)
+        .map_err(|_| oer_portable_crypto::rfc3394::KeyUnwrapError::InvalidLength)?;
+    oer_portable_crypto::rfc3394::unwrap(
+        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+        kek.aes_key(),
+        wrapped,
+    )
+    .map(|plaintext| plaintext.to_vec())
 }
 
 pub mod akm;
