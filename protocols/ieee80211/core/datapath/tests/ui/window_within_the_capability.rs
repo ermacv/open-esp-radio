@@ -1,11 +1,11 @@
 #![no_std]
 use oer_protocols_ieee80211_core_datapath::engine::{Arenas, Engine, EngineAgreements};
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckStorage;
-use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelPort};
+use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelPort, StationModel};
 
 pub type Station<const WINDOW: usize> = Engine<
     'static,
-    ModelPort<'static, 8, 0>,
+    ModelPort<'static, StationModel<8>>,
     Arenas,
     (),
     1,
@@ -16,7 +16,7 @@ pub type Station<const WINDOW: usize> = Engine<
     WINDOW,
 >;
 pub type Agreements<const FRAMES: usize, const WINDOW: usize> =
-    RxBlockAckStorage<EngineAgreements<'static, ModelCaps>, u8, 1, FRAMES, WINDOW>;
+    RxBlockAckStorage<EngineAgreements<'static, oer_protocols_ieee80211_contracts_port::Station, ModelCaps>, u8, 1, FRAMES, WINDOW>;
 
 // The model's capabilities name a window of at most 64.
 #[cfg(not(ui_reject))]

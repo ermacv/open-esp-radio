@@ -169,6 +169,14 @@ impl<'id> PortKey<'id> {
     }
 }
 
+#[cfg(test)]
+impl PortKey<'_> {
+    /// A key for this crate's tests.
+    pub(crate) const fn new_for_tests() -> Self {
+        Self { brand: PhantomData }
+    }
+}
+
 /// A port's key, the radio stopped and the stop's right, made without an
 /// installation's mint: for the tests of a core that holds rights, never a
 /// product build.
@@ -225,8 +233,8 @@ pub enum StopPoll<'id> {
 }
 
 /// What an installation's mint gives: the port's key, the radio stopped,
-/// the stop's right, the data's rights and the closed gate with its
-/// issuer. The port keeps the key and the issuer; the machine takes the
+/// the stop's right, the rights of its layout (the radio's and its
+/// interfaces') and the closed gate with its issuer. The port keeps the key and the issuer; the machine takes the
 /// rest, and the gate goes to the radio's controller.
 #[must_use = "an installation's rights each have one holder"]
 pub struct Install<'id, D, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
@@ -236,7 +244,7 @@ pub struct Install<'id, D, Path: PoolPath = Root<oer_protocols_radio_port::Local
     pub stopped: Stopped<'id>,
     /// The right to stop the radio.
     pub right: StopRight<'id>,
-    /// The data's rights.
+    /// The rights of the layout: the radio's and its interfaces'.
     pub data: D,
     /// The gate, closed: the data is stopped.
     pub gate: GateClosed<'id, Path>,
@@ -244,30 +252,20 @@ pub struct Install<'id, D, Path: PoolPath = Root<oer_protocols_radio_port::Local
     pub issuer: GateIssuer<'id, Path>,
 }
 
-/// The pool set of an installation whose data's rights `D` builds.
+/// The pool set of an installation of the layout `D`.
 pub struct PortPools<D>(PhantomData<fn() -> D>);
 
-/// The data's rights an installation's mint builds. Only this crate
-/// implements it ([`DataLayout`](crate::DataLayout)) and only its
-/// installation's mint calls it: `mint` takes a seal no other crate can
-/// make.
-pub trait MintData: sealed::Layout {
-    /// The rights, branded with the installation.
-    type Rights<'id>;
-    /// Build them, for the installation's mint alone.
-    fn mint<'id>(seal: MintSeal) -> Self::Rights<'id>;
-}
-
-/// The seal of [`MintData::mint`]: only this crate makes one.
+/// The seal of the layout's mint ([`Layout::mint`](crate::Layout::mint)):
+/// only this crate makes one.
 #[derive(Debug)]
 pub struct MintSeal(pub(crate) ());
 
 pub(crate) mod sealed {
-    /// The data layouts of this crate.
-    pub trait Layout {}
+    /// The layouts, their members and the interface roles of this crate.
+    pub trait Sealed {}
 }
 
-impl<D: MintData> PoolSet for PortPools<D> {
+impl<D: crate::Layout> PoolSet for PortPools<D> {
     type Pools<'id, Path: PoolPath> = Install<'id, D::Rights<'id>, Path>;
 
     fn build<'id, Path: PoolPath>(builder: PoolBuilder<'id, Path>) -> Self::Pools<'id, Path> {
@@ -289,8 +287,9 @@ pub trait RadioPort<'id> {
     type Caps: crate::Ieee80211Capabilities;
     /// The channel a start or a retune is given.
     type Channel: Copy;
-    /// The port's data's rights.
-    type Data;
+    /// The layout of the installations the port serves: a port serves the
+    /// layouts it is implemented for, and another does not build.
+    type Layout: crate::Layout;
     /// What a release gives back: the hardware the installation held.
     type Released<'a>
     where
@@ -347,12 +346,13 @@ pub trait RadioPort<'id> {
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<UnitsHome<'id>>;
 
-    /// Retire the stopped installation, with its data's rights and its
-    /// units home. It cannot refuse.
+    /// Retire the stopped installation, with every right of its layout
+    /// (the radio's and each interface's, so each interface taken down)
+    /// and its units home. It cannot refuse.
     fn retire(
         &mut self,
         stopped: Stopped<'id>,
-        data: Self::Data,
+        data: crate::LayoutRights<'id, Self::Layout>,
         units: UnitsHome<'id>,
     ) -> Retired<'id>;
 

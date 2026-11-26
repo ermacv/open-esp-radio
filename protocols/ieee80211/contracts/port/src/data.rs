@@ -20,10 +20,10 @@ use oer_protocols_ieee80211_wire::qos::{Tid, WmmAccessCategory};
 use oer_protocols_ieee80211_wire::security::Spp;
 use oer_protocols_radio_port::ClockError;
 
-use crate::life::{MintData, PortKey, RadioPort};
+use crate::life::{PortKey, RadioPort};
 use crate::{
-    AggregateOutcome, AmpduRate, GateClosed, GateOpen, Ieee80211Instant, MpduLength, PortRate,
-    Protection, RetryPlan, SingleOutcome, StationHe, StationReceive, SupportedBlockAck,
+    AggregateOutcome, AmpduRate, GateClosed, GateOpen, Ieee80211Instant, InterfaceRole, MpduLength,
+    PortRate, Protection, RetryPlan, SingleOutcome, StationHe, StationReceive, SupportedBlockAck,
     SupportedEdca, TbttEvent, TxFrame,
 };
 
@@ -182,9 +182,36 @@ macro_rules! right {
     };
 }
 
+/// The interface a right is of, as a type.
+type Of<I> = PhantomData<fn() -> I>;
+
+/// A right of one interface `I`: it reaches only that interface's calls.
+macro_rules! interface_right {
+    ($(#[$doc:meta])* $name:ident { $($field:ident: $ty:ty),* }) => {
+        $(#[$doc])*
+        #[must_use = "a right is the only way to the call that takes it"]
+        pub struct $name<'id, I> {
+            $($field: $ty,)*
+            brand: Brand<'id>,
+            interface: Of<I>,
+        }
+
+        impl<I> core::fmt::Debug for $name<'_, I> {
+            fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                formatter
+                    .debug_struct(stringify!($name))
+                    .field("interface", &core::any::type_name::<I>())
+                    $(.field(stringify!($field), &self.$field))*
+                    .finish()
+            }
+        }
+    };
+}
+
 right!(
     /// An arena that holds nothing: what an installation gives and a
-    /// settlement or a withdrawal returns.
+    /// settlement or a withdrawal returns. The radio's: an arena's
+    /// interface is its link's.
     IdleArena { side: ArenaSide }
 );
 right!(
@@ -195,41 +222,42 @@ right!(
     /// An arena on the air: the frames of its prefix that went.
     OnAir { side: ArenaSide, sent: u8 }
 );
-right!(
-    /// A single's place: one of a purpose of a role, a const count of the
-    /// installation.
+interface_right!(
+    /// A single's place of the interface `I`: one of a purpose of its
+    /// role, a const count of its layout. Its index is the interface's own.
     SinglePlace { index: u8 }
 );
 right!(
     /// The right to publish on a transmit queue: it says the queue is free.
+    /// The radio's: every interface publishes on the four queues.
     QueueRight { category: WmmAccessCategory }
 );
 right!(
-    /// The one place of a command.
+    /// The one place of a command: the radio's.
     CommandPlace {}
 );
-right!(
-    /// The station's pairwise key slot, empty.
-    PairwiseSlot {}
+interface_right!(
+    /// One of the interface's pairwise key places, empty.
+    PairwiseSlot { index: u8 }
 );
-right!(
-    /// The station's pairwise key, installed.
-    InstalledPairwise {}
+interface_right!(
+    /// One of the interface's pairwise keys, installed.
+    InstalledPairwise { index: u8 }
 );
-right!(
-    /// One of the station's group key slots, empty.
+interface_right!(
+    /// One of the interface's group key slots, empty.
     GroupSlot { index: u8 }
 );
-right!(
-    /// One of the station's group keys, installed.
+interface_right!(
+    /// One of the interface's group keys, installed.
     InstalledGroup { index: u8 }
 );
-right!(
-    /// A receive Block Ack agreement's slot, empty.
+interface_right!(
+    /// One of the interface's receive Block Ack agreements' slots, empty.
     AgreementSlot { index: u8 }
 );
-right!(
-    /// A receive Block Ack agreement, running.
+interface_right!(
+    /// One of the interface's receive Block Ack agreements, running.
     Agreement { index: u8 }
 );
 
@@ -270,13 +298,6 @@ impl OnAir<'_> {
     }
 }
 
-impl SinglePlace<'_> {
-    /// The place's index: the purpose it is of.
-    pub const fn index(&self) -> u8 {
-        self.index
-    }
-}
-
 impl QueueRight<'_> {
     /// The queue.
     pub const fn category(&self) -> WmmAccessCategory {
@@ -286,18 +307,27 @@ impl QueueRight<'_> {
 
 macro_rules! indexed {
     ($($name:ident),*) => {$(
-        impl $name<'_> {
-            /// The slot's index.
+        impl<I> $name<'_, I> {
+            /// The place's index among its interface's of its kind: for a
+            /// single's place, the purpose it is of.
             pub const fn index(&self) -> u8 {
                 self.index
             }
         }
     )*};
 }
-indexed!(GroupSlot, InstalledGroup, AgreementSlot, Agreement);
+indexed!(
+    SinglePlace,
+    PairwiseSlot,
+    InstalledPairwise,
+    GroupSlot,
+    InstalledGroup,
+    AgreementSlot,
+    Agreement
+);
 
 /// The access categories, a queue each, in the order of
-/// [`DataRights::queues`].
+/// [`RadioRights::queues`].
 pub const QUEUES: [WmmAccessCategory; 4] = [
     WmmAccessCategory::Voice,
     WmmAccessCategory::Video,
@@ -305,121 +335,12 @@ pub const QUEUES: [WmmAccessCategory; 4] = [
     WmmAccessCategory::Background,
 ];
 
-/// The data's rights of an installation: two arenas, `SINGLES` single
-/// places of its controller, `DATA` single places of an access point's
-/// data, a right a transmit queue, the command's place, the key slots and
-/// the receive agreements' slots, all empty. The machine holds them
-/// while the data is stopped, the engine while it flows; a retirement
-/// takes them whole.
-#[must_use = "the data's rights each have one holder"]
-#[derive(Debug)]
-pub struct DataRights<
-    'id,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-    const DATA: usize,
-> {
-    /// The two arenas.
-    pub arenas: [IdleArena<'id>; 2],
-    /// The controller's single places, one a purpose.
-    pub singles: [SinglePlace<'id>; SINGLES],
-    /// An access point's data places, one a transmit queue in the order of
-    /// [`QUEUES`]; a station's data goes in the arenas and has none
-    /// ([`DataLayout::CHECKED`]).
-    pub data: [SinglePlace<'id>; DATA],
-    /// A right a queue, in the order of [`QUEUES`].
-    pub queues: [QueueRight<'id>; 4],
-    /// The command's place.
-    pub command: CommandPlace<'id>,
-    /// The station's pairwise key slot.
-    pub pairwise: PairwiseSlot<'id>,
-    /// The station's group key slots.
-    pub groups: [GroupSlot<'id>; GROUPS],
-    /// The receive agreements' slots.
-    pub agreements: [AgreementSlot<'id>; AGREEMENTS],
-}
-
-/// The layout of an installation's data's rights.
-pub struct DataLayout<
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-    const DATA: usize,
->;
-
-/// The data places of an access point's layout: one a transmit queue.
-pub const DATA_SINGLES: usize = QUEUES.len();
-
-impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize, const DATA: usize>
-    DataLayout<SINGLES, GROUPS, AGREEMENTS, DATA>
-{
-    /// The layout's data places are none (a station's) or one a transmit
-    /// queue (an access point's, [`DATA_SINGLES`]): a single of an access
-    /// point's data takes its queue's place, so another number is no
-    /// layout. Its mint evaluates it; a layout of another number does not
-    /// build.
-    pub const CHECKED: () = if DATA != 0 && DATA != DATA_SINGLES {
-        panic!("a layout has no data place or one a transmit queue")
-    };
-}
-
-impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize, const DATA: usize>
-    crate::life::sealed::Layout for DataLayout<SINGLES, GROUPS, AGREEMENTS, DATA>
-{
-}
-
-impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize, const DATA: usize> MintData
-    for DataLayout<SINGLES, GROUPS, AGREEMENTS, DATA>
-{
-    type Rights<'id> = DataRights<'id, SINGLES, GROUPS, AGREEMENTS, DATA>;
-
-    fn mint<'id>(seal: crate::life::MintSeal) -> Self::Rights<'id> {
-        let crate::life::MintSeal(()) = seal;
-        const { Self::CHECKED };
-        const {
-            if SINGLES + DATA > u8::MAX as usize
-                || GROUPS > u8::MAX as usize
-                || AGREEMENTS > u8::MAX as usize
-            {
-                panic!("an installation's places are counted in a byte");
-            }
-        }
-        DataRights {
-            arenas: [ArenaSide::First, ArenaSide::Second].map(|side| IdleArena {
-                side,
-                brand: PhantomData,
-            }),
-            singles: Index::<SINGLES>::every().map(|index| SinglePlace {
-                index: index.to_u8(),
-                brand: PhantomData,
-            }),
-            // After the controller's: each place's index is the installation's
-            // own. The sum fits a byte (the const check above), so the
-            // addition saturates nowhere.
-            data: Index::<DATA>::every().map(|index| SinglePlace {
-                index: Index::<256>::constant::<SINGLES>()
-                    .to_u8()
-                    .saturating_add(index.to_u8()),
-                brand: PhantomData,
-            }),
-            queues: QUEUES.map(|category| QueueRight {
-                category,
-                brand: PhantomData,
-            }),
-            command: CommandPlace { brand: PhantomData },
-            pairwise: PairwiseSlot { brand: PhantomData },
-            groups: Index::<GROUPS>::every().map(|index| GroupSlot {
-                index: index.to_u8(),
-                brand: PhantomData,
-            }),
-            agreements: Index::<AGREEMENTS>::every().map(|index| AgreementSlot {
-                index: index.to_u8(),
-                brand: PhantomData,
-            }),
-        }
-    }
-}
+mod layout;
+pub use layout::{
+    AccessPointData, InterfaceLayout, InterfaceRights, Layout, LayoutRights, Member,
+    PublishedSingle, RadioRights, SingleOfTwo,
+};
+pub(crate) use layout::{access_point_data, station_data};
 
 /// What a settlement leaves of the arena.
 #[derive(Debug)]
@@ -724,13 +645,13 @@ pub enum CommandPoll<'id, H, E> {
 #[derive(Debug)]
 pub struct CloseGate<'id>(pub GateOpen<'id>);
 
-/// A command on the station's pairwise key slot.
+/// A command on a pairwise key place of the interface `I`.
 #[derive(Debug)]
-pub enum PairwiseCommand<'id> {
-    /// Install the station's pairwise key in the empty slot.
+pub enum PairwiseCommand<'id, I> {
+    /// Install a pairwise key in the empty place.
     Install {
         /// The empty slot.
-        slot: PairwiseSlot<'id>,
+        slot: PairwiseSlot<'id, I>,
         /// The peer.
         peer: IndividualAddress,
         /// The key.
@@ -739,36 +660,36 @@ pub enum PairwiseCommand<'id> {
         spp: Spp,
     },
     /// Remove the pairwise key.
-    Remove(InstalledPairwise<'id>),
+    Remove(InstalledPairwise<'id, I>),
 }
 
 /// What a pairwise key command in progress holds: the slot it installs
 /// in, or the key it removes.
 #[derive(Debug)]
-pub enum PairwiseHeld<'id> {
+pub enum PairwiseHeld<'id, I> {
     /// An installation's empty slot.
-    Installing(PairwiseSlot<'id>),
+    Installing(PairwiseSlot<'id, I>),
     /// A removal's installed key.
-    Removing(InstalledPairwise<'id>),
+    Removing(InstalledPairwise<'id, I>),
 }
 
 /// A pairwise key command's end: the slot always comes back.
 #[derive(Debug)]
-pub enum PairwiseEnd<'id> {
+pub enum PairwiseEnd<'id, I> {
     /// The key is installed.
-    Installed(InstalledPairwise<'id>),
+    Installed(InstalledPairwise<'id, I>),
     /// The slot is empty: an installation that expired (the port cleared
     /// the entry) or a removal.
-    Empty(PairwiseSlot<'id>),
+    Empty(PairwiseSlot<'id, I>),
 }
 
-/// A command on a group key slot.
+/// A command on a group key slot of the interface `I`.
 #[derive(Debug)]
-pub enum GroupCommand<'id> {
+pub enum GroupCommand<'id, I> {
     /// Install a group key in an empty slot.
     Install {
         /// The empty slot.
-        slot: GroupSlot<'id>,
+        slot: GroupSlot<'id, I>,
         /// The key's ID.
         key_id: GroupKeyId,
         /// The key.
@@ -777,72 +698,72 @@ pub enum GroupCommand<'id> {
     /// Replace an installed group key.
     Replace {
         /// The installed key.
-        installed: InstalledGroup<'id>,
+        installed: InstalledGroup<'id, I>,
         /// The new key's ID.
         key_id: GroupKeyId,
         /// The new key.
         key: Ccmp128Key,
     },
     /// Make an installed group key the one received under its ID.
-    Select(InstalledGroup<'id>),
+    Select(InstalledGroup<'id, I>),
     /// Remove a group key.
-    Remove(InstalledGroup<'id>),
+    Remove(InstalledGroup<'id, I>),
 }
 
 /// What a group key command in progress holds: its kind and its slot.
 #[derive(Debug)]
-pub enum GroupHeld<'id> {
+pub enum GroupHeld<'id, I> {
     /// An installation's empty slot.
-    Installing(GroupSlot<'id>),
+    Installing(GroupSlot<'id, I>),
     /// A replacement's installed key.
-    Replacing(InstalledGroup<'id>),
+    Replacing(InstalledGroup<'id, I>),
     /// A selection's installed key.
-    Selecting(InstalledGroup<'id>),
+    Selecting(InstalledGroup<'id, I>),
     /// A removal's installed key.
-    Removing(InstalledGroup<'id>),
+    Removing(InstalledGroup<'id, I>),
 }
 
 /// A group key command's end: the slot always comes back.
 #[derive(Debug)]
-pub enum GroupEnd<'id> {
+pub enum GroupEnd<'id, I> {
     /// A group key is installed, replaced or selected.
-    Installed(InstalledGroup<'id>),
+    Installed(InstalledGroup<'id, I>),
     /// The slot is empty: an installation, replacement or selection that
     /// expired (the port cleared the entry), or a removal.
-    Empty(GroupSlot<'id>),
+    Empty(GroupSlot<'id, I>),
 }
 
-/// A command on a receive Block Ack agreement's slot.
+/// A command on a receive Block Ack agreement's slot of the interface `I`.
 #[derive(Debug)]
-pub enum AgreementCommand<'id, K> {
+pub enum AgreementCommand<'id, I, K> {
     /// Begin a receive Block Ack agreement.
     Add {
         /// The empty slot.
-        slot: AgreementSlot<'id>,
+        slot: AgreementSlot<'id, I>,
         /// The agreement.
         agreement: SupportedBlockAck<K>,
     },
     /// End a receive Block Ack agreement.
-    End(Agreement<'id>),
+    End(Agreement<'id, I>),
 }
 
 /// What an agreement command in progress holds: the slot it adds in, or
 /// the agreement it ends.
 #[derive(Debug)]
-pub enum AgreementHeld<'id> {
+pub enum AgreementHeld<'id, I> {
     /// An addition's empty slot.
-    Adding(AgreementSlot<'id>),
+    Adding(AgreementSlot<'id, I>),
     /// An end's running agreement.
-    Ending(Agreement<'id>),
+    Ending(Agreement<'id, I>),
 }
 
 /// An agreement command's end: the slot always comes back.
 #[derive(Debug)]
-pub enum AgreementEnd<'id> {
+pub enum AgreementEnd<'id, I> {
     /// An agreement runs.
-    Added(Agreement<'id>),
+    Added(Agreement<'id, I>),
     /// The slot is empty: an addition that expired, or an end.
-    Empty(AgreementSlot<'id>),
+    Empty(AgreementSlot<'id, I>),
 }
 
 /// A command of values: it carries no right.
@@ -879,13 +800,15 @@ pub enum ValueEnd {
     Expired,
 }
 
-/// What receives the ends a port's service makes.
-pub trait PortSink<'id, A, D> {
-    /// A single's end, with its place and its queue's right.
+/// What receives the ends a port's service makes, for an installation of
+/// the layout `L`.
+pub trait PortSink<'id, L: Layout, A, D> {
+    /// A single's end, with its place, of the interface it was published
+    /// as ([`Layout::Single`]), and its queue's right.
     fn single_ended(
         &mut self,
         outcome: SingleOutcome<A, D>,
-        place: SinglePlace<'id>,
+        place: L::Single<'id>,
         queue: QueueRight<'id>,
     );
     /// A TBTT of the station's schedule.
@@ -894,8 +817,9 @@ pub trait PortSink<'id, A, D> {
 
 /// The data path, as a port gives it (section 4).
 pub trait DataPort<'id>: RadioPort<'id> {
-    /// The link an arena is opened for: it carries its key.
-    type Link;
+    /// The link of the interface `I` an arena is opened for: it carries
+    /// its key, and names the interface the arena's frames go as.
+    type Link<I: InterfaceRole>;
     /// The MSDU's memory, by its handle.
     type Memory;
     /// Octets the port's transmit memory needs in front of the
@@ -952,7 +876,12 @@ pub trait DataPort<'id>: RadioPort<'id> {
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError>;
 
     /// Open an idle arena for `link` and `tid`.
-    fn open(&mut self, idle: IdleArena<'id>, link: &Self::Link, tid: Tid) -> Arena<'id>;
+    fn open<I: InterfaceRole>(
+        &mut self,
+        idle: IdleArena<'id>,
+        link: &Self::Link<I>,
+        tid: Tid,
+    ) -> Arena<'id>;
 
     /// The next frame's place of `length` in the arena, or [`Complete`]
     /// when its slots are full.
@@ -1017,23 +946,24 @@ pub trait DataPort<'id>: RadioPort<'id> {
         facts: TxFacts,
         tbtt: Signal,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
     );
 
     /// Write a single into its place.
-    fn write_single(
+    fn write_single<I: InterfaceRole>(
         &mut self,
-        place: &mut SinglePlace<'id>,
+        place: &mut SinglePlace<'id, I>,
         fill: impl FnOnce(&mut [u8]) -> MpduLength<Self::Caps>,
     );
 
-    /// Publish a single written in its place on its free queue. From its
+    /// Publish a single written in its place on its free queue, as the
+    /// place's interface `I`: the place's type names it. From its
     /// publication to its end the place and the queue's right are the
-    /// port's; its end gives them back through the sink
-    /// ([`PortSink::single_ended`]).
-    fn publish_single(
+    /// port's; its end gives them back through the sink, the place as
+    /// `I`'s ([`PortSink::single_ended`]).
+    fn publish_single<I: InterfaceRole>(
         &mut self,
-        place: SinglePlace<'id>,
+        place: SinglePlace<'id, I>,
         queue: QueueRight<'id>,
         gate: &GateOpen<'id>,
         frame: &TxFrame<'id, Self::Caps>,
@@ -1053,56 +983,56 @@ pub trait DataPort<'id>: RadioPort<'id> {
         &mut self,
         command: InCommand<'id, GateOpen<'id>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
     ) -> CommandPoll<'id, GateOpen<'id>, GateClosed<'id>>;
 
     /// Begin a pairwise key command.
-    fn begin_pairwise(
+    fn begin_pairwise<I: InterfaceRole>(
         &mut self,
         place: CommandPlace<'id>,
-        command: PairwiseCommand<'id>,
+        command: PairwiseCommand<'id, I>,
         now: Instant,
-    ) -> InCommand<'id, PairwiseHeld<'id>>;
+    ) -> InCommand<'id, PairwiseHeld<'id, I>>;
 
     /// Poll a pairwise key command.
-    fn poll_pairwise(
+    fn poll_pairwise<I: InterfaceRole>(
         &mut self,
-        command: InCommand<'id, PairwiseHeld<'id>>,
+        command: InCommand<'id, PairwiseHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, PairwiseHeld<'id>, PairwiseEnd<'id>>;
+        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, PairwiseHeld<'id, I>, PairwiseEnd<'id, I>>;
 
     /// Begin a group key command.
-    fn begin_group(
+    fn begin_group<I: InterfaceRole>(
         &mut self,
         place: CommandPlace<'id>,
-        command: GroupCommand<'id>,
+        command: GroupCommand<'id, I>,
         now: Instant,
-    ) -> InCommand<'id, GroupHeld<'id>>;
+    ) -> InCommand<'id, GroupHeld<'id, I>>;
 
     /// Poll a group key command.
-    fn poll_group(
+    fn poll_group<I: InterfaceRole>(
         &mut self,
-        command: InCommand<'id, GroupHeld<'id>>,
+        command: InCommand<'id, GroupHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, GroupHeld<'id>, GroupEnd<'id>>;
+        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, GroupHeld<'id, I>, GroupEnd<'id, I>>;
 
     /// Begin an agreement command.
-    fn begin_agreement(
+    fn begin_agreement<I: InterfaceRole>(
         &mut self,
         place: CommandPlace<'id>,
-        command: AgreementCommand<'id, Self::Caps>,
+        command: AgreementCommand<'id, I, Self::Caps>,
         now: Instant,
-    ) -> InCommand<'id, AgreementHeld<'id>>;
+    ) -> InCommand<'id, AgreementHeld<'id, I>>;
 
     /// Poll an agreement command.
-    fn poll_agreement(
+    fn poll_agreement<I: InterfaceRole>(
         &mut self,
-        command: InCommand<'id, AgreementHeld<'id>>,
+        command: InCommand<'id, AgreementHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, AgreementHeld<'id>, AgreementEnd<'id>>;
+        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, AgreementHeld<'id, I>, AgreementEnd<'id, I>>;
 
     /// Begin a command of values.
     fn begin_value(
@@ -1117,7 +1047,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         &mut self,
         command: InCommand<'id, ValueKind>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
     ) -> CommandPoll<'id, ValueKind, ValueEnd>;
 
     /// Open the closed gate.
@@ -1208,28 +1138,31 @@ impl<'id> PortKey<'id> {
         Placing { brand: PhantomData }
     }
 
-    /// A single published: its place and its queue's right are the
-    /// port's until its end, which [`Self::single_end`] gives back.
-    pub const fn single_published(&self, place: SinglePlace<'id>, queue: QueueRight<'id>) {
-        let SinglePlace { .. } = place;
-        let QueueRight { .. } = queue;
+    /// A single published as the interface `I`: its place and its queue's
+    /// right are the port's until its end, which [`Self::single_end`]
+    /// gives back from the value this answers, which the port keeps.
+    pub const fn single_published<I: InterfaceRole>(
+        &self,
+        place: SinglePlace<'id, I>,
+        queue: QueueRight<'id>,
+    ) -> PublishedSingle {
+        let SinglePlace { index, .. } = place;
+        let QueueRight { category, .. } = queue;
+        PublishedSingle::new(I::ROLE, index, category)
     }
 
-    /// A single ended: the place and the queue's right of the single the
-    /// port published at `index` on `category`, which it held since its
-    /// publication.
-    pub const fn single_end(
+    /// A single ended: the place, as its interface's, and the queue's
+    /// right of the single the port published as `published`, which it
+    /// held since its publication.
+    pub fn single_end<L: Layout>(
         &self,
-        index: u8,
-        category: WmmAccessCategory,
-    ) -> (SinglePlace<'id>, QueueRight<'id>) {
+        published: PublishedSingle,
+    ) -> (L::Single<'id>, QueueRight<'id>) {
+        // The published single ends here: it is taken by value.
         (
-            SinglePlace {
-                index,
-                brand: PhantomData,
-            },
+            L::single(crate::life::MintSeal(()), &published),
             QueueRight {
-                category,
+                category: published.category(),
                 brand: PhantomData,
             },
         )
@@ -1254,39 +1187,93 @@ impl<'id> PortKey<'id> {
     }
 
     /// The pairwise key installed.
-    pub const fn pairwise_installed(&self, slot: PairwiseSlot<'id>) -> InstalledPairwise<'id> {
-        let PairwiseSlot { brand } = slot;
-        InstalledPairwise { brand }
+    pub const fn pairwise_installed<I>(
+        &self,
+        slot: PairwiseSlot<'id, I>,
+    ) -> InstalledPairwise<'id, I> {
+        let PairwiseSlot {
+            index,
+            brand,
+            interface,
+        } = slot;
+        InstalledPairwise {
+            index,
+            brand,
+            interface,
+        }
     }
 
     /// The pairwise key removed.
-    pub const fn pairwise_removed(&self, key: InstalledPairwise<'id>) -> PairwiseSlot<'id> {
-        let InstalledPairwise { brand } = key;
-        PairwiseSlot { brand }
+    pub const fn pairwise_removed<I>(
+        &self,
+        key: InstalledPairwise<'id, I>,
+    ) -> PairwiseSlot<'id, I> {
+        let InstalledPairwise {
+            index,
+            brand,
+            interface,
+        } = key;
+        PairwiseSlot {
+            index,
+            brand,
+            interface,
+        }
     }
 
     /// A group key installed.
-    pub const fn group_installed(&self, slot: GroupSlot<'id>) -> InstalledGroup<'id> {
-        let GroupSlot { index, brand } = slot;
-        InstalledGroup { index, brand }
+    pub const fn group_installed<I>(&self, slot: GroupSlot<'id, I>) -> InstalledGroup<'id, I> {
+        let GroupSlot {
+            index,
+            brand,
+            interface,
+        } = slot;
+        InstalledGroup {
+            index,
+            brand,
+            interface,
+        }
     }
 
     /// A group key removed, or a change of it that expired.
-    pub const fn group_removed(&self, key: InstalledGroup<'id>) -> GroupSlot<'id> {
-        let InstalledGroup { index, brand } = key;
-        GroupSlot { index, brand }
+    pub const fn group_removed<I>(&self, key: InstalledGroup<'id, I>) -> GroupSlot<'id, I> {
+        let InstalledGroup {
+            index,
+            brand,
+            interface,
+        } = key;
+        GroupSlot {
+            index,
+            brand,
+            interface,
+        }
     }
 
     /// An agreement added.
-    pub const fn agreement_added(&self, slot: AgreementSlot<'id>) -> Agreement<'id> {
-        let AgreementSlot { index, brand } = slot;
-        Agreement { index, brand }
+    pub const fn agreement_added<I>(&self, slot: AgreementSlot<'id, I>) -> Agreement<'id, I> {
+        let AgreementSlot {
+            index,
+            brand,
+            interface,
+        } = slot;
+        Agreement {
+            index,
+            brand,
+            interface,
+        }
     }
 
     /// An agreement ended.
-    pub const fn agreement_ended(&self, agreement: Agreement<'id>) -> AgreementSlot<'id> {
-        let Agreement { index, brand } = agreement;
-        AgreementSlot { index, brand }
+    pub const fn agreement_ended<I>(&self, agreement: Agreement<'id, I>) -> AgreementSlot<'id, I> {
+        let Agreement {
+            index,
+            brand,
+            interface,
+        } = agreement;
+        AgreementSlot {
+            index,
+            brand,
+            interface,
+        }
     }
 }
 
@@ -1299,18 +1286,90 @@ mod tests {
         use core::mem::size_of;
         let sizes = [
             size_of::<InCommand<'static, GateOpen<'static>>>(),
-            size_of::<InCommand<'static, PairwiseHeld<'static>>>(),
-            size_of::<InCommand<'static, GroupHeld<'static>>>(),
-            size_of::<InCommand<'static, AgreementHeld<'static>>>(),
+            size_of::<InCommand<'static, PairwiseHeld<'static, crate::Station>>>(),
+            size_of::<InCommand<'static, GroupHeld<'static, crate::Station>>>(),
+            size_of::<InCommand<'static, AgreementHeld<'static, crate::Station>>>(),
             size_of::<InCommand<'static, ValueKind>>(),
         ];
         std::println!("tokens: close, pairwise, group, agreement, value: {sizes:?}");
         assert!(sizes.iter().all(|size| *size <= 2));
-        assert!(size_of::<PairwiseHeld<'static>>() < size_of::<Ccmp128Key>());
+        assert!(size_of::<PairwiseHeld<'static, crate::Station>>() < size_of::<Ccmp128Key>());
     }
 
     use super::*;
     extern crate std;
+
+    type StationOf = InterfaceLayout<crate::Station, 2, 1, 2, 2>;
+    type AccessPointOf = InterfaceLayout<crate::AccessPoint, 3, 2, 2, 0>;
+
+    /// A layout's mint gives the radio's rights once and each interface's
+    /// bundle, each index the interface's own: the access point's data
+    /// places follow its own single places.
+    #[test]
+    fn a_layout_gives_the_radios_rights_and_each_interfaces() {
+        let (radio, (station, access_point)) =
+            <(StationOf, AccessPointOf) as Layout>::mint::<'static>(crate::MintSeal(()));
+        assert_eq!(
+            radio.arenas.map(|arena| arena.side()),
+            [ArenaSide::First, ArenaSide::Second]
+        );
+        assert_eq!(radio.queues.map(|queue| queue.category()), QUEUES);
+        assert_eq!(station.singles.map(|place| place.index()), [0, 1]);
+        assert_eq!(station.pairwise.map(|slot| slot.index()), [0]);
+        assert_eq!(access_point.singles.map(|place| place.index()), [0, 1, 2]);
+        assert_eq!(access_point.data.map(|place| place.index()), [3, 4, 5, 6]);
+        assert_eq!(access_point.pairwise.map(|slot| slot.index()), [0, 1]);
+        assert_eq!(access_point.groups.map(|slot| slot.index()), [0, 1]);
+    }
+
+    /// A single ends as the interface it was published as, whichever is
+    /// first in the layout, with its index and its queue.
+    #[test]
+    fn a_single_ends_as_the_interface_it_was_published_as() {
+        let key = PortKey::<'static>::new_for_tests();
+        let (radio, (station, access_point)) =
+            <(StationOf, AccessPointOf) as Layout>::mint::<'static>(crate::MintSeal(()));
+        let [voice, video, ..] = radio.queues;
+        let [_, station_place] = station.singles;
+        let [_, _, access_point_place] = access_point.singles;
+        let published = key.single_published(access_point_place, video);
+        assert_eq!(published.role(), crate::VifRole::AccessPoint);
+        assert_eq!(
+            (published.index(), published.category()),
+            (2, WmmAccessCategory::Video)
+        );
+        let (SingleOfTwo::Second(place), queue) =
+            key.single_end::<(StationOf, AccessPointOf)>(published)
+        else {
+            panic!("an access point's single ends as the access point's");
+        };
+        assert_eq!(
+            (place.index(), queue.category()),
+            (2, WmmAccessCategory::Video)
+        );
+        let published = key.single_published(station_place, voice);
+        let (SingleOfTwo::First(place), queue) =
+            key.single_end::<(StationOf, AccessPointOf)>(published)
+        else {
+            panic!("a station's single ends as the station's");
+        };
+        assert_eq!(
+            (place.index(), queue.category()),
+            (1, WmmAccessCategory::Voice)
+        );
+        // The other order of the members: the role, not the position, names it.
+        let (radio, (access_point, _station)) =
+            <(AccessPointOf, StationOf) as Layout>::mint::<'static>(crate::MintSeal(()));
+        let [voice, ..] = radio.queues;
+        let [first, ..] = access_point.singles;
+        let published = key.single_published(first, voice);
+        let (SingleOfTwo::First(place), _) =
+            key.single_end::<(AccessPointOf, StationOf)>(published)
+        else {
+            panic!("an access point's single ends as the access point's");
+        };
+        assert_eq!(place.index(), 0);
+    }
 
     #[test]
     fn a_frame_set_keeps_its_positions_through_its_operations() {

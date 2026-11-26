@@ -1,11 +1,11 @@
 error[E0423]: cannot initialize a tuple struct which contains private fields
- --> tests/ui/minted_data.rs:7:68
-  |
-7 |     let rights = <DataLayout<8, 2, 4, 0> as MintData>::mint::<'id>(MintSeal(())); // ui-error: E0423
-  |                                                                    ^^^^^^^^
-  |
+  --> tests/ui/minted_data.rs:10:49
+   |
+10 |     let rights = <Alone as Layout>::mint::<'id>(MintSeal(())); // ui-error: E0423
+   |                                                 ^^^^^^^^
+   |
 note: constructor is not visible here due to private fields
- --> src/life.rs
-  |
-  | pub struct MintSeal(pub(crate) ());
-  |                     ^^^^^^^^^^^^^ private field
+  --> src/life.rs
+   |
+   | pub struct MintSeal(pub(crate) ());
+   |                     ^^^^^^^^^^^^^ private field

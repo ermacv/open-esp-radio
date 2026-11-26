@@ -1,0 +1,67 @@
+error[E0080]: evaluation panicked: an interface's places are counted in a byte
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_contracts_port::InterfaceLayout::<oer_protocols_ieee80211_contracts_port::Station, 252, 1, 0, 0>::CHECKED` failed here
+  |
+ ::: src/data/layout.rs
+  |
+  |         panic!("an interface's places are counted in a byte")
+  |         ----------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+ --> tests/ui/interface_counts.rs:7:25
+  |
+7 | pub const SINGLES: () = InterfaceLayout::<Station, 252, 1, 0, 0>::CHECKED; // ui-error@outside: E0080: evaluation panicked: an interf...
+  |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0080]: evaluation panicked: an interface's places are counted in a byte
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_contracts_port::InterfaceLayout::<oer_protocols_ieee80211_contracts_port::Station, 0, 256, 0, 0>::CHECKED` failed here
+  |
+ ::: src/data/layout.rs
+  |
+  |         panic!("an interface's places are counted in a byte")
+  |         ----------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+ --> tests/ui/interface_counts.rs:9:26
+  |
+9 | pub const PAIRWISE: () = InterfaceLayout::<Station, 0, 256, 0, 0>::CHECKED;
+  |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0080]: evaluation panicked: an interface's places are counted in a byte
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_contracts_port::InterfaceLayout::<oer_protocols_ieee80211_contracts_port::Station, 0, 1, 256, 0>::CHECKED` failed here
+  |
+ ::: src/data/layout.rs
+  |
+  |         panic!("an interface's places are counted in a byte")
+  |         ----------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+  --> tests/ui/interface_counts.rs:11:24
+   |
+11 | pub const GROUPS: () = InterfaceLayout::<Station, 0, 1, 256, 0>::CHECKED;
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0080]: evaluation panicked: an interface's places are counted in a byte
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_contracts_port::InterfaceLayout::<oer_protocols_ieee80211_contracts_port::Station, 0, 1, 0, 256>::CHECKED` failed here
+  |
+ ::: src/data/layout.rs
+  |
+  |         panic!("an interface's places are counted in a byte")
+  |         ----------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+  --> tests/ui/interface_counts.rs:13:28
+   |
+13 | pub const AGREEMENTS: () = InterfaceLayout::<Station, 0, 1, 0, 256>::CHECKED;
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

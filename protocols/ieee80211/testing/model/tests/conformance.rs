@@ -26,15 +26,13 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_testing_conformance as suite;
 use oer_protocols_ieee80211_testing_model::{
     Air, Anomaly, HardwareState, MODEL_AGREEMENTS, MODEL_GROUPS, MODEL_PLACES,
-    MODEL_SHORT_AMPDU_MCS, MODEL_TX_BODY, ModelCaps, ModelLayout, ModelLink, ModelMemory,
-    ModelPort, Programmed,
+    MODEL_SHORT_AMPDU_MCS, MODEL_TX_BODY, ModelCaps, ModelLink, ModelMemory, ModelPort, Programmed,
+    StationModel,
 };
 use oer_protocols_radio_port::{Mint, branded};
 
 /// The single places of the station: its eight purposes.
 const SINGLES: usize = 8;
-/// The data places: none, a station's layout.
-const DATA: usize = 0;
 
 const ANOMALIES: [Anomaly; 4] = [
     Anomaly::MacFatal,
@@ -55,12 +53,12 @@ fn channel(number: u8) -> SupportedChannel<ModelCaps> {
 }
 
 struct Model<'id> {
-    port: ModelPort<'id, SINGLES, DATA>,
+    port: ModelPort<'id, StationModel<SINGLES>>,
     memory: u32,
 }
 
-impl<'id> suite::Harness<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA> for Model<'id> {
-    type Port = ModelPort<'id, SINGLES, DATA>;
+impl<'id> suite::Harness<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS> for Model<'id> {
+    type Port = ModelPort<'id, StationModel<SINGLES>>;
     type Record = Vec<Programmed>;
     type State = HardwareState;
 
@@ -121,13 +119,10 @@ impl<'id> suite::Harness<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA> for
 
 /// Run `body` with a fresh installation of the model.
 fn installed(
-    body: impl for<'id> FnOnce(
-        Model<'id>,
-        suite::Rights<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA>,
-    ),
+    body: impl for<'id> FnOnce(Model<'id>, suite::Rights<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>),
 ) {
     let future = core::pin::pin!(branded(
-        async |mint: Mint<'_, PortPools<ModelLayout<SINGLES, DATA>>>| {
+        async |mint: Mint<'_, PortPools<StationModel<SINGLES>>>| {
             let install = mint.into_pools();
             let model = Model {
                 port: ModelPort::new(install.key, install.issuer, channel(1)),
@@ -246,7 +241,7 @@ fn a_stop_ends_everything_on_the_air() {
 
 #[test]
 fn no_call_returns_an_error() {
-    suite::no_call_returns_an_error::<ModelPort<'static, SINGLES, DATA>>();
+    suite::no_call_returns_an_error::<ModelPort<'static, StationModel<SINGLES>>>();
 }
 
 /// The addresses lie in the unit's twelve octets before the EtherType, and

@@ -41,6 +41,7 @@ use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, decapsulate_data_fra
 use oer_protocols_ieee80211_wire::security::LinkProtection;
 
 use super::{Agreements, Carrying, Network, Told};
+use oer_protocols_ieee80211_contracts_port::Station as StationRole;
 
 mod pressure;
 use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
@@ -232,7 +233,7 @@ pub(super) struct Reorder<
     const BANKS: usize,
     const WINDOW: usize,
 > {
-    pub(super) agreements: &'a mut Agreements<'id, K, BANKS, WINDOW>,
+    pub(super) agreements: &'a mut Agreements<'id, StationRole, K, BANKS, WINDOW>,
     pub(super) local: [u8; 6],
     pub(super) bssid: Option<Bssid>,
     pub(super) admitted: RxAgreements,

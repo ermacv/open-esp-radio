@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/foreign_interface_single.rs:18:40
+   |
+18 |     port.publish_single::<AccessPoint>(station, queue, gate, frame, now); // ui-error: E0308
+   |          ----------------------------- ^^^^^^^ expected `SinglePlace<'_, AccessPoint>`, found `SinglePlace<'_, Station>`
+   |          |
+   |          arguments to this method are incorrect
+   |
+   = note: expected struct `SinglePlace<'id, oer_protocols_ieee80211_contracts_port::AccessPoint>`
+              found struct `SinglePlace<'id, oer_protocols_ieee80211_contracts_port::Station>`
+note: method defined here
+  --> src/data.rs
+   |
+   |     fn publish_single<I: InterfaceRole>(
+   |        ^^^^^^^^^^^^^^

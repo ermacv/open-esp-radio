@@ -1341,7 +1341,13 @@ its model and conformance case.
   made only by the contract from the port's `PortKey`, which only the
   installation's mint hands out; a transition consumes the right it takes
   and returns the next, so a call with a stale or a foreign right cannot be
-  written. The radio's life is called only by `drive`, from the steps of
+  written. The installation's rights are two kinds of bundle: the radio's,
+  once (the arenas, the queues, the command's place), and one an interface
+  of its layout (its singles, its data places, its keys' and agreements'
+  places), each right of an interface typed by its interface, so that it
+  reaches only that interface's calls; the machine holds every bundle
+  while the data is stopped, the engine while it flows
+  ([the contract's interfaces](../protocols/ieee80211/contracts/port/README.md#interfaces)). The radio's life is called only by `drive`, from the steps of
   the installation machine, which alone holds the radio's rights and the
   stop's right; the gate is closed at each start and opened only on a
   running radio.

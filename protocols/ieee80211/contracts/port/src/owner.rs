@@ -232,24 +232,47 @@ impl<K> core::fmt::Debug for SupportedChannel<K> {
     }
 }
 
-/// An interface role, as a type.
-pub trait InterfaceRole: 'static {
-    /// The role.
+/// An interface role, as a type: every right of an interface carries it,
+/// so a right of one interface reaches only its interface's calls. Only
+/// this crate implements it: [`Station`], [`AccessPoint`].
+pub trait InterfaceRole: crate::life::sealed::Sealed + 'static {
+    /// The role: the hardware's selector a port reads from the type.
     const ROLE: VifRole;
+    /// The role's data places: none (a station's data goes in the arenas),
+    /// or one a transmit queue (an access point's).
+    type Data<'id>;
+    /// The role's data places, for the installation's mint alone, indexed
+    /// from `first`.
+    fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id>;
 }
 
 /// The station role.
+#[derive(Debug)]
 pub enum Station {}
 
 /// The access-point role.
+#[derive(Debug)]
 pub enum AccessPoint {}
+
+impl crate::life::sealed::Sealed for Station {}
+impl crate::life::sealed::Sealed for AccessPoint {}
 
 impl InterfaceRole for Station {
     const ROLE: VifRole = VifRole::Station;
+    type Data<'id> = ();
+
+    fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id> {
+        crate::data::station_data(seal, first)
+    }
 }
 
 impl InterfaceRole for AccessPoint {
     const ROLE: VifRole = VifRole::AccessPoint;
+    type Data<'id> = crate::AccessPointData<'id>;
+
+    fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id> {
+        crate::data::access_point_data(seal, first)
+    }
 }
 
 /// Receive rules an interface of role `R` may request of `K`.

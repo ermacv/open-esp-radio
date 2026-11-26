@@ -1,15 +1,15 @@
 #![no_std]
 use oer_protocols_ieee80211_core_datapath::engine::{
-    ACCESS_POINT, Arenas, DATA_SINGLES, DataPlace, Engine, PeerPlace, Singles,
+    ACCESS_POINT, Arenas, DataPlace, Engine, PeerPlace, Singles,
 };
 use oer_protocols_ieee80211_core_datapath::numbers::TxKey;
-use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelPort};
+use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, AccessPointModel, ModelPort, StationModel};
 
 pub type Station<'id, T> =
-    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS, 7>;
+    Engine<'id, ModelPort<'id, StationModel<8>>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS, 7>;
 pub type AccessPoint<'id, T> = Engine<
     'id,
-    ModelPort<'id, 17, DATA_SINGLES>,
+    ModelPort<'id, AccessPointModel<17>>,
     Singles,
     T,
     2,

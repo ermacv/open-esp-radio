@@ -991,7 +991,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
     pub fn intake<P: DataPort<'id, Caps = K>, T: TxKey>(
         &mut self,
         port: &mut P,
-        link: &P::Link,
+        link: &P::Link<oer_protocols_ieee80211_contracts_port::Station>,
         msdu: OutboundMsdu<P::Memory>,
         numbers: &mut TxNumbers,
         key: Option<&mut T>,
