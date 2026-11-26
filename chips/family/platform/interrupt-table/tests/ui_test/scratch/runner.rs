@@ -3,7 +3,9 @@
 //! `UI_TEST_CASES` names the directory of the cases; `-- --bless` writes the
 //! snapshots beside them. `UI_TEST_TWIN=runner` makes every case a twin by
 //! the runner's defaults, for cases converted without a header;
-//! `UI_TEST_SNAPSHOTS=none` checks the annotations alone.
+//! `UI_TEST_SNAPSHOTS=none` checks the annotations alone;
+//! `UI_TEST_DEPS=package` lends the cases what the package's own manifest
+//! gives, and `UI_TEST_DEPS=package:<features>` the same with features.
 
 use std::path::{Path, PathBuf};
 
@@ -52,13 +54,18 @@ fn main() -> ui_test::color_eyre::Result<()> {
 
     let defaults = config.comment_defaults.base();
     defaults.set_custom("edition", Edition("2024".into()));
-    defaults.set_custom(
-        "dependencies",
-        DependencyBuilder {
-            crate_manifest_path: scratch.join("deps/Cargo.toml"),
-            ..DependencyBuilder::default()
-        },
-    );
+    let mut dependencies = DependencyBuilder {
+        crate_manifest_path: scratch.join("deps/Cargo.toml"),
+        ..DependencyBuilder::default()
+    };
+    if let Ok(choice) = std::env::var("UI_TEST_DEPS") {
+        dependencies.crate_manifest_path = package.join("Cargo.toml");
+        if let Some((_, features)) = choice.split_once(':') {
+            dependencies.program.args.push("--features".into());
+            dependencies.program.args.push(features.into());
+        }
+    }
+    defaults.set_custom("dependencies", dependencies);
     // A snapshot names no machine and no line of a file that is not the
     // case: the case's directory, the package, the workspace and the
     // toolchain's sources by a name, every gutter's number as `LL` at one
