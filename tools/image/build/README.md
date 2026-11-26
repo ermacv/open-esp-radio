@@ -463,15 +463,6 @@ A stack policy that names no stacks sets the move and per-function frame limit:
 the image is compiled with every image flag and has no whole stack to bound. Staged S31 images
 name their stacks and pin their ROM inputs.
 
-## Comparing images
-
-`compare::compare_elf` compares two linked RISC-V images function by
-function modulo placement, over the `oer-tools-analysis-elf` symbols and the decoded
-listings of `oer_tools_analysis_riscv_lift::listing`: every address an instruction forms
-becomes symbol+offset, legacy mangling hashes and LLVM clone numbers are
-dropped, identical-code-folded names pair by body, and a `Review` applies
-reviewed aliases and scheduling ties.
-
 ## Exclusion
 
 Build exclusion has one mechanism, the foundation's file lock

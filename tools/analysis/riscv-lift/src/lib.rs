@@ -6,13 +6,6 @@
 #![cfg_attr(
     test,
     expect(
-        clippy::cast_possible_wrap,
-        reason = "test code: a cast or a dropped result in a test loses no product's value"
-    )
-)]
-#![cfg_attr(
-    test,
-    expect(
         clippy::cast_sign_loss,
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
@@ -333,8 +326,6 @@ mod tests {
         );
     }
 }
-
-pub mod listing;
 
 /// Every form the decoder knows: `rv32imafc` with the bit-manipulation and
 /// code-size extensions, without Zcmt.

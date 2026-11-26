@@ -25,7 +25,7 @@ unavailable ROM summaries and incomplete signature audits. See the
 | --- | --- |
 | [`oer-tools-analysis-riscv-model`](riscv-model/README.md) | Identities, errors, run control, working memory and the function-record vocabulary every layer shares |
 | [`oer-tools-analysis-riscv-decode`](riscv-decode/README.md) | Instruction bytes to typed instructions for a selected extension set |
-| [`oer-tools-analysis-riscv-lift`](riscv-lift/README.md) | Function decoding, relocation interpretation, instruction semantics and placement-independent listings |
+| [`oer-tools-analysis-riscv-lift`](riscv-lift/README.md) | Function decoding, relocation interpretation and instruction semantics |
 | [`oer-tools-analysis-riscv-analysis`](riscv-analysis/README.md) | The bounded control-flow and value analysis of one function |
 | [`oer-tools-analysis-riscv-program`](riscv-program/README.md) | The view of one static RV32 image: segments, image memory, code symbols and executable sections |
 | [`oer-tools-image-stack`](../image/stack/README.md) | Worst-case stack bounds of a static image; a consumer of the layer, not part of Blobray |

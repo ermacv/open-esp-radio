@@ -15,7 +15,7 @@ tools/
   regulatory/ `cargo regdb`: generate the regulatory domain tables from wireless-regdb
   registers/  the register model and its generation; cli/ is `cargo registers`
   probe/      probe code generation and macros
-  image/      the image pipeline: bundle format, build, checks, stack analysis, comparison, ESP-IDF; cli/ is `cargo fw`,
+  image/      the image pipeline: bundle format, build, checks, stack analysis, ESP-IDF; cli/ is `cargo fw`,
               linker/ the image linker rustc runs
   lab/        the stand: boards, leases, power, router, fixtures; cli/ is `cargo stand`,
               fixture/ the Linux fixture contract (a library), fixture-install/ the
