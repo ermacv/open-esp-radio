@@ -28,7 +28,7 @@ use crate::{
         parse_group_gtk_key_data, parse_gtk_key_data,
     },
     management_ccmp::ManagementCcmpReceiver,
-    sae::{SaeCommit, SaePasswordElement},
+    sae::{SaeCommit, SaeCommitSecret, SaePasswordElement},
 };
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_protocols_ieee80211_wire::sae::{SaeCommitValues, anti_clogging_token};
@@ -245,8 +245,18 @@ fn sae_peers() -> (SaeCommit, SaeCommit) {
     let pwe =
         SaePasswordElement::hunting_and_pecking(b"password", Eui48::new(a), Eui48::new(b)).unwrap();
     (
-        SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]).unwrap(),
-        SaeCommit::new(&pwe, [0x33; 32], [0x44; 32]).unwrap(),
+        SaeCommit::new(
+            &pwe,
+            &SaeCommitSecret::new([0x11; 32]),
+            &SaeCommitSecret::new([0x22; 32]),
+        )
+        .unwrap(),
+        SaeCommit::new(
+            &pwe,
+            &SaeCommitSecret::new([0x33; 32]),
+            &SaeCommitSecret::new([0x44; 32]),
+        )
+        .unwrap(),
     )
 }
 
@@ -397,7 +407,11 @@ fn constructors_refuse_what_the_views_rely_on() {
     let one = core::array::from_fn(|index| u8::from(index == 31));
     for rand in [[0; 32], one, [0xff; 32]] {
         assert!(matches!(
-            SaeCommit::new(&pwe, rand, [0x22; 32]),
+            SaeCommit::new(
+                &pwe,
+                &SaeCommitSecret::new(rand),
+                &SaeCommitSecret::new([0x22; 32])
+            ),
             Err(SaeError::UnsuitableRandom)
         ));
     }

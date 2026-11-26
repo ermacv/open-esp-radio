@@ -72,14 +72,14 @@ fn test_unwrap(
 /// Unwrap `wrapped` under `kek` in the software engine.
 #[cfg(test)]
 pub(crate) fn test_unwrap_bytes(
-    kek: &[u8; RSN_KEK_LEN],
+    kek: &Kek,
     wrapped: &[u8],
 ) -> Result<
     oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
     oer_portable_crypto::KeyUnwrapError,
 > {
     test_unwrap(oer_portable_crypto::KeyUnwrapRequest::new(
-        oer_portable_crypto::Aes128Key::copy_from(kek),
+        kek.request_key(),
         oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::try_copy(wrapped)
             .map_err(|_| oer_portable_crypto::KeyUnwrapError::InvalidLength)?,
     ))
@@ -106,12 +106,12 @@ pub mod eapol;
 
 pub(crate) use akm::AkmKeys;
 pub use akm::RSN_MIC_LEN;
+pub(crate) use crypto::RsnKeyConfirmationKey;
 pub use crypto::{
-    AssociationSecurityBinding, PSK_PASSPHRASE_MAX_LEN, PSK_PASSPHRASE_MIN_LEN,
+    AssociationSecurityBinding, Kck, Kek, PSK_PASSPHRASE_MAX_LEN, PSK_PASSPHRASE_MIN_LEN,
     PSK_PBKDF2_ITERATIONS, PSK_SSID_MAX_LEN, Pmk, PmkDerivation, PskDerivationError, Ptk,
     PtkContext, RSN_KCK_LEN, RSN_KEK_LEN, RSN_PTK_LEN,
 };
-pub(crate) use crypto::{RsnKeyConfirmationKey, RsnKeyEncryptionKey};
 pub use eapol::{
     DEFAULT_EAPOL_FRAME_CAPACITY, EapolCopyError, EapolKeyFrame, EapolKeyMessage, MicFailure,
     OwnedEapolFrame,

@@ -216,8 +216,8 @@ fn a_verified_message2_builds_message3_and_message4_authorizes() {
     ));
     assert!(handshake.authorization().is_ok());
     assert_eq!(
-        handshake.ptk().map(Ptk::temporal_key),
-        Some(ptk.temporal_key())
+        handshake.ptk().map(|ptk| ptk.temporal_key().as_bytes()),
+        Some(ptk.temporal_key().as_bytes())
     );
     assert_eq!(handshake.latest(), None);
     assert!(matches!(

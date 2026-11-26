@@ -550,7 +550,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         // the WPA3/PMF correctness of that snapshot is not.
         let igtk = self
             .igtk()
-            .map(|igtk| RsnIgtk::new(igtk.key_id(), management_ipn, igtk.key()));
+            .map(|igtk| igtk.with_packet_number(management_ipn));
         Ok(RsnPlainKeyData::build(
             elements,
             self.gtk()?,

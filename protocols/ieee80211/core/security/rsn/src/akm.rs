@@ -14,7 +14,7 @@ use oer_protocols_ieee80211_wire::security::rsn::Akm;
 use sha1::Sha1;
 use zeroize::Zeroize;
 
-use crate::{RSN_KCK_LEN, RSN_PTK_LEN};
+use crate::{Kck, Pmk};
 
 const PTK_EXPANSION_LABEL: &[u8] = b"Pairwise key expansion";
 
@@ -26,12 +26,12 @@ pub(crate) trait AkmKeys {
     /// Key Information descriptor version carried by every EAPOL-Key frame.
     fn key_descriptor_version(self) -> oer_portable_wire::U8<3>;
     /// Expand a PMK over the canonical address/nonce context into a PTK.
-    fn expand_ptk(self, pmk: &[u8; 32], context: &[u8; 76], output: &mut [u8; RSN_PTK_LEN]);
+    fn expand_ptk(self, pmk: &Pmk, context: &[u8; 76], output: &mut [[u8; 16]; 3]);
     /// Start the suite's EAPOL-Key MIC under `kck`. An AES-CMAC suite runs it
     /// on `engine`, which holds the KCK until the MIC is done.
     fn mic<'e, E: Aes128Engine>(
         self,
-        kck: &[u8; RSN_KCK_LEN],
+        kck: &Kck,
         engine: &'e mut E,
     ) -> Result<EapolMic<'e, E>, BlockError>;
 }
@@ -48,26 +48,24 @@ impl AkmKeys for Akm {
         }
     }
 
-    fn expand_ptk(self, pmk: &[u8; 32], context: &[u8; 76], output: &mut [u8; RSN_PTK_LEN]) {
+    fn expand_ptk(self, pmk: &Pmk, context: &[u8; 76], output: &mut [[u8; 16]; 3]) {
         match self {
             Self::Psk => prf_sha1(pmk, context, output),
             Self::PskSha256 | Self::Sae => {
-                crate::kdf::kdf_sha256(pmk, PTK_EXPANSION_LABEL, context, output);
+                crate::kdf::kdf_sha256(pmk.as_bytes(), PTK_EXPANSION_LABEL, context, output);
             }
         }
     }
 
     fn mic<'e, E: Aes128Engine>(
         self,
-        kck: &[u8; RSN_KCK_LEN],
+        kck: &Kck,
         engine: &'e mut E,
     ) -> Result<EapolMic<'e, E>, BlockError> {
         match self {
-            Self::Psk => Ok(EapolMic::HmacSha1(crate::mac::sha1(kck))),
+            Self::Psk => Ok(EapolMic::HmacSha1(crate::mac::sha1(kck.as_bytes()))),
             Self::PskSha256 | Self::Sae => {
-                let key = oer_portable_crypto::Aes128Key::copy_from(kck);
-                let keyed = engine.load(&key)?;
-                drop(key);
+                let keyed = engine.load(kck.aes_key())?;
                 Ok(EapolMic::AesCmac(Cmac::new(keyed)?))
             }
         }
@@ -117,15 +115,15 @@ impl<'e, E: Aes128Engine + 'e> EapolMic<'e, E> {
 }
 
 /// IEEE 802.11 PRF-384 with HMAC-SHA1 and the pairwise expansion label.
-fn prf_sha1(pmk: &[u8; 32], context: &[u8; 76], ptk: &mut [u8; RSN_PTK_LEN]) {
+fn prf_sha1(pmk: &Pmk, context: &[u8; 76], ptk: &mut [[u8; 16]; 3]) {
     const {
-        if !(3 * 20 >= RSN_PTK_LEN && 2 * 20 < RSN_PTK_LEN) {
+        if !(3 * 20 >= crate::RSN_PTK_LEN && 2 * 20 < crate::RSN_PTK_LEN) {
             panic!("PRF-384 SHA-1 block geometry");
         }
     }
-    let mut remaining = ptk.iter_mut();
+    let mut remaining = ptk.as_flattened_mut().iter_mut();
     for counter in 0_u8..3 {
-        let mut mac = crate::mac::sha1(pmk);
+        let mut mac = crate::mac::sha1(pmk.as_bytes());
         mac.update(PTK_EXPANSION_LABEL);
         mac.update(&[0]);
         mac.update(context);
@@ -152,9 +150,9 @@ mod tests {
     use crate::test_engine::Refusing;
     use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 
-    fn expanded(akm: Akm, pmk: &[u8; 32], context: &[u8; 76]) -> [u8; RSN_PTK_LEN] {
-        let mut bytes = [0; RSN_PTK_LEN];
-        akm.expand_ptk(pmk, context, &mut bytes);
+    fn expanded(akm: Akm, pmk: &[u8; 32], context: &[u8; 76]) -> [[u8; 16]; 3] {
+        let mut bytes = [[0; 16]; 3];
+        akm.expand_ptk(&Pmk::from_bytes(*pmk), context, &mut bytes);
         bytes
     }
 
@@ -207,7 +205,7 @@ mod tests {
 
     #[test]
     fn mic_verification_accepts_only_the_finalized_value() {
-        let kck = [7; RSN_KCK_LEN];
+        let kck = Kck::copy_from(&[7; 16]);
         for akm in [Akm::Psk, Akm::PskSha256, Akm::Sae] {
             let engine = &mut SoftwareAes128;
             let mut mic = akm.mic(&kck, engine).unwrap();
@@ -224,7 +222,7 @@ mod tests {
 
     #[test]
     fn an_aes_cmac_mic_returns_the_engines_refusal_and_hmac_needs_no_engine() {
-        let kck = [7; RSN_KCK_LEN];
+        let kck = Kck::copy_from(&[7; 16]);
         for akm in [Akm::PskSha256, Akm::Sae] {
             assert_eq!(
                 akm.mic(&kck, &mut Refusing).err(),
@@ -248,12 +246,17 @@ mod tests {
             0x11, 0xfa, 0x6b, 0x7b, 0x86, 0xea, 0xca, 0xbc, 0x7a, 0xde, 0xcc, 0x4a, 0xe7, 0xd5,
             0x81, 0xc5, 0xac, 0xb1, 0x5c, 0xf9,
         ];
-        assert_eq!(expanded(Akm::PskSha256, &pmk, &context), expected);
+        assert_eq!(
+            expanded(Akm::PskSha256, &pmk, &context).as_flattened(),
+            expected
+        );
         assert_eq!(Akm::PskSha256.key_descriptor_version().get(), 3);
 
         // Computed independently with Python's cryptography CMAC.
         let mut engine = SoftwareAes128;
-        let mut mic = Akm::PskSha256.mic(&[7; RSN_KCK_LEN], &mut engine).unwrap();
+        let mut mic = Akm::PskSha256
+            .mic(&Kck::copy_from(&[7; 16]), &mut engine)
+            .unwrap();
         mic.update(b"eapol-frame-bytes").unwrap();
         assert_eq!(
             mic.finalize().unwrap(),
@@ -288,10 +291,12 @@ mod tests {
             expanded(Akm::PskSha256, &pmk, &context)
         );
         let engine = &mut SoftwareAes128;
-        let mut sae = Akm::Sae.mic(&[7; RSN_KCK_LEN], engine).unwrap();
+        let mut sae = Akm::Sae.mic(&Kck::copy_from(&[7; 16]), engine).unwrap();
         sae.update(b"eapol-frame-bytes").unwrap();
         let sae = sae.finalize().unwrap();
-        let mut psk_sha256 = Akm::PskSha256.mic(&[7; RSN_KCK_LEN], engine).unwrap();
+        let mut psk_sha256 = Akm::PskSha256
+            .mic(&Kck::copy_from(&[7; 16]), engine)
+            .unwrap();
         psk_sha256.update(b"eapol-frame-bytes").unwrap();
         assert_eq!(sae, psk_sha256.finalize().unwrap());
     }

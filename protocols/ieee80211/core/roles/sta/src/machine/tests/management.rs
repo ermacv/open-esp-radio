@@ -304,11 +304,7 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
         oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation::new(
             oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         )
-        .seal(
-            &mut SoftwareAes128,
-            &Ccmp128Key::new(ptk.temporal_key()),
-            &mut request,
-        )
+        .seal(&mut SoftwareAes128, ptk.temporal_key(), &mut request)
         .unwrap();
         let mut damaged = request.clone();
         *damaged.last_mut().unwrap() ^= 1;

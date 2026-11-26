@@ -3,6 +3,8 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use super::*;
+use oer_portable_crypto::Aes128Key;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::bip::IgtkKeyId;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 use oer_protocols_ieee80211_wire::eapol::{
@@ -18,19 +20,17 @@ pub struct RsnGtk {
     key_id: GroupKeyId,
     #[zeroize(skip)]
     tx: GtkTx,
-    key: [u8; RSN_GTK_LEN],
+    key: Ccmp128Key,
 }
 
 impl RsnGtk {
     /// Copy borrowed key data straight into its zeroizing protocol owner.
-    pub fn new(key_id: GroupKeyId, tx: GtkTx, key: &[u8; RSN_GTK_LEN]) -> Self {
-        let mut gtk = Self {
+    pub const fn new(key_id: GroupKeyId, tx: GtkTx, key: &[u8; RSN_GTK_LEN]) -> Self {
+        Self {
             key_id,
             tx,
-            key: [0; RSN_GTK_LEN],
-        };
-        gtk.key = *key;
-        gtk
+            key: Ccmp128Key::new(key),
+        }
     }
 
     pub const fn key_id(&self) -> GroupKeyId {
@@ -42,8 +42,45 @@ impl RsnGtk {
         self.tx
     }
 
-    pub const fn key(&self) -> &[u8; RSN_GTK_LEN] {
+    /// The GTK, a CCMP-128 temporal key, lent.
+    pub const fn key(&self) -> &Ccmp128Key {
         &self.key
+    }
+
+    /// A second owner of the GTK, for its installation.
+    pub const fn install_key(&self) -> Ccmp128Key {
+        Ccmp128Key::new(self.key.as_bytes())
+    }
+}
+
+/// The integrity group temporal key (IGTK, IEEE Std 802.11-2020, 12.7.1.5):
+/// the BIP-CMAC-128 key of group-addressed management frames alone.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct Igtk(Aes128Key);
+
+impl Igtk {
+    const fn copy_from(bytes: &[u8; RSN_IGTK_LEN]) -> Self {
+        Self(Aes128Key::copy_from(bytes))
+    }
+
+    /// Lend the key's octets, for its IGTK KDE.
+    pub const fn as_bytes(&self) -> &[u8; RSN_IGTK_LEN] {
+        self.0.as_bytes()
+    }
+
+    /// Lend the key to an AES-128 engine.
+    pub const fn aes_key(&self) -> &Aes128Key {
+        &self.0
+    }
+
+    /// A second zeroizing owner of the same key, for a BIP owner.
+    pub(crate) const fn second_owner(&self) -> Self {
+        Self::copy_from(self.0.as_bytes())
+    }
+
+    /// Whether `other` holds the same key.
+    pub(crate) fn same_as(&self, other: &Self) -> bool {
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -56,22 +93,34 @@ pub struct RsnIgtk {
     #[zeroize(skip)]
     key_id: IgtkKeyId,
     packet_number: [u8; RSN_IPN_LEN],
-    key: [u8; RSN_IGTK_LEN],
+    key: Igtk,
 }
 
 impl RsnIgtk {
-    pub fn new(
+    pub const fn new(
         key_id: IgtkKeyId,
         packet_number: [u8; RSN_IPN_LEN],
         key: &[u8; RSN_IGTK_LEN],
     ) -> Self {
-        let mut igtk = Self {
+        Self {
             key_id,
             packet_number,
-            key: [0; RSN_IGTK_LEN],
-        };
-        igtk.key = *key;
-        igtk
+            key: Igtk::copy_from(key),
+        }
+    }
+
+    /// The same IGTK announced with another IPN: a second owner of its key.
+    pub const fn with_packet_number(&self, packet_number: [u8; RSN_IPN_LEN]) -> Self {
+        Self {
+            key_id: self.key_id,
+            packet_number,
+            key: self.key.second_owner(),
+        }
+    }
+
+    /// Announce this IGTK with another IPN from now on.
+    pub const fn set_packet_number(&mut self, packet_number: [u8; RSN_IPN_LEN]) {
+        self.packet_number = packet_number;
     }
 
     pub const fn key_id(&self) -> IgtkKeyId {
@@ -83,7 +132,7 @@ impl RsnIgtk {
         self.packet_number
     }
 
-    pub const fn key(&self) -> &[u8; RSN_IGTK_LEN] {
+    pub const fn key(&self) -> &Igtk {
         &self.key
     }
 }
@@ -136,7 +185,7 @@ impl<const N: usize> RsnPlainKeyData<N> {
             .ok_or(RsnFrameError::CapacityExceeded)?;
         *gtk_kde = GtkKde {
             info: GtkKdeInfo::new(gtk.key_id).with_tx(gtk.tx),
-            key: gtk.key(),
+            key: gtk.key().as_bytes(),
         }
         .encode();
         let padding_bytes = match igtk {
@@ -147,7 +196,7 @@ impl<const N: usize> RsnPlainKeyData<N> {
                 *igtk_kde = IgtkKde {
                     key_id: igtk.key_id().field(),
                     packet_number: igtk.packet_number(),
-                    key: igtk.key(),
+                    key: igtk.key().as_bytes(),
                 }
                 .encode();
                 rest

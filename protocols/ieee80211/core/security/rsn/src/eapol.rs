@@ -3,7 +3,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::AkmKeys;
-use crate::{Akm, Ptk, RSN_KCK_LEN, RsnInterface, RsnKeyConfirmationKey};
+use crate::{Akm, Kck, Ptk, RsnInterface, RsnKeyConfirmationKey};
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::{EapolKey, EapolParseError, KeyInformation};
@@ -150,13 +150,13 @@ impl<'a> EapolKeyFrame<'a> {
         key: &RsnKeyConfirmationKey,
         engine: &mut E,
     ) -> Result<bool, BlockError> {
-        self.verify_mic_with_kck(key.akm(), key.as_bytes(), engine)
+        self.verify_mic_with_kck(key.akm(), key.kck(), engine)
     }
 
     fn verify_mic_with_kck<E: Aes128Engine>(
         self,
         akm: Akm,
-        kck: &[u8; RSN_KCK_LEN],
+        kck: &Kck,
         engine: &mut E,
     ) -> Result<bool, BlockError> {
         let mut mac = akm.mic(kck, engine)?;

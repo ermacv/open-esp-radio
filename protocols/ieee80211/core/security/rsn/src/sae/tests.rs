@@ -28,7 +28,12 @@ fn hunting_and_pecking_matches_annex_j10() {
     let pwe =
         SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(ADDR1), Eui48::new(ADDR2))
             .unwrap();
-    let commit = SaeCommit::new(&pwe, hex(LOCAL_RAND), hex(LOCAL_MASK)).unwrap();
+    let commit = SaeCommit::new(
+        &pwe,
+        &SaeCommitSecret::new(hex(LOCAL_RAND)),
+        &SaeCommitSecret::new(hex(LOCAL_MASK)),
+    )
+    .unwrap();
     let mut body = [0; SAE_COMMIT_LEN];
     assert_eq!(
         commit.values().encode(
@@ -45,8 +50,8 @@ fn hunting_and_pecking_matches_annex_j10() {
     )
     .unwrap();
     let keys = commit.process(peer).unwrap();
-    assert_eq!(keys.kck, hex(KCK));
-    assert_eq!(keys.pmk, hex(PMK));
+    assert_eq!(keys.kck.0, hex(KCK));
+    assert_eq!(keys.pmk.as_bytes(), &hex(PMK));
     assert_eq!(keys.pmkid, hex(PMKID));
 }
 
@@ -65,8 +70,18 @@ fn hash_to_element_matches_annex_j10() {
 }
 
 fn peers(derive: impl Fn([u8; 6], [u8; 6]) -> SaePasswordElement) -> (SaeKeys, SaeKeys) {
-    let station = SaeCommit::new(&derive(ADDR1, ADDR2), [0x11; 32], [0x22; 32]).unwrap();
-    let access_point = SaeCommit::new(&derive(ADDR2, ADDR1), [0x33; 32], [0x44; 32]).unwrap();
+    let station = SaeCommit::new(
+        &derive(ADDR1, ADDR2),
+        &SaeCommitSecret::new([0x11; 32]),
+        &SaeCommitSecret::new([0x22; 32]),
+    )
+    .unwrap();
+    let access_point = SaeCommit::new(
+        &derive(ADDR2, ADDR1),
+        &SaeCommitSecret::new([0x33; 32]),
+        &SaeCommitSecret::new([0x44; 32]),
+    )
+    .unwrap();
     (
         station.process(access_point.values()).unwrap(),
         access_point.process(station.values()).unwrap(),
@@ -86,7 +101,7 @@ fn both_peers_derive_one_pmk_and_verify_each_confirm() {
                 .password_element(Eui48::new(local), Eui48::new(peer))
         }),
     ] {
-        assert_eq!(station.pmk, access_point.pmk);
+        assert_eq!(station.pmk.as_bytes(), access_point.pmk.as_bytes());
         assert_eq!(station.pmkid, access_point.pmkid);
         assert_eq!(
             access_point.verify_peer_confirm(&station.own_confirm(1)),
@@ -110,8 +125,8 @@ fn a_wrong_password_fails_the_confirm() {
     let station = SaeCommit::new(
         &SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(ADDR1), Eui48::new(ADDR2))
             .unwrap(),
-        [0x11; 32],
-        [0x22; 32],
+        &SaeCommitSecret::new([0x11; 32]),
+        &SaeCommitSecret::new([0x22; 32]),
     )
     .unwrap();
     let access_point = SaeCommit::new(
@@ -121,8 +136,8 @@ fn a_wrong_password_fails_the_confirm() {
             Eui48::new(ADDR1),
         )
         .unwrap(),
-        [0x33; 32],
-        [0x44; 32],
+        &SaeCommitSecret::new([0x33; 32]),
+        &SaeCommitSecret::new([0x44; 32]),
     )
     .unwrap();
     let station_keys = station.process(access_point.values()).unwrap();
@@ -138,9 +153,28 @@ fn invalid_commits_are_refused() {
     let pwe =
         SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(ADDR1), Eui48::new(ADDR2))
             .unwrap();
-    assert!(SaeCommit::new(&pwe, [0; 32], [0x22; 32]).is_err());
-    assert!(SaeCommit::new(&pwe, [0xff; 32], [0x22; 32]).is_err());
-    let commit = SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]).unwrap();
+    assert!(
+        SaeCommit::new(
+            &pwe,
+            &SaeCommitSecret::new([0; 32]),
+            &SaeCommitSecret::new([0x22; 32])
+        )
+        .is_err()
+    );
+    assert!(
+        SaeCommit::new(
+            &pwe,
+            &SaeCommitSecret::new([0xff; 32]),
+            &SaeCommitSecret::new([0x22; 32])
+        )
+        .is_err()
+    );
+    let commit = SaeCommit::new(
+        &pwe,
+        &SaeCommitSecret::new([0x11; 32]),
+        &SaeCommitSecret::new([0x22; 32]),
+    )
+    .unwrap();
     assert_eq!(
         commit.process(commit.values()).err(),
         Some(SaeError::Reflection)
@@ -192,7 +226,7 @@ fn secret_owners_wipe_and_redact_debug() {
     assert_eq!(std::format!("{keys:?}"), "SaeKeys(<redacted>)");
     keys.zeroize();
     assert_eq!(keys.kck(), &[0; SAE_KEY_LEN]);
-    assert_eq!(keys.pmk(), &[0; SAE_KEY_LEN]);
+    assert_eq!(keys.pmk().as_bytes(), &[0; SAE_KEY_LEN]);
     assert_eq!(keys.pmkid().octets(), &[0; RSN_PMKID_LEN]);
 }
 
@@ -203,7 +237,11 @@ fn a_wiped_password_element_cannot_panic_when_reused_for_a_commit() {
         .password_element(Eui48::new(ADDR1), Eui48::new(ADDR2));
     pwe.zeroize();
     assert!(matches!(
-        SaeCommit::new(&pwe, [0x11; 32], [0x22; 32]),
+        SaeCommit::new(
+            &pwe,
+            &SaeCommitSecret::new([0x11; 32]),
+            &SaeCommitSecret::new([0x22; 32])
+        ),
         Err(SaeError::InfiniteSecret)
     ));
 }
@@ -257,4 +295,15 @@ fn invalid_curve_coordinates_keep_their_validity_bit() {
     ] {
         assert!(bool::from(sswu(&value).is_some()));
     }
+}
+
+/// A commit's random number is erased by its owner: the array it was given
+/// by value before was never erased.
+#[test]
+fn a_commit_secret_erases_its_octets() {
+    let mut secret = SaeCommitSecret::new([0x11; 32]);
+    secret.octets_mut()[0] = 0x12;
+    assert_eq!(secret.0[0], 0x12);
+    secret.zeroize();
+    assert_eq!(secret.0, [0; 32]);
 }

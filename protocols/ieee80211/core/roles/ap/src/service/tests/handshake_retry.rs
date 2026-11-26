@@ -332,7 +332,8 @@ fn a_retried_message4_under_the_new_ptk_is_readable_while_the_port_is_closed() {
     station.on_message3(&message3).unwrap();
     let retry = retried_message3(&mut service, &gtk);
     let message4 = station.on_message3(&retry).unwrap().frame;
-    let (mut mpdu, length) = protected_eapol(station.ptk.temporal_key(), message4.as_bytes());
+    let (mut mpdu, length) =
+        protected_eapol(station.ptk.temporal_key().as_bytes(), message4.as_bytes());
 
     // Before Message 4 the controlled port is closed: no data is admitted,
     // yet the key that opens the station's protected EAPOL is available.
@@ -341,7 +342,7 @@ fn a_retried_message4_under_the_new_ptk_is_readable_while_the_port_is_closed() {
         service.admit_downlink(PEER).err(),
         Some(ApServiceError::WrongPeerPhase)
     );
-    let temporal_key = Ccmp128Key::new(service.pending_ptk(PEER).unwrap().temporal_key());
+    let temporal_key = service.pending_ptk(PEER).unwrap().install_key();
     let body = CcmpAssociation::new(Spp::NotNegotiated)
         .open(&mut SoftwareAes128, &temporal_key, &mut mpdu[..length])
         .unwrap();

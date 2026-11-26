@@ -22,7 +22,7 @@ use crate::{
 };
 use crate::{AkmKeys, MicFailure};
 use oer_portable_crypto::{
-    Aes128Key, KeyData, KeyWrapRequest,
+    KeyData, KeyWrapRequest,
     block::{Aes128Engine, BlockError, wrap_now},
     rfc3394::KeyWrapError,
 };
@@ -629,7 +629,7 @@ fn message3<const N: usize, const K: usize, E: Aes128Engine>(
         .map_err(|_| Message3Failure::Wrap(KeyWrapError::CapacityExceeded))?;
     let wrapped = wrap_now(
         engine,
-        KeyWrapRequest::new(Aes128Key::copy_from(ptk.kek()), plaintext),
+        KeyWrapRequest::new(ptk.kek().request_key(), plaintext),
     )
     .into_wrapped()
     .map_err(Message3Failure::Wrap)?;

@@ -11,7 +11,7 @@
 //!
 //! Received frames reach [`BipReceiver::verify`]; nothing here panics on them.
 
-use crate::frames::{RSN_IGTK_LEN, RSN_IPN_LEN, RsnIgtk};
+use crate::frames::{Igtk, RSN_IPN_LEN, RsnIgtk};
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
 use oer_protocols_ieee80211_core_security_cipher::bip::{
     self, BipError, BipFrame, BipProtectError,
@@ -47,7 +47,7 @@ pub struct BipReceiver {
     /// Public: only the key material needs erasure.
     #[zeroize(skip)]
     key_id: IgtkKeyId,
-    key: [u8; RSN_IGTK_LEN],
+    key: Igtk,
     /// IPNs are public; only the key material needs erasure.
     #[zeroize(skip)]
     replay: PacketNumberFrontier<BipPacketNumber>,
@@ -58,7 +58,7 @@ impl BipReceiver {
     pub fn new(igtk: &RsnIgtk) -> Self {
         Self {
             key_id: igtk.key_id(),
-            key: *igtk.key(),
+            key: igtk.key().second_owner(),
             replay: PacketNumberFrontier::new(BipPacketNumber::from_bytes(igtk.packet_number())),
         }
     }
@@ -72,7 +72,7 @@ impl BipReceiver {
     /// key never reopens packet numbers already accepted.
     pub fn rekey(&mut self, igtk: &RsnIgtk) {
         let delivered = BipPacketNumber::from_bytes(igtk.packet_number());
-        if igtk.key_id() == self.key_id && *igtk.key() == self.key {
+        if igtk.key_id() == self.key_id && igtk.key().same_as(&self.key) {
             if let Ok(candidate) = self.replay.prepare(delivered) {
                 candidate.commit();
             }
@@ -96,7 +96,7 @@ impl BipReceiver {
             .replay
             .prepare(received)
             .map_err(|_| BipReceiveError::Replay)?;
-        frame.verify(engine, &self.key)?;
+        frame.verify(engine, self.key.aes_key())?;
         candidate.commit();
         Ok(())
     }
@@ -122,7 +122,7 @@ pub struct BipTransmitter {
     /// Public: only the key material needs erasure.
     #[zeroize(skip)]
     key_id: IgtkKeyId,
-    key: [u8; RSN_IGTK_LEN],
+    key: Igtk,
     /// The last successfully protected IPN, kept in its bounded domain.
     #[zeroize(skip)]
     packet_numbers: PacketNumberFrontier<BipPacketNumber>,
@@ -146,7 +146,7 @@ impl BipTransmitter {
     pub fn new(igtk: &RsnIgtk) -> Self {
         Self {
             key_id: igtk.key_id(),
-            key: *igtk.key(),
+            key: igtk.key().second_owner(),
             packet_numbers: PacketNumberFrontier::new(BipPacketNumber::from_bytes(
                 igtk.packet_number(),
             )),
@@ -173,7 +173,7 @@ impl BipTransmitter {
         let protected = bip::protect(
             engine,
             self.key_id,
-            &self.key,
+            self.key.aes_key(),
             candidate.packet_number().0,
             frame,
             length,

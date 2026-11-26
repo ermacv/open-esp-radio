@@ -9,8 +9,6 @@ use oer_protocols_ieee80211_wire::bip::IgtkKeyId;
 use oer_protocols_ieee80211_wire::bip::{BIP_MIC_LEN, BipFormatError, BipProtection};
 use zeroize::Zeroize;
 
-const RSN_IGTK_LEN: usize = 16;
-
 /// Why a group-addressed management frame failed BIP.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BipError {
@@ -63,14 +61,8 @@ impl<'a> BipFrame<'a> {
         self.0.packet_number()
     }
 
-    pub fn verify<E: Aes128Engine>(
-        self,
-        engine: &mut E,
-        key: &[u8; RSN_IGTK_LEN],
-    ) -> Result<(), BipError> {
-        let key = Aes128Key::copy_from(key);
-        let keyed = engine.load(&key).map_err(BipError::Engine)?;
-        drop(key);
+    pub fn verify<E: Aes128Engine>(self, engine: &mut E, key: &Aes128Key) -> Result<(), BipError> {
+        let keyed = engine.load(key).map_err(BipError::Engine)?;
         let mut mac = Cmac::new(keyed).map_err(BipError::Engine)?;
         for part in self.0.mic_input() {
             mac.update(part).map_err(BipError::Engine)?;
@@ -90,16 +82,14 @@ impl<'a> BipFrame<'a> {
 pub fn protect<E: Aes128Engine>(
     engine: &mut E,
     key_id: IgtkKeyId,
-    key: &[u8; RSN_IGTK_LEN],
+    key: &Aes128Key,
     packet_number: oer_portable_wire::U64<48>,
     frame: &mut [u8],
     length: usize,
 ) -> Result<usize, BipProtectError> {
     let protection = BipProtection::append(frame, length, key_id, packet_number)
         .map_err(|_| BipProtectError::InvalidFrame)?;
-    let key = Aes128Key::copy_from(key);
-    let keyed = engine.load(&key).map_err(BipProtectError::Engine)?;
-    drop(key);
+    let keyed = engine.load(key).map_err(BipProtectError::Engine)?;
     let mut mac = Cmac::new(keyed).map_err(BipProtectError::Engine)?;
     for part in protection.mic_input() {
         mac.update(part).map_err(BipProtectError::Engine)?;

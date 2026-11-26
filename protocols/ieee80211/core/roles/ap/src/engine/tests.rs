@@ -615,8 +615,10 @@ mod handshake {
         assert_eq!(address.get(), Eui48::new(PEER));
         assert_eq!(
             key.as_bytes(),
-            oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(ptk().temporal_key())
-                .as_bytes()
+            oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(
+                ptk().temporal_key().as_bytes()
+            )
+            .as_bytes()
         );
         // The port stays closed before the key is in.
         assert!(engine.authorize(PEER, at(11)).is_err());

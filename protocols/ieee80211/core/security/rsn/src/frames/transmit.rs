@@ -322,14 +322,14 @@ impl<const N: usize> RsnTxFrame<N> {
         key: &RsnKeyConfirmationKey,
         engine: &mut E,
     ) -> Result<Self, BlockError> {
-        self.authenticate_with_kck(key.akm(), key.as_bytes(), engine)?;
+        self.authenticate_with_kck(key.akm(), key.kck(), engine)?;
         Ok(self)
     }
 
     fn authenticate_with_kck<E: Aes128Engine>(
         &mut self,
         akm: Akm,
-        kck: &[u8; RSN_KCK_LEN],
+        kck: &Kck,
         engine: &mut E,
     ) -> Result<(), BlockError> {
         self.set_mic(&[0; RSN_MIC_LEN]);

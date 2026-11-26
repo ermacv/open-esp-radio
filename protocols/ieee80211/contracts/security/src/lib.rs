@@ -11,7 +11,8 @@
 /// The affine CCMP-128 temporal-key owner shared by RSN and lower-MAC.
 ///
 /// Installation moves this owner through the command FIFO into the backend.
-/// Hardware programming and software CCMP borrow its bytes; there is no
+/// Hardware programming borrows its bytes and software CCMP its AES-128
+/// key (`oer_portable_crypto::Aes128Key`, held inside); there is no
 /// cloning or owned byte-extraction API, and `Debug` redacts the material.
 /// The byte owner needs no C layout or word alignment: backends encode the
 /// borrowed octets into register words instead of casting this object.
@@ -23,25 +24,29 @@
 #[derive(zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 #[must_use]
 pub struct Ccmp128Key {
-    bytes: [u8; 16],
+    key: oer_portable_crypto::Aes128Key,
 }
 
 impl Ccmp128Key {
     /// Copy borrowed material directly into a zeroizing owner, without a
     /// by-value array argument or an unowned intermediate array. The source
     /// must itself have a zeroizing owner (PTK, GTK or a derivation buffer).
-    pub fn new(bytes: &[u8; 16]) -> Self {
-        let mut key = Self { bytes: [0; 16] };
-        for (to, from) in key.bytes.iter_mut().zip(bytes) {
-            *to = *from;
+    pub const fn new(bytes: &[u8; 16]) -> Self {
+        Self {
+            key: oer_portable_crypto::Aes128Key::copy_from(bytes),
         }
-        key
     }
 
     /// Lend material for hardware programming or software CCMP. The owner
     /// remains live while this view is borrowed.
     pub const fn as_bytes(&self) -> &[u8; 16] {
-        &self.bytes
+        self.key.as_bytes()
+    }
+
+    /// Lend the key to an AES-128 engine for software CCMP, without a copy
+    /// a frame.
+    pub const fn aes_key(&self) -> &oer_portable_crypto::Aes128Key {
+        &self.key
     }
 }
 

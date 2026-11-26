@@ -106,7 +106,12 @@ fn commit(world: &mut World<'_>, pwe: SaePwe, now: u32) -> SaeKeys {
         )
         .unwrap(),
     };
-    let peer = SaeCommit::new(&element, [0x40; 32], [0x41; 32]).unwrap();
+    let peer = SaeCommit::new(
+        &element,
+        &SaeCommitSecret::new([0x40; 32]),
+        &SaeCommitSecret::new([0x41; 32]),
+    )
+    .unwrap();
     let keys = peer.process(station).unwrap();
     let mut body = [0; oer_protocols_ieee80211_wire::sae::SAE_COMMIT_LEN];
     let length = peer.values().encode(None, pwe, &mut body).unwrap();
@@ -238,7 +243,7 @@ fn a_refused_message4_mic_ends_the_handshake_and_removes_its_keys() {
         let beacon = advertised(Transition::SaeOnly, SaePwe::HuntingAndPecking);
         begin(&mut world, &beacon, 0, 91);
         let keys = authenticate(&mut world, SaePwe::HuntingAndPecking, 30);
-        let pmk = Pmk::from_bytes(*keys.pmk());
+        let pmk = keys.pmk().duplicate();
         let (_, message3) = handshake_message3(&mut world, &beacon, Akm::Sae, &pmk, 32);
         let eapol = world.eapol.len();
         world.switches.on(Switch::HoldKeyInstalls);
@@ -320,7 +325,7 @@ fn wire_peer_connects_sae_only_transition_and_resumes_pmksa() {
                         0, 0x0f, 0xac, 2
                     ])
                 ));
-                let pmk = Pmk::from_bytes(*keys.pmk());
+                let pmk = keys.pmk().duplicate();
                 finish_handshake(&mut world, &beacon, Akm::Sae, &pmk, 32);
                 world.command(at(40), 92, StaCommand::Disconnect).unwrap();
                 world.run(at(40));

@@ -2,7 +2,7 @@ use super::*;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::security::SaePwe;
 
-use oer_protocols_ieee80211_core_security_rsn::sae::SaePasswordElement;
+use oer_protocols_ieee80211_core_security_rsn::sae::{SaeCommitSecret, SaePasswordElement};
 use std::vec::Vec;
 
 const LOCAL: [u8; 6] = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
@@ -13,8 +13,8 @@ fn commit(local: [u8; 6], peer: [u8; 6], seed: u8) -> SaeCommit {
     SaeCommit::new(
         &SaePasswordElement::hunting_and_pecking(PASSWORD, Eui48::new(local), Eui48::new(peer))
             .unwrap(),
-        [seed; 32],
-        [seed + 1; 32],
+        &SaeCommitSecret::new([seed; 32]),
+        &SaeCommitSecret::new([seed + 1; 32]),
     )
     .unwrap()
 }
@@ -102,7 +102,7 @@ fn a_full_exchange_yields_the_access_point_pmk() {
     assert!(
         keys.pmk
             .bind_association_security_ies(b"sae")
-            .matches(&Pmk::from_bytes(*peer.pmk()), b"sae")
+            .matches(peer.pmk(), b"sae")
     );
 }
 
@@ -164,8 +164,8 @@ fn a_wrong_password_or_a_refusal_fails() {
     let impostor = SaeCommit::new(
         &SaePasswordElement::hunting_and_pecking(b"wrong", Eui48::new(BSSID), Eui48::new(LOCAL))
             .unwrap(),
-        [0x40; 32],
-        [0x41; 32],
+        &SaeCommitSecret::new([0x40; 32]),
+        &SaeCommitSecret::new([0x41; 32]),
     )
     .unwrap();
     let values = SaeCommitValues::parse(

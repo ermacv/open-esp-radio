@@ -37,6 +37,7 @@ use p256::{
 };
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::Pmk;
 use crate::kdf::kdf_sha256;
 
 /// Octets of the KCK and of the PMK of group 19.
@@ -233,7 +234,12 @@ impl SaePasswordElement {
         for counter in 1..=MAXIMUM_PWE_ITERATIONS {
             let mut seed = hmac_sha256(&key, &[password, &[counter]]);
             let mut value = [0_u8; SAE_PRIME_LEN];
-            kdf_sha256(&seed, b"SAE Hunting and Pecking", &prime, &mut value);
+            kdf_sha256(
+                &seed,
+                b"SAE Hunting and Pecking",
+                &prime,
+                core::array::from_mut(&mut value),
+            );
             let candidate = FieldElement::from_bytes(&FieldBytes::from(value));
             let on_curve = candidate.is_some()
                 & candidate
@@ -437,11 +443,33 @@ pub struct SaeCommit {
     own: SaeCommitValues,
 }
 
+/// One of the two random numbers of a commit, `rand` or `mask` (IEEE Std
+/// 802.11-2020, 12.4.5.3), owned until the commit takes it: erased on drop.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct SaeCommitSecret([u8; SAE_PRIME_LEN]);
+
+impl SaeCommitSecret {
+    /// A secret of the given octets, drawn by the caller.
+    pub const fn new(octets: [u8; SAE_PRIME_LEN]) -> Self {
+        Self(octets)
+    }
+
+    /// The octets, for a random source to draw into in place.
+    pub const fn octets_mut(&mut self) -> &mut [u8; SAE_PRIME_LEN] {
+        &mut self.0
+    }
+}
+
+/// The key confirmation key of SAE (IEEE Std 802.11-2020, 12.4.5.4): the
+/// key of the Confirm field alone.
+#[derive(Zeroize, ZeroizeOnDrop)]
+struct SaeKck([u8; SAE_KEY_LEN]);
+
 /// The keys an accepted commit exchange derives.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SaeKeys {
-    kck: [u8; SAE_KEY_LEN],
-    pmk: [u8; SAE_KEY_LEN],
+    kck: SaeKck,
+    pmk: Pmk,
     pmkid: [u8; RSN_PMKID_LEN],
     #[zeroize(skip)]
     own: SaeCommitValues,
@@ -454,10 +482,10 @@ impl SaeCommit {
     /// by the caller; the scalar (rand + mask) mod r must exceed 1.
     pub fn new(
         pwe: &SaePasswordElement,
-        rand: [u8; SAE_PRIME_LEN],
-        mask: [u8; SAE_PRIME_LEN],
+        rand: &SaeCommitSecret,
+        mask: &SaeCommitSecret,
     ) -> Result<Self, SaeError> {
-        let (Some(rand_scalar), Some(mask_scalar)) = (scalar_from(&rand), scalar_from(&mask))
+        let (Some(rand_scalar), Some(mask_scalar)) = (scalar_from(&rand.0), scalar_from(&mask.0))
         else {
             return Err(SaeError::UnsuitableRandom);
         };
@@ -519,19 +547,17 @@ impl SaeCommit {
                 panic!("SAE derived key geometry");
             }
         }
-        let mut keys = [0_u8; 64];
+        let mut keys = [[0_u8; SAE_KEY_LEN]; 2];
         kdf_sha256(&keyseed, b"SAE KCK and PMK", &context, &mut keys);
         keyseed.zeroize();
+        let [kck, pmk] = &keys;
         let mut derived = SaeKeys {
-            kck: [0; SAE_KEY_LEN],
-            pmk: [0; SAE_KEY_LEN],
+            kck: SaeKck(*kck),
+            pmk: Pmk::copy_from(pmk),
             pmkid: [0; RSN_PMKID_LEN],
             own: self.own,
             peer,
         };
-        for (target, source) in derived.kck.iter_mut().chain(&mut derived.pmk).zip(&keys) {
-            *target = *source;
-        }
         for (target, source) in derived.pmkid.iter_mut().zip(&context) {
             *target = *source;
         }
@@ -541,10 +567,11 @@ impl SaeCommit {
 }
 
 impl SaeKeys {
-    pub const fn kck(&self) -> &[u8; SAE_KEY_LEN] {
-        &self.kck
+    #[cfg(test)]
+    pub(crate) const fn kck(&self) -> &[u8; SAE_KEY_LEN] {
+        &self.kck.0
     }
-    pub const fn pmk(&self) -> &[u8; SAE_KEY_LEN] {
+    pub const fn pmk(&self) -> &Pmk {
         &self.pmk
     }
     pub const fn pmkid(&self) -> Pmkid {
@@ -558,7 +585,7 @@ impl SaeKeys {
         second: &SaeCommitValues,
     ) -> [u8; 32] {
         hmac_sha256(
-            &self.kck,
+            &self.kck.0,
             &[
                 &oer_protocols_ieee80211_wire::sae::SaeField::of(send_confirm).to_bytes(),
                 &first.scalar,
