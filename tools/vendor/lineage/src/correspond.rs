@@ -30,7 +30,6 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
 
 use serde::Serialize;
 
@@ -355,10 +354,9 @@ impl<'a> State<'a> {
         let mut corresponding = Vec::new();
         let (mut lefts, mut rights) = (left.iter().enumerate(), right.iter().enumerate());
         // Each anchor ends a gap, and the lists' ends close the last one.
-        let anchors = self.anchors(left, right);
+        let anchors = anchors(left, right, |left, right| self.anchored(left, right));
         let ends = anchors
             .iter()
-            .rev()
             .map(|(left, right)| (Some(*left), Some(*right)))
             .chain([(None, None)]);
         for (left_end, right_end) in ends {
@@ -378,50 +376,6 @@ impl<'a> State<'a> {
             }
         }
         corresponding
-    }
-
-    /// The places of the callees that anchor the alignment of two call
-    /// lists, the last anchor first.
-    ///
-    /// The alignment of two lists starts with their first callees where
-    /// these correspond, and goes on with what follows both. Where they do
-    /// not, it is the longer of the alignment without the left list's first
-    /// callee and the one without the right list's, the former where they
-    /// are equally long. A list that has ended aligns nothing.
-    ///
-    /// A row holds, for the left callees from one on, the alignment with
-    /// what follows each right callee; it is made from the row of the left
-    /// callees after that one, and a cell holds its alignment whole, so the
-    /// length that decides between two is the length of what they hold.
-    fn anchors(&self, left: &[String], right: &[String]) -> Rc<Vec<(usize, usize)>> {
-        let nothing: Rc<Vec<(usize, usize)>> = Rc::default();
-        let mut below: Vec<Rc<Vec<(usize, usize)>>> =
-            right.iter().map(|_| Rc::clone(&nothing)).collect();
-        for (left_place, left_callee) in left.iter().enumerate().rev() {
-            // Past the last right callee nothing is aligned: in the row
-            // below, and in this one.
-            let mut diagonal = Rc::clone(&nothing);
-            let mut beside = Rc::clone(&nothing);
-            let mut row = Vec::with_capacity(right.len());
-            for ((right_place, right_callee), under) in right.iter().enumerate().zip(&below).rev() {
-                let cell = if self.anchored(left_callee, right_callee) {
-                    let mut longer = Vec::clone(&diagonal);
-                    longer.push((left_place, right_place));
-                    Rc::new(longer)
-                } else if under.len() >= beside.len() {
-                    Rc::clone(under)
-                } else {
-                    Rc::clone(&beside)
-                };
-                diagonal = Rc::clone(under);
-                beside = Rc::clone(&cell);
-                row.push(cell);
-            }
-            row.reverse();
-            below = row;
-        }
-        // A right list without a callee has no cell, and anchors nothing.
-        below.first().map_or(nothing, Rc::clone)
     }
 
     fn pair_neighbourhood(&mut self, policy: Policy) {
@@ -528,6 +482,107 @@ impl<'a> State<'a> {
             self.insert(left, right, evidence);
         }
     }
+}
+
+/// One row of the table of the lengths that the ends of two lists have in
+/// common: for the left items from one on, against the right items from
+/// each column on. Past the last right item nothing is common, and a row
+/// never falls towards the first column and rises by one at a time, so the
+/// row is the columns where it rises. The row past the last left item has
+/// none.
+#[derive(Default)]
+struct Row {
+    /// The columns where the row rises, the last column first.
+    rises: Vec<usize>,
+}
+
+impl Row {
+    /// The common length with the right items from `column` on: the rises
+    /// there or later.
+    fn common_from(&self, column: usize) -> usize {
+        self.rises.partition_point(|rise| *rise >= column)
+    }
+
+    /// The common length with the right items after `column`.
+    fn common_after(&self, column: usize) -> usize {
+        self.rises.partition_point(|rise| *rise > column)
+    }
+
+    /// The row of one more left item, which stands before this row's and
+    /// corresponds to the right items at `columns`, the last column first.
+    fn above(&self, columns: impl Iterator<Item = usize>) -> Self {
+        let mut columns = columns.peekable();
+        let mut rises = Vec::new();
+        for rise in &self.rises {
+            // The item and what was common after a column are one more than
+            // was common from the last rise at or before it: of the columns
+            // from this rise up to the one before it, the last takes the
+            // rise's place. The others give the item a second place in the
+            // same subsequence, and add nothing.
+            let reached = columns.next_if(|column| column >= rise);
+            rises.push(reached.unwrap_or(*rise));
+            while columns.next_if(|column| column >= rise).is_some() {}
+        }
+        // A column before every rise: the row's greatest length grows.
+        rises.extend(columns.next());
+        rises.shrink_to_fit();
+        Self { rises }
+    }
+}
+
+/// The rows of two lists, the first left item's first, and after the last
+/// item's the row that has nothing in common.
+fn rows<L, R>(left: &[L], right: &[R], corresponds: impl Fn(&L, &R) -> bool) -> Vec<Row> {
+    let mut rows = Vec::new();
+    let mut below = Row::default();
+    for item in left.iter().rev() {
+        let columns = right
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, other)| corresponds(item, other))
+            .map(|(column, _)| column);
+        let above = below.above(columns);
+        rows.push(std::mem::replace(&mut below, above));
+    }
+    rows.push(below);
+    rows.reverse();
+    rows
+}
+
+/// The places of the items that anchor the alignment of two lists, in
+/// order: a longest common subsequence of corresponding items.
+///
+/// From the lists' starts: two items that correspond are an anchor, and
+/// both are passed. Otherwise the left item is passed where the lists have
+/// as much in common without it as without the right one, and the right
+/// item where they have more without that one.
+fn anchors<L, R>(
+    left: &[L],
+    right: &[R],
+    corresponds: impl Fn(&L, &R) -> bool,
+) -> Vec<(usize, usize)> {
+    let rows = rows(left, right, &corresponds);
+    // Every left item with its row and the row below it.
+    let mut lefts = left.iter().enumerate().zip(rows.array_windows()).peekable();
+    let mut rights = right.iter().enumerate().peekable();
+    let mut anchors = Vec::new();
+    while let (Some(&((place, item), [row, below])), Some(&(column, other))) =
+        (lefts.peek(), rights.peek())
+    {
+        // A common length passes the one after both items by one at most,
+        // so "it is that and one" is "it is greater".
+        if corresponds(item, other) && row.common_from(column) > below.common_after(column) {
+            anchors.push((place, column));
+            lefts.next();
+            rights.next();
+        } else if below.common_from(column) >= row.common_after(column) {
+            lefts.next();
+        } else {
+            rights.next();
+        }
+    }
+    anchors
 }
 
 fn unique_names(revision: &Revision) -> HashMap<&str, Node<'_>> {
@@ -689,8 +744,128 @@ fn best_expected<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{comparable, jaccard_ppm};
+    use super::{anchors, comparable, jaccard_ppm, rows};
     use std::collections::HashSet;
+
+    /// Every list of up to `length` items out of three.
+    fn lists(length: usize) -> Vec<Vec<u8>> {
+        let mut all = vec![vec![]];
+        let mut last = vec![vec![]];
+        for _ in 0..length {
+            last = last
+                .iter()
+                .flat_map(|list: &Vec<u8>| {
+                    (0..3).map(move |item| {
+                        let mut longer = list.clone();
+                        longer.push(item);
+                        longer
+                    })
+                })
+                .collect();
+            all.extend(last.iter().cloned());
+        }
+        all
+    }
+
+    /// Items that correspond as names do, and as a pair of the
+    /// correspondence does beside them: the left 0 also with the right 1.
+    const RELATIONS: [fn(&u8, &u8) -> bool; 2] = [
+        |left, right| left == right,
+        |left, right| left == right || (*left == 0 && *right == 1),
+    ];
+
+    /// The table of common lengths cell by cell: `table[i][j]` for the left
+    /// items from `i` on and the right items from `j` on.
+    fn table(left: &[u8], right: &[u8], corresponds: fn(&u8, &u8) -> bool) -> Vec<Vec<usize>> {
+        let mut lengths = vec![vec![0; right.len() + 1]; left.len() + 1];
+        for (i, item) in left.iter().enumerate().rev() {
+            for (j, other) in right.iter().enumerate().rev() {
+                lengths[i][j] = if corresponds(item, other) {
+                    lengths[i + 1][j + 1] + 1
+                } else {
+                    lengths[i + 1][j].max(lengths[i][j + 1])
+                };
+            }
+        }
+        lengths
+    }
+
+    #[test]
+    fn a_row_s_rises_count_the_table_s_common_lengths_for_every_pair_of_short_lists() {
+        let lists = lists(4);
+        assert_eq!(lists.len(), 121);
+        for corresponds in RELATIONS {
+            for left in &lists {
+                for right in &lists {
+                    let table = table(left, right, corresponds);
+                    let rows = rows(left, right, corresponds);
+                    assert_eq!(rows.len(), table.len(), "{left:?} {right:?}");
+                    for (i, row) in rows.iter().enumerate() {
+                        for j in 0..=right.len() {
+                            assert_eq!(
+                                row.common_from(j),
+                                table[i][j],
+                                "{left:?} {right:?} {i} {j}"
+                            );
+                            let after = table[i].get(j + 1).copied().unwrap_or(0);
+                            assert_eq!(row.common_after(j), after, "{left:?} {right:?} {i} {j}");
+                        }
+                        // The rises stand in their order, each once.
+                        assert!(
+                            row.rises
+                                .array_windows()
+                                .all(|[later, sooner]| later > sooner),
+                            "{left:?} {right:?} {:?}",
+                            row.rises
+                        );
+                    }
+                    // A cell passes the one after both items by one at
+                    // most, and is that and one exactly where it is greater.
+                    for i in 0..left.len() {
+                        for j in 0..right.len() {
+                            assert!(table[i][j] <= table[i + 1][j + 1] + 1);
+                            assert_eq!(
+                                rows[i].common_from(j) > rows[i + 1].common_after(j),
+                                table[i][j] == table[i + 1][j + 1] + 1,
+                                "{left:?} {right:?} {i} {j}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_anchors_are_those_of_the_walk_through_the_table_for_every_pair_of_short_lists() {
+        for corresponds in RELATIONS {
+            for left in &lists(4) {
+                for right in &lists(4) {
+                    let lengths = table(left, right, corresponds);
+                    let mut walked = Vec::new();
+                    let (mut i, mut j) = (0, 0);
+                    while i < left.len() && j < right.len() {
+                        if corresponds(&left[i], &right[j])
+                            && lengths[i][j] == lengths[i + 1][j + 1] + 1
+                        {
+                            walked.push((i, j));
+                            i += 1;
+                            j += 1;
+                        } else if lengths[i + 1][j] >= lengths[i][j + 1] {
+                            i += 1;
+                        } else {
+                            j += 1;
+                        }
+                    }
+                    assert_eq!(
+                        anchors(left, right, corresponds),
+                        walked,
+                        "{left:?} {right:?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn the_shared_part_of_two_sets_is_held_in_parts_per_million() {
