@@ -130,7 +130,7 @@ impl IndividualTwtInformationFrontier {
     const fn from_fields(control: TwtControlFields, parameters: IndividualTwtParameterSet) -> Self {
         Self {
             flow_id: parameters.flow_id(),
-            initial_target_wake_time: TsfInstant::from_micros(parameters.target_wake_time_tsf),
+            initial_target_wake_time: parameters.target_wake_time,
             information_frames_disabled: control.information_disabled(),
         }
     }
@@ -160,11 +160,9 @@ impl IndividualTwtAgreement {
             implicit: parameters.implicit(),
             flow_type: parameters.flow_type(),
             protection: parameters.protection(),
-            target_wake_time: TsfInstant::from_micros(parameters.target_wake_time_tsf),
-            wake_interval: TsfDuration::from_micros(parameters.wake_interval_micros()?),
-            wake_duration: TsfDuration::from_micros(u64::from(
-                parameters.wake_duration_micros(response.control)?,
-            )),
+            target_wake_time: parameters.target_wake_time,
+            wake_interval: parameters.wake_interval()?,
+            wake_duration: parameters.wake_duration(response.control)?,
         })
     }
 
@@ -999,7 +997,7 @@ fn demand_response_matches(proposal: IndividualTwtProposal, response: Individual
         && requested.implicit() == accepted.implicit()
         && requested.flow_type() == accepted.flow_type()
         && requested.protection() == accepted.protection()
-        && requested.target_wake_time_tsf == accepted.target_wake_time_tsf
+        && requested.target_wake_time == accepted.target_wake_time
         && requested.nominal_minimum_wake_duration == accepted.nominal_minimum_wake_duration
         && requested.wake_interval_mantissa == accepted.wake_interval_mantissa
         && requested.request.wake_interval_exponent() == accepted.request.wake_interval_exponent()

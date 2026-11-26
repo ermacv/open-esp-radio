@@ -60,136 +60,152 @@ impl From<FtmParameterError> for FtmWireError {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FtmTrigger {
-    Stop,
-    StartOrContinue,
+/// A code whose named values are listed once: the enum, its decoder and its
+/// encoder into a field of `$width` bits.
+macro_rules! ftm_code {
+    (
+        $(#[$meta:meta])*
+        $vis:vis enum $name:ident: $width:literal, $error:path => $error_type:ty {
+            $($variant:ident = $value:literal),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        $vis enum $name {
+            $($variant),+
+        }
+
+        impl $name {
+            const fn from_wire(value: u8) -> Result<Self, $error_type> {
+                match value {
+                    $($value => Ok(Self::$variant),)+
+                    _ => Err($error),
+                }
+            }
+
+            /// The code as its field holds it.
+            pub const fn wire(self) -> oer_portable_wire::U8<$width> {
+                match self {
+                    $(Self::$variant => oer_portable_wire::U8::constant::<$value>(),)+
+                }
+            }
+        }
+    };
 }
 
-impl FtmTrigger {
-    const fn wire(self) -> u8 {
-        match self {
-            Self::Stop => 0,
-            Self::StartOrContinue => 1,
-        }
-    }
-
-    const fn from_wire(value: u8) -> Result<Self, FtmWireError> {
-        match value {
-            0 => Ok(Self::Stop),
-            1 => Ok(Self::StartOrContinue),
-            _ => Err(FtmWireError::ReservedTrigger),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum FtmBurstDuration {
-    Micros250 = 2,
-    Micros500 = 3,
-    Millis1 = 4,
-    Millis2 = 5,
-    Millis4 = 6,
-    Millis8 = 7,
-    Millis16 = 8,
-    Millis32 = 9,
-    Millis64 = 10,
-    Millis128 = 11,
-    NoPreference = 15,
-}
-
-impl FtmBurstDuration {
-    const fn from_wire(value: u8) -> Result<Self, FtmParameterError> {
-        match value {
-            2 => Ok(Self::Micros250),
-            3 => Ok(Self::Micros500),
-            4 => Ok(Self::Millis1),
-            5 => Ok(Self::Millis2),
-            6 => Ok(Self::Millis4),
-            7 => Ok(Self::Millis8),
-            8 => Ok(Self::Millis16),
-            9 => Ok(Self::Millis32),
-            10 => Ok(Self::Millis64),
-            11 => Ok(Self::Millis128),
-            15 => Ok(Self::NoPreference),
-            _ => Err(FtmParameterError::InvalidBurstDuration),
-        }
-    }
-
-    /// The code as its four-bit Burst Duration field holds it.
-    pub const fn wire(self) -> oer_portable_wire::U8<4> {
-        match self {
-            Self::Micros250 => oer_portable_wire::U8::constant::<2>(),
-            Self::Micros500 => oer_portable_wire::U8::constant::<3>(),
-            Self::Millis1 => oer_portable_wire::U8::constant::<4>(),
-            Self::Millis2 => oer_portable_wire::U8::constant::<5>(),
-            Self::Millis4 => oer_portable_wire::U8::constant::<6>(),
-            Self::Millis8 => oer_portable_wire::U8::constant::<7>(),
-            Self::Millis16 => oer_portable_wire::U8::constant::<8>(),
-            Self::Millis32 => oer_portable_wire::U8::constant::<9>(),
-            Self::Millis64 => oer_portable_wire::U8::constant::<10>(),
-            Self::Millis128 => oer_portable_wire::U8::constant::<11>(),
-            Self::NoPreference => oer_portable_wire::U8::constant::<15>(),
-        }
+ftm_code! {
+    /// The Trigger field of an FTM Request (IEEE Std 802.11-2020, 9.6.7.32).
+    pub enum FtmTrigger: 8, FtmWireError::ReservedTrigger => FtmWireError {
+        Stop = 0,
+        StartOrContinue = 1,
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum FtmFormatAndBandwidth {
-    NoPreference = 0,
-    NonHt5Mhz = 4,
-    NonHt10Mhz = 6,
-    NonHt20Mhz = 8,
-    HtMixed20Mhz = 9,
-    Vht20Mhz = 10,
-    HtMixed40Mhz = 11,
-    Vht40Mhz = 12,
-    Vht80Mhz = 13,
-    Vht80Plus80Mhz = 14,
-    Vht160MhzSeparateLos = 15,
-    Vht160MhzSingleLo = 16,
-    Dmg2160Mhz = 31,
+ftm_code! {
+    /// The Burst Duration field (IEEE Std 802.11-2020, 9.4.2.167, Table
+    /// 9-257).
+    pub enum FtmBurstDuration: 4, FtmParameterError::InvalidBurstDuration => FtmParameterError {
+        Micros250 = 2,
+        Micros500 = 3,
+        Millis1 = 4,
+        Millis2 = 5,
+        Millis4 = 6,
+        Millis8 = 7,
+        Millis16 = 8,
+        Millis32 = 9,
+        Millis64 = 10,
+        Millis128 = 11,
+        NoPreference = 15,
+    }
 }
 
-impl FtmFormatAndBandwidth {
-    const fn from_wire(value: u8) -> Result<Self, FtmParameterError> {
-        match value {
-            0 => Ok(Self::NoPreference),
-            4 => Ok(Self::NonHt5Mhz),
-            6 => Ok(Self::NonHt10Mhz),
-            8 => Ok(Self::NonHt20Mhz),
-            9 => Ok(Self::HtMixed20Mhz),
-            10 => Ok(Self::Vht20Mhz),
-            11 => Ok(Self::HtMixed40Mhz),
-            12 => Ok(Self::Vht40Mhz),
-            13 => Ok(Self::Vht80Mhz),
-            14 => Ok(Self::Vht80Plus80Mhz),
-            15 => Ok(Self::Vht160MhzSeparateLos),
-            16 => Ok(Self::Vht160MhzSingleLo),
-            31 => Ok(Self::Dmg2160Mhz),
-            _ => Err(FtmParameterError::InvalidFormatAndBandwidth),
-        }
+ftm_code! {
+    /// The Format And Bandwidth field (IEEE Std 802.11-2020, 9.4.2.167,
+    /// Table 9-258).
+    pub enum FtmFormatAndBandwidth: 6, FtmParameterError::InvalidFormatAndBandwidth => FtmParameterError {
+        NoPreference = 0,
+        NonHt5Mhz = 4,
+        NonHt10Mhz = 6,
+        NonHt20Mhz = 8,
+        HtMixed20Mhz = 9,
+        Vht20Mhz = 10,
+        HtMixed40Mhz = 11,
+        Vht40Mhz = 12,
+        Vht80Mhz = 13,
+        Vht80Plus80Mhz = 14,
+        Vht160MhzSeparateLos = 15,
+        Vht160MhzSingleLo = 16,
+        Dmg2160Mhz = 31,
+    }
+}
+
+/// The Min Delta FTM field: the shortest time between two FTM frames of a
+/// burst, in units of 100 µs (IEEE Std 802.11-2020, 9.4.2.167).
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MinDeltaFtm(u8);
+
+impl MinDeltaFtm {
+    /// `units` of 100 µs.
+    pub const fn new(units: u8) -> Self {
+        Self(units)
     }
 
-    /// The code as its six-bit Format And Bandwidth field holds it.
-    pub const fn wire(self) -> oer_portable_wire::U8<6> {
-        match self {
-            Self::NoPreference => oer_portable_wire::U8::constant::<0>(),
-            Self::NonHt5Mhz => oer_portable_wire::U8::constant::<4>(),
-            Self::NonHt10Mhz => oer_portable_wire::U8::constant::<6>(),
-            Self::NonHt20Mhz => oer_portable_wire::U8::constant::<8>(),
-            Self::HtMixed20Mhz => oer_portable_wire::U8::constant::<9>(),
-            Self::Vht20Mhz => oer_portable_wire::U8::constant::<10>(),
-            Self::HtMixed40Mhz => oer_portable_wire::U8::constant::<11>(),
-            Self::Vht40Mhz => oer_portable_wire::U8::constant::<12>(),
-            Self::Vht80Mhz => oer_portable_wire::U8::constant::<13>(),
-            Self::Vht80Plus80Mhz => oer_portable_wire::U8::constant::<14>(),
-            Self::Vht160MhzSeparateLos => oer_portable_wire::U8::constant::<15>(),
-            Self::Vht160MhzSingleLo => oer_portable_wire::U8::constant::<16>(),
-            Self::Dmg2160Mhz => oer_portable_wire::U8::constant::<31>(),
-        }
+    /// The count of 100 µs units.
+    pub const fn units(self) -> u8 {
+        self.0
+    }
+
+    /// The span of the domain `D`: at most 25.5 ms.
+    pub const fn span<D>(self) -> oer_portable_time::DomainDuration<D> {
+        oer_portable_time::DomainDuration::from_micros((self.0 as u64).wrapping_mul(100))
+    }
+}
+
+/// The Burst Period field: the time between two bursts, in units of 100 ms;
+/// zero with a single burst (IEEE Std 802.11-2020, 9.4.2.167).
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct BurstPeriod(u16);
+
+impl BurstPeriod {
+    /// No period: a single burst.
+    pub const NONE: Self = Self(0);
+
+    /// `units` of 100 ms.
+    pub const fn new(units: u16) -> Self {
+        Self(units)
+    }
+
+    /// The count of 100 ms units.
+    pub const fn units(self) -> u16 {
+        self.0
+    }
+
+    /// The span of the domain `D`: at most about 109 minutes.
+    pub const fn span<D>(self) -> oer_portable_time::DomainDuration<D> {
+        oer_portable_time::DomainDuration::from_micros((self.0 as u64).wrapping_mul(100_000))
+    }
+}
+
+/// The Value field of a failed FTM response: how long to wait before a new
+/// request, in seconds (IEEE Std 802.11-2020, 9.4.2.167, Status Indication
+/// 3).
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct RetryAfter(u8);
+
+impl RetryAfter {
+    /// `seconds` seconds.
+    pub const fn new(seconds: u8) -> Self {
+        Self(seconds)
+    }
+
+    /// The seconds.
+    pub const fn seconds(self) -> u8 {
+        self.0
+    }
+
+    /// The span of the domain `D`.
+    pub const fn span<D>(self) -> oer_portable_time::DomainDuration<D> {
+        oer_portable_time::DomainDuration::from_micros((self.0 as u64).wrapping_mul(1_000_000))
     }
 }
 
@@ -198,12 +214,12 @@ impl FtmFormatAndBandwidth {
 pub struct FtmRequestParameters {
     number_of_bursts_exponent: oer_portable_wire::U8<4>,
     burst_duration: FtmBurstDuration,
-    min_delta_ftm_100us: u8,
+    min_delta_ftm: MinDeltaFtm,
     partial_tsf_timer: Option<u16>,
     asap: FtmAsap,
     ftms_per_burst: oer_portable_wire::U8<5>,
     format_and_bandwidth: FtmFormatAndBandwidth,
-    burst_period_100ms: u16,
+    burst_period: BurstPeriod,
 }
 
 impl FtmRequestParameters {
@@ -214,12 +230,12 @@ impl FtmRequestParameters {
     pub const fn new(
         number_of_bursts_exponent: u8,
         burst_duration: FtmBurstDuration,
-        min_delta_ftm_100us: u8,
+        min_delta_ftm: MinDeltaFtm,
         partial_tsf_timer: Option<u16>,
         asap: FtmAsap,
         ftms_per_burst: u8,
         format_and_bandwidth: FtmFormatAndBandwidth,
-        burst_period_100ms: u16,
+        burst_period: BurstPeriod,
     ) -> Result<Self, FtmParameterError> {
         let number_of_bursts_exponent = match oer_portable_wire::U8::new(number_of_bursts_exponent)
         {
@@ -235,18 +251,18 @@ impl FtmRequestParameters {
         {
             return Err(FtmParameterError::PartialTsfOutOfRange);
         }
-        if number_of_bursts_exponent.get() == 0 && burst_period_100ms != 0 {
+        if number_of_bursts_exponent.get() == 0 && burst_period.units() != 0 {
             return Err(FtmParameterError::BurstPeriodReserved);
         }
         Ok(Self {
             number_of_bursts_exponent,
             burst_duration,
-            min_delta_ftm_100us,
+            min_delta_ftm,
             partial_tsf_timer,
             asap,
             ftms_per_burst,
             format_and_bandwidth,
-            burst_period_100ms,
+            burst_period,
         })
     }
 
@@ -258,8 +274,8 @@ impl FtmRequestParameters {
         self.burst_duration
     }
 
-    pub const fn min_delta_ftm_100us(self) -> u8 {
-        self.min_delta_ftm_100us
+    pub const fn min_delta_ftm(self) -> MinDeltaFtm {
+        self.min_delta_ftm
     }
 
     pub const fn partial_tsf_timer(self) -> Option<u16> {
@@ -279,8 +295,8 @@ impl FtmRequestParameters {
         self.format_and_bandwidth
     }
 
-    pub const fn burst_period_100ms(self) -> u16 {
-        self.burst_period_100ms
+    pub const fn burst_period(self) -> BurstPeriod {
+        self.burst_period
     }
 
     pub fn encode_element(self) -> [u8; FTM_PARAMETERS_ELEMENT_LEN] {
@@ -293,8 +309,8 @@ impl FtmRequestParameters {
             .with_asap(self.asap.bit())
             .with_ftms(self.ftms_per_burst)
             .with_bandwidth(self.format_and_bandwidth.wire())
-            .with_burst_period(self.burst_period_100ms)
-            .with_min_delta(self.min_delta_ftm_100us);
+            .with_burst_period(self.burst_period.units())
+            .with_min_delta(self.min_delta_ftm.units());
         parameters_element(fields)
     }
 
@@ -315,7 +331,7 @@ impl FtmRequestParameters {
         Self::new(
             FtmParameterFields::from_bytes(fields).bursts().get(),
             FtmBurstDuration::from_wire(FtmParameterFields::from_bytes(fields).duration().get())?,
-            parsed.min_delta(),
+            MinDeltaFtm::new(parsed.min_delta()),
             if !partial_tsf_no_preference {
                 Some(partial_tsf)
             } else {
@@ -330,7 +346,7 @@ impl FtmRequestParameters {
             FtmFormatAndBandwidth::from_wire(
                 FtmParameterFields::from_bytes(fields).bandwidth().get(),
             )?,
-            parsed.burst_period(),
+            BurstPeriod::new(parsed.burst_period()),
         )
     }
 }
@@ -339,7 +355,7 @@ impl FtmRequestParameters {
 pub enum FtmResponseStatus {
     Success,
     Incapable,
-    Failed { retry_after_seconds: u8 },
+    Failed { retry_after: RetryAfter },
 }
 
 /// The ASAP Capable subfield: whether the responding STA can start a burst
@@ -376,13 +392,13 @@ pub struct FtmResponseParameters {
     pub status: FtmResponseStatus,
     pub number_of_bursts_exponent: u8,
     pub burst_duration: FtmBurstDuration,
-    pub min_delta_ftm_100us: u8,
+    pub min_delta_ftm: MinDeltaFtm,
     pub partial_tsf_timer: u16,
     pub asap_capable: FtmAsapCapability,
     pub asap: FtmAsap,
     pub ftms_per_burst: u8,
     pub format_and_bandwidth: FtmFormatAndBandwidth,
-    pub burst_period_100ms: u16,
+    pub burst_period: BurstPeriod,
 }
 
 impl FtmResponseParameters {
@@ -393,8 +409,8 @@ impl FtmResponseParameters {
         let status = match (status_code, value) {
             (1, 0) => FtmResponseStatus::Success,
             (2, 0) => FtmResponseStatus::Incapable,
-            (3, retry_after_seconds) => FtmResponseStatus::Failed {
-                retry_after_seconds,
+            (3, seconds) => FtmResponseStatus::Failed {
+                retry_after: RetryAfter::new(seconds),
             },
             (0, _) => return Err(FtmParameterError::ReservedStatus),
             _ => return Err(FtmParameterError::ReservedBitsSet),
@@ -416,15 +432,15 @@ impl FtmResponseParameters {
         }
         let number_of_bursts_exponent = FtmParameterFields::from_bytes(fields).bursts().get();
         let parsed = FtmParameterFields::from_bytes(fields);
-        let burst_period_100ms = parsed.burst_period();
-        if number_of_bursts_exponent == 0 && burst_period_100ms != 0 {
+        let burst_period = BurstPeriod::new(parsed.burst_period());
+        if number_of_bursts_exponent == 0 && burst_period != BurstPeriod::NONE {
             return Err(FtmParameterError::BurstPeriodReserved);
         }
         Ok(Self {
             status,
             number_of_bursts_exponent,
             burst_duration,
-            min_delta_ftm_100us: parsed.min_delta(),
+            min_delta_ftm: MinDeltaFtm::new(parsed.min_delta()),
             partial_tsf_timer: parsed.partial_tsf(),
             asap_capable: if FtmParameterFields::from_bytes(fields).asap_capable() {
                 FtmAsapCapability::Capable
@@ -438,7 +454,7 @@ impl FtmResponseParameters {
             },
             ftms_per_burst: FtmParameterFields::from_bytes(fields).ftms().get(),
             format_and_bandwidth,
-            burst_period_100ms,
+            burst_period,
         })
     }
 
@@ -450,15 +466,13 @@ impl FtmResponseParameters {
         let (status, retry) = match self.status {
             FtmResponseStatus::Success => (1, 0),
             FtmResponseStatus::Incapable => (2, 0),
-            FtmResponseStatus::Failed {
-                retry_after_seconds,
-            } => (3, retry_after_seconds),
+            FtmResponseStatus::Failed { retry_after } => (3, retry_after.seconds()),
         };
         let fields = FtmParameterFields::from_bytes([0; 9])
             .with_status(status)
             .and_then(|fields| fields.with_retry(retry))
             .map_err(|_| FtmParameterError::ValueOutOfRange)?
-            .with_min_delta(self.min_delta_ftm_100us)
+            .with_min_delta(self.min_delta_ftm.units())
             .with_bursts(bursts)
             .with_duration(self.burst_duration.wire())
             .with_partial_tsf(self.partial_tsf_timer)
@@ -466,7 +480,7 @@ impl FtmResponseParameters {
             .with_asap(self.asap.bit())
             .with_ftms(ftms)
             .with_bandwidth(self.format_and_bandwidth.wire())
-            .with_burst_period(self.burst_period_100ms);
+            .with_burst_period(self.burst_period.units());
         let element = parameters_element(fields);
         Self::decode_element(&element)?;
         Ok(element)
@@ -540,7 +554,7 @@ pub fn encode_initial_request(
     let [category, action, trigger, element @ ..] = &mut output;
     *category = ActionCategory::PUBLIC.value();
     *action = PublicAction::FTM_REQUEST.value();
-    *trigger = FtmTrigger::StartOrContinue.wire();
+    *trigger = FtmTrigger::StartOrContinue.wire().get();
     *element = parameters.encode_element();
     output
 }
@@ -563,7 +577,7 @@ pub const fn encode_request_trigger(trigger: FtmTrigger) -> [u8; FTM_REQUEST_PRE
     [
         ActionCategory::PUBLIC.value(),
         PublicAction::FTM_REQUEST.value(),
-        trigger.wire(),
+        trigger.wire().get(),
     ]
 }
 

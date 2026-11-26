@@ -5,12 +5,12 @@ fn request_parameters() -> FtmRequestParameters {
     FtmRequestParameters::new(
         0,
         FtmBurstDuration::Millis8,
-        2,
+        crate::ftm::MinDeltaFtm::new(2),
         None,
         FtmAsap::AsSoonAsPossible,
         8,
         FtmFormatAndBandwidth::HtMixed20Mhz,
-        0,
+        crate::ftm::BurstPeriod::new(0),
     )
     .unwrap()
 }
@@ -20,13 +20,13 @@ fn response_parameters() -> FtmResponseParameters {
         status: FtmResponseStatus::Success,
         number_of_bursts_exponent: 0,
         burst_duration: FtmBurstDuration::Millis8,
-        min_delta_ftm_100us: 3,
+        min_delta_ftm: crate::ftm::MinDeltaFtm::new(3),
         partial_tsf_timer: 0x1234,
         asap_capable: FtmAsapCapability::Capable,
         asap: FtmAsap::AsSoonAsPossible,
         ftms_per_burst: 8,
         format_and_bandwidth: FtmFormatAndBandwidth::HtMixed20Mhz,
-        burst_period_100ms: 0,
+        burst_period: crate::ftm::BurstPeriod::new(0),
     }
 }
 
@@ -68,7 +68,7 @@ fn reserved_request_fields_fail_closed() {
 fn response_exponent_fifteen_is_a_finite_allocation_not_no_preference() {
     let mut response = response_parameters();
     response.number_of_bursts_exponent = 15;
-    response.burst_period_100ms = 1;
+    response.burst_period = crate::ftm::BurstPeriod::new(1);
     let element = response.encode_element().unwrap();
     assert_eq!(
         FtmResponseParameters::decode_element(&element),
@@ -407,4 +407,30 @@ fn the_codes_and_the_timestamp_fill_their_fields() {
         FtmTimestampPs::new(FTM_TIMESTAMP_MASK + 1),
         Err(FtmWireError::TimestampOutOfRange)
     );
+}
+
+/// A response's Status Indication names its status: 2 is incapable, 3 a
+/// failure whose Value is the seconds to wait.
+#[test]
+fn a_response_status_round_trips_with_its_retry_seconds() {
+    for status in [
+        FtmResponseStatus::Incapable,
+        FtmResponseStatus::Failed {
+            retry_after: crate::ftm::RetryAfter::new(17),
+        },
+    ] {
+        let element = FtmResponseParameters {
+            status,
+            ..response_parameters()
+        }
+        .encode_element()
+        .unwrap();
+        assert_eq!(
+            FtmResponseParameters::decode_element(&element).map(|parameters| parameters.status),
+            Ok(status)
+        );
+    }
+    let retry = crate::ftm::RetryAfter::new(17);
+    assert_eq!(retry.seconds(), 17);
+    assert_eq!(retry.span::<()>().as_micros(), 17_000_000);
 }
