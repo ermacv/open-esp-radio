@@ -100,15 +100,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomic-polyfill"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cf2bce30dfe09ef0bfaef228b9d414faaf7e563035494d7fe092dba54b300f4"
-dependencies = [
- "critical-section",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -682,7 +673,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "168297bf80aaf114b3c9ad589bf38b01b3009b9af7f97cd18086c5bbf96f5693"
 dependencies = [
  "embassy-executor-timer-queue",
- "heapless 0.9.3",
+ "heapless",
 ]
 
 [[package]]
@@ -926,15 +917,6 @@ dependencies = [
 
 [[package]]
 name = "hash32"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0c35f58762feb77d74ebe43bdbc3210f09be9fe6742234d573bacc26ed92b67"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
-name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
@@ -953,25 +935,11 @@ dependencies = [
 
 [[package]]
 name = "heapless"
-version = "0.7.17"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdc6457c0eb62c71aac4bc17216026d8410337c4126773b9c5daba343f17964f"
+checksum = "411fdef4df93751117bd9ef8caa0e7f99c65dafec5bd84313eb8e2fdd75e32f2"
 dependencies = [
- "atomic-polyfill",
- "hash32 0.2.1",
- "rustc_version",
- "serde",
- "spin",
- "stable_deref_trait",
-]
-
-[[package]]
-name = "heapless"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
-dependencies = [
- "hash32 0.3.1",
+ "hash32",
  "serde_core",
  "stable_deref_trait",
  "zeroize",
@@ -1124,15 +1092,6 @@ name = "litrs"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
-
-[[package]]
-name = "lock_api"
-version = "0.4.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
-dependencies = [
- "scopeguard",
-]
 
 [[package]]
 name = "log"
@@ -1739,7 +1698,7 @@ dependencies = [
 name = "oer-hil-images-aes"
 version = "0.1.0"
 dependencies = [
- "heapless 0.9.3",
+ "heapless",
  "oer",
  "oer-hil-agent",
  "oer-hil-services-aes",
@@ -1774,7 +1733,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embedded-io-async",
- "heapless 0.9.3",
+ "heapless",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",
@@ -1947,7 +1906,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "embedded-io-async",
- "heapless 0.9.3",
+ "heapless",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",
@@ -1982,7 +1941,7 @@ name = "oer-hil-probes-esp32s31-timer-facts"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "heapless 0.9.3",
+ "heapless",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-pac",
  "oer-chips-esp32s31-platform-board",
@@ -2013,7 +1972,7 @@ name = "oer-hil-scenarios-aes"
 version = "0.1.0"
 dependencies = [
  "aes",
- "heapless 0.9.3",
+ "heapless",
  "oer-hil-services-aes",
  "oer-protocols-hil-agent",
  "oer-tools-hil-harness",
@@ -2046,7 +2005,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "embassy-futures",
- "heapless 0.9.3",
+ "heapless",
  "oer-portable-crypto",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
@@ -2058,7 +2017,7 @@ dependencies = [
 name = "oer-hil-services-radio-pair"
 version = "0.1.0"
 dependencies = [
- "heapless 0.9.3",
+ "heapless",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
  "postcard",
@@ -2070,7 +2029,7 @@ dependencies = [
 name = "oer-hil-services-timer-facts"
 version = "0.1.0"
 dependencies = [
- "heapless 0.9.3",
+ "heapless",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
  "postcard",
@@ -2250,7 +2209,7 @@ version = "0.1.0"
 dependencies = [
  "cobs",
  "crc",
- "heapless 0.9.3",
+ "heapless",
  "oer-portable-wire",
  "postcard",
  "postcard-schema",
@@ -2269,7 +2228,7 @@ dependencies = [
 name = "oer-protocols-ieee80211-contracts-port"
 version = "0.1.0"
 dependencies = [
- "heapless 0.9.3",
+ "heapless",
  "oer-portable-bounded",
  "oer-portable-time",
  "oer-portable-time-virtual",
@@ -2311,7 +2270,7 @@ dependencies = [
 name = "oer-protocols-ieee80211-core-datapath"
 version = "0.1.0"
 dependencies = [
- "heapless 0.9.3",
+ "heapless",
  "oer-portable-events",
  "oer-portable-time",
  "oer-protocols-ieee802-wire",
@@ -2356,7 +2315,7 @@ dependencies = [
 name = "oer-protocols-ieee80211-core-roles-sta"
 version = "0.1.0"
 dependencies = [
- "heapless 0.9.3",
+ "heapless",
  "oer-portable-aes-software",
  "oer-portable-clock",
  "oer-portable-crypto",
@@ -2400,7 +2359,7 @@ version = "0.1.0"
 dependencies = [
  "chacha20",
  "cipher 0.5.2",
- "heapless 0.9.3",
+ "heapless",
  "hmac",
  "oer-portable-aes-software",
  "oer-portable-crypto",
@@ -2424,7 +2383,7 @@ dependencies = [
 name = "oer-protocols-ieee80211-core-upper-mac"
 version = "0.1.0"
 dependencies = [
- "heapless 0.9.3",
+ "heapless",
  "oer-portable-bounded",
  "oer-portable-clock",
  "oer-portable-events",
@@ -2486,7 +2445,7 @@ name = "oer-protocols-network-core"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "heapless 0.9.3",
+ "heapless",
  "oer-portable-events",
  "oer-portable-time",
  "oer-portable-wire",
@@ -2525,7 +2484,7 @@ name = "oer-protocols-network-testing-model"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "heapless 0.9.3",
+ "heapless",
  "oer-chips-family-radio-ieee80211-policy",
  "oer-portable-aes-software",
  "oer-portable-clock",
@@ -3460,7 +3419,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6764c3b5dd454e283a30e6dfe78e9b31096d9e32036b5d1eaac7a6119ccb9a24"
 dependencies = [
  "cobs",
- "heapless 0.7.17",
  "serde",
 ]
 
@@ -3481,7 +3439,7 @@ version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9475666d89f42231a0a57da32d5f6ca7f9b5cd4c335ea1fe8f3278215b7a21ff"
 dependencies = [
- "heapless 0.9.3",
+ "heapless",
  "postcard-derive",
  "serde",
 ]
@@ -3582,15 +3540,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
 
 [[package]]
-name = "rustc_version"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
-dependencies = [
- "semver",
-]
-
-[[package]]
 name = "rustix"
 version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3654,12 +3603,6 @@ dependencies = [
  "subtle",
  "zeroize",
 ]
-
-[[package]]
-name = "semver"
-version = "1.0.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
 name = "serde"
@@ -3825,15 +3768,6 @@ name = "smallvec"
 version = "1.16.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "149309498a5f7334b12ddae0cad8aba81ce785fe91755068867e017cf98fee46"
-
-[[package]]
-name = "spin"
-version = "0.9.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
-dependencies = [
- "lock_api",
-]
 
 [[package]]
 name = "stable_deref_trait"
