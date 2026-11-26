@@ -168,12 +168,12 @@ fn request_parameters(count: u8) -> FtmRequestParameters {
     FtmRequestParameters::new(
         0,
         FtmBurstDuration::Millis8,
-        2,
+        oer_protocols_ieee80211_wire::ftm::MinDeltaFtm::new(2),
         None,
         oer_protocols_ieee80211_wire::ftm::FtmAsap::AsSoonAsPossible,
         count,
         FtmFormatAndBandwidth::HtMixed20Mhz,
-        0,
+        oer_protocols_ieee80211_wire::ftm::BurstPeriod::new(0),
     )
     .unwrap()
 }
@@ -194,13 +194,13 @@ fn response(count: u8) -> FtmResponseParameters {
         status: FtmResponseStatus::Success,
         number_of_bursts_exponent: 0,
         burst_duration: FtmBurstDuration::Millis8,
-        min_delta_ftm_100us: 2,
+        min_delta_ftm: oer_protocols_ieee80211_wire::ftm::MinDeltaFtm::new(2),
         partial_tsf_timer: 10,
         asap_capable: FtmAsapCapability::Capable,
         asap: FtmAsap::AsSoonAsPossible,
         ftms_per_burst: count,
         format_and_bandwidth: FtmFormatAndBandwidth::HtMixed20Mhz,
-        burst_period_100ms: 0,
+        burst_period: oer_protocols_ieee80211_wire::ftm::BurstPeriod::new(0),
     }
 }
 
@@ -308,12 +308,12 @@ fn config_rejects_unbounded_or_scheduled_profiles() {
     let multiple = FtmRequestParameters::new(
         1,
         FtmBurstDuration::Millis8,
-        2,
+        oer_protocols_ieee80211_wire::ftm::MinDeltaFtm::new(2),
         None,
         oer_protocols_ieee80211_wire::ftm::FtmAsap::AsSoonAsPossible,
         4,
         FtmFormatAndBandwidth::HtMixed20Mhz,
-        1,
+        oer_protocols_ieee80211_wire::ftm::BurstPeriod::new(1),
     )
     .unwrap();
     assert_eq!(
@@ -329,12 +329,12 @@ fn config_rejects_unbounded_or_scheduled_profiles() {
     let unbounded = FtmRequestParameters::new(
         0,
         FtmBurstDuration::Millis8,
-        2,
+        oer_protocols_ieee80211_wire::ftm::MinDeltaFtm::new(2),
         None,
         oer_protocols_ieee80211_wire::ftm::FtmAsap::AsSoonAsPossible,
         0,
         FtmFormatAndBandwidth::HtMixed20Mhz,
-        0,
+        oer_protocols_ieee80211_wire::ftm::BurstPeriod::new(0),
     )
     .unwrap();
     assert_eq!(
@@ -952,4 +952,122 @@ fn an_initial_retransmission_of_no_token_is_refused() {
         ),
         Err(FtmRequesterError::InitialRetransmissionMismatch)
     );
+}
+
+/// A negotiation the requester did not ask for ends the session as a
+/// protocol violation; one within the request is admitted.
+#[test]
+fn a_negotiation_outside_the_request_is_a_protocol_violation() {
+    use oer_protocols_ieee80211_wire::ftm::{BurstPeriod, MinDeltaFtm};
+    let peer = individual(5);
+    let initial = |parameters: FtmResponseParameters| {
+        measurement_body::<{ FTM_MEASUREMENT_PREFIX_LEN + FTM_PARAMETERS_ELEMENT_LEN }>(
+            FtmMeasurementFields {
+                dialog_token: DialogToken::new(0),
+                follow_up_dialog_token: DialogToken::new(0),
+                tod: FtmTimestampPs::ZERO,
+                toa: FtmTimestampPs::ZERO,
+                tod_error: FtmTodError {
+                    max_error_exponent: 0,
+                    not_continuous: false,
+                },
+                toa_error: FtmToaError {
+                    max_error_exponent: 0,
+                },
+            },
+            Some(parameters),
+        )
+    };
+    let outcome = |parameters: FtmResponseParameters, count: u8| {
+        let mut session = start_published(FtmRequester::<1>::new(config(count, 1)), peer);
+        let body = initial(parameters);
+        let disposition = session.on_measurement(
+            peer,
+            FtmMeasurement::decode_body(&body).unwrap(),
+            None,
+            Instant::from_micros(30),
+        );
+        (disposition, session)
+    };
+    let admitted = [
+        response(1),
+        FtmResponseParameters {
+            min_delta_ftm: MinDeltaFtm::new(3),
+            ..response(1)
+        },
+        FtmResponseParameters {
+            burst_duration: FtmBurstDuration::Millis4,
+            ..response(1)
+        },
+        FtmResponseParameters {
+            ftms_per_burst: 2,
+            ..response(1)
+        },
+    ];
+    for (parameters, count) in admitted.into_iter().zip([1, 1, 1, 2]) {
+        let (disposition, _) = outcome(parameters, count);
+        assert!(disposition.is_ok(), "{parameters:?}: {disposition:?}");
+    }
+    let refused = [
+        (
+            FtmResponseParameters {
+                number_of_bursts_exponent: 1,
+                burst_period: BurstPeriod::new(1),
+                ..response(1)
+            },
+            1,
+        ),
+        (
+            FtmResponseParameters {
+                asap: FtmAsap::AtPartialTsf,
+                ..response(1)
+            },
+            1,
+        ),
+        (
+            FtmResponseParameters {
+                asap_capable: FtmAsapCapability::Incapable,
+                ..response(1)
+            },
+            1,
+        ),
+        (response(2), 1),
+        (
+            FtmResponseParameters {
+                min_delta_ftm: MinDeltaFtm::new(1),
+                ..response(1)
+            },
+            1,
+        ),
+        (
+            FtmResponseParameters {
+                burst_duration: FtmBurstDuration::Millis16,
+                ..response(1)
+            },
+            1,
+        ),
+        (
+            FtmResponseParameters {
+                format_and_bandwidth: FtmFormatAndBandwidth::NonHt20Mhz,
+                ..response(1)
+            },
+            1,
+        ),
+        (
+            FtmResponseParameters {
+                format_and_bandwidth: FtmFormatAndBandwidth::Vht20Mhz,
+                ..response(1)
+            },
+            1,
+        ),
+    ];
+    for (parameters, count) in refused {
+        let (disposition, session) = outcome(parameters, count);
+        assert_eq!(
+            disposition,
+            Err(FtmRequesterError::UnsupportedNegotiation),
+            "{parameters:?}"
+        );
+        assert_eq!(failure(session), FtmSessionFailure::ProtocolViolation);
+    }
 }

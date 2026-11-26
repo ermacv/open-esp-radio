@@ -17,10 +17,10 @@ fn parameters(implicit: IndividualTwtImplicit) -> IndividualTwtParameterSet {
     IndividualTwtParameterSet {
         request: oer_protocols_ieee80211_wire::twt::TwtRequestFields::from_bytes([0; 2])
             .with_requesting_sta(true)
-            .with_setup_command(IndividualTwtSetupCommand::Request.field())
+            .with_setup_command(IndividualTwtSetupCommand::Request)
             .with_implicit(implicit == IndividualTwtImplicit::Implicit)
             .with_flow_id(IndividualTwtFlowId::new(2).unwrap().field()),
-        target_wake_time_tsf: 10_000,
+        target_wake_time: oer_protocols_ieee80211_wire::tsf::TsfInstant::from_micros(10_000),
         nominal_minimum_wake_duration: 1,
         wake_interval_mantissa: 1_024,
         twt_channel: 0,
@@ -112,7 +112,7 @@ fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
     response_parameters.request = response_parameters
         .request
         .with_requesting_sta(false)
-        .with_setup_command(IndividualTwtSetupCommand::Accept.field());
+        .with_setup_command(IndividualTwtSetupCommand::Accept);
     let disposition = requester
         .on_setup_response(IndividualTwtSetup {
             dialog_token: DialogToken::new(1),
@@ -466,4 +466,55 @@ fn a_reconnect_returns_every_installed_agreement_and_leaves_none() {
         requester.status(IndividualTwtFlowId::new(2).unwrap()),
         IndividualTwtFlowStatus::Idle
     );
+}
+
+/// A Demand is met only by a response that accepts every requested field
+/// unchanged.
+#[test]
+fn a_demand_is_met_only_by_its_own_parameters() {
+    let demand = proposal(IndividualTwtImplicit::Implicit);
+    let response = |parameters: IndividualTwtParameterSet| IndividualTwtSetup {
+        dialog_token: oer_protocols_ieee80211_wire::management::DialogToken::new(1),
+        control: demand.control,
+        parameters: IndividualTwtParameterSet {
+            request: parameters
+                .request
+                .with_requesting_sta(false)
+                .with_setup_command(IndividualTwtSetupCommand::Accept),
+            ..parameters
+        },
+    };
+    let same = demand.parameters;
+    assert!(demand_response_matches(demand, response(same)));
+    for changed in [
+        IndividualTwtParameterSet {
+            target_wake_time: tsf(10_001),
+            ..same
+        },
+        IndividualTwtParameterSet {
+            nominal_minimum_wake_duration: 2,
+            ..same
+        },
+        IndividualTwtParameterSet {
+            wake_interval_mantissa: 1_025,
+            ..same
+        },
+        IndividualTwtParameterSet {
+            twt_channel: 1,
+            ..same
+        },
+        IndividualTwtParameterSet {
+            request: same.request.with_trigger(true),
+            ..same
+        },
+        IndividualTwtParameterSet {
+            request: same.request.with_implicit(false),
+            ..same
+        },
+    ] {
+        assert!(
+            !demand_response_matches(demand, response(changed)),
+            "{changed:?}"
+        );
+    }
 }

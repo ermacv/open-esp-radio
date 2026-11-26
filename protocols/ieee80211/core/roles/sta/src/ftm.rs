@@ -309,7 +309,9 @@ pub enum FtmSessionFailure {
     InitialResponseTimedOut,
     SessionTimedOut,
     PeerIncapable,
-    PeerFailed { retry_after_seconds: u8 },
+    PeerFailed {
+        retry_after: oer_protocols_ieee80211_wire::ftm::RetryAfter,
+    },
     HardwareAdmissionRejected,
     ProtocolViolation,
 }
@@ -996,12 +998,8 @@ impl<const N: usize> FtmSession<N> {
                     FtmSessionFailure::PeerIncapable,
                 ));
             }
-            FtmResponseStatus::Failed {
-                retry_after_seconds,
-            } => {
-                let failure = FtmSessionFailure::PeerFailed {
-                    retry_after_seconds,
-                };
+            FtmResponseStatus::Failed { retry_after } => {
+                let failure = FtmSessionFailure::PeerFailed { retry_after };
                 self.phase = FtmRequesterPhase::Failed(failure);
                 return Ok(FtmMeasurementDisposition::Failed(failure));
             }
@@ -1225,10 +1223,10 @@ impl<const N: usize> FtmSession<N> {
             || negotiated.ftms_per_burst == 0
             || negotiated.ftms_per_burst > requested.ftms_per_burst()
             || usize::from(negotiated.ftms_per_burst.saturating_sub(1)) > N
-            || negotiated.min_delta_ftm_100us < requested.min_delta_ftm_100us()
+            || negotiated.min_delta_ftm < requested.min_delta_ftm()
             || negotiated.burst_duration == FtmBurstDuration::NoPreference
             || negotiated.burst_duration.wire() > requested.burst_duration().wire()
-            || negotiated.burst_period_100ms != 0
+            || negotiated.burst_period != oer_protocols_ieee80211_wire::ftm::BurstPeriod::NONE
             || !format_allowed
         {
             self.phase = FtmRequesterPhase::Failed(FtmSessionFailure::ProtocolViolation);

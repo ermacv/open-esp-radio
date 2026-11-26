@@ -50,17 +50,18 @@ pub enum TwtWireError {
 #[repr(transparent)]
 pub struct IndividualTwtFlowId(FlowNumber);
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-#[repr(u8)]
-enum FlowNumber {
-    Flow0 = 0,
-    Flow1 = 1,
-    Flow2 = 2,
-    Flow3 = 3,
-    Flow4 = 4,
-    Flow5 = 5,
-    Flow6 = 6,
-    Flow7 = 7,
+oer_portable_wire::bitfield! {
+    #[derive(Ord, PartialOrd)]
+    enum FlowNumber: u8 [3] {
+        Flow0 = 0,
+        Flow1 = 1,
+        Flow2 = 2,
+        Flow3 = 3,
+        Flow4 = 4,
+        Flow5 = 5,
+        Flow6 = 6,
+        Flow7 = 7,
+    }
 }
 
 impl IndividualTwtFlowId {
@@ -76,47 +77,22 @@ impl IndividualTwtFlowId {
         Self(FlowNumber::Flow7),
     ];
     pub const fn new(value: u8) -> Option<Self> {
-        match value {
-            0 => Some(Self(FlowNumber::Flow0)),
-            1 => Some(Self(FlowNumber::Flow1)),
-            2 => Some(Self(FlowNumber::Flow2)),
-            3 => Some(Self(FlowNumber::Flow3)),
-            4 => Some(Self(FlowNumber::Flow4)),
-            5 => Some(Self(FlowNumber::Flow5)),
-            6 => Some(Self(FlowNumber::Flow6)),
-            7 => Some(Self(FlowNumber::Flow7)),
-            _ => None,
+        match oer_portable_wire::U8::new(value) {
+            Some(field) => Some(Self::from_field(field)),
+            None => None,
         }
     }
     pub const fn get(self) -> u8 {
-        self.0 as u8
+        self.0.encoding().get()
     }
     /// The flow a three-bit Flow Identifier field names: each of its eight
     /// values names one.
     pub const fn from_field(field: oer_portable_wire::U8<3>) -> Self {
-        Self(match field.get() {
-            0 => FlowNumber::Flow0,
-            1 => FlowNumber::Flow1,
-            2 => FlowNumber::Flow2,
-            3 => FlowNumber::Flow3,
-            4 => FlowNumber::Flow4,
-            5 => FlowNumber::Flow5,
-            6 => FlowNumber::Flow6,
-            _ => FlowNumber::Flow7,
-        })
+        Self(FlowNumber::from_encoding(field))
     }
     /// The flow's three-bit Flow Identifier field.
     pub const fn field(self) -> oer_portable_wire::U8<3> {
-        match self.0 {
-            FlowNumber::Flow0 => oer_portable_wire::U8::constant::<0>(),
-            FlowNumber::Flow1 => oer_portable_wire::U8::constant::<1>(),
-            FlowNumber::Flow2 => oer_portable_wire::U8::constant::<2>(),
-            FlowNumber::Flow3 => oer_portable_wire::U8::constant::<3>(),
-            FlowNumber::Flow4 => oer_portable_wire::U8::constant::<4>(),
-            FlowNumber::Flow5 => oer_portable_wire::U8::constant::<5>(),
-            FlowNumber::Flow6 => oer_portable_wire::U8::constant::<6>(),
-            FlowNumber::Flow7 => oer_portable_wire::U8::constant::<7>(),
-        }
+        self.0.encoding()
     }
     pub const fn index(self) -> usize {
         self.get() as usize
@@ -151,50 +127,22 @@ impl IndividualTwtFlowId {
     }
 }
 
-/// TWT Setup Command values from the two-byte Request Type field.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum IndividualTwtSetupCommand {
-    Request = 0,
-    Suggest = 1,
-    Demand = 2,
-    Grouping = 3,
-    Accept = 4,
-    Alternate = 5,
-    Dictate = 6,
-    Reject = 7,
+oer_portable_wire::bitfield! {
+    /// TWT Setup Command values from the two-byte Request Type field (IEEE
+    /// Std 802.11-2020, 9.4.2.199, Table 9-297).
+    pub enum IndividualTwtSetupCommand: u8 [3] {
+        Request = 0,
+        Suggest = 1,
+        Demand = 2,
+        Grouping = 3,
+        Accept = 4,
+        Alternate = 5,
+        Dictate = 6,
+        Reject = 7,
+    }
 }
 
 impl IndividualTwtSetupCommand {
-    /// The command a three-bit TWT Setup Command field names: each of its
-    /// eight values names one.
-    pub const fn from_field(field: oer_portable_wire::U8<3>) -> Self {
-        match field.get() {
-            0 => Self::Request,
-            1 => Self::Suggest,
-            2 => Self::Demand,
-            3 => Self::Grouping,
-            4 => Self::Accept,
-            5 => Self::Alternate,
-            6 => Self::Dictate,
-            _ => Self::Reject,
-        }
-    }
-
-    /// The command's three-bit TWT Setup Command field.
-    pub const fn field(self) -> oer_portable_wire::U8<3> {
-        match self {
-            Self::Request => oer_portable_wire::U8::constant::<0>(),
-            Self::Suggest => oer_portable_wire::U8::constant::<1>(),
-            Self::Demand => oer_portable_wire::U8::constant::<2>(),
-            Self::Grouping => oer_portable_wire::U8::constant::<3>(),
-            Self::Accept => oer_portable_wire::U8::constant::<4>(),
-            Self::Alternate => oer_portable_wire::U8::constant::<5>(),
-            Self::Dictate => oer_portable_wire::U8::constant::<6>(),
-            Self::Reject => oer_portable_wire::U8::constant::<7>(),
-        }
-    }
-
     pub const fn is_requester_command(self) -> bool {
         matches!(self, Self::Request | Self::Suggest | Self::Demand)
     }
@@ -246,10 +194,14 @@ pub enum TwtWakeDurationUnit {
 }
 
 impl TwtWakeDurationUnit {
-    pub const fn micros(self) -> u32 {
+    /// `count` of this unit, as a span of the TSF.
+    pub const fn span(self, count: u8) -> crate::tsf::TsfDuration {
         match self {
-            Self::Micros256 => 256,
-            Self::Tu1024 => 1_024,
+            // A `u8` of 256 µs is below 2^16 µs.
+            Self::Micros256 => {
+                crate::tsf::TsfDuration::from_micros((count as u64).wrapping_mul(256))
+            }
+            Self::Tu1024 => crate::tsf::TimeUnits::new(count as u16).span(),
         }
     }
 }
@@ -289,7 +241,9 @@ impl TwtControlFields {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IndividualTwtParameterSet {
     pub request: TwtRequestFields,
-    pub target_wake_time_tsf: u64,
+    /// The Target Wake Time: an instant of the TSF (IEEE Std 802.11-2020,
+    /// 9.4.2.199).
+    pub target_wake_time: crate::tsf::TsfInstant,
     pub nominal_minimum_wake_duration: u8,
     pub wake_interval_mantissa: u16,
     pub twt_channel: u8,
@@ -301,7 +255,7 @@ impl IndividualTwtParameterSet {
     }
 
     pub const fn setup_command(self) -> IndividualTwtSetupCommand {
-        IndividualTwtSetupCommand::from_field(self.request.setup_command())
+        self.request.setup_command()
     }
 
     pub const fn trigger(self) -> IndividualTwtTrigger {
@@ -340,23 +294,30 @@ impl IndividualTwtParameterSet {
         }
     }
 
-    pub const fn wake_interval_micros(self) -> Result<u64, TwtWireError> {
+    /// The TWT Wake Interval, mantissa times two to the exponent
+    /// microseconds of the TSF (IEEE Std 802.11-2020, 9.4.2.199).
+    pub const fn wake_interval(self) -> Result<crate::tsf::TsfDuration, TwtWireError> {
         if self.wake_interval_mantissa == 0 {
             return Err(TwtWireError::ZeroWakeIntervalMantissa);
         }
         // The exponent's five bits shift a sixteen-bit mantissa within 64.
-        Ok((self.wake_interval_mantissa as u64) << self.request.wake_interval_exponent().get())
+        Ok(crate::tsf::TsfDuration::from_micros(
+            (self.wake_interval_mantissa as u64) << self.request.wake_interval_exponent().get(),
+        ))
     }
 
-    pub const fn wake_duration_micros(
+    /// The Nominal Minimum TWT Wake Duration in the control's unit, a span
+    /// of the TSF (IEEE Std 802.11-2020, 9.4.2.199).
+    pub const fn wake_duration(
         self,
         control: TwtControlFields,
-    ) -> Result<u32, TwtWireError> {
+    ) -> Result<crate::tsf::TsfDuration, TwtWireError> {
         if self.nominal_minimum_wake_duration == 0 {
             return Err(TwtWireError::ZeroWakeDuration);
         }
-        Ok((self.nominal_minimum_wake_duration as u32)
-            .saturating_mul(control.wake_duration_unit().micros()))
+        Ok(control
+            .wake_duration_unit()
+            .span(self.nominal_minimum_wake_duration))
     }
 
     pub fn validate(self, control: TwtControlFields) -> Result<Self, TwtWireError> {
@@ -376,9 +337,9 @@ impl IndividualTwtParameterSet {
             return Err(TwtWireError::UnsupportedTwtChannel(self.twt_channel));
         }
         if command != IndividualTwtSetupCommand::Reject {
-            let interval = self.wake_interval_micros()?;
-            let duration = self.wake_duration_micros(control)?;
-            if duration as u64 > interval {
+            let interval = self.wake_interval()?;
+            let duration = self.wake_duration(control)?;
+            if duration > interval {
                 return Err(TwtWireError::WakeDurationExceedsInterval);
             }
         }
@@ -389,7 +350,7 @@ impl IndividualTwtParameterSet {
         let fields = IndividualTwtFields::from_bytes(bytes);
         Self {
             request,
-            target_wake_time_tsf: fields.target_wake_time(),
+            target_wake_time: crate::tsf::TsfInstant::from_micros(fields.target_wake_time()),
             nominal_minimum_wake_duration: fields.nominal_minimum_wake_duration(),
             wake_interval_mantissa: fields.wake_interval_mantissa(),
             twt_channel: fields.twt_channel(),
@@ -399,7 +360,7 @@ impl IndividualTwtParameterSet {
     /// The fields after the Request Type, as they appear on air.
     const fn fields(self) -> IndividualTwtFields {
         IndividualTwtFields::from_bytes([0; 12])
-            .with_target_wake_time(self.target_wake_time_tsf)
+            .with_target_wake_time(self.target_wake_time.as_micros())
             .with_nominal_minimum_wake_duration(self.nominal_minimum_wake_duration)
             .with_wake_interval_mantissa(self.wake_interval_mantissa)
             .with_twt_channel(self.twt_channel)
@@ -656,7 +617,7 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.199 (TWT Request Type field).
     pub struct TwtRequestFields[2] (little) {
         pub requesting_sta, with_requesting_sta: bool = 0..1;
-        pub setup_command, with_setup_command: (u8) = 1..4;
+        pub setup_command, with_setup_command: (IndividualTwtSetupCommand) = 1..4;
         pub trigger, with_trigger: bool = 4..5;
         pub implicit, with_implicit: bool = 5..6;
         pub flow_type, with_flow_type: bool = 6..7;
@@ -689,7 +650,10 @@ mod tests {
         }
         for value in 0..8 {
             let field = oer_portable_wire::U8::<3>::new(value).unwrap();
-            assert_eq!(IndividualTwtSetupCommand::from_field(field).field(), field);
+            assert_eq!(
+                IndividualTwtSetupCommand::from_encoding(field).encoding(),
+                field
+            );
         }
     }
 
@@ -700,10 +664,10 @@ mod tests {
             control: TwtControlFields::REQUEST,
             parameters: IndividualTwtParameterSet {
                 request: TwtRequestFields::from_bytes([0; 2])
-                    .with_setup_command(IndividualTwtSetupCommand::Reject.field())
+                    .with_setup_command(IndividualTwtSetupCommand::Reject)
                     .with_flow_id(IndividualTwtFlowId::ALL[0].field())
                     .with_wake_interval_exponent(oer_portable_wire::U8::constant::<31>()),
-                target_wake_time_tsf: 0,
+                target_wake_time: crate::tsf::TsfInstant::from_micros(0),
                 nominal_minimum_wake_duration: 0,
                 wake_interval_mantissa: 0,
                 twt_channel: 0,
@@ -728,14 +692,14 @@ mod tests {
             parameters: IndividualTwtParameterSet {
                 request: TwtRequestFields::from_bytes([0; 2])
                     .with_requesting_sta(true)
-                    .with_setup_command(IndividualTwtSetupCommand::Demand.field())
+                    .with_setup_command(IndividualTwtSetupCommand::Demand)
                     .with_trigger(true)
                     .with_implicit(true)
                     .with_flow_type(true)
                     .with_flow_id(IndividualTwtFlowId::ALL[5].field())
                     .with_wake_interval_exponent(oer_portable_wire::U8::constant::<10>())
                     .with_protection(true),
-                target_wake_time_tsf: 0x0123_4567_89ab_cdef,
+                target_wake_time: crate::tsf::TsfInstant::from_micros(0x0123_4567_89ab_cdef),
                 nominal_minimum_wake_duration: 0x40,
                 wake_interval_mantissa: 0x1234,
                 twt_channel: 0,
@@ -755,7 +719,7 @@ mod tests {
             let request = TwtRequestFields::from_bytes([0; 2]).with_flow_id(flow.field());
             let parameters = IndividualTwtParameterSet {
                 request,
-                target_wake_time_tsf: 0,
+                target_wake_time: crate::tsf::TsfInstant::from_micros(0),
                 nominal_minimum_wake_duration: 0,
                 wake_interval_mantissa: 0,
                 twt_channel: 0,
@@ -774,13 +738,13 @@ mod tests {
             IndividualTwtSetupCommand::Reject,
         ] {
             assert_eq!(
-                IndividualTwtSetupCommand::from_field(command.field()),
+                IndividualTwtSetupCommand::from_encoding(command.encoding()),
                 command
             );
         }
         let parameters = |request| IndividualTwtParameterSet {
             request,
-            target_wake_time_tsf: 0,
+            target_wake_time: crate::tsf::TsfInstant::from_micros(0),
             nominal_minimum_wake_duration: 0,
             wake_interval_mantissa: 0,
             twt_channel: 0,
@@ -886,5 +850,26 @@ mod tests {
                 available: INDIVIDUAL_TWT_TEARDOWN_BODY_LEN - 1,
             })
         );
+    }
+
+    /// A service period may last its whole interval, never longer.
+    #[test]
+    fn a_wake_duration_may_equal_its_interval() {
+        let parameters = |mantissa: u16| IndividualTwtParameterSet {
+            request: TwtRequestFields::from_bytes([0; 2])
+                .with_requesting_sta(true)
+                .with_setup_command(IndividualTwtSetupCommand::Request),
+            target_wake_time: crate::tsf::TsfInstant::from_micros(0),
+            nominal_minimum_wake_duration: 1,
+            wake_interval_mantissa: mantissa,
+            twt_channel: 0,
+        };
+        // One unit of 256 µs against an interval of 256 and of 255 µs.
+        assert!(parameters(256).validate(TwtControlFields::REQUEST).is_ok());
+        assert_eq!(
+            parameters(255).validate(TwtControlFields::REQUEST),
+            Err(TwtWireError::WakeDurationExceedsInterval)
+        );
+        assert!(parameters(257).validate(TwtControlFields::REQUEST).is_ok());
     }
 }
