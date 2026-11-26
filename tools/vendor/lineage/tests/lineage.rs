@@ -531,6 +531,9 @@ fn call_lists_of_different_length_correspond_inside_the_equal_gaps_between_their
             "y1 a y2 y3 b n",
             &[("x1", "y1"), ("x2", "y2"), ("x3", "y3")],
         ),
+        // The gap before the first anchor is not equal, the one between the
+        // two is.
+        ("x0 a x b", "a y b", &[("x", "y")]),
         // No anchor: the lists are one gap of two against three.
         ("x1 x2", "y1 y2 y3", &[]),
         // Equal lengths correspond position by position, anchors or none.
@@ -938,6 +941,62 @@ fn a_step_s_summary_counts_its_pairs_by_evidence_and_what_stays_unpaired() {
             lineage.revisions[1].functions
         ),
         (9, 10)
+    );
+}
+
+#[test]
+fn a_name_follows_its_function_to_another_place_in_the_newer_revision() {
+    let lineage = trace(
+        &[
+            revision(
+                "r0",
+                vec![
+                    body("first", &[1, 2, 3], &[]),
+                    body("second", &[4, 5, 6], &[]),
+                    body("third", &[7, 8, 9], &[]),
+                ],
+            ),
+            revision(
+                "r1",
+                vec![
+                    body("g_new", &[10, 11, 12], &[]),
+                    body("g_c", &[7, 8, 9], &[]),
+                    body("g_a", &[1, 2, 3], &[]),
+                    body("g_b", &[4, 5, 6], &[]),
+                ],
+            ),
+        ],
+        Policy::default(),
+        &NameClass::Prefixes(vec!["g_".to_owned()]),
+    );
+    let names: Vec<_> = lineage
+        .functions
+        .iter()
+        .map(|function| {
+            (
+                function.source_name.as_deref(),
+                function
+                    .chain
+                    .first()
+                    .map(|step| step.previous_name.as_str()),
+            )
+        })
+        .collect();
+    assert_eq!(
+        names,
+        [
+            (None, None),
+            (Some("third"), Some("third")),
+            (Some("first"), Some("first")),
+            (Some("second"), Some("second")),
+        ]
+    );
+    assert_eq!(
+        (
+            lineage.steps[0].unpaired_left,
+            lineage.steps[0].unpaired_right
+        ),
+        (0, 1)
     );
 }
 

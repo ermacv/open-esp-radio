@@ -209,6 +209,23 @@ fn a_body_is_cut_into_instructions_by_the_length_encoding() {
 }
 
 #[test]
+fn what_a_body_holds_of_its_last_instruction_is_that_instruction_s_token() {
+    // `lui a5, 0x12345` whole and cut after each of its bytes: four tokens,
+    // none like another.
+    let long = [0xb7, 0x57, 0x34, 0x12];
+    let mut tokens: Vec<u64> = (1..=4)
+        .map(|held| {
+            let tokens = function(&long[..held], vec![]).tokens;
+            assert_eq!(tokens.len(), 1, "{held}");
+            tokens[0]
+        })
+        .collect();
+    tokens.sort_unstable();
+    tokens.dedup();
+    assert_eq!(tokens.len(), 4);
+}
+
+#[test]
 fn a_relocation_enters_the_token_of_the_instruction_that_holds_its_offset() {
     // `c.nop`, `nop`, `c.nop`: no bit a branch's relocation clears is set,
     // so a token changes only by the relocation that enters it.
