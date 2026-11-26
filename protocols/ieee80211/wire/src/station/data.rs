@@ -107,7 +107,7 @@ pub struct StaProtectedDataFrame<'a> {
     pub bssid: Bssid,
     pub destination: Eui48,
     pub sequence_number: SequenceNumber,
-    pub user_priority: u8,
+    pub user_priority: WmmUserPriority,
     pub peer_qos: PeerQos,
     pub ccmp_header: [u8; CCMP_HEADER_LEN],
     pub ether_type: EtherType,
@@ -129,8 +129,7 @@ impl StaProtectedDataFrame<'_> {
         he_control: DataHeControl,
         output: &mut [u8],
     ) -> Result<usize, StationFrameError> {
-        let priority = WmmUserPriority::new(self.user_priority)
-            .ok_or(StationFrameError::UserPriorityOutOfRange)?;
+        let priority = self.user_priority;
         if self.peer_qos == PeerQos::NonQos
             && matches!(
                 he_control,

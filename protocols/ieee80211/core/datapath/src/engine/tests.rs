@@ -11,7 +11,7 @@ use oer_portable_time::Duration;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::DataPort;
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduRate, FrameSet, HEADROOM, MpduStartSpacing, Ppdu, Protection, RetryStage,
+    AmpduRate, FrameSet, HEADROOM, Ppdu, Protection, RetryStage,
 };
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, InstalledCcmpTxKey, SoftwareCcmpKey,
@@ -350,7 +350,7 @@ pub(super) fn fixed<'id, const S: usize, const D: usize, const P: usize>(
         single: Ppdu::Single(once(single)),
         aggregate: Ppdu::Aggregate {
             rate: aggregate,
-            spacing: MpduStartSpacing::new(0).unwrap(),
+            spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
             protection: Protection::None,
             alone: once(single),
         },
@@ -374,7 +374,7 @@ pub(super) fn station_link(attempts: u8, lifetime: Duration) -> StationLink<Mode
             admission: AcAdmission::default(),
             retry: Some(AggregateRetry { lifetime, attempts }),
             ht: Some(HtLimits {
-                spacing: MpduStartSpacing::new(0).unwrap(),
+                spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
                 max_length: 65_535,
             }),
             windows: [None; 8],

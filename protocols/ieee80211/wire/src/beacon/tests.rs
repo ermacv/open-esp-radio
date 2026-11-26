@@ -105,6 +105,36 @@ fn a_wpa3_beacon_carries_its_rsne_and_rsnxe_to_the_scan_record() {
     assert_eq!(record.rsnxe_bytes(), test_elements::SAE_H2E_RSNXE);
 }
 
+/// A management frame of another subtype with a beacon's body is no scan
+/// record.
+#[test]
+fn only_a_beacon_or_a_probe_response_is_a_scan_record() {
+    let ap = [0x02, 0, 0, 0, 0, 1];
+    let ssid = Ssid::new(b"open-radio-ap").unwrap();
+    let mut bytes = [0; AP_BEACON_CAPACITY];
+    let len = write_ht_beacon(
+        &TEST_ADVERTISEMENT,
+        &mut bytes,
+        Eui48::new(ap),
+        &ssid,
+        crate::channel::Channel::from_ghz2_4_channel(Ghz2_4Channel::mhz20(6).unwrap()),
+        crate::tsf::TimeUnits::new(100),
+        2,
+        seq(1),
+        test_elements::WPA3_PERSONAL,
+        ApBssProtection::default(),
+    )
+    .unwrap();
+    let frame = &mut bytes[..len];
+    assert!(parse_management(frame).is_some());
+    // Probe Response, subtype 5.
+    frame[0] = 0x50;
+    assert!(parse_management(frame).is_some());
+    // Probe Request, subtype 4.
+    frame[0] = 0x40;
+    assert!(parse_management(frame).is_none());
+}
+
 #[test]
 fn builds_the_bounded_wpa2_ht20_beacon() {
     let ap = [0x02, 0, 0, 0, 0, 1];

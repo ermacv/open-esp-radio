@@ -1,7 +1,7 @@
 //! Station authentication, disconnect, deauthentication and action frame
 //! codecs.
 
-use crate::frame::FrameControlFields;
+use crate::frame::{FrameControlFields, ManagementSubtype};
 use crate::management::{AuthenticationAlgorithm, AuthenticationTransaction};
 use crate::status::{ReasonCode, StatusCode};
 use oer_protocols_ieee802_wire::Eui48;
@@ -300,9 +300,9 @@ pub fn parse_sta_disconnect(
         return None;
     }
 
-    let kind = match control.subtype() {
-        10 => StaDisconnectKind::Disassociation,
-        12 => StaDisconnectKind::Deauthentication,
+    let kind = match control.management_subtype() {
+        ManagementSubtype::Disassociation => StaDisconnectKind::Disassociation,
+        ManagementSubtype::Deauthentication => StaDisconnectKind::Deauthentication,
         _ => return None,
     };
     let mut reader = oer_portable_wire::Reader::new(header.body());

@@ -11,12 +11,21 @@ fn mpdu_spacing_rounds_exact_symbol_rates_up_to_octets() {
         .unwrap(),
     );
     // 260 bits / 3.6 us, multiplied by each spacing then divided by eight.
-    for (encoding, bytes) in [0, 3, 5, 10, 19, 37, 73, 145].into_iter().enumerate() {
-        assert_eq!(ht.minimum_mpdu_spacing_bytes(encoding as u8), Some(bytes));
+    use crate::ht::MinimumMpduStartSpacing as Spacing;
+    for (spacing, bytes) in [
+        (Spacing::NoRestriction, 0),
+        (Spacing::Us0_25, 3),
+        (Spacing::Us0_5, 5),
+        (Spacing::Us1, 10),
+        (Spacing::Us2, 19),
+        (Spacing::Us4, 37),
+        (Spacing::Us8, 73),
+        (Spacing::Us16, 145),
+    ] {
+        assert_eq!(ht.minimum_mpdu_spacing_bytes(spacing), Some(bytes));
     }
-    assert_eq!(ht.minimum_mpdu_spacing_bytes(8), None);
     assert_eq!(
-        PhyRate::Legacy(LegacyRate::Ofdm54M).minimum_mpdu_spacing_bytes(0),
+        PhyRate::Legacy(LegacyRate::Ofdm54M).minimum_mpdu_spacing_bytes(Spacing::NoRestriction),
         None
     );
     let he = PhyRate::He(
@@ -31,7 +40,7 @@ fn mpdu_spacing_rounds_exact_symbol_rates_up_to_octets() {
         .unwrap(),
     );
     // 1960 subcarriers * 10 bits * 5/6 * 8 streams, 13.6 us symbols.
-    assert_eq!(he.minimum_mpdu_spacing_bytes(7), Some(19_216));
+    assert_eq!(he.minimum_mpdu_spacing_bytes(Spacing::Us16), Some(19_216));
 }
 
 #[test]

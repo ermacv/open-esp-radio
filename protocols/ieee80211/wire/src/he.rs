@@ -658,6 +658,62 @@ impl HeCapabilities {
     }
 }
 
+/// The color of an HE BSS: the six-bit BSS Color subfield of the HE
+/// Operation element (IEEE Std 802.11ax-2021, 9.4.2.249).
+///
+/// ```compile_fail,E0423
+/// # use oer_protocols_ieee80211_wire::he::BssColor;
+/// let _ = BssColor(64);
+/// ```
+///
+/// ```
+/// # use oer_protocols_ieee80211_wire::he::BssColor;
+/// assert!(BssColor::new(64).is_none());
+/// assert!(BssColor::new(63).is_some());
+/// ```
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BssColor(oer_portable_wire::U8<6>);
+
+impl BssColor {
+    /// Color zero: no BSS color.
+    pub const ZERO: Self = Self(oer_portable_wire::U8::constant::<0>());
+
+    /// `color`, when it is a BSS color, 0 to 63.
+    pub const fn new(color: u8) -> Option<Self> {
+        match oer_portable_wire::U8::new(color) {
+            Some(color) => Some(Self(color)),
+            None => None,
+        }
+    }
+
+    /// The color its field holds.
+    pub const fn from_field(field: oer_portable_wire::U8<6>) -> Self {
+        Self(field)
+    }
+
+    /// The color.
+    pub const fn get(self) -> u8 {
+        self.0.get()
+    }
+}
+
+/// The Max Co-Hosted BSSID Indicator of a co-hosted BSS: the BSS shares
+/// its medium with up to 2^n BSSIDs (IEEE Std 802.11ax-2021, 9.4.2.249).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MaxCoHostedBssidIndicator(u8);
+
+impl MaxCoHostedBssidIndicator {
+    /// The indicator `value`, as its octet holds it.
+    pub const fn new(value: u8) -> Self {
+        Self(value)
+    }
+
+    /// The indicator.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
+
 /// A parsed HE Operation element: its HE Operation Parameters and BSS
 /// Color Information and its Basic HE-MCS And NSS Set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -666,8 +722,8 @@ pub struct HeOperation {
 }
 
 impl HeOperation {
-    pub const fn bss_color(self) -> u8 {
-        self.fields.bss_color()
+    pub const fn bss_color(self) -> BssColor {
+        BssColor::from_field(self.fields.bss_color())
     }
 
     pub const fn bss_color_enabled(self) -> bool {
@@ -691,11 +747,11 @@ impl HeOperation {
     /// whenever that enable bit is clear. Keeping the advertised numeric
     /// color separate from this effective transmit value prevents a disabled
     /// BSS color such as `0xae` from becoming active color 46.
-    pub const fn effective_bss_color(self) -> u8 {
+    pub const fn effective_bss_color(self) -> BssColor {
         if self.bss_color_enabled() {
             self.bss_color()
         } else {
-            0
+            BssColor::ZERO
         }
     }
 }
@@ -719,7 +775,7 @@ pub struct HePeerState {
     /// complete-IE byte four bit seven (Co-Hosted BSS) and, when it is set,
     /// the byte at element offset 12 with the VHT Operation Information
     /// (byte four bit six) or 9 without it to `hal_he_set_co_hosted_bss`.
-    pub max_co_hosted_bssid_indicator: Option<u8>,
+    pub max_co_hosted_bssid_indicator: Option<MaxCoHostedBssidIndicator>,
 }
 
 impl HePeerState {
@@ -727,8 +783,8 @@ impl HePeerState {
         self.operation.default_pe()
     }
 
-    pub const fn bss_color(self) -> u8 {
-        self.operation.bss_color()
+    pub const fn bss_color(self) -> BssColor {
+        BssColor::from_field(self.operation.bss_color())
     }
 
     pub const fn bss_color_enabled(self) -> bool {
@@ -1076,7 +1132,9 @@ pub fn parse_he_peer_state(
         if fields.vht_operation_present() {
             optional.take(3).map_err(|_| HeElementError::TooShort)?;
         }
-        Some(optional.u8().map_err(|_| HeElementError::TooShort)?)
+        Some(MaxCoHostedBssidIndicator::new(
+            optional.u8().map_err(|_| HeElementError::TooShort)?,
+        ))
     } else {
         None
     };
@@ -1226,7 +1284,7 @@ oer_portable_wire::bitfield! {
         pub vht_operation_present, with_vht_operation_present: bool = 14..15;
         pub co_hosted_bss, with_co_hosted_bss: bool = 15..16;
         pub er_su_disabled, with_er_su_disabled: bool = 16..17;
-        pub bss_color, with_bss_color: u8 = 24..30;
+        pub bss_color, with_bss_color: (u8) = 24..30;
         pub partial_bss_color, with_partial_bss_color: bool = 30..31;
         pub bss_color_disabled, with_bss_color_disabled: bool = 31..32;
         pub basic_mcs_nss, with_basic_mcs_nss: {u16} = 32..48;

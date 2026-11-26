@@ -1196,7 +1196,7 @@ impl ApMsduPlan {
             access_point: Eui48::new(access_point),
             peer: Eui48::new(self.peer),
             sequence_number,
-            user_priority: self.tid.value(),
+            user_priority: self.tid,
             peer_qos: self.qos,
             more_data: oer_protocols_ieee80211_wire::data::MoreData::Clear,
             msdu: MsduHeader {

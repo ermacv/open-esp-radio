@@ -126,7 +126,7 @@ pub const fn ht_capability_ie_for_peer(
             } else {
                 peer.exponent()
             };
-            let spacing = if local.spacing().get() > peer.spacing().get() {
+            let spacing = if local.spacing().encoding().get() > peer.spacing().encoding().get() {
                 local.spacing()
             } else {
                 peer.spacing()
@@ -276,7 +276,7 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
     pub struct HtAmpduParameters[1] (little) {
         pub exponent, with_exponent: (u8) = 0..2;
-        pub spacing, with_spacing: (u8) = 2..5;
+        pub spacing, with_spacing: (MinimumMpduStartSpacing) = 2..5;
     }
 }
 impl HtAmpduParameters {
@@ -286,11 +286,6 @@ impl HtAmpduParameters {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (A-MPDU Parameters field).
     pub const EXPONENT_65535_OCTETS: oer_portable_wire::U8<2> =
         oer_portable_wire::U8::constant::<3>();
-    /// The Minimum MPDU Start Spacing code of 4 us.
-    ///
-    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (Minimum MPDU Start Spacing
-    /// subfield: 5 is 4 us).
-    pub const SPACING_4_US: oer_portable_wire::U8<3> = oer_portable_wire::U8::constant::<5>();
 
     /// The Maximum A-MPDU Length the exponent names: `2^(13 + exponent) - 1`
     /// octets.
@@ -334,6 +329,22 @@ mod tests;
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.55.3 (Minimum MPDU Start Spacing code).
     pub struct HtAmpduSpacingCode[1] (little) {
-        pub spacing, with_spacing: (u8) = 0..3;
+        pub spacing, with_spacing: (MinimumMpduStartSpacing) = 0..3;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// The Minimum MPDU Start Spacing subfield: the shortest time between
+    /// the starts of two MPDUs of an A-MPDU (IEEE Std 802.11-2020,
+    /// 9.4.2.55.3).
+    pub enum MinimumMpduStartSpacing: u8 [3] {
+        NoRestriction = 0,
+        Us0_25 = 1,
+        Us0_5 = 2,
+        Us1 = 3,
+        Us2 = 4,
+        Us4 = 5,
+        Us8 = 6,
+        Us16 = 7,
     }
 }

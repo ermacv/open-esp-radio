@@ -5,7 +5,7 @@ use crate::AkmKeys;
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::{
-    EapolEncodeError, EapolKeyBuffer, EapolKeyFields, EapolKeyFixedFields,
+    EapolEncodeError, EapolKeyBuffer, EapolKeyFields, EapolKeyFixedFields, EapolProtocolVersion,
 };
 
 /// The Key Length field these EAPOL-Key frames carry: `RSN_GTK_LEN`
@@ -35,7 +35,7 @@ impl<const N: usize> RsnTxFrame<N> {
         Self::build(
             RsnInterface::AccessPoint,
             peer,
-            2,
+            EapolProtocolVersion::V2004,
             KeyInformation::EMPTY
                 .with_descriptor_version(akm.key_descriptor_version())
                 .with_pairwise(true)
@@ -62,7 +62,7 @@ impl<const N: usize> RsnTxFrame<N> {
             peer,
             retransmission: false,
             packet: EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
-                protocol_version: 2,
+                protocol_version: EapolProtocolVersion::V2004,
                 key_information: KeyInformation::EMPTY
                     .with_descriptor_version(akm.key_descriptor_version())
                     .with_pairwise(true)
@@ -106,7 +106,7 @@ impl<const N: usize> RsnTxFrame<N> {
         Self::station(
             EapolKeyBuffer::encode_with_bounded_key_data(
                 &EapolKeyFixedFields {
-                    protocol_version: 1,
+                    protocol_version: EapolProtocolVersion::V2001,
                     key_information: KeyInformation::EMPTY
                         .with_descriptor_version(akm.key_descriptor_version())
                         .with_pairwise(true)
@@ -137,7 +137,7 @@ impl<const N: usize> RsnTxFrame<N> {
         Self::build(
             RsnInterface::AccessPoint,
             peer,
-            2,
+            EapolProtocolVersion::V2004,
             KeyInformation::EMPTY
                 .with_descriptor_version(akm.key_descriptor_version())
                 .with_pairwise(true)
@@ -158,7 +158,7 @@ impl<const N: usize> RsnTxFrame<N> {
     pub fn message4(akm: Akm, peer: Eui48, replay_counter: u64) -> Self {
         Self::station(
             EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
-                protocol_version: 1,
+                protocol_version: EapolProtocolVersion::V2001,
                 key_information: KeyInformation::EMPTY
                     .with_descriptor_version(akm.key_descriptor_version())
                     .with_pairwise(true)
@@ -178,7 +178,7 @@ impl<const N: usize> RsnTxFrame<N> {
     pub fn group_message2(akm: Akm, peer: Eui48, replay_counter: u64) -> Self {
         Self::station(
             EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
-                protocol_version: 1,
+                protocol_version: EapolProtocolVersion::V2001,
                 key_information: KeyInformation::EMPTY
                     .with_descriptor_version(akm.key_descriptor_version())
                     .with_mic(true)
@@ -217,7 +217,7 @@ impl<const N: usize> RsnTxFrame<N> {
         Self::build(
             RsnInterface::AccessPoint,
             peer,
-            2,
+            EapolProtocolVersion::V2004,
             KeyInformation::EMPTY
                 .with_descriptor_version(akm.key_descriptor_version())
                 .with_ack(true)
@@ -236,7 +236,7 @@ impl<const N: usize> RsnTxFrame<N> {
     fn build(
         interface: RsnInterface,
         peer: Eui48,
-        protocol_version: u8,
+        protocol_version: EapolProtocolVersion,
         key_info: KeyInformation,
         key_length: u16,
         replay_counter: u64,

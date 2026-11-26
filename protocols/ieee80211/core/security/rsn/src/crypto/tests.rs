@@ -101,7 +101,10 @@ fn derives_known_ptk_and_builds_message_2() {
             .authenticate(&ptk, &mut SoftwareAes128)
             .unwrap();
     let parsed4 = EapolKeyFrame::parse(message4.as_bytes()).unwrap();
-    assert_eq!(parsed4.protocol_version(), 1);
+    assert_eq!(
+        parsed4.protocol_version(),
+        oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion::V2001
+    );
     assert_eq!(parsed4.message(), EapolKeyMessage::PairwiseMessage4);
     assert_eq!(parsed4.replay_counter(), 8);
     assert!(parsed4.verify_mic(&ptk, &mut SoftwareAes128).unwrap());

@@ -60,40 +60,7 @@ impl From<FtmParameterError> for FtmWireError {
     }
 }
 
-/// A code whose named values are listed once: the enum, its decoder and its
-/// encoder into a field of `$width` bits.
-macro_rules! ftm_code {
-    (
-        $(#[$meta:meta])*
-        $vis:vis enum $name:ident: $width:literal, $error:path => $error_type:ty {
-            $($variant:ident = $value:literal),+ $(,)?
-        }
-    ) => {
-        $(#[$meta])*
-        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-        $vis enum $name {
-            $($variant),+
-        }
-
-        impl $name {
-            const fn from_wire(value: u8) -> Result<Self, $error_type> {
-                match value {
-                    $($value => Ok(Self::$variant),)+
-                    _ => Err($error),
-                }
-            }
-
-            /// The code as its field holds it.
-            pub const fn wire(self) -> oer_portable_wire::U8<$width> {
-                match self {
-                    $(Self::$variant => oer_portable_wire::U8::constant::<$value>(),)+
-                }
-            }
-        }
-    };
-}
-
-ftm_code! {
+crate::closed_code::closed_code! {
     /// The Trigger field of an FTM Request (IEEE Std 802.11-2020, 9.6.7.32).
     pub enum FtmTrigger: 8, FtmWireError::ReservedTrigger => FtmWireError {
         Stop = 0,
@@ -101,7 +68,7 @@ ftm_code! {
     }
 }
 
-ftm_code! {
+crate::closed_code::closed_code! {
     /// The Burst Duration field (IEEE Std 802.11-2020, 9.4.2.167, Table
     /// 9-257).
     pub enum FtmBurstDuration: 4, FtmParameterError::InvalidBurstDuration => FtmParameterError {
@@ -119,7 +86,7 @@ ftm_code! {
     }
 }
 
-ftm_code! {
+crate::closed_code::closed_code! {
     /// The Format And Bandwidth field (IEEE Std 802.11-2020, 9.4.2.167,
     /// Table 9-258).
     pub enum FtmFormatAndBandwidth: 6, FtmParameterError::InvalidFormatAndBandwidth => FtmParameterError {

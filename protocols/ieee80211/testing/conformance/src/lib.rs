@@ -41,9 +41,9 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, ArenaOutcome, CloseGate, CommandPlace, CommandPoll, DataPort, DataRights, FrameSet,
     GateClosed, GateOpen, GroupCommand, GroupEnd, HEADROOM, HeaderLen, IdleArena, InCommand,
-    MpduLength, MpduStartSpacing, PairwiseCommand, PairwiseEnd, PhyRate, PortRate, PortSink, Ppdu,
-    QueueRight, RadioPort, ReceivePort, Round, Settled, SingleOutcome, SinglePlace, StartPoll,
-    StopFrom, StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome, ValueCommand, ValueEnd,
+    MpduLength, PairwiseCommand, PairwiseEnd, PhyRate, PortRate, PortSink, Ppdu, QueueRight,
+    RadioPort, ReceivePort, Round, Settled, SingleOutcome, SinglePlace, StartPoll, StopFrom,
+    StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome, ValueCommand, ValueEnd,
 };
 use oer_protocols_ieee80211_wire::frame::MacHeader;
 use oer_protocols_ieee80211_wire::phy::{
@@ -380,7 +380,7 @@ fn data_run<'id, H, const S: usize, const G: usize, const A: usize, const D: usi
     let (place, end) = value_command(
         harness,
         place,
-        ValueCommand::SetBssColor(oer_protocols_ieee80211_contracts_port::BssColor::ZERO),
+        ValueCommand::SetBssColor(oer_protocols_ieee80211_wire::he::BssColor::ZERO),
     );
     assert_eq!(end, ValueEnd::Done, "a command of values takes effect");
     let (command, closed) = close_gate(harness, place, open);
@@ -805,7 +805,7 @@ fn alone<'id, P: DataPort<'id>>(port: &P) -> RetryPlan<PortRate<'id, P::Caps>> {
 fn aggregate<'id, P: DataPort<'id>>(port: &P, mcs: u8) -> Ppdu<'id, P::Caps> {
     Ppdu::Aggregate {
         rate: ht_rate(port, mcs),
-        spacing: MpduStartSpacing::new(0).unwrap(),
+        spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
         protection: Protection::None,
         alone: alone(port),
     }

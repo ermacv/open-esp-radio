@@ -80,7 +80,9 @@ impl<'a> EapolKeyFrame<'a> {
         self.0.bytes()
     }
 
-    pub const fn protocol_version(self) -> u8 {
+    pub const fn protocol_version(
+        self,
+    ) -> oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion {
         self.0.protocol_version()
     }
 

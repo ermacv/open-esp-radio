@@ -14,6 +14,7 @@
 
 use oer_portable_events::{EventSink, report};
 use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee80211_wire::frame::DataSubtype;
 use oer_protocols_ieee80211_wire::qos::Tid;
 
 use super::{
@@ -1023,7 +1024,13 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
             || fragment != 0
             || header.transmitter != bssid.get()
             || header.receiver != local
-            || !matches!(control.subtype(), 8..=11)
+            || !matches!(
+                control.data_subtype(),
+                DataSubtype::QosData
+                    | DataSubtype::QosDataCfAck
+                    | DataSubtype::QosDataCfPoll
+                    | DataSubtype::QosDataCfAckCfPoll
+            )
             || (control.protected()
                 && !matches!(
                     meta.common().crypto,

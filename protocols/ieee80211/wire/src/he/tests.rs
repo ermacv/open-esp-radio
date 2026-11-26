@@ -234,10 +234,10 @@ fn decodes_the_vendor_s31_sta_stbc_and_cqi_advertisement() {
 fn parses_disabled_partial_bss_color() {
     let element = [255, 7, 36, 0, 0, 0, 0xc5, 0xfd, 0xff];
     let operation = parse_he_operation(&element).unwrap();
-    assert_eq!(operation.bss_color(), 5);
+    assert_eq!(operation.bss_color().get(), 5);
     assert!(!operation.bss_color_enabled());
     assert!(operation.partial_bss_color());
-    assert_eq!(operation.effective_bss_color(), 0);
+    assert_eq!(operation.effective_bss_color(), BssColor::ZERO);
     assert_eq!(operation.basic_mcs_nss_map(), 0xfffd);
 }
 
@@ -245,10 +245,10 @@ fn parses_disabled_partial_bss_color() {
 fn disabled_color_matches_vendor_effective_tx_color() {
     let element = [255, 7, 36, 0, 0, 0, 0xae, 0xfd, 0xff];
     let operation = parse_he_operation(&element).unwrap();
-    assert_eq!(operation.bss_color(), 46);
+    assert_eq!(operation.bss_color().get(), 46);
     assert!(!operation.bss_color_enabled());
     assert!(!operation.partial_bss_color());
-    assert_eq!(operation.effective_bss_color(), 0);
+    assert_eq!(operation.effective_bss_color(), BssColor::ZERO);
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn recovers_vendor_ap_he20_peer_state() {
         state.default_packet_extension_duration(),
         DefaultPeDuration::Us16
     );
-    assert_eq!(state.bss_color(), 27);
+    assert_eq!(state.bss_color().get(), 27);
     assert!(state.bss_color_enabled());
     assert!(!state.partial_bss_color());
     assert_eq!(state.basic_mcs_nss_map(), 0xfffc);
@@ -632,11 +632,23 @@ fn a_co_hosted_bss_names_its_max_co_hosted_bssid_indicator() {
     // Co-Hosted BSS (parameters bit 15): the octet after the fixed fields.
     let co_hosted = [255, 8, 36, 0x04, 0x80, 0x00, 0x1b, 0xfc, 0xff, 3];
     let state = parse_he_peer_state(&capability, &co_hosted).unwrap();
-    assert_eq!(state.max_co_hosted_bssid_indicator, Some(3));
+    assert_eq!(
+        state.max_co_hosted_bssid_indicator,
+        Some(MaxCoHostedBssidIndicator::new(3))
+    );
+    assert_eq!(
+        state
+            .max_co_hosted_bssid_indicator
+            .map(MaxCoHostedBssidIndicator::get),
+        Some(3)
+    );
     // With VHT Operation Information (bit 14): after its three octets.
     let with_vht = [255, 11, 36, 0x04, 0xc0, 0x00, 0x1b, 0xfc, 0xff, 0, 42, 0, 5];
     let state = parse_he_peer_state(&capability, &with_vht).unwrap();
-    assert_eq!(state.max_co_hosted_bssid_indicator, Some(5));
+    assert_eq!(
+        state.max_co_hosted_bssid_indicator,
+        Some(MaxCoHostedBssidIndicator::new(5))
+    );
     // Announced but absent: the element is too short.
     let missing = [255, 7, 36, 0x04, 0x80, 0x00, 0x1b, 0xfc, 0xff];
     assert_eq!(
@@ -648,14 +660,13 @@ fn a_co_hosted_bss_names_its_max_co_hosted_bssid_indicator() {
 #[test]
 fn an_operation_s_color_is_enabled_by_its_clear_disabled_bit_and_rts_disabled_at_0_and_1023() {
     let fields = HeOperationFields::from_bytes([0; 6])
-        .with_bss_color(5)
-        .unwrap();
+        .with_bss_color(oer_portable_wire::U8::constant::<5>());
     let operation = HeOperation { fields };
-    assert!(operation.bss_color_enabled() && operation.effective_bss_color() == 5);
+    assert!(operation.bss_color_enabled() && operation.effective_bss_color().get() == 5);
     let operation = HeOperation {
         fields: fields.with_bss_color_disabled(true),
     };
-    assert!(!operation.bss_color_enabled() && operation.effective_bss_color() == 0);
+    assert!(!operation.bss_color_enabled() && operation.effective_bss_color() == BssColor::ZERO);
     let state = |threshold| HePeerState {
         capability_prefix: [0; HE_CAPABILITIES_IE_MIN_LEN],
         packet_padding: HePacketPadding::None,

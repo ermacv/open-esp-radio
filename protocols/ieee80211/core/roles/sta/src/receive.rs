@@ -34,9 +34,9 @@ impl<'frame> Management<'frame> {
         &self.0
     }
 
-    /// The Frame Control subtype: 8 for a beacon, 5 for a probe response.
-    pub const fn subtype(&self) -> u16 {
-        self.0.control().subtype()
+    /// The Frame Control subtype.
+    pub const fn subtype(&self) -> oer_protocols_ieee80211_wire::frame::ManagementSubtype {
+        self.0.control().management_subtype()
     }
 }
 
@@ -97,14 +97,14 @@ pub fn observe_scan<const N: usize>(
 /// What a scan reports of `meta`'s frame of Frame Control `subtype`, which
 /// [`observe_scan`] recorded as `observation`.
 pub(crate) fn scan_heard(
-    subtype: u16,
+    subtype: oer_protocols_ieee80211_wire::frame::ManagementSubtype,
     addressing: crate::events::Addressing,
     meta: &impl RxMetadata,
     observation: ScanObservation,
 ) -> crate::events::ScanHeard {
     crate::events::ScanHeard {
         own: !matches!(observation, ScanObservation::Ignored),
-        frame: if subtype == PROBE_RESPONSE {
+        frame: if subtype == oer_protocols_ieee80211_wire::frame::ManagementSubtype::ProbeResponse {
             crate::events::ScanFrame::ProbeResponse
         } else {
             crate::events::ScanFrame::Beacon
@@ -116,9 +116,6 @@ pub(crate) fn scan_heard(
         },
     }
 }
-
-/// The Frame Control subtype of a probe response (IEEE 802.11-2020 9.2.4.1.3).
-const PROBE_RESPONSE: u16 = 5;
 
 #[cfg(test)]
 mod tests;

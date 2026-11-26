@@ -53,11 +53,17 @@ fn classified_management(frame: &[u8]) -> Management<'_> {
 fn classify_sorts_management_from_data() {
     let beacon = management(8, &[]);
     let sorted = classified_management(&beacon);
-    assert_eq!(sorted.subtype(), 8);
+    assert_eq!(
+        sorted.subtype(),
+        oer_protocols_ieee80211_wire::frame::ManagementSubtype::Beacon
+    );
     assert_eq!(sorted.frame(), beacon.as_slice());
     assert_eq!(sorted.header().address3(), Eui48::new(BSSID));
     let probe = management(5, &[]);
-    assert_eq!(classified_management(&probe).subtype(), 5);
+    assert_eq!(
+        classified_management(&probe).subtype(),
+        oer_protocols_ieee80211_wire::frame::ManagementSubtype::ProbeResponse
+    );
 
     let data = data();
     match classify(&data) {

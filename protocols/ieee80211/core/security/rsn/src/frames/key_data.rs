@@ -256,7 +256,7 @@ fn parse_key_data(
                     return Err(RsnFrameError::UnsupportedKeyData);
                 };
                 match data_type {
-                    GTK_KDE_TYPE => {
+                    KdeDataType::GTK => {
                         let GtkKde { info, key } =
                             GtkKde::parse(body).ok_or(RsnFrameError::UnsupportedKeyData)?;
                         if gtk.is_some() {
@@ -265,7 +265,7 @@ fn parse_key_data(
                         let key_id = info.group_key_id().ok_or(RsnFrameError::InvalidKeyId)?;
                         gtk = Some(RsnGtk::new(key_id, info.tx(), key));
                     }
-                    IGTK_KDE_TYPE => {
+                    KdeDataType::IGTK => {
                         if group_management.is_none() {
                             return Err(RsnFrameError::UnexpectedIgtk);
                         }

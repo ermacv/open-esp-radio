@@ -10,7 +10,8 @@
 use oer_protocols_ieee80211_wire::he::{HeOperation, HePeerState};
 use oer_protocols_ieee80211_wire::management::{AidField, AssociationId};
 
-use crate::BssColor;
+use oer_protocols_ieee80211_wire::he::{BssColor, MaxCoHostedBssidIndicator};
+use oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing;
 
 /// The HE state of the station's interface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,22 +62,19 @@ pub struct HeBssColor {
 
 impl HeBssColor {
     /// The color `operation` names.
-    pub const fn of(operation: &HeOperation) -> Option<Self> {
-        match BssColor::new(operation.bss_color()) {
-            Some(color) => Some(Self {
-                color,
-                used: if operation.bss_color_enabled() {
-                    BssColorUse::Enabled
-                } else {
-                    BssColorUse::Disabled
-                },
-                scope: if operation.partial_bss_color() {
-                    BssColorScope::Partial
-                } else {
-                    BssColorScope::Full
-                },
-            }),
-            None => None,
+    pub const fn of(operation: &HeOperation) -> Self {
+        Self {
+            color: operation.bss_color(),
+            used: if operation.bss_color_enabled() {
+                BssColorUse::Enabled
+            } else {
+                BssColorUse::Disabled
+            },
+            scope: if operation.partial_bss_color() {
+                BssColorScope::Partial
+            } else {
+                BssColorScope::Full
+            },
         }
     }
 
@@ -104,10 +102,10 @@ impl HeBssColor {
 pub struct HeAssociation {
     color: HeBssColor,
     association_id: AssociationId,
-    minimum_mpdu_start_spacing: u8,
+    minimum_mpdu_start_spacing: MinimumMpduStartSpacing,
     packet_padding: oer_protocols_ieee80211_wire::he::HePacketPadding,
     default_packet_extension: oer_protocols_ieee80211_wire::he::DefaultPeDuration,
-    max_co_hosted_bssid_indicator: Option<u8>,
+    max_co_hosted_bssid_indicator: Option<MaxCoHostedBssidIndicator>,
     extended_range_single_user_disabled: bool,
 }
 
@@ -116,20 +114,13 @@ pub struct HeAssociation {
 pub enum HeAssociationError {
     /// The AID is outside 1 to 2007 (IEEE Std 802.11-2020, 9.4.1.8).
     AssociationId(AidField),
-    /// The minimum MPDU start spacing code is above 7 (IEEE Std
-    /// 802.11-2020, 9.4.2.55.3).
-    MinimumMpduStartSpacing(u8),
-    /// The BSS color is above 63.
-    BssColor(u8),
     /// The Max Co-Hosted BSSID Indicator is above 8: a co-hosted set of
     /// more than 2^8 BSSIDs, whose mask the MAC's eight-bit field cannot
     /// hold.
-    MaxCoHostedBssidIndicator(u8),
+    MaxCoHostedBssidIndicator(MaxCoHostedBssidIndicator),
 }
 
 impl HeAssociation {
-    /// The largest minimum MPDU start spacing code.
-    pub const MAX_MINIMUM_MPDU_START_SPACING: u8 = 7;
     /// The largest Max Co-Hosted BSSID Indicator.
     pub const MAX_CO_HOSTED_BSSID_INDICATOR: u8 = 8;
 
@@ -138,24 +129,17 @@ impl HeAssociation {
     pub const fn new(
         peer: &HePeerState,
         association_id: AidField,
-        minimum_mpdu_start_spacing: u8,
+        minimum_mpdu_start_spacing: MinimumMpduStartSpacing,
     ) -> Result<Self, HeAssociationError> {
         let Some(association_id) = AssociationId::from_field(association_id) else {
             return Err(HeAssociationError::AssociationId(association_id));
         };
-        if minimum_mpdu_start_spacing > Self::MAX_MINIMUM_MPDU_START_SPACING {
-            return Err(HeAssociationError::MinimumMpduStartSpacing(
-                minimum_mpdu_start_spacing,
-            ));
-        }
         if let Some(indicator) = peer.max_co_hosted_bssid_indicator
-            && indicator > Self::MAX_CO_HOSTED_BSSID_INDICATOR
+            && indicator.get() > Self::MAX_CO_HOSTED_BSSID_INDICATOR
         {
             return Err(HeAssociationError::MaxCoHostedBssidIndicator(indicator));
         }
-        let Some(color) = BssColor::new(peer.bss_color()) else {
-            return Err(HeAssociationError::BssColor(peer.bss_color()));
-        };
+        let color = peer.bss_color();
         Ok(Self {
             color: HeBssColor {
                 color,
@@ -189,8 +173,8 @@ impl HeAssociation {
         self.association_id
     }
 
-    /// The access point's minimum MPDU start spacing code, 0 to 7.
-    pub const fn minimum_mpdu_start_spacing(&self) -> u8 {
+    /// The access point's minimum MPDU start spacing.
+    pub const fn minimum_mpdu_start_spacing(&self) -> MinimumMpduStartSpacing {
         self.minimum_mpdu_start_spacing
     }
 
@@ -208,7 +192,7 @@ impl HeAssociation {
 
     /// The HE Operation's Max Co-Hosted BSSID Indicator, 0 to 8, when it
     /// announces a co-hosted BSS.
-    pub const fn max_co_hosted_bssid_indicator(&self) -> Option<u8> {
+    pub const fn max_co_hosted_bssid_indicator(&self) -> Option<MaxCoHostedBssidIndicator> {
         self.max_co_hosted_bssid_indicator
     }
 

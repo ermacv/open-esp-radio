@@ -170,7 +170,7 @@ pub(super) fn unprotected_action(
 ) -> Option<BlockAckAction> {
     let header = management.header();
     let control = header.control();
-    if management.subtype() != 13
+    if management.subtype() != oer_protocols_ieee80211_wire::frame::ManagementSubtype::Action
         || control.protected()
         || control.ds() != 0
         || control.more_fragments()

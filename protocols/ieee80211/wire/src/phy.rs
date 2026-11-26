@@ -599,7 +599,11 @@ impl PhyRate {
     /// field's spacing encoding (0, 0.25, 0.5, 1, 2, 4, 8 or 16 us).
     /// Uses the exact symbol rate and rounds up, including short GI and HE
     /// fractional coding rates. Legacy rates cannot carry an A-MPDU.
-    pub const fn minimum_mpdu_spacing_bytes(self, encoding: u8) -> Option<u32> {
+    pub const fn minimum_mpdu_spacing_bytes(
+        self,
+        spacing: crate::ht::MinimumMpduStartSpacing,
+    ) -> Option<u32> {
+        use crate::ht::MinimumMpduStartSpacing as Spacing;
         macro_rules! checked {
             ($value:expr) => {
                 match $value {
@@ -608,16 +612,15 @@ impl PhyRate {
                 }
             };
         }
-        let spacing_ns = match encoding {
-            0 => 0,
-            1 => 250,
-            2 => 500,
-            3 => 1_000,
-            4 => 2_000,
-            5 => 4_000,
-            6 => 8_000,
-            7 => 16_000,
-            _ => return None,
+        let spacing_ns = match spacing {
+            Spacing::NoRestriction => 0,
+            Spacing::Us0_25 => 250,
+            Spacing::Us0_5 => 500,
+            Spacing::Us1 => 1_000,
+            Spacing::Us2 => 2_000,
+            Spacing::Us4 => 4_000,
+            Spacing::Us8 => 8_000,
+            Spacing::Us16 => 16_000,
         };
         let (bits, divisor, symbol_ns) = match self {
             Self::Legacy(_) => return None,

@@ -237,7 +237,7 @@ pub struct StaAssociatedPeer {
     /// The HE state of an HE association.
     pub he_peer_state: Option<oer_protocols_ieee80211_wire::he::HePeerState>,
     /// The BSS color of the access point's HE Operation, zero without one.
-    pub he_bss_color: u8,
+    pub he_bss_color: oer_protocols_ieee80211_wire::he::BssColor,
     /// What the station's MAC follows of an HE association: its peer
     /// state, the AID and the access point's minimum MPDU start spacing.
     pub he_association: Option<oer_protocols_ieee80211_contracts_port::HeAssociation>,
@@ -363,8 +363,10 @@ impl StaAssociatedPeer {
                 (
                     parse_he_capabilities(access_point.he_capability_ie_bytes()).ok(),
                     None,
-                    parse_he_operation(access_point.he_operation_ie_bytes())
-                        .map_or(0, |operation| operation.effective_bss_color()),
+                    parse_he_operation(access_point.he_operation_ie_bytes()).map_or(
+                        oer_protocols_ieee80211_wire::he::BssColor::ZERO,
+                        |operation| operation.effective_bss_color(),
+                    ),
                 )
             };
         // SOURCE(esp32s31): complete pinned `libnet80211.a[wl_cnx.o]::ic_set_sta`
@@ -376,7 +378,10 @@ impl StaAssociatedPeer {
                 oer_protocols_ieee80211_contracts_port::HeAssociation::new(
                     &state,
                     response.association_id,
-                    (ht_ampdu_parameters >> 2) & 0x07,
+                    oer_protocols_ieee80211_wire::ht::HtAmpduParameters::from_bytes([
+                        ht_ampdu_parameters,
+                    ])
+                    .spacing(),
                 )
                 .map_err(StaAssociatedPeerError::HeAssociation)?,
             ),

@@ -423,7 +423,13 @@ impl<'a> ScanFrame<'a> {
 fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     let header = crate::frame::DecodedHeader::decode(frame)?;
     let control = header.control();
-    if control.is_data() || !matches!(control.subtype(), 5 | 8) {
+    if control.is_data()
+        || !matches!(
+            control.management_subtype(),
+            crate::frame::ManagementSubtype::ProbeResponse
+                | crate::frame::ManagementSubtype::Beacon
+        )
+    {
         return None;
     }
     let mut reader = oer_portable_wire::Reader::new(header.body());

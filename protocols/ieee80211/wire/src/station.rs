@@ -53,7 +53,6 @@ pub enum StationFrameError {
     TooManySupportedRates,
     NoAmsduFrames,
     AmsduTooLong { length: usize, maximum: usize },
-    UserPriorityOutOfRange,
     HeControlRequiresQos,
     OutputTooSmall { required: usize },
 }

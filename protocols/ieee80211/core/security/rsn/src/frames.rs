@@ -1,6 +1,6 @@
 //! Fixed WPA2-CCMP EAPOL frame construction and GTK key-data parsing.
 
-use oer_protocols_ieee80211_wire::eapol::{GTK_KDE_TYPE, IGTK_KDE_TYPE, KeyInformation};
+use oer_protocols_ieee80211_wire::eapol::{KdeDataType, KeyInformation};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{

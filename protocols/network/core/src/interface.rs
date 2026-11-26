@@ -26,7 +26,6 @@ pub(crate) enum Addressing {
 pub struct Ipv4 {
     address: Ipv4Address,
     prefix: u8,
-    mask: u32,
     gateway: Option<Ipv4Address>,
 }
 
@@ -52,13 +51,9 @@ impl Ipv4 {
         if prefix > 32 {
             return Err(InterfaceError::Prefix(prefix));
         }
-        let mask = u32::MAX
-            .checked_shl(32_u32.wrapping_sub(u32::from(prefix)))
-            .unwrap_or(0);
         let ipv4 = Self {
             address,
             prefix,
-            mask,
             gateway,
         };
         if gateway.is_some_and(|gateway| !ipv4.on_link(gateway)) {
@@ -79,20 +74,28 @@ impl Ipv4 {
         self.gateway
     }
 
+    /// The network's mask: the prefix's leading ones. A prefix of zero has
+    /// none, as a shift by the whole width gives no bits.
+    fn mask(&self) -> u32 {
+        u32::MAX
+            .checked_shl(32_u32.wrapping_sub(u32::from(self.prefix)))
+            .unwrap_or(0)
+    }
+
     fn on_link(&self, address: Ipv4Address) -> bool {
-        (address.bits() ^ self.address.bits()) & self.mask == 0
+        (address.bits() ^ self.address.bits()) & self.mask() == 0
     }
 
     /// The network's own broadcast address. Prefixes of 31 and 32 bits have
     /// none, RFC 3021.
     pub(crate) fn is_directed_broadcast(&self, address: Ipv4Address) -> bool {
-        !self.mask > 1 && self.on_link(address) && address.bits() | self.mask == u32::MAX
+        !self.mask() > 1 && self.on_link(address) && address.bits() | self.mask() == u32::MAX
     }
 
     /// The network's own number, all host bits zero, RFC 1122, 3.2.1.3 (b),
     /// for prefixes with host bits to spare, RFC 3021.
     pub(crate) fn is_network(&self, address: Ipv4Address) -> bool {
-        !self.mask > 1 && self.on_link(address) && address.bits() & !self.mask == 0
+        !self.mask() > 1 && self.on_link(address) && address.bits() & !self.mask() == 0
     }
 
     /// The neighbor a datagram to `address` goes through; `None` when no

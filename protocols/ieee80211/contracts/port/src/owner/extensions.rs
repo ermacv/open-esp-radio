@@ -4,7 +4,6 @@
 //!   A-MPDU publication takes
 //!   ([`ArenaFormat::Aggregate`](crate::arena::ArenaFormat::Aggregate)) and
 //!   only [`PortArena::ampdu_rate`](crate::PortArena::ampdu_rate) checks.
-//! - [`MpduStartSpacing`]: an aggregate's minimum MPDU start spacing.
 
 use super::PortRate;
 
@@ -27,26 +26,5 @@ impl<'p, K> AmpduRate<'p, K> {
     /// The rate.
     pub const fn rate(&self) -> &PortRate<'p, K> {
         &self.0
-    }
-}
-
-/// The minimum MPDU start spacing of an aggregate, as the 802.11 encoding
-/// 0 to 7.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MpduStartSpacing(u8);
-
-impl MpduStartSpacing {
-    /// `encoding`, when it is 0 to 7.
-    pub const fn new(encoding: u8) -> Option<Self> {
-        if encoding <= 7 {
-            Some(Self(encoding))
-        } else {
-            None
-        }
-    }
-
-    /// The encoding.
-    pub const fn get(self) -> u8 {
-        self.0
     }
 }
