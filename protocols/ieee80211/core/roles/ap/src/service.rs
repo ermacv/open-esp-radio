@@ -399,6 +399,9 @@ pub enum ApWpa2Error {
     /// The access point's software engine cannot stop: no wrap failure
     /// is its.
     KeyWrap(KeyWrapError<core::convert::Infallible>),
+    /// Message 3's key data and the wrap's semiblock of room exceed the
+    /// key-data buffer.
+    KeyDataTooLong,
     UnexpectedAction,
     Retry(RsnRetryError),
     /// The installed GTK lent for Message 3's Key RSC is not the GTK
@@ -460,6 +463,7 @@ impl From<RsnApError<core::convert::Infallible>> for ApWpa2Error {
             RsnApError::ReplayCounterExhausted => RsnStateError::ReplayCounterExhausted.into(),
             RsnApError::Frame(error) => Self::Frame(error),
             RsnApError::KeyWrap(error) => Self::KeyWrap(error),
+            RsnApError::KeyDataTooLong => Self::KeyDataTooLong,
             RsnApError::Engine(never) => match never {},
         }
     }

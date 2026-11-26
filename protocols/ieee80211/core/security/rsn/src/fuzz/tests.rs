@@ -55,7 +55,7 @@ fn message3() -> (crate::Ptk, Vec<u8>) {
         },
     );
     let plain = crate::test_unwrap_bytes(ptk.kek(), frame.key_data()).unwrap();
-    let plain = Vec::from(plain.as_bytes());
+    let plain = Vec::from(plain.as_slice());
     (ptk, plain)
 }
 

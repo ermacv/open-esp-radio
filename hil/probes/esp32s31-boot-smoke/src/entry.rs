@@ -1,6 +1,10 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use oer_portable_crypto::{Aes128Key, KeyData, KeyUnwrapRequest, KeyUnwrapResponse};
+use oer_portable_crypto::{
+    Aes128Key,
+    block::EngineStopped,
+    rfc3394::{KeyUnwrapError, unwrap},
+};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
@@ -101,9 +105,6 @@ const FIRST_ROUND: oer_portable_time::Duration =
 /// a wait the boot hart's writer must program on hart 1's comparator.
 const HART1_TIMER: oer_portable_time::Duration = oer_portable_time::Duration::from_millis(2);
 
-/// The unwrap buffer: RFC 3394 §4.1's 24 wrapped bytes fit.
-const AES_CAPACITY: usize = 32;
-
 /// RFC 3394 §4.1 (Wrap 128 bits of Key Data with a 128-bit KEK): the KEK.
 const RFC3394_4_1_KEK: [u8; 16] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -122,8 +123,10 @@ const RFC3394_4_1_CIPHERTEXT: [u8; 24] = [
 /// the request, which it unwraps between the exchanges on its own timers;
 /// the second takes the response back.
 struct AesExchange {
-    request: Option<KeyUnwrapRequest<AES_CAPACITY>>,
-    response: Option<KeyUnwrapResponse<AES_CAPACITY, oer_portable_crypto::block::EngineStopped>>,
+    /// The wrapped key data, unwrapped in place on hart 1.
+    request: Option<[u8; RFC3394_4_1_CIPHERTEXT.len()]>,
+    /// Whether the unwrap answered RFC 3394 §4.1's key data, or its refusal.
+    response: Option<Result<bool, KeyUnwrapError<EngineStopped>>>,
 }
 
 /// The boot hart's end of the exchange.
@@ -435,7 +438,11 @@ async fn serve_aes(mut server: AesServer, mut engine: AesEngine, hart: u16) {
                 // collecting exchange expires. A wait past representable
                 // time runs no unwrap: the check finds no response.
                 if EmbassyClock.wait_for(HART1_TIMER).await.is_ok() {
-                    Some(oer_portable_crypto::block::unwrap_now(&mut engine, request))
+                    let mut buffer = request;
+                    let outcome =
+                        unwrap(&mut engine, &Aes128Key::copy_from(&RFC3394_4_1_KEK), &mut buffer)
+                            .map(|plaintext| *plaintext == RFC3394_4_1_KEY_DATA);
+                    Some(outcome)
                 } else {
                     None
                 }
@@ -533,10 +540,7 @@ async fn check_hart1(peers: Peers) {
     )
     .await;
     // The known answer of RFC 3394 §4.1, unwrapped on hart 1.
-    let Ok(wrapped) = KeyData::try_copy(&RFC3394_4_1_CIPHERTEXT) else {
-        fail(oer_portable_diagnostics::name!("aes-capacity"; 32));
-    };
-    let request = KeyUnwrapRequest::new(Aes128Key::copy_from(&RFC3394_4_1_KEK), wrapped);
+    let request = RFC3394_4_1_CIPHERTEXT;
     let _taken = ask(
         &mut unwrap,
         AesExchange {
@@ -560,7 +564,7 @@ async fn check_hart1(peers: Peers) {
     let matched = collected
         .response
         .as_ref()
-        .is_some_and(|response| response.plaintext() == Ok(&RFC3394_4_1_KEY_DATA[..]));
+        .is_some_and(|outcome| *outcome == Ok(true));
     // The supervisor posted its first beat when it started: by its deadline
     // the round completed, or its expiry reset the image.
     let mut rounds = LIVENESS_ROUNDS.load(Ordering::Acquire);

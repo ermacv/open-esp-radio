@@ -4,16 +4,18 @@
     clippy::panic,
     clippy::expect_used,
     clippy::unwrap_used,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    reason = "test support that asserts: an engine that breaks a case panics with what it observed, so its test fails"
 )]
 //! The shared conformance cases of every AES-128 engine's RFC 3394 unwrap
-//! ([`crate::block::unwrap_now`]): [`key_unwrap_rfc3394`]. An engine's tests
+//! ([`crate::rfc3394::unwrap`]): [`key_unwrap_rfc3394`]. An engine's tests
 //! call it with the engine; an engine that breaks a case panics with what it
 //! observed, so the test fails.
 
 use crate::{
-    Aes128Key, KeyData, KeyUnwrapError, KeyUnwrapRequest,
-    block::{Aes128Engine, unwrap_now},
+    Aes128Key,
+    block::Aes128Engine,
+    rfc3394::{KeyUnwrapError, unwrap},
 };
 
 /// The key-encryption key of RFC 3394 §4.1.
@@ -30,70 +32,65 @@ pub const RFC3394_4_1_CIPHERTEXT: [u8; 24] = [
     0x9d, 0x3e, 0x86, 0x23, 0x71, 0xd2, 0xcf, 0xe5,
 ];
 
-fn request<const N: usize>(wrapped: &[u8]) -> KeyUnwrapRequest<N> {
-    KeyUnwrapRequest::new(
-        Aes128Key::copy_from(&RFC3394_4_1_KEK),
-        KeyData::try_copy(wrapped).expect("the case fits the engine's buffer"),
-    )
-}
-
-/// An AES-128 RFC 3394 unwrap engine of buffers of `N >= 32` bytes:
-/// - unwraps the §4.1 vector to its key data;
-/// - refuses a changed ciphertext as `IntegrityCheckFailed` with no plaintext;
+/// An AES-128 RFC 3394 unwrap engine:
+/// - unwraps the §4.1 vector to its key data, in place;
+/// - refuses a changed ciphertext as `IntegrityCheckFailed` and clears the
+///   buffer;
 /// - refuses data of fewer than three semiblocks, or not semiblocks, as
 ///   `InvalidLength`;
-/// - takes the next request after a refusal.
+/// - takes the next unwrap after a refusal.
 ///
 /// # Panics
 ///
 /// The engine breaks a case.
-pub fn key_unwrap_rfc3394<E: Aes128Engine, const N: usize>(engine: &mut E)
+pub fn key_unwrap_rfc3394<E: Aes128Engine>(engine: &mut E)
 where
     E::Stop: core::fmt::Debug + PartialEq,
 {
-    const {
-        if N < 32 {
-            panic!("the conformance cases need 32-byte buffers");
-        }
-    }
-    let response = unwrap_now(engine, request::<N>(&RFC3394_4_1_CIPHERTEXT));
+    let kek = Aes128Key::copy_from(&RFC3394_4_1_KEK);
+    let mut buffer = RFC3394_4_1_CIPHERTEXT;
+    let plaintext = unwrap(engine, &kek, &mut buffer).expect("RFC 3394 §4.1 unwraps");
     assert_eq!(
-        response.plaintext(),
-        Ok(&RFC3394_4_1_KEY_DATA[..]),
+        plaintext, &RFC3394_4_1_KEY_DATA,
         "RFC 3394 §4.1 unwraps to its key data"
+    );
+    assert_eq!(
+        buffer[..8],
+        [0xa6; 8],
+        "the first semiblock holds the verified initial value"
     );
 
     let mut changed = RFC3394_4_1_CIPHERTEXT;
-    changed[23] ^= 1;
-    let response = unwrap_now(engine, request::<N>(&changed));
+    // The last byte (0xe5) masked with itself: zero. A mask that is the
+    // byte also tells `^=` from `&=` and `|=`, which would leave it.
+    changed[23] ^= RFC3394_4_1_CIPHERTEXT[23];
     assert_eq!(
-        response.plaintext(),
-        Err(KeyUnwrapError::IntegrityCheckFailed),
+        unwrap(engine, &kek, &mut changed).err(),
+        Some(KeyUnwrapError::IntegrityCheckFailed),
         "a changed ciphertext fails the integrity check"
     );
+    assert_eq!(changed, [0; 24], "an integrity failure clears the buffer");
 
-    let response = unwrap_now(engine, request::<N>(&RFC3394_4_1_CIPHERTEXT[..16]));
+    let mut short = [0; 16];
+    short.copy_from_slice(&RFC3394_4_1_CIPHERTEXT[..16]);
     assert_eq!(
-        response.plaintext(),
-        Err(KeyUnwrapError::InvalidLength),
+        unwrap(engine, &kek, &mut short).err(),
+        Some(KeyUnwrapError::InvalidLength),
         "one semiblock of key data is outside RFC 3394"
     );
 
     let mut odd = [0; 25];
     odd[..24].copy_from_slice(&RFC3394_4_1_CIPHERTEXT);
-    let response = unwrap_now(engine, request::<N>(&odd));
     assert_eq!(
-        response.plaintext(),
-        Err(KeyUnwrapError::InvalidLength),
+        unwrap(engine, &kek, &mut odd).err(),
+        Some(KeyUnwrapError::InvalidLength),
         "data that is not semiblocks is refused"
     );
 
-    let response = unwrap_now(engine, request::<N>(&RFC3394_4_1_CIPHERTEXT));
+    let mut again = RFC3394_4_1_CIPHERTEXT;
     assert_eq!(
-        response
-            .into_plaintext()
-            .map(|data| data.as_bytes() == RFC3394_4_1_KEY_DATA),
-        Ok(true),
-        "the engine serves its next request after a refusal"
+        unwrap(engine, &kek, &mut again).map(|plaintext| &*plaintext),
+        Ok(&RFC3394_4_1_KEY_DATA[..]),
+        "the engine serves its next unwrap after a refusal"
     );
 }

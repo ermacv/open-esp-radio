@@ -76,7 +76,7 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
     );
     assert!(frame.check_mic(&ptk, &mut SoftwareAes128).is_ok());
     let plain = crate::test_unwrap_bytes(ptk.kek(), frame.key_data()).unwrap();
-    let keys = parse_gtk_key_data(plain.as_bytes(), &RSN_IE, &[], BIP).unwrap();
+    let keys = parse_gtk_key_data(plain.as_slice(), &RSN_IE, &[], BIP).unwrap();
     assert_eq!(keys.gtk.key_id().get(), 1);
     assert_eq!(keys.gtk.key().as_bytes(), &GTK);
     assert_eq!(keys.gtk.tx(), GtkTx::ReceiveOnly);
@@ -88,7 +88,7 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
     // Variants of the recorded KDE exercise every two-bit wire ID. Only
     // the KeyID field changes; these are derived cases, not extra captures.
     for raw_id in 0..=3 {
-        let mut changed = std::vec::Vec::from(plain.as_bytes());
+        let mut changed = std::vec::Vec::from(plain.as_slice());
         changed[28] = raw_id;
         let keys = parse_gtk_key_data(&changed, &RSN_IE, &[], BIP).unwrap();
         let install = crate::keys::RsnKeyInstall::group(

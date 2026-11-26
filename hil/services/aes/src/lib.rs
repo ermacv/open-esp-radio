@@ -17,8 +17,9 @@
 //! checks the answers against its own reference.
 
 use oer_portable_crypto::{
-    Aes128Key, KeyData, KeyUnwrapError, KeyUnwrapRequest,
-    block::{Aes128Engine, EngineStopped, unwrap_now},
+    Aes128Key,
+    block::{Aes128Engine, EngineStopped},
+    rfc3394::{KeyUnwrapError, unwrap},
 };
 use postcard_schema::Schema;
 use serde::{Deserialize, Serialize};
@@ -97,17 +98,21 @@ where
     R: Fn(&E) -> Option<EngineObservation>,
 {
     async fn unwrap_key(&mut self, request: UnwrapKey) -> Unwrapped {
-        // A request never exceeds the buffer: both hold MAX_WRAPPED bytes.
-        let Ok(wrapped) = KeyData::<MAX_WRAPPED>::try_copy(&request.wrapped) else {
-            return Unwrapped::Refused(UnwrapError::InvalidLength);
-        };
-        let request = KeyUnwrapRequest::new(Aes128Key::copy_from(&request.kek), wrapped);
-        let response = unwrap_now(&mut self.engine, request);
-        match response.plaintext() {
-            Ok(plaintext) => match heapless::Vec::from_slice(plaintext) {
-                Ok(plaintext) => Unwrapped::Plaintext(plaintext),
-                Err(_) => Unwrapped::Refused(UnwrapError::InvalidLength),
-            },
+        // The request's own buffer is unwrapped in place.
+        let UnwrapKey { kek, mut wrapped } = request;
+        let kek = Aes128Key::copy_from(&kek);
+        match unwrap(&mut self.engine, &kek, wrapped.as_mut_slice()) {
+            Ok(_) => {
+                // The plaintext is the request's buffer after its first
+                // semiblock: drop that semiblock and answer the rest.
+                let mut position: usize = 0;
+                wrapped.retain(|_| {
+                    let keep = position >= 8;
+                    position = position.saturating_add(1);
+                    keep
+                });
+                Unwrapped::Plaintext(wrapped)
+            }
             Err(KeyUnwrapError::InvalidLength) => Unwrapped::Refused(UnwrapError::InvalidLength),
             Err(KeyUnwrapError::IntegrityCheckFailed) => {
                 Unwrapped::Refused(UnwrapError::IntegrityCheckFailed)

@@ -86,7 +86,7 @@ on the application executor: the RTC watchdog feed.
 AES-128 engine (`AesEngine`, an `oer_portable_crypto::block::Aes128Engine`), owned by
 whoever holds it: each block waits on its `STATE` flag within its settle,
 and an operation borrows the engine for the length of its call
-(`oer_portable_crypto::block::unwrap_now`), so no operation outlives it and nothing
+(`oer_portable_crypto::rfc3394::unwrap`), so no operation outlives it and nothing
 waits on another holder. The AES interrupt stays silent.
 
 `Console::open` takes the USB Serial/JTAG block from the early writer and

@@ -1,12 +1,11 @@
 use crate::{
-    Aes128Key, KeyData, KeyDataCapacityError, KeyUnwrapError, KeyUnwrapRequest, KeyWrapRequest,
-    block::{Aes128Engine, Block, BlockEngine, EngineStopped, unwrap_now, wrap_now},
+    Aes128Key,
+    block::{Aes128Engine, Block, BlockEngine, EngineStopped},
     conformance::{self, RFC3394_4_1_CIPHERTEXT, RFC3394_4_1_KEK, RFC3394_4_1_KEY_DATA},
-    rfc3394::{self, KeyWrapError},
+    rfc3394::{KeyUnwrapError, KeyWrapError, unwrap, wrap},
     test_engine,
 };
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
-use zeroize::ZeroizeOnDrop;
 
 /// RustCrypto AES-128 as the synchronous block primitive.
 struct Rust;
@@ -38,241 +37,188 @@ impl Aes128Engine for Rust {
     }
 }
 
-/// The software engine's key, loaded: it cannot refuse.
-fn rust_keyed(key: &Aes128Key) -> RustKeyed {
-    let Ok(keyed) = Rust.load(key);
-    keyed
-}
-
 #[test]
 fn the_synchronous_engine_passes_the_rfc3394_conformance_cases() {
-    conformance::key_unwrap_rfc3394::<_, 32>(&mut Rust);
-    conformance::key_unwrap_rfc3394::<_, 512>(&mut Rust);
+    conformance::key_unwrap_rfc3394(&mut Rust);
 }
 
-fn wrap_request<const N: usize>(plaintext: &[u8]) -> KeyWrapRequest<N> {
-    KeyWrapRequest::new(
-        Aes128Key::copy_from(&RFC3394_4_1_KEK),
-        KeyData::try_copy(plaintext).unwrap(),
-    )
+fn kek() -> Aes128Key {
+    Aes128Key::copy_from(&RFC3394_4_1_KEK)
+}
+
+/// A buffer of a semiblock of room, then `plain`.
+fn room_and<const N: usize>(plain: &[u8]) -> [u8; N] {
+    let mut buffer = [0xc3; N];
+    buffer[8..].copy_from_slice(plain);
+    buffer
 }
 
 #[test]
 fn wrap_produces_the_rfc3394_vector_and_unwrap_reverses_longer_key_data() {
-    let response = wrap_now(&mut Rust, wrap_request::<32>(&RFC3394_4_1_KEY_DATA));
-    assert_eq!(response.wrapped(), Ok(&RFC3394_4_1_CIPHERTEXT[..]));
+    let mut buffer = room_and::<24>(&RFC3394_4_1_KEY_DATA);
+    assert_eq!(wrap(&mut Rust, &kek(), &mut buffer), Ok(()));
+    assert_eq!(buffer, RFC3394_4_1_CIPHERTEXT);
 
     let plain: [u8; 40] = core::array::from_fn(|index| index as u8 ^ 0x5a);
-    let wrapped = wrap_now(&mut Rust, wrap_request::<48>(&plain))
-        .into_wrapped()
-        .unwrap();
-    assert_eq!(wrapped.as_bytes().len(), 48);
-    let response = unwrap_now(
-        &mut Rust,
-        KeyUnwrapRequest::new(Aes128Key::copy_from(&RFC3394_4_1_KEK), wrapped),
+    let mut buffer = room_and::<48>(&plain);
+    assert_eq!(wrap(&mut Rust, &kek(), &mut buffer), Ok(()));
+    let plaintext = unwrap(&mut Rust, &kek(), &mut buffer).unwrap();
+    assert_eq!(plaintext, &plain);
+    assert_eq!(
+        buffer[..8],
+        [0xa6; 8],
+        "the first semiblock holds the initial value"
     );
-    assert_eq!(response.plaintext(), Ok(&plain[..]));
 }
 
 #[test]
-fn wrap_refuses_data_outside_rfc3394_and_its_capacity() {
-    assert_eq!(
-        wrap_now(&mut Rust, wrap_request::<32>(&[0; 8])).wrapped(),
-        Err(KeyWrapError::InvalidLength)
-    );
-    assert_eq!(
-        wrap_now(&mut Rust, wrap_request::<32>(&[0; 17])).wrapped(),
-        Err(KeyWrapError::InvalidLength)
-    );
-    assert_eq!(
-        wrap_now(&mut Rust, wrap_request::<23>(&[0; 16])).wrapped(),
-        Err(KeyWrapError::CapacityExceeded)
-    );
-    // Twenty-four octets of capacity hold sixteen and their register.
-    assert!(
-        wrap_now(&mut Rust, wrap_request::<24>(&[0; 16]))
-            .wrapped()
-            .is_ok()
-    );
-}
-
-/// A length refusal loads no key; a refused block ends the wrap with the
-/// engine's error and the buffer cleared.
-#[test]
-fn a_refused_wrap_loads_no_key_or_clears_its_buffer() {
-    let mut loaded = false;
-    let response =
-        rfc3394::wrap::<test_engine::Engine, 32>(KeyData::try_copy(&[0xa5; 8]).unwrap(), || {
-            loaded = true;
-            Ok(test_engine::Engine::new(&RFC3394_4_1_KEK))
-        });
-    assert_eq!(response.wrapped(), Err(KeyWrapError::InvalidLength));
-    assert!(!loaded);
-    assert!(erased(&response));
-    for refuse_from in [0, 1, 5, 11] {
-        let response = rfc3394::wrap::<test_engine::Engine, 32>(
-            KeyData::try_copy(&RFC3394_4_1_KEY_DATA).unwrap(),
-            || {
-                Ok(test_engine::Engine::refusing_from(
-                    &RFC3394_4_1_KEK,
-                    refuse_from,
-                ))
-            },
-        );
+fn wrap_refuses_data_outside_rfc3394_and_leaves_it() {
+    for length in [0, 8, 16, 17, 25] {
+        let mut buffer = std::vec![0x3c; length];
         assert_eq!(
-            response.wrapped(),
-            Err(KeyWrapError::Engine(test_engine::REFUSAL)),
-            "{refuse_from}"
+            wrap(&mut Rust, &kek(), &mut buffer),
+            Err(KeyWrapError::InvalidLength),
+            "{length}"
         );
-        assert!(erased(&response), "{refuse_from}");
-        assert_eq!(
-            response.into_wrapped().err(),
-            Some(KeyWrapError::Engine(test_engine::REFUSAL))
-        );
+        assert!(buffer.iter().all(|byte| *byte == 0x3c), "{length}");
     }
-    let response = rfc3394::wrap::<test_engine::Engine, 32>(
-        KeyData::try_copy(&RFC3394_4_1_KEY_DATA).unwrap(),
-        || Err(test_engine::REFUSAL),
-    );
-    assert_eq!(
-        response.wrapped(),
-        Err(KeyWrapError::Engine(test_engine::REFUSAL))
-    );
-    assert!(erased(&response));
-    // Twelve blocks (two semiblocks, six passes) wrap the vector.
-    let response = rfc3394::wrap::<test_engine::Engine, 32>(
-        KeyData::try_copy(&RFC3394_4_1_KEY_DATA).unwrap(),
-        || Ok(test_engine::Engine::refusing_from(&RFC3394_4_1_KEK, 12)),
-    );
-    assert_eq!(response.wrapped(), Ok(&RFC3394_4_1_CIPHERTEXT[..]));
+    // Twenty-four octets hold a semiblock of room and sixteen of key data.
+    assert_eq!(wrap(&mut Rust, &kek(), &mut [0; 24]), Ok(()));
 }
 
-#[test]
-fn refused_unwraps_return_the_cleared_buffer() {
-    let mut engine = Rust;
-    let mut changed = RFC3394_4_1_CIPHERTEXT;
-    changed[0] ^= 0x80;
-    let response = unwrap_now(
-        &mut engine,
-        KeyUnwrapRequest::new(
-            Aes128Key::copy_from(&RFC3394_4_1_KEK),
-            KeyData::<32>::try_copy(&changed).unwrap(),
-        ),
-    );
-    assert_eq!(
-        response.into_plaintext().err(),
-        Some(KeyUnwrapError::IntegrityCheckFailed)
-    );
-    let response = unwrap_now(
-        &mut engine,
-        KeyUnwrapRequest::new(
-            Aes128Key::copy_from(&RFC3394_4_1_KEK),
-            KeyData::<32>::try_copy(&[]).unwrap(),
-        ),
-    );
-    assert_eq!(response.plaintext(), Err(KeyUnwrapError::InvalidLength));
-}
-
-/// A hardware-like engine: RustCrypto blocks until it refuses, either the
-/// key or the block numbered `refuse_block`.
-struct Refusing {
+/// An engine over [`test_engine::Engine`]: it counts its loads, refuses its
+/// key with `refuse_key`, and its keyed view refuses every block from
+/// `refuse_from` on.
+struct Counted {
+    loads: usize,
     refuse_key: bool,
-    refuse_block: usize,
-    blocks: usize,
+    refuse_from: usize,
 }
-struct RefusingKeyed<'a> {
-    engine: &'a mut Refusing,
-    cipher: RustKeyed,
-}
-impl BlockEngine for RefusingKeyed<'_> {
-    type Stop = EngineStopped;
-    fn encrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
-        self.decrypt(block)
-    }
-    fn decrypt(&mut self, block: &mut Block) -> Result<(), EngineStopped> {
-        self.engine.blocks += 1;
-        if self.engine.blocks == self.engine.refuse_block {
-            return Err(EngineStopped);
+
+impl Counted {
+    /// Blocks from `refuse_from` on are refused.
+    const fn refusing_from(refuse_from: usize) -> Self {
+        Self {
+            loads: 0,
+            refuse_key: false,
+            refuse_from,
         }
-        let Ok(()) = self.cipher.decrypt(block);
-        Ok(())
+    }
+
+    /// The key is refused.
+    const fn refusing_the_key() -> Self {
+        Self {
+            loads: 0,
+            refuse_key: true,
+            refuse_from: usize::MAX,
+        }
     }
 }
-impl Aes128Engine for Refusing {
+
+impl Aes128Engine for Counted {
     type Stop = EngineStopped;
-    type Keyed<'a> = RefusingKeyed<'a>;
-    fn load(&mut self, key: &Aes128Key) -> Result<RefusingKeyed<'_>, EngineStopped> {
+    type Keyed<'a> = test_engine::Engine;
+    fn load(&mut self, key: &Aes128Key) -> Result<test_engine::Engine, EngineStopped> {
+        self.loads += 1;
         if self.refuse_key {
             return Err(EngineStopped);
         }
-        let cipher = rust_keyed(key);
-        Ok(RefusingKeyed {
-            engine: self,
-            cipher,
-        })
+        Ok(test_engine::Engine::refusing_from(
+            key.as_bytes(),
+            self.refuse_from,
+        ))
     }
 }
 
-fn rfc3394_request() -> KeyUnwrapRequest<32> {
-    KeyUnwrapRequest::new(
-        Aes128Key::copy_from(&RFC3394_4_1_KEK),
-        KeyData::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap(),
-    )
+/// A length refusal loads no key and leaves the buffer; a stop ends the
+/// wrap with the engine's stop and the whole buffer cleared.
+#[test]
+fn a_refused_wrap_loads_no_key_or_clears_its_buffer() {
+    let mut engine = Counted::refusing_from(usize::MAX);
+    let mut buffer = [0xa5; 16];
+    assert_eq!(
+        wrap(&mut engine, &kek(), &mut buffer),
+        Err(KeyWrapError::InvalidLength)
+    );
+    assert_eq!(engine.loads, 0);
+    assert_eq!(buffer, [0xa5; 16]);
+    for refuse_from in [0, 1, 5, 11] {
+        let mut buffer = room_and::<24>(&RFC3394_4_1_KEY_DATA);
+        assert_eq!(
+            wrap(
+                &mut Counted::refusing_from(refuse_from),
+                &kek(),
+                &mut buffer
+            ),
+            Err(KeyWrapError::Engine(test_engine::REFUSAL)),
+            "{refuse_from}"
+        );
+        assert_eq!(buffer, [0; 24], "{refuse_from}");
+    }
+    let mut buffer = room_and::<24>(&RFC3394_4_1_KEY_DATA);
+    assert_eq!(
+        wrap(&mut Counted::refusing_the_key(), &kek(), &mut buffer),
+        Err(KeyWrapError::Engine(test_engine::REFUSAL))
+    );
+    assert_eq!(buffer, [0; 24]);
+    // Twelve blocks (two semiblocks, six passes) wrap the vector.
+    let mut buffer = room_and::<24>(&RFC3394_4_1_KEY_DATA);
+    assert_eq!(
+        wrap(&mut Counted::refusing_from(12), &kek(), &mut buffer),
+        Ok(())
+    );
+    assert_eq!(buffer, RFC3394_4_1_CIPHERTEXT);
 }
 
 #[test]
-fn a_fallible_engine_unwraps_in_place_and_its_refusals_are_typed_engine_failures() {
-    let mut engine = Refusing {
-        refuse_key: false,
-        refuse_block: usize::MAX,
-        blocks: 0,
-    };
-    let response = crate::block::unwrap_now(&mut engine, rfc3394_request());
-    assert_eq!(response.plaintext(), Ok(&RFC3394_4_1_KEY_DATA[..]));
-    assert_eq!(engine.blocks, 12, "two 64-bit blocks: six rounds of two");
-
-    let mut engine = Refusing {
-        refuse_key: false,
-        refuse_block: 3,
-        blocks: 0,
-    };
-    let response = crate::block::unwrap_now(&mut engine, rfc3394_request());
+fn refused_unwraps_clear_the_buffer() {
+    let mut changed = RFC3394_4_1_CIPHERTEXT;
+    changed[0] ^= 0x80;
     assert_eq!(
-        response.plaintext(),
-        Err(KeyUnwrapError::Engine(EngineStopped))
+        unwrap(&mut Rust, &kek(), &mut changed).err(),
+        Some(KeyUnwrapError::IntegrityCheckFailed)
     );
-    assert_eq!(engine.blocks, 3, "no block after the refused one");
-
-    let mut engine = Refusing {
-        refuse_key: true,
-        refuse_block: usize::MAX,
-        blocks: 0,
-    };
-    let response = crate::block::unwrap_now(&mut engine, rfc3394_request());
+    assert_eq!(changed, [0; 24]);
     assert_eq!(
-        response.plaintext(),
-        Err(KeyUnwrapError::Engine(EngineStopped))
+        unwrap(&mut Rust, &kek(), &mut []).err(),
+        Some(KeyUnwrapError::InvalidLength)
     );
-    assert_eq!(engine.blocks, 0);
 }
 
 #[test]
-fn key_data_refuses_more_than_its_capacity() {
+fn a_fallible_engine_unwraps_in_place_and_its_stops_are_typed_engine_failures() {
+    let mut engine = Counted::refusing_from(usize::MAX);
+    let mut buffer = RFC3394_4_1_CIPHERTEXT;
     assert_eq!(
-        KeyData::<8>::try_copy(&[0; 9]).err(),
-        Some(KeyDataCapacityError)
+        unwrap(&mut engine, &kek(), &mut buffer).map(|plaintext| &*plaintext),
+        Ok(&RFC3394_4_1_KEY_DATA[..])
     );
-    assert_eq!(KeyData::<8>::try_copy(&[7; 8]).unwrap().as_bytes(), [7; 8]);
+
+    let mut buffer = RFC3394_4_1_CIPHERTEXT;
+    assert_eq!(
+        unwrap(&mut Counted::refusing_from(3), &kek(), &mut buffer).err(),
+        Some(KeyUnwrapError::Engine(EngineStopped))
+    );
+    assert_eq!(buffer, [0; 24]);
+
+    let mut engine = Counted::refusing_the_key();
+    let mut buffer = RFC3394_4_1_CIPHERTEXT;
+    assert_eq!(
+        unwrap(&mut engine, &kek(), &mut buffer).err(),
+        Some(KeyUnwrapError::Engine(EngineStopped))
+    );
+    assert_eq!(engine.loads, 1);
+    assert_eq!(buffer, [0; 24]);
 }
 
 #[test]
-fn keys_and_key_data_erase_themselves_when_dropped() {
-    fn erased<T: ZeroizeOnDrop>() {}
+fn keys_erase_themselves_when_dropped() {
+    fn erased<T: zeroize::ZeroizeOnDrop>() {}
     erased::<Aes128Key>();
-    erased::<KeyData<32>>();
 }
 
-/// An engine that records the first block it is given and refuses it.
+/// An engine whose keyed view records the first block it is given and
+/// refuses it.
 struct RecordingRefusal {
     first: Option<Block>,
 }
@@ -286,38 +232,69 @@ impl BlockEngine for &mut RecordingRefusal {
         Err(EngineStopped)
     }
 }
+impl Aes128Engine for RecordingRefusal {
+    type Stop = EngineStopped;
+    type Keyed<'a> = &'a mut RecordingRefusal;
+    fn load(&mut self, _key: &Aes128Key) -> Result<&mut RecordingRefusal, EngineStopped> {
+        Ok(self)
+    }
+}
 
 #[test]
-fn an_engine_error_terminates_the_mode_without_exposing_key_data() {
-    let wrapped = KeyData::<32>::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap();
+fn an_engine_stop_terminates_the_mode_without_exposing_key_data() {
+    let mut buffer = RFC3394_4_1_CIPHERTEXT;
     let mut engine = RecordingRefusal { first: None };
-    let response = crate::rfc3394::unwrap(wrapped, || Ok(&mut engine));
+    assert_eq!(
+        unwrap(&mut engine, &kek(), &mut buffer).err(),
+        Some(KeyUnwrapError::Engine(EngineStopped))
+    );
     let mut expected = [0; 16];
     expected[..8].copy_from_slice(&RFC3394_4_1_CIPHERTEXT[..8]);
     expected[7] ^= 12; // n*j+i = 2*5+2, big endian.
     expected[8..].copy_from_slice(&RFC3394_4_1_CIPHERTEXT[16..]);
     assert_eq!(engine.first, Some(expected));
-    assert_eq!(
-        response.plaintext(),
-        Err(KeyUnwrapError::Engine(EngineStopped))
-    );
-    assert_eq!(response.data.len, 0);
-    assert!(response.data.bytes.iter().all(|byte| *byte == 0));
+    assert_eq!(buffer, [0; 24]);
 }
 
 #[test]
 fn a_length_refusal_loads_no_key() {
-    let wrapped = KeyData::<32>::try_copy(&RFC3394_4_1_CIPHERTEXT[..16]).unwrap();
-    let mut loads = 0;
-    let response = crate::rfc3394::unwrap(wrapped, || {
-        loads += 1;
-        Rust.load(&Aes128Key::copy_from(&RFC3394_4_1_KEK))
-    });
-    assert_eq!(response.plaintext(), Err(KeyUnwrapError::InvalidLength));
-    assert_eq!(loads, 0);
+    let mut engine = Counted::refusing_from(usize::MAX);
+    let mut buffer = [0; 16];
+    buffer.copy_from_slice(&RFC3394_4_1_CIPHERTEXT[..16]);
+    assert_eq!(
+        unwrap(&mut engine, &kek(), &mut buffer).err(),
+        Some(KeyUnwrapError::InvalidLength)
+    );
+    assert_eq!(engine.loads, 0);
+    assert_eq!(
+        buffer[..],
+        RFC3394_4_1_CIPHERTEXT[..16],
+        "a length refusal leaves the buffer"
+    );
 }
 
-/// Whether a response's whole buffer, beyond its length too, is zero.
-fn erased<const N: usize, S>(response: &crate::KeyWrapResponse<N, S>) -> bool {
-    response.data.len == 0 && response.data.bytes.iter().all(|byte| *byte == 0)
+/// An engine whose blocks come back as they went: not AES.
+struct Identity;
+impl BlockEngine for Identity {
+    type Stop = core::convert::Infallible;
+    fn encrypt(&mut self, _: &mut Block) -> Result<(), Self::Stop> {
+        Ok(())
+    }
+    fn decrypt(&mut self, _: &mut Block) -> Result<(), Self::Stop> {
+        Ok(())
+    }
+}
+impl Aes128Engine for Identity {
+    type Stop = core::convert::Infallible;
+    type Keyed<'a> = Identity;
+    fn load(&mut self, _: &Aes128Key) -> Result<Identity, Self::Stop> {
+        Ok(Identity)
+    }
+}
+
+/// The conformance cases fail an engine that breaks them.
+#[test]
+#[should_panic(expected = "RFC 3394 §4.1 unwraps")]
+fn an_engine_that_is_not_aes_fails_the_conformance_cases() {
+    conformance::key_unwrap_rfc3394(&mut Identity);
 }

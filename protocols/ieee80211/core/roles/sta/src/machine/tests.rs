@@ -5790,22 +5790,26 @@ fn block_ack_agreements_need_both_qos_and_an_ht_format() {
     });
 }
 
+/// Key data a test helper made: its bytes.
+struct KeyBytes(std::vec::Vec<u8>);
+
+impl KeyBytes {
+    fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// RFC 3394 wrap over the software engine, as a composition runs it.
 fn software_wrap(
     kek: &oer_protocols_ieee80211_core_security_rsn::Kek,
     plaintext: &[u8],
-) -> Result<
-    oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
-    oer_portable_crypto::rfc3394::KeyWrapError<core::convert::Infallible>,
-> {
-    let plaintext = oer_portable_crypto::KeyData::try_copy(plaintext)
-        .map_err(|_| oer_portable_crypto::rfc3394::KeyWrapError::CapacityExceeded)?;
-    oer_portable_crypto::block::wrap_now(
+) -> Result<KeyBytes, oer_portable_crypto::rfc3394::KeyWrapError<core::convert::Infallible>> {
+    let mut buffer = oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::new();
+    let buffer = buffer.plaintext(plaintext).unwrap();
+    oer_portable_crypto::rfc3394::wrap(
         &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
-        oer_portable_crypto::KeyWrapRequest::new(
-            oer_portable_crypto::Aes128Key::copy_from(kek.as_bytes()),
-            plaintext,
-        ),
-    )
-    .into_wrapped()
+        &oer_portable_crypto::Aes128Key::copy_from(kek.as_bytes()),
+        buffer,
+    )?;
+    Ok(KeyBytes(buffer.to_vec()))
 }

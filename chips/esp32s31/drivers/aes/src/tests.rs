@@ -3,8 +3,8 @@ use super::*;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 use oer_chips_esp32s31_hal::peripherals::aes::{AesState, AesStateField};
 use oer_portable_crypto::{
-    KeyData, KeyUnwrapError, KeyUnwrapRequest,
     conformance::{self, RFC3394_4_1_CIPHERTEXT, RFC3394_4_1_KEK, RFC3394_4_1_KEY_DATA},
+    rfc3394::{KeyUnwrapError, unwrap},
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -177,11 +177,13 @@ impl SettleCounter for Ticking {
     }
 }
 
-fn request() -> KeyUnwrapRequest<32> {
-    KeyUnwrapRequest::new(
-        Aes128Key::copy_from(&RFC3394_4_1_KEK),
-        KeyData::try_copy(&RFC3394_4_1_CIPHERTEXT).unwrap(),
-    )
+/// The RFC 3394 §4.1 unwrap, in place in its own buffer: whether it
+/// answered the key data, or its refusal, and the buffer after it.
+fn unwrapped<E: Aes128Engine>(engine: &mut E) -> (Result<bool, KeyUnwrapError<E::Stop>>, [u8; 24]) {
+    let mut buffer = RFC3394_4_1_CIPHERTEXT;
+    let outcome = unwrap(engine, &Aes128Key::copy_from(&RFC3394_4_1_KEK), &mut buffer)
+        .map(|plaintext| *plaintext == RFC3394_4_1_KEY_DATA);
+    (outcome, buffer)
 }
 fn assert_erased(port: &Rc<RefCell<Port>>) {
     let p = port.borrow();
@@ -198,8 +200,8 @@ fn fake_register_engine_passes_the_shared_rfc3394_conformance() {
         ..Port::default()
     }));
     let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
-    conformance::key_unwrap_rfc3394::<_, 32>(&mut engine);
-    conformance::key_unwrap_rfc3394::<_, 512>(&mut engine);
+    conformance::key_unwrap_rfc3394(&mut engine);
+    conformance::key_unwrap_rfc3394(&mut engine);
     assert_eq!(port.borrow().starts, 72);
     assert_erased(&port);
     drop(engine);
@@ -212,8 +214,8 @@ fn a_block_waits_on_its_state_flag_and_the_key_is_erased_after_the_run() {
         ..Port::default()
     }));
     let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
-    let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
-    assert_eq!(response.plaintext(), Ok(&RFC3394_4_1_KEY_DATA[..]));
+    let (outcome, _) = unwrapped(&mut engine);
+    assert_eq!(outcome, Ok(true));
     let p = port.borrow();
     assert_eq!(p.starts, 12);
     // The setup's read, then each block's three busy reads and its idle one.
@@ -334,8 +336,9 @@ fn a_failed_block_ends_its_run_and_the_next_load_starts_again() {
         // Through the unwrap: every failed request gives its typed error.
         port.borrow_mut().answer = answer;
         for _ in 0..2 {
-            let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
-            assert_eq!(response.plaintext(), Err(KeyUnwrapError::Engine(error)));
+            let (outcome, buffer) = unwrapped(&mut engine);
+            assert_eq!(outcome, Err(KeyUnwrapError::Engine(error)));
+            assert_eq!(buffer, [0; 24], "a stopped unwrap clears its buffer");
             assert_erased(&port);
         }
     }

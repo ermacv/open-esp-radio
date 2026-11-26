@@ -251,15 +251,14 @@ impl Kek {
         self.0.as_bytes()
     }
 
-    /// The zeroizing owner a key-wrap or key-unwrap request takes and
-    /// erases when it ends.
-    pub(crate) const fn request_key(&self) -> Aes128Key {
-        Aes128Key::copy_from(self.0.as_bytes())
+    /// Lend the key to an AES-128 engine, for a key wrap or unwrap.
+    pub(crate) const fn aes_key(&self) -> &Aes128Key {
+        &self.0
     }
 
     /// A second zeroizing owner of the same key.
     const fn second_owner(&self) -> Self {
-        Self(self.request_key())
+        Self(Aes128Key::copy_from(self.0.as_bytes()))
     }
 }
 
