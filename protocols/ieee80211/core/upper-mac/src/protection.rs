@@ -21,6 +21,7 @@
 //! supplies.
 
 use oer_protocols_ieee80211_wire::{
+    he::HeTxopDurationRtsThreshold,
     phy::{DsssPreamble, HeRate, LegacyRate, PhyRate, PpduBandwidth},
     protection::HtProtectionMode,
 };
@@ -49,8 +50,8 @@ impl<B: HeTxopRtsBudget + ?Sized> HeTxopRtsBudget for &B {
 
 mod bss;
 pub use bss::{
-    BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold, ProtectedPpdu,
-    RtsLengthThreshold, TxProtectionDecision, TxProtectionReasons, TxPsdu, TxReceiver,
+    BasicRates, BssProtection, HePacketPadding, ProtectedPpdu, RtsLengthThreshold,
+    TxProtectionDecision, TxProtectionReasons, TxPsdu, TxReceiver,
 };
 use oer_protocols_ieee80211_contracts_port::Protection;
 

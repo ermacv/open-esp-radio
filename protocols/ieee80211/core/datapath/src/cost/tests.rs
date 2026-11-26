@@ -69,9 +69,9 @@ fn a_publication_costs_its_own_ppdu_and_response_only() {
         let ppdu = 20 + 4 * 84 + 6;
         assert_eq!(
             single_cost(&plan, 1_000, &outcome),
-            TxEstimate::Estimated {
-                micros: ppdu + 10 + ACK_AT_6M
-            }
+            TxEstimate::Estimated(oer_portable_time::Duration::from_micros(u64::from(
+                ppdu + 10 + ACK_AT_6M
+            )))
         );
     });
 }
@@ -122,9 +122,9 @@ fn a_single_arena_s_cost_sums_each_publication_at_its_own_rate() {
         let ack = 10 + ACK_AT_6M;
         assert_eq!(
             single_cost(&plan, PSDU, &outcome),
-            TxEstimate::Estimated {
-                micros: ppdu(96) + ack + ppdu(24) + ack
-            }
+            TxEstimate::Estimated(oer_portable_time::Duration::from_micros(u64::from(
+                ppdu(96) + ack + ppdu(24) + ack
+            )))
         );
     });
 }
@@ -145,9 +145,9 @@ fn a_publication_that_never_reached_the_air_adds_no_cost_and_keeps_the_earlier()
             TxOutcome::Ended(SingleEnd::ContentionLimit(Some(air(1, rate.get()))));
         assert_eq!(
             single_cost(&plan, PSDU, &outcome),
-            TxEstimate::Estimated {
-                micros: ppdu(96) + 10 + ACK_AT_6M
-            }
+            TxEstimate::Estimated(oer_portable_time::Duration::from_micros(u64::from(
+                ppdu(96) + 10 + ACK_AT_6M
+            )))
         );
     });
 }
@@ -184,8 +184,8 @@ fn an_aggregate_costs_each_transmission_with_its_block_ack() {
         TxOutcome::Ended(AggregateEnd::AckTimeout(air(2, rate)));
     assert_eq!(
         aggregate_cost(PSDU, &outcome),
-        TxEstimate::Estimated {
-            micros: 2 * (ppdu(96) + 10 + BLOCK_ACK_AT_6M)
-        }
+        TxEstimate::Estimated(oer_portable_time::Duration::from_micros(u64::from(
+            2 * (ppdu(96) + 10 + BLOCK_ACK_AT_6M)
+        )))
     );
 }

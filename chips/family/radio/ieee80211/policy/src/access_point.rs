@@ -35,7 +35,7 @@ const fn ac(aifsn: U8<4>, ecw_min: U8<4>, ecw_max: U8<4>, txop: u16) -> WmmAcPar
         aifsn,
         ecw_min,
         ecw_max,
-        txop_limit_units_32_us: txop,
+        txop_limit: oer_protocols_ieee80211_wire::extensions::wmm::TxopLimit::new(txop),
     }
 }
 

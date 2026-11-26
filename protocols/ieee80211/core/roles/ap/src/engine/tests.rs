@@ -45,7 +45,7 @@ const ADVERTISEMENT: Advertisement = match Advertisement::new(
             aifsn: oer_portable_wire::U8::constant::<3>(),
             ecw_min: oer_portable_wire::U8::constant::<4>(),
             ecw_max: oer_portable_wire::U8::constant::<10>(),
-            txop_limit_units_32_us: 0,
+            txop_limit: oer_protocols_ieee80211_wire::extensions::wmm::TxopLimit::new(0),
         }; 4],
     ) {
         Some(value) => value,

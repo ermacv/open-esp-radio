@@ -11,6 +11,7 @@
 //! the contract's.
 
 use core::num::NonZeroU16;
+use oer_portable_time::Duration;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// The response the attempt solicits, which the hardware waits for.
@@ -164,7 +165,7 @@ pub enum IndeterminateCause {
     KeyRefused,
 }
 
-/// What transmissions cost by a backend's declared model, in microseconds:
+/// What transmissions cost by a backend's declared model, as air time:
 /// for every publication that reached the air, its modelled PPDU duration,
 /// one SIFS and its solicited response (an ACK or a BlockAck) at the
 /// backend's declared response rate. It is an estimate of that model only:
@@ -178,29 +179,26 @@ pub enum IndeterminateCause {
 /// never zero.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxEstimate {
-    /// The model's sum.
-    Estimated {
-        /// Microseconds.
-        micros: u32,
-    },
-    /// A publication outside the model, or a sum past a `u32`.
+    /// The model's sum, a span of air time.
+    Estimated(Duration),
+    /// A publication outside the model, or a sum past the range of a
+    /// [`Duration`].
     Unknown,
 }
 
 impl TxEstimate {
     /// Nothing reached the air.
-    pub const NONE: Self = Self::Estimated { micros: 0 };
+    pub const NONE: Self = Self::Estimated(Duration::ZERO);
 
-    /// Both: unknown when either is, or when the sum leaves a `u32`.
+    /// Both: unknown when either is, or when the sum leaves the range of a
+    /// [`Duration`].
     #[must_use]
     pub const fn add(self, other: Self) -> Self {
         match (self, other) {
-            (Self::Estimated { micros: a }, Self::Estimated { micros: b }) => {
-                match a.checked_add(b) {
-                    Some(micros) => Self::Estimated { micros },
-                    None => Self::Unknown,
-                }
-            }
+            (Self::Estimated(a), Self::Estimated(b)) => match a.checked_add(b) {
+                Some(sum) => Self::Estimated(sum),
+                None => Self::Unknown,
+            },
             _ => Self::Unknown,
         }
     }

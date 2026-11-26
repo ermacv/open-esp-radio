@@ -659,7 +659,10 @@ fn an_operation_s_color_is_enabled_by_its_clear_disabled_bit_and_rts_disabled_at
     };
     assert_eq!(state(0).rts_threshold(), None);
     assert_eq!(state(0x03ff).rts_threshold(), None);
-    assert_eq!(state(100).rts_threshold(), Some(100));
+    assert_eq!(
+        state(100).rts_threshold(),
+        HeTxopDurationRtsThreshold::new(100)
+    );
     assert!(state(0).extended_range_single_user_permitted());
     let disabled = HePeerState {
         operation: fields.with_er_su_disabled(true),
@@ -698,4 +701,14 @@ fn the_channel_width_set_is_its_bits() {
         HeChannelWidthSet::MHZ20.union(HeChannelWidthSet::MHZ20),
         HeChannelWidthSet::MHZ20
     );
+}
+
+#[test]
+fn an_enabled_rts_threshold_keeps_its_units_and_spans_them_at_32_microseconds() {
+    enum Air {}
+    for units in [1, 64, 1022] {
+        let threshold = HeTxopDurationRtsThreshold::new(units).unwrap();
+        assert_eq!(threshold.units_32_us(), units);
+        assert_eq!(threshold.span::<Air>().as_micros(), u64::from(units) * 32);
+    }
 }

@@ -118,7 +118,7 @@ fn decodes_erp_ht_and_he_protection_fields() {
         parsed.observation.protection,
         StaBeaconProtection {
             ht: HtProtectionMode::Nonmember,
-            he_txop_rts_threshold: Some(64),
+            he_txop_rts_threshold: crate::he::HeTxopDurationRtsThreshold::new(64),
         }
     );
     assert!(parsed.erp.unwrap().information().eq([0x07]));

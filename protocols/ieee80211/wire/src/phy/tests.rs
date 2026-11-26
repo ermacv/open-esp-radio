@@ -158,14 +158,16 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     // signal extension. A 32-octet BlockAck: (16 + 256 + 6) / 24 -> 12.
     assert_eq!(
         PhyRate::Legacy(LegacyRate::Ofdm6M)
-            .max_ppdu_duration_micros(32)
+            .max_ppdu_duration(32)
+            .map(Duration::as_micros)
             .unwrap(),
         20 + 48 + 6
     );
     // DSSS 1 Mb/s with the long preamble: 192 us and 8 us an octet.
     assert_eq!(
         PhyRate::Legacy(LegacyRate::Dsss1M)
-            .max_ppdu_duration_micros(14)
+            .max_ppdu_duration(14)
+            .map(Duration::as_micros)
             .unwrap(),
         192 + 112
     );
@@ -178,7 +180,10 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     )
     .unwrap();
     assert_eq!(
-        PhyRate::Ht(ht).max_ppdu_duration_micros(1_500).unwrap(),
+        PhyRate::Ht(ht)
+            .max_ppdu_duration(1_500)
+            .map(Duration::as_micros)
+            .unwrap(),
         36 + 47 * 4 + 6
     );
     // The short GI keeps the symbols and shortens them to 3.6 us.
@@ -189,7 +194,10 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     )
     .unwrap();
     assert_eq!(
-        PhyRate::Ht(short).max_ppdu_duration_micros(1_500).unwrap(),
+        PhyRate::Ht(short)
+            .max_ppdu_duration(1_500)
+            .map(Duration::as_micros)
+            .unwrap(),
         36 + 4 * 43 + 6
     );
     // HT40 doubles the bits a symbol.
@@ -200,8 +208,14 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     )
     .unwrap();
     assert!(
-        PhyRate::Ht(ht40).max_ppdu_duration_micros(1_500).unwrap()
-            < PhyRate::Ht(ht).max_ppdu_duration_micros(1_500).unwrap()
+        PhyRate::Ht(ht40)
+            .max_ppdu_duration(1_500)
+            .map(Duration::as_micros)
+            .unwrap()
+            < PhyRate::Ht(ht)
+                .max_ppdu_duration(1_500)
+                .map(Duration::as_micros)
+                .unwrap()
     );
     // HE20 MCS 7, one stream, 2x LTF and 0.8 us GI: 234 * 6 * 5/6 = 1170
     // bits a 13.6 us symbol, (16 + 12000 + 6) / 1170 -> 11 symbols.
@@ -215,8 +229,11 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     )
     .unwrap();
     assert_eq!(
-        PhyRate::He(he).max_ppdu_duration_micros(1_500).unwrap(),
-        (36_000_u32 + 7_200 + 11 * 13_600).div_ceil(1_000) + 16 + 6
+        PhyRate::He(he)
+            .max_ppdu_duration(1_500)
+            .map(Duration::as_micros)
+            .unwrap(),
+        (36_000_u64 + 7_200 + 11 * 13_600).div_ceil(1_000) + 16 + 6
     );
     // Longer PSDUs never take less time.
     for rate in [
@@ -225,8 +242,13 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
         PhyRate::Legacy(LegacyRate::Ofdm54M),
     ] {
         assert!(
-            rate.max_ppdu_duration_micros(3_000).unwrap()
-                >= rate.max_ppdu_duration_micros(1_500).unwrap()
+            rate.max_ppdu_duration(3_000)
+                .map(Duration::as_micros)
+                .unwrap()
+                >= rate
+                    .max_ppdu_duration(1_500)
+                    .map(Duration::as_micros)
+                    .unwrap()
         );
     }
 }
@@ -234,13 +256,22 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
 #[test]
 fn unrepresentable_airtime_is_an_error_instead_of_a_truncated_duration() {
     assert_eq!(
-        PhyRate::Legacy(LegacyRate::Dsss1M).max_ppdu_duration_micros(u32::MAX),
+        PhyRate::Legacy(LegacyRate::Dsss1M)
+            .max_ppdu_duration(u32::MAX)
+            .map(Duration::as_micros),
         None
     );
     let rate = PhyRate::Legacy(LegacyRate::Dsss1M);
     let last = (u32::MAX - 192) / 8;
-    assert!(rate.max_ppdu_duration_micros(last).is_some());
-    assert_eq!(rate.max_ppdu_duration_micros(last + 1), None);
+    assert!(
+        rate.max_ppdu_duration(last)
+            .map(Duration::as_micros)
+            .is_some()
+    );
+    assert_eq!(
+        rate.max_ppdu_duration(last + 1).map(Duration::as_micros),
+        None
+    );
 }
 
 #[test]
@@ -348,7 +379,8 @@ fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
                             assert_eq!(
                                 u64::from(rate.nominal_kbps()),
                                 numerator * 1_000_000
-                                    / (denominator * (12_800 + u64::from(gi.guard_interval_ns())))
+                                    / (denominator
+                                        * (12_800 + u64::from(gi.guard_interval().get())))
                             );
                         }
                     }
@@ -360,7 +392,7 @@ fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
 
 #[test]
 fn an_ht_mixed_ppdu_lasts_at_most_what_the_l_sig_length_carries() {
-    assert_eq!(HT_MIXED_MAX_TXTIME_MICROS, 5_484);
+    assert_eq!(HT_MIXED_MAX_TXTIME.as_micros(), 5_484);
     let mcs7 = PhyRate::Ht(
         HtRate::new(
             HtMcs::new(7).unwrap(),
@@ -369,16 +401,33 @@ fn an_ht_mixed_ppdu_lasts_at_most_what_the_l_sig_length_carries() {
         )
         .unwrap(),
     );
-    assert_eq!(mcs7.max_txtime_micros(), Some(5_484));
+    assert_eq!(mcs7.max_txtime().map(Duration::as_micros), Some(5_484));
     assert_eq!(
-        PhyRate::Legacy(LegacyRate::Ofdm54M).max_txtime_micros(),
+        PhyRate::Legacy(LegacyRate::Ofdm54M)
+            .max_txtime()
+            .map(Duration::as_micros),
         None
     );
     // 32 subframes of a full frame at MCS 7, 20 MHz, long GI pass it; 28 fit.
     let subframe = 1_552_u32;
-    assert!(mcs7.max_ppdu_duration_micros(32 * subframe).unwrap() > 5_484);
-    assert!(mcs7.max_ppdu_duration_micros(28 * subframe).unwrap() <= 5_484);
-    assert!(mcs7.max_ppdu_duration_micros(29 * subframe).unwrap() > 5_484);
+    assert!(
+        mcs7.max_ppdu_duration(32 * subframe)
+            .map(Duration::as_micros)
+            .unwrap()
+            > 5_484
+    );
+    assert!(
+        mcs7.max_ppdu_duration(28 * subframe)
+            .map(Duration::as_micros)
+            .unwrap()
+            <= 5_484
+    );
+    assert!(
+        mcs7.max_ppdu_duration(29 * subframe)
+            .map(Duration::as_micros)
+            .unwrap()
+            > 5_484
+    );
 }
 
 fn ht(mcs: u8, bandwidth: PpduBandwidth, guard_interval: crate::phy::HtGuardInterval) -> PhyRate {
@@ -444,7 +493,7 @@ fn an_octet_is_sent_at_the_end_of_the_symbol_that_carries_it() {
         (PhyRate::Legacy(LegacyRate::Dsss1M), 0, 200_000),
     ] {
         assert_eq!(
-            rate.psdu_octet_sent_nanos(offset),
+            rate.psdu_octet_sent(offset).map(Nanoseconds::get),
             Some(nanos),
             "{rate:?} at {offset}"
         );
@@ -464,8 +513,15 @@ fn the_ppdu_ends_after_its_last_octet_by_tail_padding_and_signal_extension_only(
         PhyRate::Legacy(LegacyRate::Ofdm54M),
     ] {
         for octets in [1_u32, 2, 33, 100, 1_554, 49_918] {
-            let last = rate.psdu_octet_sent_nanos(octets - 1).unwrap();
-            let end = u64::from(rate.max_ppdu_duration_micros(octets).unwrap()) * 1_000;
+            let last = rate
+                .psdu_octet_sent(octets - 1)
+                .map(Nanoseconds::get)
+                .unwrap();
+            let end = u64::from(
+                rate.max_ppdu_duration(octets)
+                    .map(Duration::as_micros)
+                    .unwrap(),
+            ) * 1_000;
             // The signal extension, then at most one more symbol for the
             // tail bits and the short guard interval's 4-us rounding.
             assert!(last + 6_000 <= end, "{rate:?} {octets}: {last} {end}");
@@ -474,7 +530,7 @@ fn the_ppdu_ends_after_its_last_octet_by_tail_padding_and_signal_extension_only(
                 "{rate:?} {octets}: {last} {end}"
             );
             // Each octet goes no earlier than the one before.
-            assert!(rate.psdu_octet_sent_nanos(octets).unwrap() >= last);
+            assert!(rate.psdu_octet_sent(octets).map(Nanoseconds::get).unwrap() >= last);
         }
     }
 }
@@ -484,20 +540,31 @@ fn sixty_four_short_mpdus_land_after_the_preamble_and_a_lone_one_within_its_data
     // The first of 64 A-MPDU subframes of 44-octet MPDUs ends at octet 47
     // of the PSDU: in the first 3.6-us symbol after the 36-us preamble.
     let rate = ht(7, PpduBandwidth::Mhz40, crate::phy::HtGuardInterval::Short);
-    assert_eq!(rate.psdu_octet_sent_nanos(47), Some(39_600));
+    assert_eq!(rate.psdu_octet_sent(47).map(Nanoseconds::get), Some(39_600));
     // One 32-octet MPDU without a delimiter at HT20 MCS 0: 272 bits, the
     // 11th symbol, 80 us; its PPDU ends 6 us of signal extension later.
     let lone = ht(0, PpduBandwidth::Mhz20, crate::phy::HtGuardInterval::Normal);
-    assert_eq!(lone.psdu_octet_sent_nanos(31), Some(80_000));
-    assert_eq!(lone.max_ppdu_duration_micros(32), Some(86));
+    assert_eq!(lone.psdu_octet_sent(31).map(Nanoseconds::get), Some(80_000));
+    assert_eq!(
+        lone.max_ppdu_duration(32).map(Duration::as_micros),
+        Some(86)
+    );
 }
 
 #[test]
 fn an_offset_past_the_counting_range_is_refused() {
     let rate = ht(0, PpduBandwidth::Mhz20, crate::phy::HtGuardInterval::Normal);
-    assert!(rate.psdu_octet_sent_nanos(u32::MAX).is_some());
+    assert!(
+        rate.psdu_octet_sent(u32::MAX)
+            .map(Nanoseconds::get)
+            .is_some()
+    );
     let dsss = PhyRate::Legacy(LegacyRate::Dsss1M);
-    assert!(dsss.psdu_octet_sent_nanos(u32::MAX).is_some());
+    assert!(
+        dsss.psdu_octet_sent(u32::MAX)
+            .map(Nanoseconds::get)
+            .is_some()
+    );
 }
 
 /// The rate's values as the table of every case gave them before they were

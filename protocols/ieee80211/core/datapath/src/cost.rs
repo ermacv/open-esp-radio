@@ -66,20 +66,28 @@ pub fn response_micros(rate: PhyRate, response: Response) -> Option<u32> {
         PhyRate::Legacy(_) | PhyRate::Ht(_) | PhyRate::He(_) => LegacyRate::Ofdm6M,
     };
     PhyRate::Legacy(basic)
-        .max_ppdu_duration_micros(octets)?
+        .max_ppdu_duration(octets)
+        .and_then(micros)?
         .checked_add(SIFS_MICROS)
 }
 
 /// One transmission of `psdu_octets` at `rate` and its response.
 pub fn transmission_micros(rate: PhyRate, psdu_octets: u32, response: Response) -> Option<u32> {
-    rate.max_ppdu_duration_micros(psdu_octets)?
-        .checked_add(response_micros(rate, response)?)
+    micros(rate.max_ppdu_duration(psdu_octets)?)?.checked_add(response_micros(rate, response)?)
+}
+
+/// The microseconds of `span`: the model's sums stay within a `u32`, as
+/// [`PhyRate::max_ppdu_duration`] bounds its own; `None` past it.
+fn micros(span: oer_portable_time::Duration) -> Option<u32> {
+    u32::try_from(span.as_micros()).ok()
 }
 
 /// `micros` as an estimate: unknown when the model could not time it.
 const fn estimate(micros: Option<u32>) -> TxEstimate {
     match micros {
-        Some(micros) => TxEstimate::Estimated { micros },
+        Some(micros) => {
+            TxEstimate::Estimated(oer_portable_time::Duration::from_micros(micros as u64))
+        }
         None => TxEstimate::Unknown,
     }
 }

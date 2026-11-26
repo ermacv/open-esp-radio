@@ -7,6 +7,8 @@
 //! Every constructor validates the combination, so a held value is a rate
 //! IEEE 802.11-2020/802.11ax-2021 defines.
 
+use oer_portable_time::Duration;
+
 /// Preamble of a DSSS or CCK PPDU (IEEE 802.11-2020 16.2.2).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum DsssPreamble {
@@ -305,12 +307,13 @@ pub enum HeGiLtf {
 }
 
 impl HeGiLtf {
-    pub const fn guard_interval_ns(self) -> u16 {
-        match self {
+    /// The guard interval.
+    pub const fn guard_interval(self) -> Nanoseconds {
+        Nanoseconds(match self {
             Self::Ltf1xGi800Ns | Self::Ltf2xGi800Ns => 800,
             Self::Ltf2xGi1600Ns => 1_600,
             Self::Ltf4xGi3200Ns => 3_200,
-        }
+        })
     }
 }
 
@@ -537,15 +540,33 @@ impl HeRate {
     }
 }
 
-/// The longest TXTIME of an HT-mixed PPDU less its signal extension, in
-/// microseconds: the L-SIG's 12-bit LENGTH at 6 Mb/s (IEEE Std
-/// 802.11-2020, 19.3.9.3.5). See [`PhyRate::max_txtime_micros`].
-pub const HT_MIXED_MAX_TXTIME_MICROS: u32 = const {
+/// The longest TXTIME of an HT-mixed PPDU less its signal extension: the
+/// L-SIG's 12-bit LENGTH at 6 Mb/s (IEEE Std 802.11-2020, 19.3.9.3.5). See
+/// [`PhyRate::max_txtime`].
+pub const HT_MIXED_MAX_TXTIME: Duration = const {
     // L-STF, L-LTF and L-SIG, then 4 us symbols of 24 data bits carrying
     // SERVICE, LENGTH octets and the tail (17.4.3).
-    let symbols = (16_u32 + 8 * 4_095 + 6 + 23) / 24;
-    20 + 4 * symbols
+    let symbols = (16_u64 + 8 * 4_095 + 6 + 23) / 24;
+    Duration::from_micros(20 + 4 * symbols)
 };
+
+/// A span of a PPDU's time on air counted in nanoseconds, finer than the
+/// microseconds of [`Duration`]: a guard interval, or how far into a PPDU an
+/// octet has been sent.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Nanoseconds(u64);
+
+impl Nanoseconds {
+    /// `nanos` nanoseconds.
+    pub const fn from_nanos(nanos: u64) -> Self {
+        Self(nanos)
+    }
+
+    /// The nanoseconds.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
 
 /// The PHY rate of one PPDU.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -610,7 +631,7 @@ impl PhyRate {
                 (
                     numerator,
                     denominator,
-                    checked!(12_800_u64.checked_add(rate.gi_ltf.guard_interval_ns() as u64)),
+                    checked!(12_800_u64.checked_add(rate.gi_ltf.guard_interval().get())),
                 )
             }
         };
@@ -632,11 +653,11 @@ impl PhyRate {
     /// a 12-bit LENGTH (IEEE Std 802.11-2020, 19.3.9.3.5, Equation (19-1)),
     /// so its TXTIME less any signal extension is at most
     /// 20 + 4 * ceil((16 + 8 * 4095 + 6) / 24) = 5484 us. Compared with
-    /// [`Self::max_ppdu_duration_micros`], which includes the 6 us signal
+    /// [`Self::max_ppdu_duration`], which includes the 6 us signal
     /// extension, the limit errs short by that extension.
-    pub const fn max_txtime_micros(self) -> Option<u32> {
+    pub const fn max_txtime(self) -> Option<Duration> {
         match self {
-            Self::Ht(_) => Some(HT_MIXED_MAX_TXTIME_MICROS),
+            Self::Ht(_) => Some(HT_MIXED_MAX_TXTIME),
             Self::Legacy(_) | Self::He(_) => None,
         }
     }
@@ -649,7 +670,7 @@ impl PhyRate {
     /// (16 us). A caller keeping an exchange within a TXOP limit stays
     /// within the limit by this bound. `None` refuses a duration that cannot
     /// be represented in microseconds by a `u32`.
-    pub const fn max_ppdu_duration_micros(self, psdu_octets: u32) -> Option<u32> {
+    pub const fn max_ppdu_duration(self, psdu_octets: u32) -> Option<Duration> {
         macro_rules! checked {
             ($value:expr) => {
                 match $value {
@@ -732,7 +753,7 @@ impl PhyRate {
                 // rounded up (27.4.3).
                 let symbols =
                     checked!(ceil_div(checked!(bits.checked_mul(denominator)), numerator));
-                let guard_ns = rate.gi_ltf.guard_interval_ns() as u64;
+                let guard_ns = rate.gi_ltf.guard_interval().get();
                 let ltf: u64 = match rate.gi_ltf {
                     HeGiLtf::Ltf1xGi800Ns => 3_200,
                     HeGiLtf::Ltf2xGi800Ns | HeGiLtf::Ltf2xGi1600Ns => 6_400,
@@ -756,7 +777,7 @@ impl PhyRate {
             }
         };
         match oer_portable_wire::U64::<32>::new(micros) {
-            Some(micros) => Some(micros.to_u32()),
+            Some(micros) => Some(Duration::from_micros(micros.get())),
             None => None,
         }
     }
@@ -770,11 +791,11 @@ impl PhyRate {
     /// the 16-bit SERVICE field ahead of the PSDU. It leaves out what
     /// follows the PSDU: the tail and pad bits, the 6 us signal extension,
     /// an HE packet extension and the 4-us rounding of a short-GI PPDU's
-    /// end, which [`Self::max_ppdu_duration_micros`] adds. The preamble and
+    /// end, which [`Self::max_ppdu_duration`] adds. The preamble and
     /// symbol terms are that function's TXTIME terms (IEEE Std 802.11-2020
     /// 15.4.3, 17.4.3, 19.4.3 and 802.11ax-2021 27.4.3). `None` refuses an
     /// instant a `u64` of nanoseconds cannot hold.
-    pub const fn psdu_octet_sent_nanos(self, offset: u32) -> Option<u64> {
+    pub const fn psdu_octet_sent(self, offset: u32) -> Option<Nanoseconds> {
         macro_rules! checked {
             ($value:expr) => {
                 match $value {
@@ -830,7 +851,7 @@ impl PhyRate {
                 // plus the guard interval over exact N_DBPS (27.4.3).
                 let (numerator, denominator) = rate.data_bits_wide();
                 let streams = rate.spatial_streams.0 as u64;
-                let guard_ns = rate.gi_ltf.guard_interval_ns() as u64;
+                let guard_ns = rate.gi_ltf.guard_interval().get();
                 let ltf: u64 = match rate.gi_ltf {
                     HeGiLtf::Ltf1xGi800Ns => 3_200,
                     HeGiLtf::Ltf2xGi800Ns | HeGiLtf::Ltf2xGi1600Ns => 6_400,
@@ -847,7 +868,7 @@ impl PhyRate {
                 )))
             }
         };
-        Some(nanos)
+        Some(Nanoseconds(nanos))
     }
 }
 

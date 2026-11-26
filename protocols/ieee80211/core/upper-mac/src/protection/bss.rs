@@ -1,37 +1,12 @@
 //! Protection inputs and decisions shared by upper-MAC and the family policy.
-use core::num::NonZeroU16;
 use oer_protocols_ieee802_wire::{Eui48, Eui48Kind};
 use oer_protocols_ieee80211_contracts_port::Protection;
 use oer_protocols_ieee80211_wire::{
+    he::HeTxopDurationRtsThreshold,
     phy::{LegacyRate, PhyRate},
     protection::{ErpProtection, HtProtectionMode},
     rates::{LEGACY_RATES, LegacyRateSet, RateSelection},
 };
-
-/// Finite HE TXOP Duration RTS Threshold in the element's native 32-µs
-/// units.
-///
-/// Encodings zero and 1023 disable the rule and do not construct this type.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct HeTxopDurationRtsThreshold(NonZeroU16);
-
-impl HeTxopDurationRtsThreshold {
-    /// Admit an enabled threshold in the range 1 through 1022.
-    pub const fn new(units_32_us: u16) -> Option<Self> {
-        if units_32_us >= 0x03ff {
-            return None;
-        }
-        match NonZeroU16::new(units_32_us) {
-            Some(units) => Some(Self(units)),
-            None => None,
-        }
-    }
-
-    /// Threshold in native 32 microsecond units.
-    pub const fn units_32_us(self) -> u16 {
-        self.0.get()
-    }
-}
 
 /// The peer's nominal packet padding (HE Capabilities).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

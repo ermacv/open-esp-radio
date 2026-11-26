@@ -73,7 +73,7 @@ use crate::{
 /// #         rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<0>(), rx_block_ack_max_window: 0,
 /// #         rx_amsdu_in_ampdu: false,
 /// #         edca_max_aifsn: 15, edca_max_cw_exponent: 10,
-/// #         edca_max_txop_limit_units_32_us: u16::MAX,
+/// #         edca_max_txop_limit: oer_protocols_ieee80211_wire::extensions::wmm::TxopLimit::new(u16::MAX),
 /// #     }
 /// # }
 /// struct DualBand;
@@ -105,7 +105,7 @@ use crate::{
 /// #         rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<0>(), rx_block_ack_max_window: 0,
 /// #         rx_amsdu_in_ampdu: false,
 /// #         edca_max_aifsn: 15, edca_max_cw_exponent: 10,
-/// #         edca_max_txop_limit_units_32_us: u16::MAX,
+/// #         edca_max_txop_limit: oer_protocols_ieee80211_wire::extensions::wmm::TxopLimit::new(u16::MAX),
 /// #     }
 /// # }
 /// struct SingleBand;
@@ -260,7 +260,7 @@ fn control_plan(
 /// #     rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<0>(), rx_block_ack_max_window: 0,
 /// #         rx_amsdu_in_ampdu: false,
 /// #     edca_max_aifsn: 15, edca_max_cw_exponent: 10,
-/// #     edca_max_txop_limit_units_32_us: u16::MAX,
+/// #     edca_max_txop_limit: oer_protocols_ieee80211_wire::extensions::wmm::TxopLimit::new(u16::MAX),
 /// # };
 /// # #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// # struct Snr(i8);
@@ -297,7 +297,7 @@ fn control_plan(
 /// #     rx_block_ack_max_tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<0>(), rx_block_ack_max_window: 0,
 /// #         rx_amsdu_in_ampdu: false,
 /// #     edca_max_aifsn: 15, edca_max_cw_exponent: 10,
-/// #     edca_max_txop_limit_units_32_us: u16::MAX,
+/// #     edca_max_txop_limit: oer_protocols_ieee80211_wire::extensions::wmm::TxopLimit::new(u16::MAX),
 /// # };
 /// #[derive(Clone, Copy)]
 /// struct Measured {

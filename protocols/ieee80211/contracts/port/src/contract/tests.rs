@@ -78,7 +78,7 @@ fn terminal_status_distinguishes_an_exchange_from_one_attempt() {
         final_rate: 7_u8,
         acknowledged: Some(true),
         ack_snr_db: Some(18),
-        airtime_micros: None,
+        airtime: None,
     };
     assert_eq!(status.attempts, 3);
     assert_eq!(status.result, MacTxResult::Transmitted);
