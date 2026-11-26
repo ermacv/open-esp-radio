@@ -31,9 +31,10 @@ use crate::diagnostics::{Count, counted};
 use crate::echo::{Echoes, IcmpDrop, Owed};
 use crate::interface::{Addressing, Interface, Ipv4, is_unicast};
 use crate::loans::{LoansRefused, NotLent};
-use crate::neighbor::{Holds, Lookup, Neighbors};
+use crate::neighbor::{Holds, Lookup, NeighborIndex, Neighbors};
 use crate::payload::Payload;
-use crate::places::{Declared, Place, Places, Run, Sending, Vacant};
+use crate::places::{Declared, Place, PlaceNumber, Places, Run, Sending, Vacant};
+use crate::serial::{Serial, Serials};
 use oer_protocols_network_port::{Held, Slot};
 
 /// RFC 1122, 3.2.1.7: a default time to live large enough for the Internet.
@@ -59,27 +60,27 @@ pub struct Remote {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Work {
     Reply {
-        serial: u64,
+        serial: Serial,
     },
     Request {
-        neighbor: u8,
-        serial: u64,
+        neighbor: NeighborIndex,
+        serial: Serial,
     },
     Datagram {
-        socket: u8,
-        place: u8,
-        serial: u64,
+        socket: SocketIndex,
+        place: PlaceNumber,
+        serial: Serial,
         /// While what its demand found of the next hop holds: none for a
         /// broadcast. The station address found goes with the grant.
         found: Option<Holds>,
     },
     /// The DHCP client's owed message.
     Dhcp {
-        serial: u64,
+        serial: Serial,
     },
     /// An echo reply owed.
     Echo {
-        serial: u64,
+        serial: Serial,
         /// As a datagram's.
         found: Holds,
     },
@@ -166,14 +167,14 @@ pub(crate) enum Frame<'a, T> {
 /// it, and a place's next work has another.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WorkId {
-    serial: u64,
-    place: u8,
+    serial: Serial,
+    place: PlaceNumber,
 }
 
 impl WorkId {
     /// The command place it runs in, among its socket's.
     pub const fn place(self) -> usize {
-        self.place as usize
+        self.place.index()
     }
 }
 
@@ -494,18 +495,30 @@ impl Prepared {
     }
 }
 
+/// A socket's slot among the core's, which only the core gives: the flow its
+/// work carries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SocketIndex(u8);
+
+impl SocketIndex {
+    /// Its slot.
+    const fn slot(self) -> usize {
+        self.0 as usize
+    }
+}
+
 /// A socket. Its handle is not a copy: closing consumes it.
 #[derive(Debug, Eq, PartialEq)]
 pub struct SocketId<B> {
-    index: u8,
-    serial: u64,
+    index: SocketIndex,
+    serial: Serial,
     brand: Tag<B>,
 }
 
 impl<B> SocketId<B> {
     /// The flow this socket's work carries.
     pub const fn flow(&self) -> u8 {
-        self.index
+        self.index.0
     }
 
     /// Where this socket's ends are told ([`Core::next_end`]): it outlives
@@ -524,8 +537,8 @@ impl<B> SocketId<B> {
 /// another, and this tells none of its ends.
 #[derive(Debug, Eq, PartialEq)]
 pub struct Ends<B> {
-    index: u8,
-    serial: u64,
+    index: SocketIndex,
+    serial: Serial,
     brand: Tag<B>,
 }
 
@@ -547,17 +560,17 @@ pub struct Queued<B> {
     pub group: Group<B>,
     /// When it was accepted.
     pub since: Instant,
-    place: u8,
-    serial: u64,
+    place: PlaceNumber,
+    serial: Serial,
     brand: Tag<B>,
 }
 
 /// A running command's right to its one result.
 #[derive(Debug, Eq, PartialEq)]
 pub struct CommandId<B> {
-    socket: u8,
-    place: u8,
-    serial: u64,
+    socket: SocketIndex,
+    place: PlaceNumber,
+    serial: Serial,
     brand: Tag<B>,
 }
 
@@ -903,7 +916,7 @@ impl Configuration {
 
 #[derive(Debug)]
 struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T> {
-    serial: u64,
+    serial: Serial,
     opened: Opened,
     dscp: Dscp,
     /// What its received data counts toward.
@@ -919,7 +932,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
 {
     const fn new() -> Self {
         Self {
-            serial: 0,
+            serial: Serial::UNGIVEN,
             opened: Opened::Closed,
             dscp: BEST_EFFORT,
             group: Group::shared(),
@@ -949,7 +962,7 @@ struct Admitted {
 /// A reply owed to an asker.
 #[derive(Clone, Copy, Debug)]
 struct Reply {
-    serial: u64,
+    serial: Serial,
     hardware: Eui48,
     address: Ipv4Address,
 }
@@ -979,8 +992,8 @@ pub struct Core<
     /// How often a socket's datagrams were prepared.
     #[cfg(test)]
     prepares: usize,
-    /// The last serial given: 2^64 of them outlast any device.
-    serial: u64,
+    /// The counter of the brand's numbers.
+    serial: Serials,
     /// Moves whenever a neighbor entry may have become free for a new send:
     /// see [`Self::neighbors_changed`].
     neighbor_changes: u32,
@@ -1109,14 +1122,12 @@ impl<
             return;
         }
         self.link = link;
-        let mut serial = self.serial;
         if let Some(client) = self.address.client_mut() {
             match link.state {
-                LinkState::Up => client.link_up(now, link.epoch, &mut serial),
+                LinkState::Up => client.link_up(now, link.epoch, &mut self.serial),
                 LinkState::Down => client.link_down(),
             }
         }
-        self.serial = serial;
         self.configured();
     }
 
@@ -1177,9 +1188,8 @@ impl<
         })
     }
 
-    fn next_serial(&mut self) -> u64 {
-        self.serial = self.serial.wrapping_add(1);
-        self.serial
+    fn next_serial(&mut self) -> Serial {
+        self.serial.next()
     }
 
     /// Open a socket on `port`, whose datagrams carry `dscp`.
@@ -1261,7 +1271,7 @@ impl<
             .enumerate()
             .find(|(_, socket)| !socket.in_use())
             .ok_or(OpenRefused::NoSocket)?;
-        let index_byte = u8::try_from(index).map_err(|_| OpenRefused::NoSocket)?;
+        let index_byte = SocketIndex(u8::try_from(index).map_err(|_| OpenRefused::NoSocket)?);
         // The last refusal: nothing is written before it.
         admit(index)?;
         let index = index_byte;
@@ -1282,11 +1292,11 @@ impl<
 
     fn socket_mut(
         &mut self,
-        index: u8,
-        serial: u64,
+        index: SocketIndex,
+        serial: Serial,
     ) -> Option<&mut Socket<'m, B, SIZE, CREDITS, RECEIVED, T>> {
         self.sockets
-            .get_mut(usize::from(index))
+            .get_mut(index.slot())
             .filter(|socket| socket.serial == serial)
     }
 
@@ -1365,7 +1375,7 @@ impl<
         let usable = self.usable(now);
         let open = self
             .sockets
-            .get(usize::from(socket.index))
+            .get(socket.index.slot())
             .filter(|open| {
                 open.serial == socket.serial && matches!(open.opened, Opened::Open { .. })
             })
@@ -1535,7 +1545,7 @@ impl<
     pub fn take_result(&mut self, command: CommandId<B>) -> CommandState<B> {
         let taken = self
             .sockets
-            .get_mut(usize::from(command.socket))
+            .get_mut(command.socket.slot())
             .and_then(|socket| socket.places.take(command.place, command.serial));
         match taken {
             None => CommandState::Gone,
@@ -1628,7 +1638,7 @@ impl<
     /// frees now; a running command keeps it until its end, so that end
     /// never reaches a later command.
     pub fn drop_observer(&mut self, command: CommandId<B>) {
-        if let Some(socket) = self.sockets.get_mut(usize::from(command.socket)) {
+        if let Some(socket) = self.sockets.get_mut(command.socket.slot()) {
             socket.places.unobserve(command.place, command.serial);
         }
     }
@@ -1666,7 +1676,7 @@ impl<
             .ok_or(StaleSocket)?;
         let was = core::mem::replace(&mut open.opened, Opened::Closed);
         if was.mode() == Some(Mode::Lend) {
-            pool.loans().revoke(usize::from(socket.index));
+            pool.loans().revoke(socket.index.slot());
         }
         while let Some(datagram) = open.received.pop_front() {
             pool.give(datagram.block);
@@ -1678,7 +1688,7 @@ impl<
             self.neighbors_moved();
         }
         self.forget_unneeded();
-        let place = u8::try_from(CREDITS).map_err(|_| StaleSocket)?;
+        let place = Places::<'m, B, SIZE, CREDITS, T>::close_number().ok_or(StaleSocket)?;
         Ok(CommandId {
             socket: socket.index,
             place,
@@ -1981,9 +1991,7 @@ impl<
         let Some(client) = self.address.client_mut() else {
             return;
         };
-        let mut serial = self.serial;
-        let taken = client.input(now, source, message, &mut serial);
-        self.serial = serial;
+        let taken = client.input(now, source, message, &mut self.serial);
         match taken {
             Ok(()) => {
                 self.configured();
@@ -2084,7 +2092,6 @@ impl<
         if self.address.client().is_some() {
             self.tick_dhcp(now, pool, events);
         }
-        let mut serial = self.serial;
         let mut changes = self.neighbor_changes;
         let dhcp = self.address.dhcp_hop();
         // An expired neighbor some work still needs is asked again. The
@@ -2098,9 +2105,8 @@ impl<
             .flatten()
             .filter(|address| data_needs(sockets, echoes, *address) || dhcp == Some(*address));
         for hop in hops {
-            let next = serial.wrapping_add(1);
-            if self.neighbors.reask(now, hop, next) {
-                serial = next;
+            let neighbors = &mut self.neighbors;
+            if self.serial.next_if(|next| neighbors.reask(now, hop, next)) {
                 changes = changes.wrapping_add(1);
             }
         }
@@ -2109,13 +2115,12 @@ impl<
         if let Some(hop) = dhcp
             && !self.neighbors.holds(hop)
         {
-            serial = serial.wrapping_add(1);
+            let serial = self.serial.next();
             let (sockets, echoes) = (&self.sockets, &self.echoes);
             self.neighbors.ask(now, hop, serial, |address| {
                 data_needs(sockets, echoes, address) || address == hop
             });
         }
-        self.serial = serial;
         let sockets = &mut self.sockets;
         let echoes = &mut self.echoes;
         let mut client = self.address.client_mut();
@@ -2151,11 +2156,9 @@ impl<
         let Some(client) = self.address.client_mut() else {
             return;
         };
-        let mut serial = self.serial;
         let before = client.state();
-        client.tick(now, &mut serial);
+        client.tick(now, &mut self.serial);
         let moved = client.state() != before;
-        self.serial = serial;
         if moved {
             self.configured();
         }
@@ -2316,7 +2319,7 @@ impl<
         now: Instant,
         index: usize,
         socket: &Socket<'m, B, SIZE, CREDITS, RECEIVED, T>,
-        number: u8,
+        number: PlaceNumber,
         place: &Place<'m, B, SIZE, T>,
     ) -> Option<Demand<B>> {
         let (remote, hop, length) = match place.run() {
@@ -2347,7 +2350,7 @@ impl<
                 dscp: socket.dscp,
             },
             work: Work::Datagram {
-                socket: u8::try_from(index).ok()?,
+                socket: SocketIndex(u8::try_from(index).ok()?),
                 place: number,
                 serial: place.serial(),
                 found: found.map(|(holds, _)| holds),
@@ -2431,7 +2434,7 @@ impl<
 
     #[cold]
     #[inline(never)]
-    fn dhcp_frame(&self, now: Instant, serial: u64, peer: Eui48) -> Option<Frame<'_, T>> {
+    fn dhcp_frame(&self, now: Instant, serial: Serial, peer: Eui48) -> Option<Frame<'_, T>> {
         let client = self.address.client()?;
         if self.dhcp_peer(now, client)? != peer {
             return None;
@@ -2466,7 +2469,7 @@ impl<
     fn echo_frame(
         &self,
         now: Instant,
-        serial: u64,
+        serial: Serial,
         peer: Eui48,
         found: &Holds,
     ) -> Option<Frame<'_, T>> {
@@ -2543,14 +2546,14 @@ impl<
     fn datagram_frame(
         &self,
         now: Instant,
-        socket: u8,
-        place: u8,
-        serial: u64,
+        socket: SocketIndex,
+        place: PlaceNumber,
+        serial: Serial,
         (peer, found): (Eui48, Option<Holds>),
     ) -> Option<Frame<'_, T>> {
         // No frame leaves from an address past its lease's end.
         let source = self.usable(now)?.address();
-        let open = self.sockets.get(usize::from(socket))?;
+        let open = self.sockets.get(socket.slot())?;
         // A socket being closed has no port: its running work sends nothing.
         open.opened.port()?;
         let entry = open.places.of(place, serial)?;
@@ -2679,7 +2682,11 @@ impl<
     /// a new send, which [`Self::neighbors_changed`] tells.
     #[cold]
     #[inline(never)]
-    fn end_echo<const BLOCKS: usize>(&mut self, serial: u64, pool: &mut Pool<'m, B, SIZE, BLOCKS>) {
+    fn end_echo<const BLOCKS: usize>(
+        &mut self,
+        serial: Serial,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) {
         if let Some(owed) = self.echoes.take(serial) {
             pool.give(owed.block);
             self.neighbors_moved();
@@ -2691,7 +2698,7 @@ impl<
     /// its time.
     #[cold]
     #[inline(never)]
-    fn dhcp_sent(&mut self, now: Instant, serial: u64) {
+    fn dhcp_sent(&mut self, now: Instant, serial: Serial) {
         if let Some(client) = self.address.client_mut() {
             client.sent(now, serial);
         }
@@ -2728,10 +2735,10 @@ impl<
         else {
             return;
         };
-        self.cursor = usize::from(socket).wrapping_add(1);
+        self.cursor = socket.slot().wrapping_add(1);
         let released = self
             .sockets
-            .get_mut(usize::from(socket))
+            .get_mut(socket.slot())
             .map(|open| &mut open.places)
             .filter(|places| places.of(place, serial).is_some())
             .is_some_and(|places| places.end(place, outcome, pool));
@@ -2772,7 +2779,7 @@ impl<
                 serial,
                 ..
             } => {
-                self.cursor = usize::from(socket).wrapping_add(1);
+                self.cursor = socket.slot().wrapping_add(1);
                 self.identification = self.identification.wrapping_add(1);
                 let outcome = match frame {
                     FrameWritten::Written => Outcome::Accepted,
@@ -2780,7 +2787,7 @@ impl<
                 };
                 let places = self
                     .sockets
-                    .get_mut(usize::from(socket))
+                    .get_mut(socket.slot())
                     .map(|open| &mut open.places)
                     .filter(|places| places.of(place, serial).is_some());
                 let (released, given) = match places {
@@ -2822,7 +2829,7 @@ impl<
         let mut index = 0;
         let mut results = [const { [Kept::Nothing; CREDITS] }; SOCKETS];
         let mut closes = [Kept::Nothing; SOCKETS];
-        let mut generations = [0_u64; SOCKETS];
+        let mut generations = [Serial::UNGIVEN; SOCKETS];
         for mut socket in sockets {
             if let Some(slot) = generations.get_mut(index) {
                 *slot = socket.serial;
@@ -2887,12 +2894,12 @@ enum DemandAt {
     /// The DHCP client's owed message.
     Dhcp,
     /// The next echo reply owed after this serial (`None`: the oldest).
-    Echoes(Option<u64>),
+    Echoes(Option<Serial>),
     /// The `offset`-th socket from the core's cursor, at running place `at`
     /// (`None`: its chain's head is next).
     Datagrams {
         offset: usize,
-        at: Option<u8>,
+        at: Option<PlaceNumber>,
     },
     Done,
 }
@@ -3096,10 +3103,10 @@ enum Kept<T> {
     /// No result, or one read.
     Nothing,
     /// A command's.
-    Result { serial: u64, outcome: Outcome },
+    Result { serial: Serial, outcome: Outcome },
     /// A declared work's, with its producer's tag.
     Declared {
-        serial: u64,
+        serial: Serial,
         outcome: Outcome,
         tag: T,
     },
@@ -3121,7 +3128,7 @@ pub struct RetiredResults<B, const SOCKETS: usize, const CREDITS: usize, T = ()>
     closes: [Kept<T>; SOCKETS],
     /// Each slot's socket as the core retired it: a socket's results are
     /// its own only, not those of another socket in the same slot.
-    generations: [u64; SOCKETS],
+    generations: [Serial; SOCKETS],
     /// Received datagrams nobody read, which went back to the pool.
     pub received_dropped: u32,
     brand: Tag<B>,
@@ -3138,14 +3145,14 @@ impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
         &mut self,
         socket: &SocketId<B>,
     ) -> impl Iterator<Item = (WorkId, T, Outcome)> + '_ {
-        let index = usize::from(socket.index);
+        let index = socket.index.slot();
         let own = self.generations.get(index) == Some(&socket.serial);
         self.results
             .get_mut(index)
             .filter(|_| own)
             .into_iter()
             .flatten()
-            .zip(0_u8..)
+            .zip(PlaceNumber::in_order())
             .filter_map(|(kept, place)| {
                 let Kept::Declared {
                     serial,
@@ -3164,9 +3171,9 @@ impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
     pub fn take(&mut self, command: CommandId<B>) -> CommandState<B> {
         let kept = self
             .results
-            .get_mut(usize::from(command.socket))
-            .and_then(|places| places.get_mut(usize::from(command.place)))
-            .or_else(|| self.closes.get_mut(usize::from(command.socket)));
+            .get_mut(command.socket.slot())
+            .and_then(|places| places.get_mut(command.place.index()))
+            .or_else(|| self.closes.get_mut(command.socket.slot()));
         let Some(kept) = kept else {
             return CommandState::Gone;
         };

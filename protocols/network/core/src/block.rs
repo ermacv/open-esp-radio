@@ -2,6 +2,7 @@
 
 use crate::brand::{Brand, NetworkClaim};
 use crate::loans::Loans;
+use crate::serial::Serials;
 use core::marker::PhantomData;
 use core::mem::replace;
 
@@ -17,7 +18,7 @@ pub(crate) type Tag<B> = PhantomData<fn(B) -> B>;
 #[derive(Debug)]
 pub struct CoreBrand<B> {
     pub(crate) brand: Tag<B>,
-    pub(crate) serial: u64,
+    pub(crate) serial: Serials,
 }
 
 /// What a brand's claim gives: its one pool and the right to its core.
@@ -55,7 +56,13 @@ pub fn claim<'m, B: Brand, const SIZE: usize, const BLOCKS: usize>(
     storage: &'m mut [BlockPlace<'m, SIZE>; BLOCKS],
 ) -> Claimed<'m, B, SIZE, BLOCKS> {
     let NetworkClaim { brand } = right;
-    (Pool::new(storage), CoreBrand { brand, serial: 0 })
+    (
+        Pool::new(storage),
+        CoreBrand {
+            brand,
+            serial: Serials::new(),
+        },
+    )
 }
 
 /// One block's place in a pool's storage: its octets, and what its block and
@@ -67,7 +74,7 @@ pub struct BlockPlace<'m, const SIZE: usize> {
     /// How many octets the block holds, and the group it counts toward: set
     /// when it is taken, and read by the block that was.
     length: PrefixLength<SIZE>,
-    group: u8,
+    group: GroupIndex,
     bytes: [u8; SIZE],
 }
 
@@ -78,7 +85,7 @@ impl<const SIZE: usize> BlockPlace<'_, SIZE> {
         Self {
             link: Link::Off,
             length: PrefixLength::ZERO,
-            group: 0,
+            group: GroupIndex::SHARED,
             bytes: [0; SIZE],
         }
     }
@@ -188,7 +195,7 @@ pub const GROUPS: usize = 8;
 /// stays shared.
 #[derive(Debug)]
 pub struct Group<B> {
-    index: u8,
+    index: GroupIndex,
     brand: Tag<B>,
 }
 
@@ -197,7 +204,7 @@ impl<B> Group<B> {
     #[must_use]
     pub const fn shared() -> Self {
         Self {
-            index: 0,
+            index: GroupIndex::SHARED,
             brand: PhantomData,
         }
     }
@@ -218,6 +225,19 @@ impl<B> PartialEq for Group<B> {
 }
 
 impl<B> Eq for Group<B> {}
+
+/// A group's slot among its pool's accounts, which only the pool gives.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct GroupIndex(u8);
+
+impl GroupIndex {
+    /// The group every pool has.
+    const SHARED: Self = Self(0);
+
+    const fn slot(self) -> usize {
+        self.0 as usize
+    }
+}
 
 /// A pool has as many groups as it can keep, [`GROUPS`]. A final refusal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -271,7 +291,7 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
     /// # Errors
     /// [`GroupsFull`].
     pub fn group(&mut self, limit: usize) -> Result<Group<B>, GroupsFull> {
-        let index = u8::try_from(self.groups.len()).map_err(|_| GroupsFull)?;
+        let index = GroupIndex(u8::try_from(self.groups.len()).map_err(|_| GroupsFull)?);
         self.groups
             .push(Account { limit, held: 0 })
             .map_err(|_| GroupsFull)?;
@@ -282,7 +302,7 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
     }
 
     fn account(&self, group: Group<B>) -> Option<&Account> {
-        self.groups.get(usize::from(group.index))
+        self.groups.get(group.index.slot())
     }
 
     /// A free block, emptied, for the shared group.
@@ -299,7 +319,7 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
         let place = self.free.pop()?;
         place.length = PrefixLength::ZERO;
         place.group = group.index;
-        if let Some(account) = self.groups.get_mut(usize::from(group.index)) {
+        if let Some(account) = self.groups.get_mut(group.index.slot()) {
             account.held = account.held.saturating_add(1);
         }
         Some(Block {
@@ -311,7 +331,7 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
     /// Take a block back: only now does it stop counting toward its group.
     pub fn give(&mut self, block: Block<'m, B, SIZE>) {
         let Block { place, .. } = block;
-        if let Some(account) = self.groups.get_mut(usize::from(place.group)) {
+        if let Some(account) = self.groups.get_mut(place.group.slot()) {
             account.held = account.held.saturating_sub(1);
         }
         self.free.push(place);
@@ -325,7 +345,8 @@ impl<'m, B, const SIZE: usize, const BLOCKS: usize> Pool<'m, B, SIZE, BLOCKS> {
 
     /// The group holding the most blocks, wherever they are, with their count.
     pub fn heaviest(&self) -> Option<(Group<B>, usize)> {
-        let (index, held) = (0_u8..)
+        let (index, held) = (0_u8..=u8::MAX)
+            .map(GroupIndex)
             .zip(self.groups.iter().map(|account| account.held))
             .max_by_key(|(_, held)| *held)?;
         let group = Group {

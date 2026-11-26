@@ -28,6 +28,7 @@ use oer_protocols_network_wire::dhcp::{
 };
 
 use crate::interface::{Ipv4, is_unicast};
+use crate::serial::{Serial, Serials};
 
 /// The first wait for an OFFER: a first DISCOVER can reach an access point
 /// before its port opens, which a station cannot see (up to 119 ms after the
@@ -300,7 +301,7 @@ impl Random {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Turn {
     /// Its message is owed; a grant names it by this serial.
-    Owed(u64),
+    Owed(Serial),
     /// Its message is owed again at this time.
     At(Instant),
 }
@@ -411,9 +412,8 @@ fn doubled(wait: Duration) -> Duration {
 }
 
 /// The next message's serial.
-const fn owe(serial: &mut u64) -> Turn {
-    *serial = serial.wrapping_add(1);
-    Turn::Owed(*serial)
+const fn owe(serial: &mut Serials) -> Turn {
+    Turn::Owed(serial.next())
 }
 
 impl Client {
@@ -460,7 +460,7 @@ impl Client {
     }
 
     /// INIT: a new transaction, its DISCOVER owed now.
-    fn restart(&mut self, now: Instant, serial: &mut u64) {
+    fn restart(&mut self, now: Instant, serial: &mut Serials) {
         self.new_transaction(now);
         self.phase = Phase::Selecting {
             turn: owe(serial),
@@ -473,7 +473,7 @@ impl Client {
     /// (INIT-REBOOT, 4.4.2), and without one it starts discovery over at once,
     /// even mid-backoff: a message spent on the old link never reached this
     /// one.
-    pub(crate) fn link_up(&mut self, now: Instant, epoch: u64, serial: &mut u64) {
+    pub(crate) fn link_up(&mut self, now: Instant, epoch: u64, serial: &mut Serials) {
         if self.link == Link::Up(epoch) {
             return;
         }
@@ -499,7 +499,7 @@ impl Client {
 
     /// Advance to `now`: expire the lease, enter RENEWING or REBINDING, and
     /// owe what a retransmission time asks for.
-    pub(crate) fn tick(&mut self, now: Instant, serial: &mut u64) {
+    pub(crate) fn tick(&mut self, now: Instant, serial: &mut Serials) {
         // Each pass moves the phase forward or stops: Rebooting → Bound →
         // Renewing → Rebinding at most.
         for _ in 0..4 {
@@ -514,7 +514,7 @@ impl Client {
     }
 
     /// One transition `now` asks for; whether one happened.
-    fn step(&mut self, now: Instant, serial: &mut u64) -> bool {
+    fn step(&mut self, now: Instant, serial: &mut Serials) -> bool {
         let due = |turn: Turn| matches!(turn, Turn::At(at) if now >= at);
         match &mut self.phase {
             // A repeat keeps its transaction: a slow OFFER answers it as
@@ -576,7 +576,7 @@ impl Client {
     }
 
     /// The serial of the message owed, while the link is up to carry it.
-    pub(crate) const fn owed(&self) -> Option<u64> {
+    pub(crate) const fn owed(&self) -> Option<Serial> {
         match (self.link, self.phase.turn()) {
             (Link::Up(_), Some(Turn::Owed(serial))) => Some(serial),
             _ => None,
@@ -592,7 +592,7 @@ impl Client {
     }
 
     /// The message of `serial`, while it is owed, RFC 2131, Table 5.
-    pub(crate) fn message(&self, now: Instant, serial: u64) -> Option<Outgoing> {
+    pub(crate) fn message(&self, now: Instant, serial: Serial) -> Option<Outgoing> {
         if self.owed() != Some(serial) {
             return None;
         }
@@ -637,7 +637,7 @@ impl Client {
     /// The port took the message of `serial`: its retransmission time starts
     /// now, the attempt counts toward its phase's backoff and tries, and a
     /// REQUEST's lease counts from the first one the port took.
-    pub(crate) fn sent(&mut self, now: Instant, serial: u64) {
+    pub(crate) fn sent(&mut self, now: Instant, serial: Serial) {
         if !self.owes(serial) {
             return;
         }
@@ -662,14 +662,14 @@ impl Client {
     /// lease's start counts, and the backoff stays where it is. The next
     /// attempt still waits for its phase's time, so a refusal neither spins
     /// nor loses the client's wake. A `serial` no longer owed changes nothing.
-    pub(crate) fn refused(&mut self, now: Instant, serial: u64) {
+    pub(crate) fn refused(&mut self, now: Instant, serial: Serial) {
         if self.owes(serial) {
             self.end_attempt(now);
         }
     }
 
     /// Whether the message of `serial` is owed, the link up or not.
-    fn owes(&self, serial: u64) -> bool {
+    fn owes(&self, serial: Serial) -> bool {
         self.phase.turn() == Some(Turn::Owed(serial))
     }
 
@@ -712,7 +712,7 @@ impl Client {
         now: Instant,
         source: Ipv4Address,
         bytes: &[u8],
-        serial: &mut u64,
+        serial: &mut Serials,
     ) -> Result<(), DhcpDrop> {
         let message = DhcpMessage::parse(bytes).map_err(DhcpDrop::Malformed)?;
         let fixed = message.fixed;

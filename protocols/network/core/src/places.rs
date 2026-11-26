@@ -16,6 +16,7 @@ use oer_protocols_network_wire::address::Ipv4Address;
 
 use crate::block::{Block, Pool};
 use crate::machine::{Outcome, Remote};
+use crate::serial::Serial;
 
 #[derive(Debug)]
 pub(crate) struct Sending<'m, B, const SIZE: usize> {
@@ -95,22 +96,43 @@ enum Chain {
     Ended,
 }
 
+/// A place's number among its socket's places, which only the places give:
+/// `CREDITS` is the close's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PlaceNumber(u8);
+
+impl PlaceNumber {
+    /// Its index among the places.
+    pub(crate) const fn index(self) -> usize {
+        self.0 as usize
+    }
+
+    /// The numbers of places in their order, from the first: those a
+    /// socket's places left in a retired core's results.
+    pub(crate) fn in_order() -> impl Iterator<Item = Self> {
+        (0_u8..=u8::MAX).map(Self)
+    }
+}
+
 /// A chain's two ends.
 #[derive(Clone, Copy, Debug)]
 enum Line {
     Empty,
-    Of { head: u8, tail: u8 },
+    Of {
+        head: PlaceNumber,
+        tail: PlaceNumber,
+    },
 }
 
 impl Line {
-    const fn head(self) -> Option<u8> {
+    const fn head(self) -> Option<PlaceNumber> {
         match self {
             Self::Empty => None,
             Self::Of { head, .. } => Some(head),
         }
     }
 
-    const fn tail(self) -> Option<u8> {
+    const fn tail(self) -> Option<PlaceNumber> {
         match self {
             Self::Empty => None,
             Self::Of { tail, .. } => Some(tail),
@@ -118,7 +140,7 @@ impl Line {
     }
 
     /// With `number` behind its tail.
-    const fn push(self, number: u8) -> Self {
+    const fn push(self, number: PlaceNumber) -> Self {
         match self {
             Self::Empty => Self::Of {
                 head: number,
@@ -129,7 +151,7 @@ impl Line {
     }
 
     /// Without a place whose neighbors were `previous` and `next`.
-    const fn without(self, previous: Option<u8>, next: Option<u8>) -> Self {
+    const fn without(self, previous: Option<PlaceNumber>, next: Option<PlaceNumber>) -> Self {
         match (self, previous, next) {
             (Self::Empty, _, _) | (_, None, None) => Self::Empty,
             (Self::Of { tail, .. }, None, Some(head)) => Self::Of { head, tail },
@@ -146,8 +168,8 @@ enum Link {
     /// On `chain`, between these; none at its end.
     On {
         chain: Chain,
-        previous: Option<u8>,
-        next: Option<u8>,
+        previous: Option<PlaceNumber>,
+        next: Option<PlaceNumber>,
     },
 }
 
@@ -155,7 +177,7 @@ enum Link {
 #[derive(Debug)]
 pub(crate) struct Place<'m, B, const SIZE: usize, T> {
     /// The running command's, or 0.
-    serial: u64,
+    serial: Serial,
     /// Someone holds the right to the result.
     observed: bool,
     run: Run<'m, B, SIZE, T>,
@@ -165,14 +187,14 @@ pub(crate) struct Place<'m, B, const SIZE: usize, T> {
 impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
     const fn new() -> Self {
         Self {
-            serial: 0,
+            serial: Serial::UNGIVEN,
             observed: false,
             run: Run::Free,
             link: Link::Off,
         }
     }
 
-    pub(crate) const fn serial(&self) -> u64 {
+    pub(crate) const fn serial(&self) -> Serial {
         self.serial
     }
 
@@ -185,7 +207,7 @@ impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
     }
 
     /// The place behind it on its chain.
-    const fn next(&self) -> Option<u8> {
+    const fn next(&self) -> Option<PlaceNumber> {
         match self.link {
             Link::Off => None,
             Link::On { next, .. } => next,
@@ -203,7 +225,7 @@ impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
 
     /// Its generation, its state and whether its result is observed, as it
     /// leaves its core.
-    pub(crate) fn into_parts(self) -> (u64, bool, Run<'m, B, SIZE, T>) {
+    pub(crate) fn into_parts(self) -> (Serial, bool, Run<'m, B, SIZE, T>) {
         (self.serial, self.observed, self.run)
     }
 }
@@ -211,10 +233,10 @@ impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
 /// A place [`Places::vacant`] found free: the right to start one command in
 /// it, before anything else starts there.
 #[derive(Debug)]
-pub(crate) struct Vacant(u8);
+pub(crate) struct Vacant(PlaceNumber);
 
 impl Vacant {
-    pub(crate) const fn number(&self) -> u8 {
+    pub(crate) const fn number(&self) -> PlaceNumber {
         self.0
     }
 }
@@ -245,8 +267,8 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     }
 
     /// A place by its number: `CREDITS` is the close's.
-    pub(crate) fn get(&self, number: u8) -> Option<&Place<'m, B, SIZE, T>> {
-        let number = usize::from(number);
+    pub(crate) fn get(&self, number: PlaceNumber) -> Option<&Place<'m, B, SIZE, T>> {
+        let number = number.index();
         if number == CREDITS {
             Some(&self.close)
         } else {
@@ -255,12 +277,12 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     }
 
     /// A place by its number, while it runs `serial`'s command.
-    pub(crate) fn of(&self, number: u8, serial: u64) -> Option<&Place<'m, B, SIZE, T>> {
+    pub(crate) fn of(&self, number: PlaceNumber, serial: Serial) -> Option<&Place<'m, B, SIZE, T>> {
         self.get(number).filter(|place| place.serial == serial)
     }
 
-    fn get_mut(&mut self, number: u8) -> Option<&mut Place<'m, B, SIZE, T>> {
-        let number = usize::from(number);
+    fn get_mut(&mut self, number: PlaceNumber) -> Option<&mut Place<'m, B, SIZE, T>> {
+        let number = number.index();
         if number == CREDITS {
             Some(&mut self.close)
         } else {
@@ -277,7 +299,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     }
 
     /// Put `number` at `chain`'s tail. It is on no chain.
-    fn push(&mut self, chain: Chain, number: u8) {
+    fn push(&mut self, chain: Chain, number: PlaceNumber) {
         let line = *self.ends(chain);
         let Some(place) = self.get_mut(number) else {
             return;
@@ -294,7 +316,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     }
 
     /// Take `number` off the chain it is on, if any.
-    fn unlink(&mut self, number: u8) {
+    fn unlink(&mut self, number: PlaceNumber) {
         let Some(place) = self.get_mut(number) else {
             return;
         };
@@ -321,7 +343,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     }
 
     /// The link of the place `number`, if there is one.
-    fn link_of(&mut self, number: Option<u8>) -> Option<&mut Link> {
+    fn link_of(&mut self, number: Option<PlaceNumber>) -> Option<&mut Link> {
         self.get_mut(number?).map(|place| &mut place.link)
     }
 
@@ -329,7 +351,11 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// it, as with [`Self::put`], which writes one in place when nothing of
     /// the old is needed. An ended command goes on the ended chain only from
     /// a running one, so its end is told once.
-    fn set(&mut self, number: u8, run: Run<'m, B, SIZE, T>) -> Option<Run<'m, B, SIZE, T>> {
+    fn set(
+        &mut self,
+        number: PlaceNumber,
+        run: Run<'m, B, SIZE, T>,
+    ) -> Option<Run<'m, B, SIZE, T>> {
         let to = self.chain_for(number, &run)?;
         let place = self.get_mut(number)?;
         let old = core::mem::replace(&mut place.run, run);
@@ -341,7 +367,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// free, declared or a result): the new state is written in place and
     /// nothing of the old is moved out. A sending command's end, whose block
     /// goes back to the pool, takes [`Self::set`].
-    fn put(&mut self, number: u8, run: Run<'m, B, SIZE, T>) {
+    fn put(&mut self, number: PlaceNumber, run: Run<'m, B, SIZE, T>) {
         let Some(to) = self.chain_for(number, &run) else {
             return;
         };
@@ -352,17 +378,17 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     }
 
     /// Free `number`, whose state holds no block, as [`Self::free`] does.
-    fn free_unsent(&mut self, number: u8) {
+    fn free_unsent(&mut self, number: PlaceNumber) {
         self.put(number, Run::Free);
         if let Some(place) = self.get_mut(number) {
-            place.serial = 0;
+            place.serial = Serial::UNGIVEN;
         }
     }
 
     /// The chain `number` goes on with `run`, as the place stands now:
     /// `None` names no such place; `Some(None)` no chain.
-    fn chain_for(&self, number: u8, run: &Run<'m, B, SIZE, T>) -> Option<Option<Chain>> {
-        let close = usize::from(number) == CREDITS;
+    fn chain_for(&self, number: PlaceNumber, run: &Run<'m, B, SIZE, T>) -> Option<Option<Chain>> {
+        let close = number.index() == CREDITS;
         let place = self.get(number)?;
         let was_running = place.run.running();
         Some(match run {
@@ -376,7 +402,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     }
 
     /// Put `number` on `to`, off the chain it was on.
-    fn relink(&mut self, number: u8, to: Option<Chain>) {
+    fn relink(&mut self, number: PlaceNumber, to: Option<Chain>) {
         let on = self.get(number).and_then(Place::chain);
         if on != to {
             self.unlink(number);
@@ -386,20 +412,25 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         }
     }
 
+    /// The close's number, when it is one.
+    pub(crate) fn close_number() -> Option<PlaceNumber> {
+        u8::try_from(CREDITS).ok().map(PlaceNumber)
+    }
+
     /// A free place, which [`Self::start`] takes.
     pub(crate) fn vacant(&self) -> Option<Vacant> {
         self.free
             .head()
             .or_else(|| {
                 (self.fresh < CREDITS)
-                    .then(|| u8::try_from(self.fresh).ok())
+                    .then(|| u8::try_from(self.fresh).ok().map(PlaceNumber))
                     .flatten()
             })
             .map(Vacant)
     }
 
     /// Run `run` as `serial`'s command in `vacant`.
-    pub(crate) fn start(&mut self, vacant: Vacant, serial: u64, run: Run<'m, B, SIZE, T>) {
+    pub(crate) fn start(&mut self, vacant: Vacant, serial: Serial, run: Run<'m, B, SIZE, T>) {
         let Vacant(number) = vacant;
         // With no freed place, the vacant one is the first never used.
         if self.free.head().is_none() {
@@ -417,7 +448,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// `pool`; whether it held a neighbor's protection, which ends with it.
     pub(crate) fn end<const BLOCKS: usize>(
         &mut self,
-        number: u8,
+        number: PlaceNumber,
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> bool {
@@ -431,7 +462,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// As [`Self::end`], for who does not ask of the protection.
     fn end_running<const BLOCKS: usize>(
         &mut self,
-        number: u8,
+        number: PlaceNumber,
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) {
@@ -444,7 +475,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// End declared work in `number` as `outcome`: it holds no block.
     /// Whether it held a neighbor's protection.
-    pub(crate) fn end_declared(&mut self, number: u8, outcome: Outcome) -> bool {
+    pub(crate) fn end_declared(&mut self, number: PlaceNumber, outcome: Outcome) -> bool {
         let Some(Run::Declared(declared)) = self.get(number).map(Place::run) else {
             return false;
         };
@@ -460,7 +491,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// comes back.
     pub(crate) fn end_given<const BLOCKS: usize>(
         &mut self,
-        number: u8,
+        number: PlaceNumber,
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> (bool, Option<T>) {
@@ -508,7 +539,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// End the command. A place nobody observes frees here; otherwise the
     /// result waits in it, and its end goes on the ended chain.
-    fn finish(&mut self, number: u8, outcome: Outcome) -> Option<Run<'m, B, SIZE, T>> {
+    fn finish(&mut self, number: PlaceNumber, outcome: Outcome) -> Option<Run<'m, B, SIZE, T>> {
         let place = self.get(number)?;
         if place.observed {
             // A declared work's result keeps its tag, for its producer.
@@ -527,7 +558,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// [`Self::finish`] of a command whose state holds no block: a declared
     /// work's result keeps its tag, and nothing is moved out.
-    fn finish_unsent(&mut self, number: u8, outcome: Outcome) {
+    fn finish_unsent(&mut self, number: PlaceNumber, outcome: Outcome) {
         let Some(place) = self.get(number) else {
             return;
         };
@@ -545,10 +576,10 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         self.put(number, result);
     }
 
-    fn free(&mut self, number: u8) -> Option<Run<'m, B, SIZE, T>> {
+    fn free(&mut self, number: PlaceNumber) -> Option<Run<'m, B, SIZE, T>> {
         let old = self.set(number, Run::Free);
         if let Some(place) = self.get_mut(number) {
-            place.serial = 0;
+            place.serial = Serial::UNGIVEN;
         }
         old
     }
@@ -591,8 +622,8 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// The close finished at once, as `serial`'s command: its end is told as
     /// a command's.
-    pub(crate) fn close(&mut self, serial: u64) {
-        let number = u8::try_from(CREDITS).unwrap_or(u8::MAX);
+    pub(crate) fn close(&mut self, serial: Serial) {
+        let number = PlaceNumber(u8::try_from(CREDITS).unwrap_or(u8::MAX));
         self.close.observed = true;
         self.close.serial = serial;
         self.put(number, Run::Finished(Outcome::SocketClosed));
@@ -600,7 +631,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// The result of `serial`'s command in `number`, once it ended: the
     /// place frees. `None` names no such command; `Some(None)` one that runs.
-    pub(crate) fn take(&mut self, number: u8, serial: u64) -> Option<Option<Outcome>> {
+    pub(crate) fn take(&mut self, number: PlaceNumber, serial: Serial) -> Option<Option<Outcome>> {
         let place = self.of(number, serial)?;
         let Some(outcome) = place.run.outcome() else {
             return Some(None);
@@ -611,7 +642,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// Nobody will read `serial`'s result: a finished command's place frees
     /// now, a running one at its end.
-    pub(crate) fn unobserve(&mut self, number: u8, serial: u64) {
+    pub(crate) fn unobserve(&mut self, number: PlaceNumber, serial: Serial) {
         let Some(place) = self.get_mut(number).filter(|place| place.serial == serial) else {
             return;
         };
@@ -623,7 +654,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// The next end not yet told, oldest first, as its place and its
     /// generation: each end is told once, and its result stays in its place.
-    pub(crate) fn tell(&mut self) -> Option<(u8, u64)> {
+    pub(crate) fn tell(&mut self) -> Option<(PlaceNumber, Serial)> {
         let number = self.ended.head()?;
         let serial = self.get(number)?.serial;
         self.unlink(number);
@@ -634,7 +665,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// generation, outcome and tag: its place frees, so its result is given
     /// once. An end of other work on the way is told and stays for its
     /// holder.
-    pub(crate) fn tell_declared(&mut self) -> Option<(u8, u64, Outcome, T)> {
+    pub(crate) fn tell_declared(&mut self) -> Option<(PlaceNumber, Serial, Outcome, T)> {
         for _ in 0..=CREDITS {
             let (number, serial) = self.tell()?;
             let Some(place) = self.get(number) else {
@@ -649,13 +680,16 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     }
 
     /// The oldest running command's place: the running chain's head.
-    pub(crate) const fn first_running(&self) -> Option<u8> {
+    pub(crate) const fn first_running(&self) -> Option<PlaceNumber> {
         self.running.head()
     }
 
     /// The running command after `number`'s on the running chain, with
     /// `number`'s place.
-    pub(crate) fn running_at(&self, number: u8) -> Option<(&Place<'m, B, SIZE, T>, Option<u8>)> {
+    pub(crate) fn running_at(
+        &self,
+        number: PlaceNumber,
+    ) -> Option<(&Place<'m, B, SIZE, T>, Option<PlaceNumber>)> {
         let place = self.get(number)?;
         Some((place, place.next()))
     }
@@ -663,7 +697,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// The running commands, oldest first.
     pub(crate) fn running(
         &self,
-    ) -> impl Iterator<Item = (u8, &Place<'m, B, SIZE, T>)> + Clone + '_ {
+    ) -> impl Iterator<Item = (PlaceNumber, &Place<'m, B, SIZE, T>)> + Clone + '_ {
         let mut at = self.running.head();
         // A chain is at most every place long.
         (0..=CREDITS).map_while(move |_| {

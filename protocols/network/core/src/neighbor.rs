@@ -7,8 +7,14 @@ use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_network_wire::address::Ipv4Address;
 
+use crate::serial::Serial;
+
 /// Requests before a neighbor counts as unreachable.
 pub(crate) const REQUESTS: u8 = 3;
+
+/// An entry's slot in the table, which only the table gives.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct NeighborIndex(u8);
 /// RFC 1122, 2.3.2.1: at most one request per second per destination.
 const RETRY: Duration = Duration::from_secs(1);
 const LIFETIME: Duration = Duration::from_secs(60);
@@ -19,7 +25,7 @@ pub(crate) enum Entry {
     Asking {
         address: Ipv4Address,
         /// This resolution's: a grant names it and no later one.
-        serial: u64,
+        serial: Serial,
         requests: u8,
         next: Instant,
         /// A request is owed to the port.
@@ -147,7 +153,7 @@ impl<const N: usize> Neighbors<N> {
         &mut self,
         now: Instant,
         address: Ipv4Address,
-        serial: u64,
+        serial: Serial,
         needed: impl Fn(Ipv4Address) -> bool,
     ) -> Lookup {
         for entry in &self.entries {
@@ -179,7 +185,7 @@ impl<const N: usize> Neighbors<N> {
         &mut self,
         now: Instant,
         address: Ipv4Address,
-        serial: u64,
+        serial: Serial,
         needed: impl Fn(Ipv4Address) -> bool,
     ) {
         if let Some(index) = self.room_for(address, needed) {
@@ -218,7 +224,7 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// Ask for `address` in the entry `index`, whatever it held.
-    fn ask_in(&mut self, index: usize, now: Instant, address: Ipv4Address, serial: u64) {
+    fn ask_in(&mut self, index: usize, now: Instant, address: Ipv4Address, serial: Serial) {
         let Some(entry) = self.entries.get_mut(index) else {
             return;
         };
@@ -229,7 +235,7 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
-    const fn asking(now: Instant, address: Ipv4Address, serial: u64) -> Entry {
+    const fn asking(now: Instant, address: Ipv4Address, serial: Serial) -> Entry {
         Entry::Asking {
             address,
             serial,
@@ -291,7 +297,7 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// Ask again for `address` if its entry expired; whether it did.
-    pub(crate) fn reask(&mut self, now: Instant, address: Ipv4Address, serial: u64) -> bool {
+    pub(crate) fn reask(&mut self, now: Instant, address: Ipv4Address, serial: Serial) -> bool {
         for entry in &mut self.entries {
             if let Entry::Known {
                 address: known,
@@ -348,7 +354,10 @@ impl<const N: usize> Neighbors<N> {
     /// The requests owed: each entry with its address and resolution.
     /// The first entry from `from` on that owes a request, as
     /// [`Self::owed_requests`] gives it, with the index after it.
-    pub(crate) fn owed_request_from(&self, from: usize) -> Option<((u8, Ipv4Address, u64), usize)> {
+    pub(crate) fn owed_request_from(
+        &self,
+        from: usize,
+    ) -> Option<((NeighborIndex, Ipv4Address, Serial), usize)> {
         let rest = self.entries.get(from..)?;
         rest.iter()
             .zip(from..)
@@ -358,16 +367,19 @@ impl<const N: usize> Neighbors<N> {
                     serial,
                     owed: true,
                     ..
-                } => u8::try_from(index)
-                    .ok()
-                    .map(|place| ((place, address, serial), index.saturating_add(1))),
+                } => u8::try_from(index).ok().map(|place| {
+                    (
+                        (NeighborIndex(place), address, serial),
+                        index.saturating_add(1),
+                    )
+                }),
                 _ => None,
             })
     }
 
     pub(crate) fn owed_requests(
         &self,
-    ) -> impl Iterator<Item = (u8, Ipv4Address, u64)> + Clone + '_ {
+    ) -> impl Iterator<Item = (NeighborIndex, Ipv4Address, Serial)> + Clone + '_ {
         self.entries
             .iter()
             .enumerate()
@@ -379,7 +391,7 @@ impl<const N: usize> Neighbors<N> {
                     ..
                 } => u8::try_from(index)
                     .ok()
-                    .map(|index| (index, address, serial)),
+                    .map(|index| (NeighborIndex(index), address, serial)),
                 _ => None,
             })
     }
@@ -393,13 +405,13 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// The port took the request of entry `index`.
-    pub(crate) fn request_accepted(&mut self, index: u8, now: Instant) {
+    pub(crate) fn request_accepted(&mut self, index: NeighborIndex, now: Instant) {
         if let Some(Entry::Asking {
             requests,
             next,
             owed,
             ..
-        }) = self.entries.get_mut(usize::from(index))
+        }) = self.entries.get_mut(usize::from(index.0))
         {
             *requests = requests.saturating_add(1);
             *next = now.saturating_add(RETRY);
@@ -410,8 +422,12 @@ impl<const N: usize> Neighbors<N> {
     /// The port refused the request of entry `index` for good: this resolution
     /// ends here, and its address comes back. Nothing asks in its name, so a
     /// later resolution of that address is a new one.
-    pub(crate) fn request_refused(&mut self, index: u8, resolution: u64) -> Option<Ipv4Address> {
-        let entry = self.entries.get_mut(usize::from(index))?;
+    pub(crate) fn request_refused(
+        &mut self,
+        index: NeighborIndex,
+        resolution: Serial,
+    ) -> Option<Ipv4Address> {
+        let entry = self.entries.get_mut(usize::from(index.0))?;
         match *entry {
             Entry::Asking {
                 address, serial, ..
