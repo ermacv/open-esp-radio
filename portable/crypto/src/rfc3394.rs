@@ -251,7 +251,10 @@ fn wrap_blocks<K: BlockEngine, const N: usize>(
                 .ok_or(KeyWrapError::CapacityExceeded)?;
             let mut high;
             (high, *register) = split(block);
-            for ((out, value), count) in accumulator.iter_mut().zip(high).zip(counter.to_be_bytes())
+            for ((out, value), count) in accumulator
+                .iter_mut()
+                .zip(high.iter())
+                .zip(counter.to_be_bytes())
             {
                 *out = value ^ count;
             }

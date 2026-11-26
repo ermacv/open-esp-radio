@@ -93,10 +93,55 @@ fn the_subkey_step_adds_rb_only_after_a_carry() {
     high[0] = 0x80;
     let mut expected = [0; 16];
     expected[15] = 0x87;
-    assert_eq!(double(&high), expected);
+    double(&mut high);
+    assert_eq!(high, expected);
     let mut low = [0; 16];
     low[15] = 0x41;
     let mut shifted = [0; 16];
     shifted[15] = 0x82;
-    assert_eq!(double(&low), shifted);
+    double(&mut low);
+    assert_eq!(low, shifted);
+}
+
+/// Finishing leaves no secret block in the computation: `L`, the subkeys
+/// derived in its place, the chaining value and the held-back last block are
+/// erased where they lie, after a full last block, a partial one and a
+/// refusal alike. The test owns the computation and reads its fields after
+/// `finish`, the step `finalize` runs before the computation is dropped.
+#[test]
+fn finishing_erases_every_secret_block_in_its_place() {
+    for (length, expected) in [
+        (
+            16,
+            [
+                0x07, 0x0a, 0x16, 0xb4, 0x6b, 0x4d, 0x41, 0x44, 0xf7, 0x9b, 0xdd, 0x9d, 0xd0, 0x4a,
+                0x28, 0x7c,
+            ],
+        ),
+        (
+            0,
+            [
+                0xbb, 0x1d, 0x69, 0x29, 0xe9, 0x59, 0x37, 0x28, 0x7f, 0xa3, 0x7d, 0x12, 0x9b, 0x75,
+                0x67, 0x46,
+            ],
+        ),
+    ] {
+        let message = [
+            0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93,
+            0x17, 0x2a,
+        ];
+        let mut mac = Cmac::new(Engine::new(&RFC4493_KEY)).unwrap();
+        mac.update(&message[..length]).unwrap();
+        assert_ne!(mac.l, [0; 16]);
+        assert_eq!(mac.finish(), Ok(expected));
+        assert_eq!(mac.l, [0; 16]);
+        assert_eq!(mac.state, [0; 16]);
+        assert_eq!(mac.pending, [0; 16]);
+    }
+    let mut mac = Cmac::new(Engine::refusing_from(&RFC4493_KEY, 1)).unwrap();
+    mac.update(&[1; 7]).unwrap();
+    assert_eq!(mac.finish(), Err(REFUSAL));
+    assert_eq!(mac.l, [0; 16]);
+    assert_eq!(mac.state, [0; 16]);
+    assert_eq!(mac.pending, [0; 16]);
 }

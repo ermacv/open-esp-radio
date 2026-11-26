@@ -186,7 +186,7 @@ fn mask<E: BlockEngine, const M: usize>(
     let mut s0 = block(LENGTH_FIELD, nonce, 0);
     engine.encrypt(&mut s0)?;
     let mut mic = [0; M];
-    for ((out, value), mask) in mic.iter_mut().zip(tag.iter()).zip(s0) {
+    for ((out, value), mask) in mic.iter_mut().zip(tag.iter()).zip(s0.iter()) {
         *out = value ^ mask;
     }
     s0.zeroize();
