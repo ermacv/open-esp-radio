@@ -10,12 +10,18 @@ use oer_protocols_ieee80211_wire::management::DialogToken;
 use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::{
     block_ack::frame::{
-        ADDBA_ACTION_BODY_LEN, BlockAckAction, BlockAckPolicy, encode_addba_response,
+        ADDBA_ACTION_BODY_LEN, BlockAckAction, BlockAckPolicy, BlockAckWindow, BufferSize,
+        encode_addba_response,
     },
     sequence::SequenceNumber,
     status::StatusCode,
     tsf::TimeUnits,
 };
+
+/// The window a request of no Buffer Size gets, and the widest this
+/// recipient grants: the HT default of 64 positions (IEEE Std 802.11-2020,
+/// 9.4.1.14; Linux mac80211 `agg-rx.c` `__ieee80211_start_rx_ba_session`).
+const DEFAULT_WINDOW: BlockAckWindow = BlockAckWindow::constant::<64>();
 
 /// IEEE 802.11 ADDBA response status, separate from a local parsing error.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,7 +72,7 @@ pub struct RxAddbaRequest {
     tid: Tid,
     policy: BlockAckPolicy,
     amsdu: Amsdu,
-    window: u16,
+    window: BufferSize,
     timeout: TimeUnits,
     starting_sequence: SequenceNumber,
 }
@@ -88,7 +94,7 @@ impl RxAddbaRequest {
                 } else {
                     Amsdu::NotPermitted
                 },
-                window: parameters.window(),
+                window: parameters.buffer_size(),
                 timeout,
                 starting_sequence,
             }),
@@ -101,9 +107,8 @@ impl RxAddbaRequest {
         self.tid
     }
 
-    /// The Buffer Size the request asks for, as received: zero asks the
-    /// recipient to choose.
-    pub const fn window(&self) -> u16 {
+    /// The Buffer Size the request asks for, as received.
+    pub const fn window(&self) -> BufferSize {
         self.window
     }
 }
@@ -114,13 +119,13 @@ pub struct AddbaResponse {
     pub dialog_token: DialogToken,
     pub status: AddbaStatus,
     pub tid: Tid,
-    pub window: u16,
+    pub window: BufferSize,
     pub timeout: TimeUnits,
     pub amsdu: bool,
 }
 
 impl AddbaResponse {
-    pub fn encode(self) -> Option<[u8; ADDBA_ACTION_BODY_LEN]> {
+    pub const fn encode(self) -> [u8; ADDBA_ACTION_BODY_LEN] {
         encode_addba_response(
             self.dialog_token,
             self.status.code(),
@@ -133,15 +138,18 @@ impl AddbaResponse {
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported
             },
         )
-        .ok()
     }
 }
 
 /// Validated recipient parameters, before any hardware publication.
 pub struct RxBlockAckNegotiation {
-    response: AddbaResponse,
+    dialog_token: DialogToken,
+    tid: Tid,
+    window: BlockAckWindow,
+    timeout: TimeUnits,
+    amsdu: bool,
     starting_sequence: SequenceNumber,
-    requested_window: u16,
+    requested_window: BufferSize,
     requested_amsdu: Amsdu,
     inactivity: Inactivity,
 }
@@ -186,7 +194,7 @@ impl RxBlockAckNegotiation {
             timeout,
             starting_sequence,
         } = request;
-        let mut response = AddbaResponse {
+        let response = AddbaResponse {
             dialog_token,
             status: AddbaStatus::RequestDeclined,
             tid,
@@ -194,15 +202,11 @@ impl RxBlockAckNegotiation {
             timeout,
             amsdu: false,
         };
-        if window > 1023 {
-            response.status = AddbaStatus::InvalidParameters;
+        // The retained frames bound the window: none is no agreement.
+        let Some(retained) = BlockAckWindow::new(capacity.min(DEFAULT_WINDOW.get())) else {
             return Err(response);
-        }
-        if policy == BlockAckPolicy::Delayed
-            || tid > maximum_tid
-            || capacity == 0
-            || bank == BankRoom::Exhausted
-        {
+        };
+        if policy == BlockAckPolicy::Delayed || tid > maximum_tid || bank == BankRoom::Exhausted {
             return Err(response);
         }
         let inactivity = if timeout == TimeUnits::ZERO {
@@ -216,15 +220,20 @@ impl RxBlockAckNegotiation {
             };
             Inactivity::At(deadline)
         };
-        response.status = AddbaStatus::Success;
         // Buffer Size zero asks for the HT default of 64 positions.
         // IEEE 802.11 ADDBA Parameter Set; Linux mac80211 agg-rx.c
         // __ieee80211_start_rx_ba_session applies the same default before
         // bounding it by the receiver's actual storage capacity.
-        response.window = if window == 0 { 64 } else { window }.min(capacity).min(64);
-        response.amsdu = amsdu == Amsdu::Permitted && amsdu_in_ampdu == AmsduInAmpdu::Delivered;
+        let asked = match window {
+            BufferSize::Unnamed => DEFAULT_WINDOW,
+            BufferSize::Window(window) => window,
+        };
         Ok(Self {
-            response,
+            dialog_token,
+            tid,
+            window: asked.at_most(DEFAULT_WINDOW).at_most(retained),
+            timeout,
+            amsdu: amsdu == Amsdu::Permitted && amsdu_in_ampdu == AmsduInAmpdu::Delivered,
             starting_sequence,
             requested_window: window,
             requested_amsdu: amsdu,
@@ -232,8 +241,21 @@ impl RxBlockAckNegotiation {
         })
     }
 
+    /// The accepting response.
     pub const fn response(&self) -> AddbaResponse {
-        self.response
+        AddbaResponse {
+            dialog_token: self.dialog_token,
+            status: AddbaStatus::Success,
+            tid: self.tid,
+            window: BufferSize::Window(self.window),
+            timeout: self.timeout,
+            amsdu: self.amsdu,
+        }
+    }
+
+    /// The window the agreement takes.
+    pub const fn window(&self) -> BlockAckWindow {
+        self.window
     }
 
     pub const fn starting_sequence(&self) -> SequenceNumber {
@@ -255,7 +277,7 @@ pub struct RxBlockAckSession<A, const WINDOW: usize, const SLOTS: usize> {
     inactivity: Inactivity,
     gap: GapWait,
     starting_sequence: SequenceNumber,
-    requested_window: u16,
+    requested_window: BufferSize,
     requested_amsdu: Amsdu,
     timeout: TimeUnits,
     tid: Tid,
@@ -269,7 +291,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         negotiation: RxBlockAckNegotiation,
         agreement: A,
     ) -> Result<Self, (A, RxReorderError)> {
-        match RxReorderBuffer::new(negotiation.starting_sequence, negotiation.response.window) {
+        match RxReorderBuffer::new(negotiation.starting_sequence, negotiation.window) {
             Ok(reorder) => Ok(Self {
                 agreement,
                 reorder,
@@ -278,10 +300,10 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
                 starting_sequence: negotiation.starting_sequence,
                 requested_window: negotiation.requested_window,
                 requested_amsdu: negotiation.requested_amsdu,
-                timeout: negotiation.response.timeout,
-                tid: negotiation.response.tid,
-                dialog_token: negotiation.response.dialog_token,
-                amsdu: negotiation.response.amsdu,
+                timeout: negotiation.timeout,
+                tid: negotiation.tid,
+                dialog_token: negotiation.dialog_token,
+                amsdu: negotiation.amsdu,
             }),
             Err(reason) => Err((agreement, reason)),
         }
@@ -291,7 +313,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         self.tid
     }
 
-    pub fn window(&self) -> u16 {
+    pub fn window(&self) -> BlockAckWindow {
         self.reorder.window()
     }
 
@@ -329,7 +351,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
             dialog_token: self.dialog_token,
             status: AddbaStatus::Success,
             tid: self.tid,
-            window: self.reorder.window(),
+            window: BufferSize::Window(self.reorder.window()),
             timeout: self.timeout,
             amsdu: self.amsdu,
         }

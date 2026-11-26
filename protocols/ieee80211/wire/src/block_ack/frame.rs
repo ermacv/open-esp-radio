@@ -34,16 +34,69 @@ pub enum DelbaInitiator {
     Recipient,
 }
 
-/// A field that cannot be represented by an immediate ADDBA request.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AddbaRequestError {
-    InvalidWindow(u16),
+/// A Block Ack agreement's window: the Buffer Size of an agreement, 1 to
+/// 1023 MPDUs (IEEE Std 802.11-2020, 9.4.1.14, a ten-bit field).
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct BlockAckWindow(oer_portable_wire::U16<10>);
+
+impl BlockAckWindow {
+    /// `mpdus`, when it is 1 to 1023.
+    pub const fn new(mpdus: u16) -> Option<Self> {
+        match oer_portable_wire::U16::new(mpdus) {
+            Some(field) if mpdus != 0 => Some(Self(field)),
+            _ => None,
+        }
+    }
+
+    /// The window of `MPDUS`, checked where it is written.
+    pub const fn constant<const MPDUS: u16>() -> Self {
+        const {
+            if MPDUS == 0 || MPDUS > 1023 {
+                panic!("a Block Ack window is 1 to 1023 MPDUs");
+            }
+        }
+        Self(oer_portable_wire::U16::constant::<MPDUS>())
+    }
+
+    /// The MPDUs.
+    pub const fn get(self) -> u16 {
+        self.0.get()
+    }
+
+    /// This window, or `bound` where that is smaller.
+    pub const fn at_most(self, bound: Self) -> Self {
+        if bound.get() < self.get() {
+            bound
+        } else {
+            self
+        }
+    }
 }
 
-impl From<AddbaParametersError> for AddbaRequestError {
-    fn from(error: AddbaParametersError) -> Self {
-        match error {
-            AddbaParametersError::WindowOutOfRange(window) => Self::InvalidWindow(window),
+/// The Buffer Size subfield of a Block Ack Parameter Set (IEEE Std
+/// 802.11-2020, 9.4.1.14): a window, or zero.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BufferSize {
+    /// Zero: in a request, the recipient chooses the window.
+    Unnamed,
+    Window(BlockAckWindow),
+}
+
+impl BufferSize {
+    /// The subfield holding `field`.
+    pub const fn of_field(field: oer_portable_wire::U16<10>) -> Self {
+        if field.get() == 0 {
+            Self::Unnamed
+        } else {
+            Self::Window(BlockAckWindow(field))
+        }
+    }
+
+    /// Its ten bits.
+    pub const fn field(self) -> oer_portable_wire::U16<10> {
+        match self {
+            Self::Unnamed => oer_portable_wire::U16::constant::<0>(),
+            Self::Window(BlockAckWindow(field)) => field,
         }
     }
 }
@@ -55,23 +108,20 @@ impl From<AddbaParametersError> for AddbaRequestError {
 pub fn encode_addba_request(
     dialog_token: DialogToken,
     tid: Tid,
-    window: u16,
+    window: BlockAckWindow,
     timeout: crate::tsf::TimeUnits,
     amsdu: AmsduSupport,
     starting_sequence: SequenceNumber,
-) -> Result<[u8; ADDBA_ACTION_BODY_LEN], AddbaRequestError> {
-    let parameters = AddbaParameters::immediate(amsdu, tid, window)?;
-    // A request names the buffer it asks for: zero is no buffer.
-    if window == 0 {
-        return Err(AddbaRequestError::InvalidWindow(window));
-    }
+) -> [u8; ADDBA_ACTION_BODY_LEN] {
+    // A request names the buffer it asks for.
+    let parameters = AddbaParameters::immediate(amsdu, tid, BufferSize::Window(window));
     let [p0, p1] = parameters.to_bytes();
     let [t0, t1] = BlockAckTimeout::of(timeout).to_bytes();
     let [s0, s1] = starting_sequence.sequence_control().to_bytes();
     // SOURCE: IEEE Std 802.11-2020, 9.6.5.2 (ADDBA Request frame format):
     // Category, Block Ack Action, Dialog Token, Block Ack Parameter Set,
     // Block Ack Timeout Value, Block Ack Starting Sequence Control.
-    Ok([
+    [
         ActionCategory::BLOCK_ACK.value(),
         BlockAckActionCode::ADDBA_REQUEST.value(),
         dialog_token.value(),
@@ -81,7 +131,7 @@ pub fn encode_addba_request(
         t1,
         s0,
         s1,
-    ])
+    ]
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -197,15 +247,6 @@ pub fn encode_block_ack_request(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxAddbaResponseError {
     InvalidBodyLength(usize),
-    InvalidWindow(u16),
-}
-
-impl From<AddbaParametersError> for RxAddbaResponseError {
-    fn from(error: AddbaParametersError) -> Self {
-        match error {
-            AddbaParametersError::WindowOutOfRange(window) => Self::InvalidWindow(window),
-        }
-    }
 }
 
 /// Write one successful immediate BlockAck response into an owned action body.
@@ -215,25 +256,21 @@ pub fn write_successful_addba_response(
     body: &mut [u8],
     dialog_token: DialogToken,
     tid: Tid,
-    window: u16,
+    window: BlockAckWindow,
 ) -> Result<(), RxAddbaResponseError> {
     let length = body.len();
     let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
         return Err(RxAddbaResponseError::InvalidBodyLength(length));
     };
-    let written = encode_addba_response(
+    // A successful agreement has a buffer.
+    *body = encode_addba_response(
         dialog_token,
         StatusCode::SUCCESS,
         tid,
-        window,
+        BufferSize::Window(window),
         crate::tsf::TimeUnits::new(0),
         AmsduSupport::NotSupported,
-    )?;
-    // A successful agreement has a buffer: zero is none.
-    if window == 0 {
-        return Err(RxAddbaResponseError::InvalidWindow(window));
-    }
-    *body = written;
+    );
     Ok(())
 }
 
@@ -246,7 +283,7 @@ pub fn write_declined_addba_response(
     body: &mut [u8],
     dialog_token: DialogToken,
     tid: Tid,
-    requested_window: u16,
+    requested: BufferSize,
 ) -> Result<(), RxAddbaResponseError> {
     let length = body.len();
     let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
@@ -256,10 +293,10 @@ pub fn write_declined_addba_response(
         dialog_token,
         StatusCode::REQUEST_DECLINED,
         tid,
-        requested_window,
+        requested,
         crate::tsf::TimeUnits::new(0),
         AmsduSupport::NotSupported,
-    )?;
+    );
     Ok(())
 }
 
@@ -269,21 +306,18 @@ pub fn write_declined_addba_response(
 /// Category, Block Ack Action, Dialog Token, Status Code, Block Ack
 /// Parameter Set and Block Ack Timeout Value).
 ///
-/// # Errors
-///
-/// A window wider than ten bits.
-pub fn encode_addba_response(
+pub const fn encode_addba_response(
     dialog_token: DialogToken,
     status: StatusCode,
     tid: Tid,
-    window: u16,
+    buffer: BufferSize,
     timeout: crate::tsf::TimeUnits,
     amsdu: AmsduSupport,
-) -> Result<[u8; ADDBA_ACTION_BODY_LEN], RxAddbaResponseError> {
-    let [p0, p1] = AddbaParameters::immediate(amsdu, tid, window)?.to_bytes();
+) -> [u8; ADDBA_ACTION_BODY_LEN] {
+    let [p0, p1] = AddbaParameters::immediate(amsdu, tid, buffer).to_bytes();
     let [s0, s1] = crate::management::StatusCodeField::of(status).to_bytes();
     let [t0, t1] = BlockAckTimeout::of(timeout).to_bytes();
-    Ok([
+    [
         ActionCategory::BLOCK_ACK.value(),
         BlockAckActionCode::ADDBA_RESPONSE.value(),
         dialog_token.value(),
@@ -293,7 +327,7 @@ pub fn encode_addba_response(
         p1,
         t0,
         t1,
-    ])
+    ]
 }
 
 /// Encode one DELBA action body tearing down `tid`'s agreement.
@@ -389,51 +423,34 @@ oer_portable_wire::bitfield! {
         pub amsdu, with_amsdu: bool = 0..1;
         pub policy, with_policy: (BlockAckPolicy) = 1..2;
         pub tid, with_tid: (Tid) = 2..6;
-        pub window, with_window: u16 = 6..16;
+        buffer_size_field, with_buffer_size_field: (u16) = 6..16;
     }
-}
-
-/// Why a Block Ack Parameter Set cannot hold a value (IEEE Std
-/// 802.11-2020, 9.4.1.14: a ten-bit Buffer Size).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AddbaParametersError {
-    WindowOutOfRange(u16),
 }
 
 impl AddbaParameters {
     /// The parameters of an agreement under `policy` for `tid` and
-    /// `window`.
-    ///
-    /// # Errors
-    ///
-    /// A window wider than ten.
+    /// `buffer`.
     pub const fn new(
         policy: BlockAckPolicy,
         amsdu: AmsduSupport,
         tid: Tid,
-        window: u16,
-    ) -> Result<Self, AddbaParametersError> {
-        let parameters = Self::from_bytes([0; 2])
+        buffer: BufferSize,
+    ) -> Self {
+        Self::from_bytes([0; 2])
             .with_amsdu(matches!(amsdu, AmsduSupport::Supported))
             .with_policy(policy)
-            .with_tid(tid);
-        match parameters.with_window(window) {
-            Ok(parameters) => Ok(parameters),
-            Err(_) => Err(AddbaParametersError::WindowOutOfRange(window)),
-        }
+            .with_tid(tid)
+            .with_buffer_size_field(buffer.field())
     }
 
     /// An immediate agreement's parameters; [`Self::new`].
-    ///
-    /// # Errors
-    ///
-    /// As [`Self::new`].
-    pub const fn immediate(
-        amsdu: AmsduSupport,
-        tid: Tid,
-        window: u16,
-    ) -> Result<Self, AddbaParametersError> {
-        Self::new(BlockAckPolicy::Immediate, amsdu, tid, window)
+    pub const fn immediate(amsdu: AmsduSupport, tid: Tid, buffer: BufferSize) -> Self {
+        Self::new(BlockAckPolicy::Immediate, amsdu, tid, buffer)
+    }
+
+    /// The Buffer Size subfield.
+    pub const fn buffer_size(self) -> BufferSize {
+        BufferSize::of_field(self.buffer_size_field())
     }
 }
 

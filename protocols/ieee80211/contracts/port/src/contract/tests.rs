@@ -95,7 +95,7 @@ fn receive_metadata_keeps_absence_and_provenance_distinct() {
             .unwrap(),
         ),
         rate: RxEvidence::HardwareObserved(11_u8),
-        rssi_dbm: RxEvidence::HardwareObserved(-47),
+        rssi_dbm: RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(-47)),
         crypto: RxEvidence::Unavailable,
         aggregation: RxEvidence::Unavailable,
         amsdu: RxEvidence::Unavailable,
@@ -177,7 +177,7 @@ fn a_chip_rate_maps_to_the_portable_rate_with_its_provenance() {
 
     let chip = MacRxMetadata {
         rate: RxEvidence::HardwareObserved(0x0b_u8),
-        rssi_dbm: RxEvidence::HardwareObserved(-50),
+        rssi_dbm: RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(-50)),
         ..MacRxMetadata::unavailable()
     };
     let decode = |code| (code == 0x0b).then_some(PhyRate::Legacy(LegacyRate::Ofdm6M));
@@ -205,7 +205,7 @@ fn a_rate_conversion_keeps_every_other_field_as_it_was() {
             .unwrap(),
         ),
         rate: RxEvidence::ProtocolValidated(7_u8),
-        rssi_dbm: RxEvidence::HardwareObserved(-61),
+        rssi_dbm: RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(-61)),
         crypto: RxEvidence::ProtocolValidated(RxCryptoStatus::DecryptedAndIntegrityVerified),
         aggregation: RxEvidence::HardwareObserved(Aggregation::SMpdu),
         amsdu: RxEvidence::ProtocolValidated(true),

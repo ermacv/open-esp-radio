@@ -276,12 +276,11 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
         let body = encode_addba_request(
             DialogToken::new(17),
             Tid::constant::<15>(),
-            16,
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<16>(),
             oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
             SequenceNumber::ZERO,
-        )
-        .unwrap();
+        );
         let mut request = plain_disconnect(0xd0, 0);
         request.truncate(24);
         request.extend_from_slice(&body);

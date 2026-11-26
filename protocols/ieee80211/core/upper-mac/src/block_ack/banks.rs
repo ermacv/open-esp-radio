@@ -14,6 +14,7 @@
 
 use oer_portable_events::{EventSink, report};
 use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee80211_wire::block_ack::frame::{BlockAckWindow, BufferSize};
 use oer_protocols_ieee80211_wire::frame::DataSubtype;
 use oer_protocols_ieee80211_wire::qos::Tid;
 
@@ -65,15 +66,15 @@ pub enum RxBlockAckEvent {
     },
     /// An agreement became active: the logical owner, not a confirmed
     /// hardware register write.
-    Started { tid: Tid, window: u16 },
+    Started { tid: Tid, window: BlockAckWindow },
     /// An agreement ended.
     Stopped { tid: Tid, reason: AgreementStop },
     /// One ADDBA Request taken: its TID, the Buffer Size it asked for as
-    /// received (zero included) and what became of it. A started agreement
+    /// received and what became of it. A started agreement
     /// reports [`Self::Started`] first.
     Requested {
         tid: Tid,
-        requested: u16,
+        requested: BufferSize,
         outcome: AddbaOutcome,
     },
 }
@@ -82,10 +83,10 @@ pub enum RxBlockAckEvent {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AddbaOutcome {
     /// A new agreement started with `window`; its success response is owed.
-    Accepted { window: u16 },
+    Accepted { window: BlockAckWindow },
     /// The running agreement's own request again: its success response,
     /// with the agreement's `window`, is owed once more.
-    Repeated { window: u16 },
+    Repeated { window: BlockAckWindow },
     /// A refusal response with this status is queued.
     Refused(AddbaStatus),
     /// No reply place or bank remained ([`RxBlockAckCapacity`]): no
@@ -747,18 +748,19 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
         agreements: RxAgreements,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> Result<AddbaOutcome, RxBlockAckCapacity> {
-        if let Some((index, response)) = self.banks.iter().enumerate().find_map(|(index, bank)| {
-            bank.active()?
-                .repeated_request(parsed)
-                .map(|response| (index, response))
-        }) {
+        if let Some((index, response, window)) =
+            self.banks.iter().enumerate().find_map(|(index, bank)| {
+                let active = bank.active()?;
+                active
+                    .repeated_request(parsed)
+                    .map(|response| (index, response, active.window()))
+            })
+        {
             if response.status == AddbaStatus::Success {
                 if let Some(Bank::Active { reply, .. }) = self.banks.get_mut(index) {
                     *reply = Reply::Owed;
                 }
-                return Ok(AddbaOutcome::Repeated {
-                    window: response.window,
-                });
+                return Ok(AddbaOutcome::Repeated { window });
             }
             return self.queue_response(response);
         }
@@ -772,7 +774,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
                 return match self.banks.get(existing) {
                     Some(Bank::Adding { negotiation, .. } | Bank::AddCommand { negotiation }) => {
                         Ok(AddbaOutcome::Repeated {
-                            window: negotiation.response().window,
+                            window: negotiation.window(),
                         })
                     }
                     Some(Bank::Active { .. }) => {
@@ -805,7 +807,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
             .banks
             .iter()
             .filter_map(Bank::active)
-            .map(|active| usize::from(active.window()).saturating_sub(1))
+            .map(|active| usize::from(active.window().get()).saturating_sub(1))
             .sum();
         // At most the window, which is at most the capabilities' (`new`).
         let capacity = self.frames.len().saturating_sub(reserved).min(WINDOW);
@@ -829,11 +831,12 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
             Err(response) => return self.queue_response(response),
         };
         let response = negotiation.response();
+        let negotiation_window = negotiation.window();
         let Some(agreement) = SupportedBlockAck::<T::Caps>::new(
             bssid.individual(),
             response.tid,
             negotiation.starting_sequence(),
-            response.window,
+            negotiation.window(),
         ) else {
             return self.queue_response(AddbaResponse {
                 status: AddbaStatus::RequestDeclined,
@@ -857,7 +860,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
             }
         };
         Ok(AddbaOutcome::Accepted {
-            window: response.window,
+            window: negotiation_window,
         })
     }
 
@@ -865,9 +868,10 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
         &mut self,
         response: AddbaResponse,
     ) -> Result<AddbaOutcome, RxBlockAckCapacity> {
-        match response.encode().filter(|body| self.queue(*body)) {
-            Some(_) => Ok(AddbaOutcome::Refused(response.status)),
-            None => Err(RxBlockAckCapacity),
+        if self.queue(response.encode()) {
+            Ok(AddbaOutcome::Refused(response.status))
+        } else {
+            Err(RxBlockAckCapacity)
         }
     }
 
@@ -911,7 +915,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
             else {
                 return None;
             };
-            let body = session.response().encode()?;
+            let body = session.response().encode();
             Some(RxBlockAckReplyBody {
                 place: ReplyPlace::Bank(index),
                 association,

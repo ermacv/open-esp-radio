@@ -12,18 +12,24 @@ fn bounded_filter_combines_type_rssi_and_address_without_payload_matching() {
         channel_context: ChannelContextId::PRIMARY,
         bytes: &bytes,
         metadata: MacRxMetadata {
-            rssi_dbm: RxEvidence::HardwareObserved(-51),
+            rssi_dbm: RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(
+                -51,
+            )),
             ..MacRxMetadata::unavailable()
         },
         logical_length: bytes.len(),
     };
     let filter = MonitorFilter::all()
         .frame_types(MonitorFrameTypeMask::DATA)
-        .minimum_rssi_dbm(-60)
+        .minimum_rssi(oer_protocols_ieee80211_wire::power::Dbm::new(-60))
         .any_address(Eui48::new(selected));
 
     assert!(filter.accepts(&frame));
-    assert!(!filter.minimum_rssi_dbm(-40).accepts(&frame));
+    assert!(
+        !filter
+            .minimum_rssi(oer_protocols_ieee80211_wire::power::Dbm::new(-40))
+            .accepts(&frame)
+    );
     assert!(
         !filter
             .frame_types(MonitorFrameTypeMask::MANAGEMENT)
@@ -103,5 +109,9 @@ fn unavailable_rssi_does_not_satisfy_a_threshold() {
         logical_length: bytes.len(),
     };
 
-    assert!(!MonitorFilter::all().minimum_rssi_dbm(-100).accepts(&frame));
+    assert!(
+        !MonitorFilter::all()
+            .minimum_rssi(oer_protocols_ieee80211_wire::power::Dbm::new(-100))
+            .accepts(&frame)
+    );
 }

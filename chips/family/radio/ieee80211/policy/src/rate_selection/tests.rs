@@ -79,7 +79,10 @@ impl RxMetadata for Measured {
 
 impl SignalMetadata for Measured {
     fn link_metric(&self) -> LinkMetric {
-        LinkMetric::new(self.0, 0)
+        LinkMetric::new(
+            oer_protocols_ieee80211_wire::power::Dbm::new(self.0),
+            oer_protocols_ieee80211_wire::power::Dbm::new(0),
+        )
     }
 }
 
@@ -311,8 +314,14 @@ fn data_starts_at_the_controls_rate_and_steps_down_the_vendor_ladder_within_its_
 #[test]
 fn data_completions_adapt_the_rate_as_the_vendor_control_does() {
     let mut selection = EspressifRateSelection::<Caps>::new();
-    let mut reference =
-        EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(), LinkMetric::new(60, 0));
+    let mut reference = EspressifRateControl::for_peer(
+        (),
+        &ht_peer_at_20_mhz(),
+        LinkMetric::new(
+            oer_protocols_ieee80211_wire::power::Dbm::new(60),
+            oer_protocols_ieee80211_wire::power::Dbm::new(0),
+        ),
+    );
     RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_20_mhz(), &metric(60));
     let before = plan_of(&selection, FrameRates::Data)
         .stages()
@@ -511,7 +520,7 @@ fn a_zero_retry_budget_never_creates_a_transmission() {
 fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
     use oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates;
     let he = RatePeer {
-        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
+        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
         he_capabilities: Some(
             oer_protocols_ieee80211_wire::he::parse_he_capabilities(&[
                 255, 22, 35, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d,
@@ -569,8 +578,14 @@ fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
 #[test]
 fn a_delivered_outcome_feeds_its_ack_snr_to_the_rate_control() {
     let mut selection = EspressifRateSelection::<Caps>::new();
-    let mut reference =
-        EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(), LinkMetric::new(60, 0));
+    let mut reference = EspressifRateControl::for_peer(
+        (),
+        &ht_peer_at_20_mhz(),
+        LinkMetric::new(
+            oer_protocols_ieee80211_wire::power::Dbm::new(60),
+            oer_protocols_ieee80211_wire::power::Dbm::new(0),
+        ),
+    );
     RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_20_mhz(), &metric(60));
     for snr in [30, 18, 25] {
         RateSelection::<Measured, Snr>::completed(

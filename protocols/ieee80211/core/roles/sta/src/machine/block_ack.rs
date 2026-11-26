@@ -84,9 +84,7 @@ impl PendingRxBlockAck {
         if response.dialog_token != dialog_token || response.tid != parameters.tid() {
             return Err(self);
         }
-        let Some(body) = response.encode() else {
-            return Err(self);
-        };
+        let body = response.encode();
         Ok(RxBlockAckReply {
             epoch: self.epoch,
             bssid: self.bssid,
@@ -108,7 +106,7 @@ impl PendingRxBlockAck {
             dialog_token,
             status: AddbaStatus::RequestDeclined,
             tid: parameters.tid(),
-            window: parameters.window(),
+            window: parameters.buffer_size(),
             timeout,
             amsdu: false,
         })
@@ -129,16 +127,12 @@ impl RxBlockAckReply {
 
     /// Encode a response retained by this association's receive bank owner.
     /// The station rechecks the supplied epoch before taking its frame's place.
-    pub fn for_association(
-        epoch: LinkEpoch,
-        bssid: Bssid,
-        response: AddbaResponse,
-    ) -> Option<Self> {
-        Some(Self {
+    pub fn for_association(epoch: LinkEpoch, bssid: Bssid, response: AddbaResponse) -> Self {
+        Self {
             epoch,
             bssid,
-            body: response.encode()?,
-        })
+            body: response.encode(),
+        }
     }
 
     /// Restore a queued encoded ADDBA response after checking its frame kind.

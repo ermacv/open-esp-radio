@@ -259,7 +259,7 @@ fn station_config() -> StaConfig<ModelCaps24, Callbacks> {
         listen_interval:
             oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
         he_power: oer_protocols_ieee80211_core_roles_sta::association::StaHePower {
-            power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20)
+            power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20))
                 .unwrap(),
             ul_mu_power:
                 oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices(

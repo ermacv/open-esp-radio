@@ -65,12 +65,12 @@ mod associated_peer {
             &he_access_point(),
             oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
-            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
         )
         .unwrap();
         assert_eq!(
             peer.phy,
-            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
         );
         assert_eq!(peer.ht_ampdu_parameters, 0x17);
         assert_eq!(peer.he_bss_color.get(), 5);
@@ -119,7 +119,7 @@ mod associated_peer {
 
     fn he_mode() -> oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
         oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He {
-            power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20)
+            power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20))
                 .unwrap(),
             he_ul_mu_power:
                 oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices(
@@ -153,7 +153,7 @@ mod associated_peer {
                 &he_access_point(),
                 oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
                 &response(17),
-                oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
+                oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
             ),
             Err(StaAssociatedPeerError::Rejected(oer_protocols_ieee80211_wire::status::StatusCode::DENIED_NO_MORE_STAS))
         );
@@ -244,7 +244,7 @@ mod request {
             vifs: 2,
             tx_queues: 4,
             max_mpdu_length: 2304,
-            tx_power_ceiling_min_dbm: Some(0),
+            tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),
             individual_no_ack: PhyFormatSet::NON_HT,
             station_receive_filters: ReceiveFilter::BSS_MEMBER,
             access_point_receive_filters: ReceiveFilter::BSS_MEMBER,

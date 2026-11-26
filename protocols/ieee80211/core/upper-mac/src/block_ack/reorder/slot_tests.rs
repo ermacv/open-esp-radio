@@ -11,7 +11,11 @@ fn frame(sequence: u16, slot: u8) -> RxReorderMpdu {
 
 #[test]
 fn in_order_frames_are_released_immediately() {
-    let mut reorder = RxReorderBuffer::<64, 34>::new(SequenceNumber::new(10).unwrap(), 64).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(10).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>(),
+    )
+    .unwrap();
     assert_eq!(
         reorder.retains_on_ingest(SequenceNumber::new(10).unwrap()),
         Ok(false)
@@ -24,8 +28,11 @@ fn in_order_frames_are_released_immediately() {
 
 #[test]
 fn immediate_ingest_avoids_a_release_list_only_without_a_buffered_successor() {
-    let mut reorder =
-        RxReorderBuffer::<64, 65>::new(SequenceNumber::new(100).unwrap(), 16).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 65>::new(
+        SequenceNumber::new(100).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<16>(),
+    )
+    .unwrap();
     assert_eq!(
         reorder.try_ingest_immediate(frame(100, 64)),
         Ok(Some(frame(100, 64)))
@@ -47,8 +54,11 @@ fn immediate_ingest_avoids_a_release_list_only_without_a_buffered_successor() {
 
 #[test]
 fn gap_is_buffered_and_then_released_in_sequence_order() {
-    let mut reorder =
-        RxReorderBuffer::<64, 34>::new(SequenceNumber::new(100).unwrap(), 64).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(100).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>(),
+    )
+    .unwrap();
     assert_eq!(
         reorder.retains_on_ingest(SequenceNumber::new(102).unwrap()),
         Ok(true)
@@ -73,7 +83,11 @@ fn gap_is_buffered_and_then_released_in_sequence_order() {
 
 #[test]
 fn window_advance_releases_owned_frames_and_counts_missing_without_long_loop() {
-    let mut reorder = RxReorderBuffer::<64, 34>::new(SequenceNumber::new(0).unwrap(), 64).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(0).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>(),
+    )
+    .unwrap();
     reorder.ingest(frame(2, 2)).unwrap();
     reorder.ingest(frame(31, 31)).unwrap();
     let release = reorder.ingest(frame(1000, 1)).unwrap();
@@ -92,7 +106,11 @@ fn window_advance_releases_owned_frames_and_counts_missing_without_long_loop() {
 
 #[test]
 fn async_expiry_skips_only_the_current_gap() {
-    let mut reorder = RxReorderBuffer::<64, 34>::new(SequenceNumber::new(20).unwrap(), 8).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(20).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+    )
+    .unwrap();
     reorder.ingest(frame(22, 2)).unwrap();
     reorder.ingest(frame(23, 3)).unwrap();
     let release = reorder.expire_gap();
@@ -106,8 +124,11 @@ fn async_expiry_skips_only_the_current_gap() {
 
 #[test]
 fn sequence_wrap_and_stale_rejection_are_unambiguous() {
-    let mut reorder =
-        RxReorderBuffer::<64, 34>::new(SequenceNumber::new(0x0fff).unwrap(), 8).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(0x0fff).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+    )
+    .unwrap();
     assert_eq!(
         reorder.retains_on_ingest(SequenceNumber::new(0).unwrap()),
         Ok(true)
@@ -128,7 +149,11 @@ fn sequence_wrap_and_stale_rejection_are_unambiguous() {
 
 #[test]
 fn retention_prediction_matches_window_advance_and_duplicate_edges() {
-    let mut reorder = RxReorderBuffer::<64, 34>::new(SequenceNumber::new(10).unwrap(), 8).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(10).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+    )
+    .unwrap();
     assert_eq!(
         reorder.retains_on_ingest(SequenceNumber::new(20).unwrap()),
         Ok(true)
@@ -141,7 +166,11 @@ fn retention_prediction_matches_window_advance_and_duplicate_edges() {
         ))
     );
 
-    let mut singleton = RxReorderBuffer::<64, 1>::new(SequenceNumber::new(10).unwrap(), 1).unwrap();
+    let mut singleton = RxReorderBuffer::<64, 1>::new(
+        SequenceNumber::new(10).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<1>(),
+    )
+    .unwrap();
     assert_eq!(
         singleton.retains_on_ingest(SequenceNumber::new(20).unwrap()),
         Ok(false)
@@ -151,7 +180,11 @@ fn retention_prediction_matches_window_advance_and_duplicate_edges() {
 
 #[test]
 fn a_slot_index_cannot_be_owned_twice() {
-    let mut reorder = RxReorderBuffer::<64, 34>::new(SequenceNumber::new(1).unwrap(), 8).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(1).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+    )
+    .unwrap();
     reorder.ingest(frame(2, 4)).unwrap();
     assert_eq!(
         reorder.ingest(frame(3, 4)),
@@ -161,7 +194,11 @@ fn a_slot_index_cannot_be_owned_twice() {
 
 #[test]
 fn backing_slot_id_is_independent_of_reorder_window_index() {
-    let mut reorder = RxReorderBuffer::<64, 34>::new(SequenceNumber::new(1).unwrap(), 64).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(1).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>(),
+    )
+    .unwrap();
     let highest_valid = u8::try_from(34 - 1).unwrap();
     let first_invalid = 34 as u8;
     assert_eq!(
@@ -180,7 +217,11 @@ fn backing_slot_id_is_independent_of_reorder_window_index() {
 
 #[test]
 fn integration_can_bind_the_reorder_to_its_exact_slot_domain() {
-    let mut reorder = RxReorderBuffer::<64, 40>::new(SequenceNumber::new(1).unwrap(), 8).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 40>::new(
+        SequenceNumber::new(1).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+    )
+    .unwrap();
     assert_eq!(
         reorder
             .ingest(frame(1, 39))
@@ -197,17 +238,29 @@ fn integration_can_bind_the_reorder_to_its_exact_slot_domain() {
 
 #[test]
 fn window_cannot_exceed_the_owned_reorder_slot_pool() {
-    assert!(RxReorderBuffer::<64, 34>::new(SequenceNumber::new(0).unwrap(), 64).is_ok());
+    assert!(
+        RxReorderBuffer::<64, 34>::new(
+            SequenceNumber::new(0).unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>()
+        )
+        .is_ok()
+    );
     assert!(matches!(
-        RxReorderBuffer::<64, 34>::new(SequenceNumber::new(0).unwrap(), 64 + 1),
+        RxReorderBuffer::<64, 34>::new(
+            SequenceNumber::new(0).unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<65>()
+        ),
         Err(RxReorderError::InvalidWindow(_))
     ));
 }
 
 #[test]
 fn stop_releases_every_owned_slot_in_sequence_order() {
-    let mut reorder =
-        RxReorderBuffer::<64, 34>::new(SequenceNumber::new(4094).unwrap(), 8).unwrap();
+    let mut reorder = RxReorderBuffer::<64, 34>::new(
+        SequenceNumber::new(4094).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+    )
+    .unwrap();
     reorder.ingest(frame(1, 3)).unwrap();
     reorder.ingest(frame(4095, 1)).unwrap();
     let release = reorder.stop();
@@ -220,7 +273,11 @@ fn stop_releases_every_owned_slot_in_sequence_order() {
 
 #[test]
 fn a_block_ack_request_releases_frames_before_its_start_then_the_run_from_it() {
-    let mut state = RxReorderBuffer::<64, 40>::new(SequenceNumber::new(10).unwrap(), 8).unwrap();
+    let mut state = RxReorderBuffer::<64, 40>::new(
+        SequenceNumber::new(10).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+    )
+    .unwrap();
     // 10 and 11 are missing; 12, 14 and 15 are buffered.
     for (sequence, slot) in [(12, 2), (14, 4), (15, 5)] {
         assert!(state.ingest(frame(sequence, slot)).unwrap().received == Received::Buffered);
@@ -246,7 +303,11 @@ fn a_block_ack_request_releases_frames_before_its_start_then_the_run_from_it() {
 
 #[test]
 fn a_block_ack_request_at_or_behind_the_window_start_is_ignored() {
-    let mut state = RxReorderBuffer::<64, 40>::new(SequenceNumber::new(100).unwrap(), 8).unwrap();
+    let mut state = RxReorderBuffer::<64, 40>::new(
+        SequenceNumber::new(100).unwrap(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+    )
+    .unwrap();
     assert!(state.ingest(frame(102, 2)).unwrap().received == Received::Buffered);
     assert!(
         state

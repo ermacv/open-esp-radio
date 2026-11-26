@@ -190,7 +190,7 @@ fn drive<E: Copy + Eq, const WINDOW: usize>(
                 port.0.push(Call::Add {
                     slot,
                     tid: agreement.get().1.get(),
-                    window: agreement.get().3,
+                    window: agreement.get().3.get(),
                 });
                 view.added(ticket, (slot, agreement.get().1.get()), events);
             }
@@ -230,12 +230,11 @@ fn addba(tid: u8, timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits) -> Bloc
     let body = encode_addba_request(
         DialogToken::new(5),
         Tid::new(tid).unwrap(),
-        8,
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
         timeout,
         oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
         SequenceNumber::new(100).unwrap(),
-    )
-    .unwrap();
+    );
     parse_block_ack_action(&body).unwrap()
 }
 
@@ -321,12 +320,11 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
     let body = encode_addba_request(
         DialogToken::new(5),
         Tid::constant::<0>(),
-        64,
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>(),
         oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
         SequenceNumber::new(100).unwrap(),
-    )
-    .unwrap();
+    );
     let request = parse_block_ack_action(&body).unwrap();
     view.offered(
         now(1),
@@ -351,7 +349,17 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
         BlockAckAction::AddbaResponse {
             status, parameters, ..
         } => {
-            assert_eq!((status, parameters.window()), (StatusCode::SUCCESS, 16));
+            assert_eq!(
+                (status, parameters.buffer_size()),
+                (
+                    StatusCode::SUCCESS,
+                    oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<
+                            16,
+                        >()
+                    )
+                )
+            );
         }
         other => panic!("expected an ADDBA Response, got {other:?}"),
     }
@@ -688,8 +696,8 @@ fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
                 event,
                 RxBlockAckEvent::Started {
                     tid: TID_0,
-                    window: 8
-                }
+                    window
+                } if window.get() == 8
             ))
             .count(),
         1
@@ -909,9 +917,11 @@ fn request_for(dialog_token: u8, tid: u8, window: u16) -> BlockAckAction {
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
             Tid::new(tid).unwrap(),
-            window,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::new(window).map_or(
+                oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Unnamed,
+                oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window,
+            ),
+        ),
     }
 }
 
@@ -924,7 +934,7 @@ fn requested(events: &[RxBlockAckEvent]) -> Vec<(Tid, u16, AddbaOutcome)> {
                 tid,
                 requested,
                 outcome,
-            } => Some((tid, requested, outcome)),
+            } => Some((tid, requested.field().get(), outcome)),
             _ => None,
         })
         .collect()
@@ -954,7 +964,12 @@ fn requests_get_their_window<const WINDOW: usize>() {
             [(
                 Tid::constant::<0>(),
                 asked,
-                AddbaOutcome::Accepted { window }
+                AddbaOutcome::Accepted {
+                    window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::new(
+                        window
+                    )
+                    .unwrap()
+                }
             )],
             "a request for {asked}"
         );
@@ -964,7 +979,7 @@ fn requests_get_their_window<const WINDOW: usize>() {
                 [
                     RxBlockAckEvent::Requested { .. },
                     RxBlockAckEvent::Started { tid: TID_0, window: started },
-                ] if *started == window
+                ] if started.get() == window
             ),
             "the agreement starts at its addition's end, after the request: {:?}",
             events.0
@@ -1004,12 +1019,20 @@ fn the_window_binds_below_the_frames() {
             (
                 Tid::constant::<0>(),
                 64,
-                AddbaOutcome::Accepted { window: 16 }
+                AddbaOutcome::Accepted {
+                    window:
+                        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<16>(
+                        )
+                }
             ),
             (
                 Tid::constant::<1>(),
                 64,
-                AddbaOutcome::Accepted { window: 16 }
+                AddbaOutcome::Accepted {
+                    window:
+                        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<16>(
+                        )
+                }
             ),
         ]
     );
@@ -1039,12 +1062,20 @@ fn a_second_concurrent_tid_records_the_one_frame_left_for_it() {
             (
                 Tid::constant::<0>(),
                 64,
-                AddbaOutcome::Accepted { window: 16 }
+                AddbaOutcome::Accepted {
+                    window:
+                        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<16>(
+                        )
+                }
             ),
             (
                 Tid::constant::<1>(),
                 64,
-                AddbaOutcome::Accepted { window: 1 }
+                AddbaOutcome::Accepted {
+                    window:
+                        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<1>(
+                        )
+                }
             ),
         ]
     );
@@ -1099,12 +1130,20 @@ fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outc
             (
                 Tid::constant::<0>(),
                 8,
-                AddbaOutcome::Accepted { window: 8 }
+                AddbaOutcome::Accepted {
+                    window:
+                        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(
+                        )
+                }
             ),
             (
                 Tid::constant::<0>(),
                 8,
-                AddbaOutcome::Repeated { window: 8 }
+                AddbaOutcome::Repeated {
+                    window:
+                        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(
+                        )
+                }
             ),
             (
                 Tid::constant::<0>(),

@@ -84,7 +84,9 @@ pub fn observe_scan<const N: usize>(
 ) -> ScanObservation {
     let common = meta.common();
     let rssi = match common.rssi_dbm {
-        RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => Some(rssi),
+        RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => {
+            Some(rssi.get())
+        }
         RxEvidence::Unavailable => None,
     };
     let channel = common.channel.number();
@@ -111,7 +113,9 @@ pub(crate) fn scan_heard(
         },
         addressing,
         rssi: match meta.common().rssi_dbm {
-            RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => Some(rssi),
+            RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => {
+                Some(rssi.get())
+            }
             RxEvidence::Unavailable => None,
         },
     }

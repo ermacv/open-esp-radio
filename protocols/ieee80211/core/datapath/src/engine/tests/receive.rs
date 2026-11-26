@@ -637,17 +637,14 @@ pub(super) fn addba(starting: u16) -> Vec<u8> {
     frame.extend_from_slice(&ACCESS_POINT_ADDRESS);
     frame.extend_from_slice(&ACCESS_POINT_ADDRESS);
     frame.extend_from_slice(&[0, 0]);
-    frame.extend_from_slice(
-        &encode_addba_request(
-            DialogToken::new(5),
-            Tid::constant::<0>(),
-            8,
-            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
-            AmsduSupport::NotSupported,
-            SequenceNumber::new(starting).unwrap(),
-        )
-        .unwrap(),
-    );
+    frame.extend_from_slice(&encode_addba_request(
+        DialogToken::new(5),
+        Tid::constant::<0>(),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
+        AmsduSupport::NotSupported,
+        SequenceNumber::new(starting).unwrap(),
+    ));
     frame
 }
 

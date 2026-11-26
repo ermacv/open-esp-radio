@@ -3,7 +3,7 @@
 use oer_portable_bounded::Index;
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::block_ack::frame::{
-    ADDBA_ACTION_BODY_LEN, AddbaRequestError, BlockAckAction, encode_addba_request,
+    ADDBA_ACTION_BODY_LEN, BlockAckAction, BlockAckWindow, BufferSize, encode_addba_request,
     parse_block_ack_action,
 };
 use oer_protocols_ieee80211_wire::management::DialogToken;
@@ -16,19 +16,21 @@ pub const MAX_TX_BLOCK_ACK_WINDOW: u16 = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxBlockAckError {
-    InvalidWindow(u16),
+    /// A window wider than the delivery and expiry bitmaps.
+    InvalidWindow(BlockAckWindow),
     ZeroTimeout,
     DeadlineOverflow,
     MalformedResponse,
     UnexpectedResponse,
     DelayedPolicyUnsupported,
-    WindowExceedsCapacity(u16),
+    /// A response that names no window, or one wider than the request's.
+    WindowExceedsCapacity(BufferSize),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TxBlockAckConfig {
     pub tid: WmmUserPriority,
-    pub window: u16,
+    pub window: BlockAckWindow,
     pub timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits,
     /// How long a negotiation waits for the peer's ADDBA response.
     pub negotiation_timeout: Duration,
@@ -37,7 +39,7 @@ pub struct TxBlockAckConfig {
 
 impl TxBlockAckConfig {
     pub const fn validate(self) -> Result<Self, TxBlockAckError> {
-        if self.window == 0 || self.window > MAX_TX_BLOCK_ACK_WINDOW {
+        if self.window.get() > MAX_TX_BLOCK_ACK_WINDOW {
             return Err(TxBlockAckError::InvalidWindow(self.window));
         }
         if self.negotiation_timeout.as_micros() == 0 {
@@ -66,7 +68,7 @@ pub struct AddbaRequest {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OperationalTxBlockAck {
     pub tid: WmmUserPriority,
-    pub window: u16,
+    pub window: BlockAckWindow,
     pub timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits,
     /// Current originator-window head, advanced by delivery and expiry.
     pub starting_sequence: SequenceNumber,
@@ -153,10 +155,7 @@ impl TxBlockAckSession {
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported
             },
             starting_sequence,
-        )
-        .map_err(|error| match error {
-            AddbaRequestError::InvalidWindow(window) => TxBlockAckError::InvalidWindow(window),
-        })?;
+        );
         self.generation = next_generation(self.generation);
         self.phase = TxBlockAckPhase::Awaiting {
             dialog_token,
@@ -220,7 +219,7 @@ impl TxBlockAckSession {
             parameters.policy()
                 == oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             parameters.amsdu(),
-            parameters.window(),
+            parameters.buffer_size(),
         );
 
         if status != StatusCode::SUCCESS {
@@ -235,9 +234,10 @@ impl TxBlockAckSession {
         if tid != self.config.tid.tid() {
             return Err(TxBlockAckError::UnexpectedResponse);
         }
-        if window == 0 || window > self.config.window {
-            return Err(TxBlockAckError::WindowExceedsCapacity(window));
-        }
+        let window = match window {
+            BufferSize::Window(window) if window <= self.config.window => window,
+            _ => return Err(TxBlockAckError::WindowExceedsCapacity(window)),
+        };
         let agreement = OperationalTxBlockAck {
             tid: self.config.tid,
             window,
@@ -311,7 +311,7 @@ impl TxBlockAckSession {
             }
             let sequence = starting_sequence.wrapping_add(offset);
             let distance = agreement.starting_sequence.forward_distance(sequence);
-            if distance >= agreement.window {
+            if distance >= agreement.window.get() {
                 continue;
             }
             // Validation bounds the window by 64, so distance fits the mask.

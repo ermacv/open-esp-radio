@@ -19,12 +19,11 @@ fn unsupported_addba_receives_an_explicit_decline() {
         let body = encode_addba_request(
             DialogToken::new(17),
             Tid::constant::<15>(),
-            16,
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<16>(),
             oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
             SequenceNumber::ZERO,
-        )
-        .unwrap();
+        );
         let mut request = std::vec![0; 24];
         request[0] = 0xd0;
         request[4..10].copy_from_slice(&LOCAL);
@@ -71,12 +70,13 @@ fn an_encoder_refusal_returns_the_reply_without_marking_tx_busy() {
                 status:
                     oer_protocols_ieee80211_core_upper_mac::block_ack::AddbaStatus::RequestDeclined,
                 tid: Tid::constant::<0>(),
-                window: 8,
+                window: oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                    oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
+                ),
                 timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
                 amsdu: false,
             },
-        )
-        .unwrap();
+        );
         let (reply, reason) = world.station.try_block_ack_reply(reply).err().unwrap();
         assert_eq!(reason, BlockAckReplyRefusal::Encode);
         assert!(world.station.is_connected());

@@ -1528,9 +1528,10 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
             AP_TX_BLOCK_ACK_TID.tid(),
-            AP_TX_BLOCK_ACK_WINDOW,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                AP_TX_BLOCK_ACK_WINDOW,
+            ),
+        ),
     };
     assert!(matches!(
         service.on_tx_block_ack_action(PEER, response),
@@ -1560,7 +1561,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     assert!(service.peer_status(OTHER).unwrap().tx_block_ack.is_none());
     assert_eq!(
         service.operational_tx_block_ack_window(PEER),
-        Some(AP_TX_BLOCK_ACK_WINDOW)
+        Some(AP_TX_BLOCK_ACK_WINDOW.get())
     );
     assert_eq!(service.operational_tx_block_ack_window(OTHER), None);
     assert!(service.has_operational_tx_block_ack());
@@ -1582,7 +1583,7 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     );
     assert_eq!(
         service.operational_tx_block_ack_window(PEER),
-        Some(AP_TX_BLOCK_ACK_WINDOW)
+        Some(AP_TX_BLOCK_ACK_WINDOW.get())
     );
     assert_eq!(service.operational_tx_block_ack_window(OTHER), None);
     assert!(service.has_operational_tx_block_ack());
@@ -1626,9 +1627,10 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
             AP_TX_BLOCK_ACK_TID.tid(),
-            AP_TX_BLOCK_ACK_WINDOW,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                AP_TX_BLOCK_ACK_WINDOW,
+            ),
+        ),
     };
     service.on_tx_block_ack_action(PEER, response).unwrap();
     assert!(
@@ -1678,9 +1680,10 @@ fn addba_response_after_the_negotiation_timeout_is_dropped_as_stale() {
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
             AP_TX_BLOCK_ACK_TID.tid(),
-            AP_TX_BLOCK_ACK_WINDOW,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                AP_TX_BLOCK_ACK_WINDOW,
+            ),
+        ),
     };
     assert_eq!(service.on_tx_block_ack_action(PEER, late), Ok(None));
     assert_eq!(service.operational_tx_block_ack_window(PEER), None);
@@ -1773,9 +1776,8 @@ fn an_unanswered_or_unsent_offer_is_retried_after_the_interval_while_attempts_re
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
             AP_TX_BLOCK_ACK_TID.tid(),
-            0,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Unnamed,
+        ),
     };
     assert_eq!(
         service.on_tx_block_ack_action(PEER, declined),

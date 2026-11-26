@@ -51,7 +51,11 @@ const fn ht_element(marker: u8) -> [u8; 28] {
 
 fn power() -> StaHePower {
     StaHePower {
-        power_capability: StaPowerCapability::new(-11, 20).unwrap(),
+        power_capability: StaPowerCapability::new(
+            oer_protocols_ieee80211_wire::power::Dbm::new(-11),
+            oer_protocols_ieee80211_wire::power::Dbm::new(20),
+        )
+        .unwrap(),
         ul_mu_power: HeUlMuPowerCapability::from_rate_power_indices([
             20, 20, 20, 20, 19, 19, 18, 18, 16, 15,
         ])
@@ -185,7 +189,7 @@ fn an_he_access_point_gets_the_he_request_and_an_he_link() {
         let peer = world.station.peer().unwrap();
         assert_eq!(
             peer.associated.phy,
-            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
         );
         assert_eq!(peer.associated.he_bss_color.get(), 27);
         assert!(
@@ -195,11 +199,11 @@ fn an_he_access_point_gets_the_he_request_and_an_he_link() {
         );
         assert!(world.take().iter().any(|seen| matches!(
             seen,
-            Seen::Notify(StaNotice::Connected { phy, .. }) if *phy == oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
+            Seen::Notify(StaNotice::Connected { phy, .. }) if *phy == oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
         )));
         assert_eq!(
             connected_phy(&world),
-            Some(oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode())
+            Some(oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode())
         );
     });
 }
@@ -332,7 +336,7 @@ fn the_response_s_bss_color_is_the_link_s() {
     let peer = peer.unwrap();
     assert_eq!(
         peer.phy,
-        oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
+        oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
     );
     assert_eq!(peer.he_bss_color.get(), 5);
     assert_eq!(peer.he_peer_state.unwrap().bss_color().get(), 5);
@@ -635,7 +639,7 @@ fn he_then_ht_then_he_sets_each_bss_and_association_and_ends_each() {
         world.receive(at(231), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
         assert_eq!(
             world.station.peer().unwrap().associated.phy,
-            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
         );
         let again = he_settings(&world.take());
         assert!(
@@ -762,7 +766,7 @@ fn a_restarted_station_sets_no_he_off_for_an_association_of_its_last_run() {
         world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
         assert_eq!(
             world.station.peer().unwrap().associated.phy,
-            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(oer_protocols_ieee80211_wire::power::Dbm::new(0), oer_protocols_ieee80211_wire::power::Dbm::new(20)).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode()
         );
         let mut world = restarted(world);
         world.take();
@@ -919,7 +923,11 @@ fn an_he_request_carries_the_power_of_its_channel() {
         let mut world = World::new(mint, 3);
         world.station.config.association = &ELEMENTS;
         let lower = StaHePower {
-            power_capability: StaPowerCapability::new(-11, 12).unwrap(),
+            power_capability: StaPowerCapability::new(
+                oer_protocols_ieee80211_wire::power::Dbm::new(-11),
+                oer_protocols_ieee80211_wire::power::Dbm::new(12),
+            )
+            .unwrap(),
             ul_mu_power: HeUlMuPowerCapability::from_rate_power_indices([12; 10]).unwrap(),
         };
         world.station.config.channels = heapless::Vec::from_slice(&[

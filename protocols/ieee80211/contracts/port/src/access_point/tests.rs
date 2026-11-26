@@ -22,7 +22,7 @@ const CAPS: crate::LowerMacCapabilities = crate::LowerMacCapabilities {
     vifs: 2,
     tx_queues: 4,
     max_mpdu_length: 2304,
-    tx_power_ceiling_min_dbm: Some(0),
+    tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),
     individual_no_ack: crate::PhyFormatSet::NON_HT,
     station_receive_filters: crate::ReceiveFilter::BSS_MEMBER,
     access_point_receive_filters: crate::ReceiveFilter::BSS_MEMBER,

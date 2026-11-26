@@ -77,7 +77,7 @@ pub enum RssiFloor {
     /// Any frame, with or without RSSI evidence.
     Any,
     /// A frame whose RSSI is observed and at least this many dBm.
-    AtLeast(i8),
+    AtLeast(oer_protocols_ieee80211_wire::power::Dbm),
 }
 
 /// The address a monitored frame must hold.
@@ -103,8 +103,8 @@ impl MonitorFilter {
         self
     }
 
-    pub const fn minimum_rssi_dbm(mut self, minimum_rssi_dbm: i8) -> Self {
-        self.minimum_rssi = RssiFloor::AtLeast(minimum_rssi_dbm);
+    pub const fn minimum_rssi(mut self, minimum: oer_protocols_ieee80211_wire::power::Dbm) -> Self {
+        self.minimum_rssi = RssiFloor::AtLeast(minimum);
         self
     }
 

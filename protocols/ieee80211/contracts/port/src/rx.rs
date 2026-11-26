@@ -82,9 +82,12 @@ impl RxMetadata for RxMeta {
 pub struct LinkMetric(i8);
 
 impl LinkMetric {
-    /// The metric of a frame received at `rssi_dbm` over `noise_floor_dbm`.
-    pub const fn new(rssi_dbm: i8, noise_floor_dbm: i8) -> Self {
-        Self(rssi_dbm.wrapping_sub(noise_floor_dbm))
+    /// The metric of a frame received at `rssi` over `noise_floor`.
+    pub const fn new(
+        rssi: oer_protocols_ieee80211_wire::power::Dbm,
+        noise_floor: oer_protocols_ieee80211_wire::power::Dbm,
+    ) -> Self {
+        Self(rssi.over(noise_floor))
     }
 
     /// The metric in dB.
@@ -130,11 +133,11 @@ pub struct RxMeta {
     /// The received PPDU's decoded PHY rate, with its provenance.
     pub rate: RxEvidence<PhyRate>,
     /// The received signal level in dBm, with its provenance.
-    pub rssi_dbm: RxEvidence<i8>,
+    pub rssi_dbm: RxEvidence<oer_protocols_ieee80211_wire::power::Dbm>,
     /// The receiver's noise floor when the frame arrived: a per-frame
     /// measurement, or the PHY's running estimate read at reception,
     /// observed either way.
-    pub noise_floor_dbm: RxEvidence<i8>,
+    pub noise_floor_dbm: RxEvidence<oer_protocols_ieee80211_wire::power::Dbm>,
     /// Reception time in the port's radio clock, with the generation of
     /// the clock relation it was taken in.
     pub timestamp: RxEvidence<Ieee80211Stamp>,

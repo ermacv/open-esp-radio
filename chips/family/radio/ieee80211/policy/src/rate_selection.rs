@@ -302,8 +302,8 @@ fn control_plan(
 /// #[derive(Clone, Copy)]
 /// struct Measured {
 ///     common: RxMeta,
-///     rssi_dbm: i8,
-///     noise_floor_dbm: i8,
+///     rssi: oer_protocols_ieee80211_wire::power::Dbm,
+///     noise_floor: oer_protocols_ieee80211_wire::power::Dbm,
 /// }
 /// impl RxMetadata for Measured {
 ///     fn common(&self) -> &RxMeta {
@@ -312,7 +312,7 @@ fn control_plan(
 /// }
 /// impl SignalMetadata for Measured {
 ///     fn link_metric(&self) -> LinkMetric {
-///         LinkMetric::new(self.rssi_dbm, self.noise_floor_dbm)
+///         LinkMetric::new(self.rssi, self.noise_floor)
 ///     }
 /// }
 /// #[derive(Clone, Copy, Debug, PartialEq, Eq)]
