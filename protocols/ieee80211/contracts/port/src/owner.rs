@@ -75,7 +75,7 @@
 //! #         vifs: 2,
 //! #         tx_queues: 4,
 //! #         max_mpdu_length: 2304,
-//! #         tx_power_ceiling_min_dbm: Some(0),
+//! #         tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),
 //! #         individual_no_ack: PhyFormatSet::NON_HT,
 //! #         station_receive_filters: ReceiveFilter::BSS_MEMBER,
 //! #         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
@@ -118,7 +118,7 @@
 //! #         vifs: 2,
 //! #         tx_queues: 4,
 //! #         max_mpdu_length: 2304,
-//! #         tx_power_ceiling_min_dbm: Some(0),
+//! #         tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),
 //! #         individual_no_ack: PhyFormatSet::NON_HT,
 //! #         station_receive_filters: ReceiveFilter::BSS_MEMBER,
 //! #         access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
@@ -331,7 +331,7 @@ impl<K: Ieee80211Capabilities> SupportedPower<K> {
     pub const fn new(power: TxPower) -> Option<Self> {
         let supported = match (power, K::CAPS.tx_power_ceiling_min_dbm) {
             (TxPower::Calibrated, _) => true,
-            (TxPower::MaxDbm(dbm), Some(lowest)) => dbm >= lowest,
+            (TxPower::MaxDbm(dbm), Some(lowest)) => dbm.get() >= lowest.get(),
             (TxPower::MaxDbm(_), None) => false,
         };
         if supported {
@@ -400,7 +400,7 @@ pub struct SupportedBlockAck<K> {
     peer: IndividualAddress,
     tid: Tid,
     start_sequence: SequenceNumber,
-    window: u16,
+    window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow,
     brand: PhantomData<fn() -> K>,
 }
 
@@ -411,11 +411,10 @@ impl<K: Ieee80211Capabilities> SupportedBlockAck<K> {
         peer: IndividualAddress,
         tid: Tid,
         start_sequence: SequenceNumber,
-        window: u16,
+        window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow,
     ) -> Option<Self> {
         if tid.get() <= K::CAPS.rx_block_ack_max_tid.get()
-            && window >= 1
-            && window <= K::CAPS.rx_block_ack_max_window
+            && window.get() <= K::CAPS.rx_block_ack_max_window
         {
             Some(Self {
                 peer,
@@ -430,7 +429,14 @@ impl<K: Ieee80211Capabilities> SupportedBlockAck<K> {
     }
 
     /// The originator, the TID, the starting sequence and the window.
-    pub const fn get(&self) -> (IndividualAddress, Tid, SequenceNumber, u16) {
+    pub const fn get(
+        &self,
+    ) -> (
+        IndividualAddress,
+        Tid,
+        SequenceNumber,
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow,
+    ) {
         (self.peer, self.tid, self.start_sequence, self.window)
     }
 }

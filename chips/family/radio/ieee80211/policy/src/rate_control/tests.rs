@@ -654,7 +654,10 @@ mod seam {
 
     /// The metric of a frame `db` dB over the noise floor.
     fn metric(db: i8) -> LinkMetric {
-        LinkMetric::new(db, 0)
+        LinkMetric::new(
+            oer_protocols_ieee80211_wire::power::Dbm::new(db),
+            oer_protocols_ieee80211_wire::power::Dbm::new(0),
+        )
     }
 
     #[test]

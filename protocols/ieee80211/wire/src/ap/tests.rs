@@ -297,7 +297,7 @@ fn ap_action_frame_and_parser_preserve_per_peer_addba_identity() {
                 parameters,
                 ..
             },
-        }) if dialog_token == DialogToken::new(7) && parsed_peer == Eui48::new(peer) && (parameters.tid(), parameters.window()) == (Tid::constant::<0>(), 32)
+        }) if dialog_token == DialogToken::new(7) && parsed_peer == Eui48::new(peer) && (parameters.tid(), parameters.buffer_size()) == (Tid::constant::<0>(), crate::block_ack::frame::BufferSize::Window(crate::block_ack::frame::BlockAckWindow::constant::<32>()))
     ));
 }
 

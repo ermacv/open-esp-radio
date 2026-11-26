@@ -2046,7 +2046,7 @@ fn agreement_change<T: StaTypes, K>(
         let window = tx.operational(tid).map(|agreement| {
             oer_protocols_ieee80211_core_datapath::plane::TxWindow {
                 head: agreement.starting_sequence,
-                size: agreement.window,
+                size: agreement.window.get(),
             }
         });
         let heard = tid.select_mut(told);

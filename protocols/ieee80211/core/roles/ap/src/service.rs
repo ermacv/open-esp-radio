@@ -87,7 +87,8 @@ pub const AP_TX_BLOCK_ACK_TID: WmmUserPriority = WmmUserPriority::UP0;
 /// admission. AP and STA use the same 32-MPDU production aggregate contract;
 /// duplex fairness must be provided by the common MAC transaction scheduler,
 /// not by weakening the AP's negotiated BlockAck capability.
-pub const AP_TX_BLOCK_ACK_WINDOW: u16 = 32;
+pub const AP_TX_BLOCK_ACK_WINDOW: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow =
+    oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<32>();
 pub const AP_TX_BLOCK_ACK_NEGOTIATION_TIMEOUT: oer_portable_time::Duration =
     oer_portable_time::Duration::from_millis(100);
 
@@ -1091,7 +1092,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             .flatten()
             .find(|existing| existing.address == peer)
             .and_then(|existing| existing.tx_block_ack.operational(AP_TX_BLOCK_ACK_TID))
-            .map(|agreement| agreement.window)
+            .map(|agreement| agreement.window.get())
     }
 
     pub const fn associated_count(&self) -> u8 {

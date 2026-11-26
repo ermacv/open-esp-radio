@@ -22,6 +22,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use crate::sequence::SequenceSpace;
+use oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow;
 
 use core::num::NonZeroUsize;
 
@@ -56,8 +57,8 @@ pub struct RxReorderMpdu {
 /// Why the buffer refused an operation; the buffer did not change.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RxReorderError {
-    /// A window of zero, or wider than the buffer's `WINDOW_CAPACITY`.
-    InvalidWindow(u16),
+    /// A window wider than the buffer's `WINDOW_CAPACITY`.
+    InvalidWindow(BlockAckWindow),
     /// A slot outside the caller's `SLOT_CAPACITY` domain.
     InvalidSlot(u8),
     /// The sequence is already buffered.
@@ -173,7 +174,7 @@ impl ReleaseRange {
 pub struct RxReorderBuffer<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize> {
     starting_sequence: SequenceNumber,
     next_sequence: SequenceNumber,
-    window: u16,
+    window: BlockAckWindow,
     occupied: u64,
     /// Physical position of `next_sequence`, always vacant between inputs.
     /// Mapping relative to this head also works when WINDOW_CAPACITY does
@@ -194,18 +195,19 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
     /// ```compile_fail,E0080
     /// use oer_protocols_ieee80211_core_upper_mac::block_ack::RxReorderBuffer;
     /// use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-    /// let _ = RxReorderBuffer::<0, 8>::new(SequenceNumber::ZERO, 1);
+    /// # use oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow;
+    /// let _ = RxReorderBuffer::<0, 8>::new(SequenceNumber::ZERO, BlockAckWindow::constant::<1>());
     /// ```
     pub const fn new(
         starting_sequence: SequenceNumber,
-        window: u16,
+        window: BlockAckWindow,
     ) -> Result<Self, RxReorderError> {
         const {
             if WINDOW_CAPACITY == 0 || WINDOW_CAPACITY > MAX_RX_REORDER_WINDOW as usize {
                 panic!("the occupancy bitmap holds at most 64 window positions");
             }
         };
-        if window == 0 || window as usize > WINDOW_CAPACITY {
+        if window.get() as usize > WINDOW_CAPACITY {
             return Err(RxReorderError::InvalidWindow(window));
         }
         Ok(Self {
@@ -223,7 +225,7 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         self.next_sequence
     }
 
-    pub const fn window(&self) -> u16 {
+    pub const fn window(&self) -> BlockAckWindow {
         self.window
     }
 
@@ -260,8 +262,8 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         if use_received_sequence
             || self.starting_sequence.forward_distance(sequence) >= SequenceNumber::HALF_SPACE
         {
-            // `new` refuses a zero window, so `window - 1` does not wrap.
-            next_sequence = sequence.wrapping_sub(self.window.wrapping_sub(1));
+            // A window is at least one, so `window - 1` does not wrap.
+            next_sequence = sequence.wrapping_sub(self.window.get().wrapping_sub(1));
             if use_received_sequence {
                 next_sequence = sequence;
             }
@@ -285,12 +287,12 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         if distance >= SequenceNumber::HALF_SPACE {
             return Ok(false);
         }
-        if distance < self.window && self.has_sequence(sequence) {
+        if distance < self.window.get() && self.has_sequence(sequence) {
             return Err(RxReorderError::DuplicateSequence(sequence));
         }
-        let distance_after_advance = if distance >= self.window {
-            // `new` refuses a zero window, so `window - 1` does not wrap.
-            self.window.wrapping_sub(1)
+        let distance_after_advance = if distance >= self.window.get() {
+            // A window is at least one, so `window - 1` does not wrap.
+            self.window.get().wrapping_sub(1)
         } else {
             distance
         };
@@ -337,9 +339,9 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         if self.has_sequence(frame.sequence) {
             return Err(RxReorderError::DuplicateSequence(frame.sequence));
         }
-        let advance = if distance >= self.window {
+        let advance = if distance >= self.window.get() {
             // 1 <= window <= distance < 2048, so this is 1..=2047 and does not wrap.
-            distance.wrapping_sub(self.window).wrapping_add(1)
+            distance.wrapping_sub(self.window.get()).wrapping_add(1)
         } else {
             0
         };
@@ -410,7 +412,7 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
     /// The scan is bounded by the negotiated window. It never reads time or
     /// waits; the caller decides when this edge is due.
     pub fn expire_gap(&mut self) -> RxReorderRelease<WINDOW_CAPACITY> {
-        for distance in 0..self.window {
+        for distance in 0..self.window.get() {
             let start = self.next_sequence.wrapping_add(distance);
             if self.has_sequence(start) {
                 let contiguous = self.contiguous_from(start, None);
@@ -473,12 +475,12 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
     /// Plan the complete run before changing any retained slot. Each
     /// examined sequence is distinct: window <= 64 < the sequence space.
     fn contiguous_from(&self, start: SequenceNumber, received: Option<SequenceNumber>) -> u16 {
-        (0..self.window)
+        (0..self.window.get())
             .find(|offset| {
                 let sequence = start.wrapping_add(*offset);
                 received != Some(sequence) && !self.has_sequence(sequence)
             })
-            .unwrap_or(self.window)
+            .unwrap_or(self.window.get())
     }
 
     /// Commit a timer/BAR transition without an incoming MPDU. Old frames
@@ -516,7 +518,7 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
 
     fn has_sequence(&self, sequence: SequenceNumber) -> bool {
         let distance = self.next_sequence.forward_distance(sequence);
-        if distance >= self.window {
+        if distance >= self.window.get() {
             return false;
         }
         let index = self.relative_index(distance);

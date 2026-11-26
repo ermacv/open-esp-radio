@@ -182,7 +182,7 @@ pub struct MacRxMetadata<Rate = PhyRate> {
     /// a backend's configured channel is not per-frame evidence.
     pub channel: RxEvidence<Channel>,
     pub rate: RxEvidence<Rate>,
-    pub rssi_dbm: RxEvidence<i8>,
+    pub rssi_dbm: RxEvidence<oer_protocols_ieee80211_wire::power::Dbm>,
     pub crypto: RxEvidence<RxCryptoStatus>,
     /// How this MPDU was carried in its PPDU, with its provenance.
     pub aggregation: RxEvidence<Aggregation>,

@@ -30,7 +30,8 @@ fn originator(
     TxBlockAckOriginator::new(
         POLICY,
         TxBlockAckOriginatorConfig {
-            window,
+            window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::new(window)
+                .unwrap(),
             negotiation_timeout: Duration::from_micros(100_000),
             amsdu_tids,
         },
@@ -51,9 +52,11 @@ fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckActi
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
             Tid::new(tid).unwrap(),
-            window,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::new(window).map_or(
+                oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Unnamed,
+                oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window,
+            ),
+        ),
     }
 }
 
@@ -82,7 +85,9 @@ fn the_policy_s_tids_share_one_token_sequence_and_route_responses() {
                 tid: WmmUserPriority::UP7,
                 response: TxBlockAckResponse::Operational(OperationalTxBlockAck {
                     tid: WmmUserPriority::UP7,
-                    window: 16,
+                    window:
+                        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<16>(
+                        ),
                     timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(7),
                     starting_sequence: sequence(0x200),
                     amsdu: false,
@@ -217,7 +222,8 @@ fn a_policy_names_each_tid_once() {
         TxBlockAckOriginator::<TX_BLOCK_ACK_MAX_TIDS>::new(
             TWICE,
             TxBlockAckOriginatorConfig {
-                window: 8,
+                window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(
+                ),
                 negotiation_timeout: Duration::from_micros(1),
                 amsdu_tids: &[],
             },
@@ -285,7 +291,7 @@ fn no_attempt_queues_nothing() {
 #[test]
 fn an_originator_owns_at_most_its_tids() {
     let config = TxBlockAckOriginatorConfig {
-        window: 8,
+        window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
         negotiation_timeout: Duration::from_micros(1),
         amsdu_tids: &[],
     };
@@ -644,7 +650,7 @@ fn inactive_or_other_tid_progress_never_emits_a_bar() {
 #[test]
 fn policy_tid_validation_rejects_duplicates() {
     let config = TxBlockAckOriginatorConfig {
-        window: 8,
+        window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
         negotiation_timeout: Duration::from_micros(1),
         amsdu_tids: &WmmUserPriority::ALL,
     };
@@ -786,7 +792,7 @@ fn the_requests_carry_the_sequence_in_turn() {
             ..POLICY
         },
         TxBlockAckOriginatorConfig {
-            window: 8,
+            window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
             negotiation_timeout: Duration::from_micros(100_000),
             amsdu_tids: &[],
         },
@@ -819,7 +825,7 @@ fn a_first_dialog_token_outside_its_sequence_is_refused() {
                 ..POLICY
             },
             TxBlockAckOriginatorConfig {
-                window: 8,
+                window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>(),
                 negotiation_timeout: Duration::from_micros(1),
                 amsdu_tids: &[],
             },

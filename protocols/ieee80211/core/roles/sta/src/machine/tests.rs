@@ -64,7 +64,7 @@ impl Ieee80211Capabilities for Caps {
         vifs: 2,
         tx_queues: 4,
         max_mpdu_length: 2304,
-        tx_power_ceiling_min_dbm: Some(0),
+        tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),
         individual_no_ack: PhyFormatSet::NON_HT,
         station_receive_filters: ReceiveFilter::BSS_MEMBER
             .union(ReceiveFilter::OTHER_BSS_MANAGEMENT),
@@ -222,8 +222,10 @@ fn beacon_on(number: u8) -> [u8; 55] {
 /// floor.
 fn meta() -> RxMeta {
     let mut meta = RxMeta::unavailable(Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap());
-    meta.rssi_dbm = RxEvidence::HardwareObserved(-40);
-    meta.noise_floor_dbm = RxEvidence::HardwareObserved(-95);
+    meta.rssi_dbm =
+        RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(-40));
+    meta.noise_floor_dbm =
+        RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(-95));
     meta
 }
 
@@ -1169,7 +1171,9 @@ impl<'id, const G: usize> World<'id, G> {
     fn receive(&mut self, now: Instant, frame: &[u8]) {
         let mut meta = meta();
         if self.rssi != i8::MIN {
-            meta.rssi_dbm = RxEvidence::HardwareObserved(self.rssi);
+            meta.rssi_dbm = RxEvidence::HardwareObserved(
+                oer_protocols_ieee80211_wire::power::Dbm::new(self.rssi),
+            );
         }
         let _ = self.deliver(now, frame, meta);
         self.run(now);
@@ -1352,8 +1356,10 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
         assert!(world.station.peer().is_none());
         // The Association Response, 55 dB over the noise floor.
         let mut meta = meta();
-        meta.rssi_dbm = RxEvidence::HardwareObserved(-40);
-        meta.noise_floor_dbm = RxEvidence::HardwareObserved(-95);
+        meta.rssi_dbm =
+            RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(-40));
+        meta.noise_floor_dbm =
+            RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(-95));
         let _ = world.deliver(at(31), &open_association_response(), meta);
         world.run(at(31));
         assert_eq!(
@@ -1647,7 +1653,8 @@ fn a_connect_reports_each_step_and_what_its_scan_heard() {
         world.advance();
         let now = at(13);
         let mut heard = meta();
-        heard.rssi_dbm = RxEvidence::HardwareObserved(-40);
+        heard.rssi_dbm =
+            RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(-40));
         let _ = world.deliver(now, &beacon(), heard);
         assert_eq!(
             world.losses.heard,
@@ -5658,7 +5665,11 @@ fn scan(number: u8) -> ScanChannel<Caps> {
 fn test_he_power() -> crate::association::StaHePower {
     use oer_protocols_ieee80211_wire::station::{HeUlMuPowerCapability, StaPowerCapability};
     crate::association::StaHePower {
-        power_capability: StaPowerCapability::new(-11, 20).unwrap(),
+        power_capability: StaPowerCapability::new(
+            oer_protocols_ieee80211_wire::power::Dbm::new(-11),
+            oer_protocols_ieee80211_wire::power::Dbm::new(20),
+        )
+        .unwrap(),
         ul_mu_power: HeUlMuPowerCapability::from_rate_power_indices([
             20, 20, 20, 20, 19, 19, 18, 18, 16, 15,
         ])

@@ -4,7 +4,7 @@ use crate::seq;
 
 const CONFIG: TxBlockAckConfig = TxBlockAckConfig {
     tid: WmmUserPriority::UP7,
-    window: 32,
+    window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<32>(),
     timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
     negotiation_timeout: Duration::from_micros(100_000),
     amsdu: true,
@@ -49,7 +49,7 @@ fn matching_response_commits_only_the_static_window() {
     let response = [3, 1, request.dialog_token.value(), 0, 0, 0x1f, 0x08, 0, 0];
     let agreement = OperationalTxBlockAck {
         tid: WmmUserPriority::UP7,
-        window: 32,
+        window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<32>(),
         timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         starting_sequence: seq(0x123),
         amsdu: true,
@@ -114,11 +114,17 @@ fn response_cannot_expand_the_static_capacity() {
     ];
     assert_eq!(
         session.on_response(&response),
-        Err(TxBlockAckError::WindowExceedsCapacity(64))
+        Err(TxBlockAckError::WindowExceedsCapacity(
+            oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>()
+            )
+        ))
     );
 }
 
 fn active(start: u16, window: u16) -> TxBlockAckSession {
+    let window =
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::new(window).unwrap();
     let mut session = TxBlockAckSession::new(TxBlockAckConfig { window, ..CONFIG }).unwrap();
     let request = session.begin(seq(start), at(0)).unwrap();
     session
@@ -130,9 +136,8 @@ fn active(start: u16, window: u16) -> TxBlockAckSession {
                 oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
                 CONFIG.tid.tid(),
-                window,
-            )
-            .unwrap(),
+                oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(window),
+            ),
         })
         .unwrap();
     session
@@ -178,9 +183,11 @@ fn terminal_marks_are_idempotent_and_reset_with_the_agreement() {
                 oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
                 oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
                 CONFIG.tid.tid(),
-                32,
-            )
-            .unwrap(),
+                oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                    oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<32>(
+                    ),
+                ),
+            ),
         })
         .unwrap();
     assert_eq!(session.on_delivered(seq(100), 1), None);
@@ -191,11 +198,14 @@ fn terminal_marks_are_idempotent_and_reset_with_the_agreement() {
 fn a_window_larger_than_the_originator_marks_is_refused() {
     assert_eq!(
         TxBlockAckConfig {
-            window: 65,
+            window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<65>(
+            ),
             ..CONFIG
         }
         .validate(),
-        Err(TxBlockAckError::InvalidWindow(65))
+        Err(TxBlockAckError::InvalidWindow(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<65>()
+        ))
     );
 }
 
@@ -230,7 +240,7 @@ fn responses(count: usize) {
             let request = session.begin(seq(0x100), at(0)).unwrap();
             assert_eq!(request.dialog_token, DialogToken::new(1));
             if let Ok(TxBlockAckResponse::Operational(agreement)) = session.on_response(bytes) {
-                assert!(agreement.window != 0 && agreement.window <= CONFIG.window);
+                assert!(agreement.window <= CONFIG.window);
                 assert_eq!(session.operational(), Some(agreement));
             }
         },

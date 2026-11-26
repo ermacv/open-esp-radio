@@ -91,7 +91,7 @@ pub enum TxPower {
     /// At most this many dBm: the backend sends the calibrated target when
     /// that is lower. Accepted down to
     /// [`tx_power_ceiling_min_dbm`](crate::LowerMacCapabilities::tx_power_ceiling_min_dbm).
-    MaxDbm(i8),
+    MaxDbm(oer_protocols_ieee80211_wire::power::Dbm),
 }
 
 /// One hardware publication observed by a retry planner. This is not a

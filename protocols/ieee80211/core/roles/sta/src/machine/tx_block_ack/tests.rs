@@ -4,7 +4,7 @@ use oer_protocols_ieee80211_wire::qos::Tid;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 const POLICY: StaTxBlockAckPolicy = StaTxBlockAckPolicy {
-    window: 32,
+    window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<32>(),
     negotiation_timeout: Duration::from_millis(100),
     retry: TxBlockAckRetry {
         attempts: 2,
@@ -30,9 +30,11 @@ fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckActi
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
             Tid::new(tid).unwrap(),
-            window,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::new(window).map_or(
+                oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Unnamed,
+                oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window,
+            ),
+        ),
     }
 }
 
@@ -88,7 +90,8 @@ fn a_policy_that_cannot_negotiate_is_refused() {
     let invalid = |policy| StaTxBlockAck::new(policy).err();
     assert!(matches!(
         invalid(StaTxBlockAckPolicy {
-            window: 65,
+            window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<65>(
+            ),
             ..POLICY
         }),
         Some(StaTxBlockAckPolicyError::Agreement(_))
@@ -155,7 +158,7 @@ fn data_of_a_tid_negotiates_it_only_with_an_admitting_association() {
     assert!(tx.on_action(response(request.dialog_token.value(), 6, 0, 16), at(3)));
     let agreement = tx.operational(WmmUserPriority::UP6).unwrap();
     assert_eq!(
-        (agreement.window, agreement.starting_sequence.get()),
+        (agreement.window.get(), agreement.starting_sequence.get()),
         (16, 40)
     );
     assert_eq!(
@@ -378,9 +381,10 @@ fn the_recipient_s_delba_ends_the_agreement_and_receive_actions_pass_by() {
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
             Tid::constant::<0>(),
-            64,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>(),
+            ),
+        ),
     };
     assert!(!tx.on_action(request, at(2)));
 }

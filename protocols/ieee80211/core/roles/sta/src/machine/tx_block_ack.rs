@@ -30,7 +30,7 @@ const ALL_TIDS: [WmmUserPriority; TX_BLOCK_ACK_MAX_TIDS] = WmmUserPriority::ALL;
 pub struct StaTxBlockAckPolicy {
     /// The window the ADDBA Request asks for: at most what the port's
     /// aggregates carry, 1 to 64.
-    pub window: u16,
+    pub window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow,
     /// How long a negotiation waits for the ADDBA Response.
     pub negotiation_timeout: Duration,
     /// How many requests one negotiation makes and how far apart.

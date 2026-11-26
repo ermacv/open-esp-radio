@@ -129,7 +129,7 @@ pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
     vifs: 2,
     tx_queues: 4,
     max_mpdu_length: MODEL_MAX_MPDU as u16,
-    tx_power_ceiling_min_dbm: Some(0),
+    tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),
     individual_no_ack: PhyFormatSet::NON_HT,
     station_receive_filters: ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::OTHER_BSS_MANAGEMENT),
     access_point_receive_filters: ReceiveFilter::BSS_MEMBER.union(ReceiveFilter::PROBE_REQUESTS),

@@ -38,7 +38,15 @@ fn data() -> Vec<u8> {
 
 fn on_channel(number: u8, rssi: RxEvidence<i8>) -> RxMeta {
     let mut meta = RxMeta::unavailable(Channel::ghz2_4(number, ChannelWidth::Mhz20).unwrap());
-    meta.rssi_dbm = rssi;
+    meta.rssi_dbm = match rssi {
+        RxEvidence::HardwareObserved(rssi) => {
+            RxEvidence::HardwareObserved(oer_protocols_ieee80211_wire::power::Dbm::new(rssi))
+        }
+        RxEvidence::ProtocolValidated(rssi) => {
+            RxEvidence::ProtocolValidated(oer_protocols_ieee80211_wire::power::Dbm::new(rssi))
+        }
+        RxEvidence::Unavailable => RxEvidence::Unavailable,
+    };
     meta
 }
 

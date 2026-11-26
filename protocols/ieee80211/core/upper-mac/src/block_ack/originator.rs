@@ -77,7 +77,7 @@ pub struct TxBlockAckOriginatorPolicy {
 /// The agreement parameters every TID of an originator requests.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TxBlockAckOriginatorConfig {
-    pub window: u16,
+    pub window: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow,
     /// How long a negotiation waits for the ADDBA Response.
     pub negotiation_timeout: Duration,
     /// The TIDs whose agreements may carry A-MSDUs.

@@ -75,6 +75,7 @@ pub mod management;
 pub mod management_protection;
 pub mod monitor_injection;
 pub mod phy;
+pub mod power;
 pub mod protection;
 pub mod rates;
 pub mod sae;

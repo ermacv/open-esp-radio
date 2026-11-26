@@ -9,9 +9,10 @@ fn request(tid: u8, timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits) -> Rx
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
             Tid::new(tid).unwrap(),
-            64,
-        )
-        .unwrap(),
+            oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+                oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<64>(),
+            ),
+        ),
         timeout,
         starting_sequence: SequenceNumber::new(4094).unwrap(),
     })
@@ -62,13 +63,18 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
     .unwrap();
     let response = negotiation.response();
     assert_eq!(response.status, AddbaStatus::Success);
-    assert_eq!(response.window, 8);
+    assert_eq!(
+        response.window,
+        oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>()
+        )
+    );
     assert_eq!(response.dialog_token, DialogToken::new(17));
     assert_eq!(response.tid, Tid::constant::<3>());
     assert!(response.amsdu);
     assert!(matches!(
         oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(
-            &response.encode().unwrap()
+            &response.encode()
         ),
         Some(BlockAckAction::AddbaResponse {
             dialog_token,
@@ -76,7 +82,7 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
             parameters,
             ..
         }) if dialog_token == DialogToken::new(17)
-            && (parameters.tid(), parameters.window(), parameters.amsdu()) == (Tid::constant::<3>(), 8, true)
+            && (parameters.tid(), parameters.buffer_size(), parameters.amsdu()) == (Tid::constant::<3>(), oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<8>()), true)
     ));
 }
 
@@ -112,7 +118,7 @@ fn amsdus_are_granted_only_when_requested_and_the_backend_delivers_them() {
         assert_eq!(negotiation.response().amsdu, granted);
         assert!(matches!(
             oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(
-                &negotiation.response().encode().unwrap()
+                &negotiation.response().encode()
             ),
             Some(BlockAckAction::AddbaResponse { parameters, .. }) if parameters.amsdu() == granted
         ));
@@ -130,7 +136,7 @@ fn amsdus_are_granted_only_when_requested_and_the_backend_delivers_them() {
 fn a_zero_request_window_uses_the_ht_default_bounded_by_real_capacity() {
     let clock = VirtualClock::new();
     let mut request = request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0));
-    request.window = 0;
+    request.window = oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Unnamed;
     let accepted = RxBlockAckNegotiation::request(
         request,
         Tid::constant::<7>(),
@@ -140,7 +146,12 @@ fn a_zero_request_window_uses_the_ht_default_bounded_by_real_capacity() {
         clock.now(),
     )
     .unwrap();
-    assert_eq!(accepted.response().window, 7);
+    assert_eq!(
+        accepted.response().window,
+        oer_protocols_ieee80211_wire::block_ack::frame::BufferSize::Window(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::constant::<7>()
+        )
+    );
 }
 
 #[test]
@@ -179,7 +190,6 @@ fn unavailable_bank_and_unsupported_parameters_have_explicit_responses() {
         assert_eq!(response.status, AddbaStatus::RequestDeclined);
         assert_eq!(response.dialog_token, DialogToken::new(17));
         assert_eq!(response.tid, request.tid);
-        assert!(response.encode().is_some());
     }
 }
 
@@ -308,4 +318,26 @@ fn invalid_timer_inputs_leave_the_reorder_owner_unchanged() {
     let (bank, release) = receiver.stop();
     assert_eq!(bank, Bank(3));
     assert!(released(&release).is_empty());
+}
+
+/// The largest TID an integration takes is taken; the one above it is
+/// refused.
+#[test]
+fn the_maximum_tid_is_accepted_and_the_one_above_refused() {
+    let clock = VirtualClock::new();
+    let at = |tid| {
+        RxBlockAckNegotiation::request(
+            request(tid, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0)),
+            Tid::constant::<7>(),
+            AmsduInAmpdu::Delivered,
+            8,
+            BankRoom::Free,
+            clock.now(),
+        )
+    };
+    assert!(at(7).is_ok());
+    assert_eq!(
+        at(8).err().map(|response| response.status),
+        Some(AddbaStatus::RequestDeclined)
+    );
 }

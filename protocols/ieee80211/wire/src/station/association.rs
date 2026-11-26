@@ -72,8 +72,8 @@ impl HeUlMuPowerCapability {
 /// and before Extended Supported Rates whenever the HE cipher path is active.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaPowerCapability {
-    minimum_dbm: i8,
-    maximum_dbm: i8,
+    minimum: crate::power::Dbm,
+    maximum: crate::power::Dbm,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,30 +82,30 @@ pub enum StaPowerCapabilityError {
 }
 
 impl StaPowerCapability {
-    pub const fn new(minimum_dbm: i8, maximum_dbm: i8) -> Result<Self, StaPowerCapabilityError> {
-        if minimum_dbm > maximum_dbm {
+    pub const fn new(
+        minimum: crate::power::Dbm,
+        maximum: crate::power::Dbm,
+    ) -> Result<Self, StaPowerCapabilityError> {
+        if minimum.get() > maximum.get() {
             return Err(StaPowerCapabilityError::MinimumAboveMaximum);
         }
-        Ok(Self {
-            minimum_dbm,
-            maximum_dbm,
-        })
+        Ok(Self { minimum, maximum })
     }
 
-    pub const fn minimum_dbm(self) -> i8 {
-        self.minimum_dbm
+    pub const fn minimum(self) -> crate::power::Dbm {
+        self.minimum
     }
 
-    pub const fn maximum_dbm(self) -> i8 {
-        self.maximum_dbm
+    pub const fn maximum(self) -> crate::power::Dbm {
+        self.maximum
     }
 
     fn encode(self) -> [u8; POWER_CAPABILITY_IE_LEN] {
         [
             ElementId::POWER_CAPABILITY.value(),
             2,
-            self.minimum_dbm.cast_unsigned(),
-            self.maximum_dbm.cast_unsigned(),
+            self.minimum.get().cast_unsigned(),
+            self.maximum.get().cast_unsigned(),
         ]
     }
 }
@@ -516,7 +516,9 @@ mod tests {
     /// powers are signed, in dBm.
     #[test]
     fn a_power_capability_carries_both_powers_in_two_s_complement() {
-        let capability = StaPowerCapability::new(-2, 20).unwrap();
+        let capability =
+            StaPowerCapability::new(crate::power::Dbm::new(-2), crate::power::Dbm::new(20))
+                .unwrap();
         assert_eq!(capability.encode(), [33, 2, 0xfe, 20]);
     }
 

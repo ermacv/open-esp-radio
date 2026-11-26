@@ -369,7 +369,7 @@ pub struct LowerMacCapabilities {
     pub max_mpdu_length: u16,
     /// The lowest [`TxPower::MaxDbm`](crate::TxPower::MaxDbm) ceiling the
     /// backend applies; `None` when it applies none.
-    pub tx_power_ceiling_min_dbm: Option<i8>,
+    pub tx_power_ceiling_min_dbm: Option<oer_protocols_ieee80211_wire::power::Dbm>,
     /// The PPDU formats that send an individually addressed frame with
     /// [`TxResponse::None`](crate::TxResponse::None).
     pub individual_no_ack: PhyFormatSet,
@@ -462,7 +462,7 @@ mod tests {
             vifs: 2,
             tx_queues: 4,
             max_mpdu_length: 2304,
-            tx_power_ceiling_min_dbm: Some(0),
+            tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),
             individual_no_ack: PhyFormatSet::NON_HT,
             station_receive_filters: ReceiveFilter::BSS_MEMBER,
             access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
