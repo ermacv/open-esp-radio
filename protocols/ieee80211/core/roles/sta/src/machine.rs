@@ -91,7 +91,7 @@ use oer_protocols_ieee80211_core_security_rsn::{
     DEFAULT_EAPOL_FRAME_CAPACITY, OwnedEapolFrame, Pmk, RsnInterface,
     frames::RsnTxFrame,
     keys::{RsnKeyInstall, RsnKeyKind},
-    sae::{SaeCommit, SaePassword, SaePasswordElement, SaePasswordToken},
+    sae::{SaeCommit, SaeCommitSecret, SaePassword, SaePasswordElement, SaePasswordToken},
     supplicant::{
         RsnConnectedAction, RsnConnectedProcessError, RsnConnectedSupplicant,
         RsnConnectedSupplicantError, RsnGroupKeyFrame, RsnGroupKeyInstallRequest,
@@ -4731,8 +4731,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                         };
                         let commit = SaeCommit::new(
                             &element,
-                            self.config.callbacks.nonce(),
-                            self.config.callbacks.nonce(),
+                            &SaeCommitSecret::new(self.config.callbacks.nonce()),
+                            &SaeCommitSecret::new(self.config.callbacks.nonce()),
                         )
                         .map_err(|error| {
                             sae_derivation_failure(error, bssid.get().octets(), pwe)

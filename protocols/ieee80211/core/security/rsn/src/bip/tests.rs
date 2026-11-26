@@ -325,3 +325,23 @@ fn forged_higher_ipns_and_repeated_key_delivery_cannot_roll_back_the_frontier() 
         .unwrap();
     assert_eq!(bip.verify(&mut SoftwareAes128, &frame[..length]), Ok(()));
 }
+
+/// A BIP owner erases its IGTK, as its array was, and keeps the public key
+/// identifier and IPN frontier.
+#[test]
+fn bip_owners_erase_their_igtk() {
+    use zeroize::Zeroize;
+    let igtk = RsnIgtk::new(
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four,
+        [3, 0, 0, 0, 0, 0],
+        &[0x77; 16],
+    );
+    let mut receiver = BipReceiver::new(&igtk);
+    let mut transmitter = BipTransmitter::new(&igtk);
+    receiver.zeroize();
+    transmitter.zeroize();
+    assert_eq!(receiver.key.as_bytes(), &[0; 16]);
+    assert_eq!(transmitter.key.as_bytes(), &[0; 16]);
+    assert_eq!(igtk.key().as_bytes(), &[0x77; 16]);
+    assert_eq!(transmitter.packet_number(), [3, 0, 0, 0, 0, 0]);
+}

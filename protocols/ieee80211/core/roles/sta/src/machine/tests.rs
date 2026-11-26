@@ -5774,7 +5774,7 @@ fn block_ack_agreements_need_both_qos_and_an_ht_format() {
 
 /// RFC 3394 wrap over the software engine, as a composition runs it.
 fn software_wrap(
-    kek: &[u8; 16],
+    kek: &oer_protocols_ieee80211_core_security_rsn::Kek,
     plaintext: &[u8],
 ) -> Result<
     oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
@@ -5785,7 +5785,7 @@ fn software_wrap(
     oer_portable_crypto::block::wrap_now(
         &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
         oer_portable_crypto::KeyWrapRequest::new(
-            oer_portable_crypto::Aes128Key::copy_from(kek),
+            oer_portable_crypto::Aes128Key::copy_from(kek.as_bytes()),
             plaintext,
         ),
     )

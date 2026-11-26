@@ -1,12 +1,12 @@
 /// Unwrap `wrapped` under `kek` in the software engine, as a station would.
 fn software_key_unwrap(
-    kek: &[u8; 16],
+    kek: &oer_protocols_ieee80211_core_security_rsn::Kek,
     wrapped: &[u8],
 ) -> Result<RsnKeyData, oer_portable_crypto::KeyUnwrapError> {
     oer_portable_crypto::block::unwrap_now(
         &mut SoftwareAes128,
         oer_portable_crypto::KeyUnwrapRequest::new(
-            oer_portable_crypto::Aes128Key::copy_from(kek),
+            oer_portable_crypto::Aes128Key::copy_from(kek.as_bytes()),
             RsnKeyData::try_copy(wrapped).unwrap(),
         ),
     )
@@ -2073,7 +2073,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128),
     )
     .unwrap();
-    assert_eq!(keys.igtk.unwrap().key(), &[0x66; 16]);
+    assert_eq!(keys.igtk.unwrap().key().as_bytes(), &[0x66; 16]);
     service
         .observe_wpa2_transmit(
             message3_context,
@@ -2670,11 +2670,7 @@ fn group_management_reports_ipn_exhaustion_and_keeps_the_announced_frontier() {
     let AccessPointSecurityMaterial::Wpa3Personal { igtk, .. } = &mut service.security else {
         panic!("fixture must have an IGTK");
     };
-    *igtk = RsnIgtk::new(
-        igtk.key_id(),
-        [0xfe, 0xff, 0xff, 0xff, 0xff, 0xff],
-        igtk.key(),
-    );
+    igtk.set_packet_number([0xfe, 0xff, 0xff, 0xff, 0xff, 0xff]);
     service.group_management = Some(BipTransmitter::new(igtk));
     let mut frame = [0; 64];
     let length = ApManagementFrame {

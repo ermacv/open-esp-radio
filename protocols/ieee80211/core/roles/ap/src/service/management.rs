@@ -221,7 +221,7 @@ impl<S: SppScope> AccessPointService<'_, S> {
         // New associations receive the current frontier in Message 3,
         // so old group frames cannot replay under the unchanged IGTK.
         let packet_number = sender.packet_number();
-        *igtk = RsnIgtk::new(igtk.key_id(), packet_number, igtk.key());
+        igtk.set_packet_number(packet_number);
         Ok(protected)
     }
 }

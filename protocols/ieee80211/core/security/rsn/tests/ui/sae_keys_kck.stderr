@@ -1,10 +1,5 @@
 error[E0616]: field `kck` of struct `SaeKeys` is private
- --> tests/ui/sae_keys_kck.rs:5:23
+ --> tests/ui/sae_keys_kck.rs:5:19
   |
-5 |     let bytes = &keys.kck; // ui-error: E0616
-  |                       ^^^ private field
-  |
-help: a method `kck` also exists, call it with parentheses
-  |
-5 |     let bytes = &keys.kck(); // ui-error: E0616
-  |                          ++
+5 |     let _ = &keys.kck; // ui-error: E0616
+  |                   ^^^ private field

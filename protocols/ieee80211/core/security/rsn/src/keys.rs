@@ -42,7 +42,7 @@ impl RsnKeyInstall {
             peer,
             kind: RsnKeyKind::Pairwise,
             receive_sequence,
-            key: Ccmp128Key::new(ptk.temporal_key()),
+            key: ptk.install_key(),
         }
     }
 
@@ -55,7 +55,7 @@ impl RsnKeyInstall {
                 tx: gtk.tx(),
             },
             receive_sequence,
-            key: Ccmp128Key::new(gtk.key()),
+            key: gtk.install_key(),
         }
     }
 

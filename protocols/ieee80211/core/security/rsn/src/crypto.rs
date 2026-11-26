@@ -2,7 +2,9 @@
 
 use crate::AkmKeys;
 use hmac::{Hmac, Mac};
+use oer_portable_crypto::Aes128Key;
 use oer_protocols_ieee802_wire::Eui48;
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use sha1::Sha1;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -111,10 +113,20 @@ impl Pmk {
         Self(self.0)
     }
 
+    /// Copy borrowed material straight into its zeroizing owner.
+    pub(crate) const fn copy_from(bytes: &[u8; 32]) -> Self {
+        Self(*bytes)
+    }
+
+    /// The key, for the suite's PRF expanding it.
+    pub(crate) const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
     /// Derive the pairwise transient key with the association's suite.
     pub fn derive_ptk(&self, akm: Akm, context: PtkContext) -> Ptk {
         const {
-            if !(RSN_PTK_LEN == 3 * 16
+            if !(RSN_PTK_LEN == core::mem::size_of::<[[u8; 16]; 3]>()
                 && RSN_PTK_LEN == RSN_KCK_LEN + RSN_KEK_LEN + 16
                 && core::mem::size_of::<[u8; 76]>()
                     == 2 * (Eui48::LEN + core::mem::size_of::<[u8; 32]>()))
@@ -141,17 +153,17 @@ impl Pmk {
         ) {
             *target = *source;
         }
-        // Split the expansion into typed KCK, KEK and TK blocks, then erase
+        // Split the expansion into the KCK, KEK and TK owners, then erase
         // the temporary expansion and canonical context before returning.
-        let mut ptk = Ptk {
+        let mut expanded = [[0; 16]; 3];
+        akm.expand_ptk(self, &canonical, &mut expanded);
+        let [kck, kek, temporal_key] = &expanded;
+        let ptk = Ptk {
             akm,
-            bytes: [[0; 16]; 3],
+            kck: Kck(Aes128Key::copy_from(kck)),
+            kek: Kek(Aes128Key::copy_from(kek)),
+            temporal_key: Ccmp128Key::new(temporal_key),
         };
-        let mut expanded = [0; RSN_PTK_LEN];
-        akm.expand_ptk(&self.0, &canonical, &mut expanded);
-        for (target, source) in ptk.bytes.as_flattened_mut().iter_mut().zip(&expanded) {
-            *target = *source;
-        }
         expanded.zeroize();
         canonical.zeroize();
         ptk
@@ -194,7 +206,61 @@ impl Pmk {
 pub struct Ptk {
     #[zeroize(skip)]
     akm: Akm,
-    bytes: [[u8; 16]; 3],
+    kck: Kck,
+    kek: Kek,
+    temporal_key: Ccmp128Key,
+}
+
+/// The EAPOL-Key confirmation key (KCK, IEEE Std 802.11-2020, 12.7.1.3):
+/// the key of the EAPOL-Key MIC alone, an HMAC or AES-CMAC key by its
+/// suite.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct Kck(Aes128Key);
+
+impl Kck {
+    /// A KCK of the given octets, for a test.
+    #[cfg(test)]
+    pub(crate) const fn copy_from(bytes: &[u8; RSN_KCK_LEN]) -> Self {
+        Self(Aes128Key::copy_from(bytes))
+    }
+
+    /// Lend the key's octets, for an HMAC suite and for a test.
+    pub const fn as_bytes(&self) -> &[u8; RSN_KCK_LEN] {
+        self.0.as_bytes()
+    }
+
+    /// Lend the key to an AES-128 engine, for an AES-CMAC suite.
+    pub(crate) const fn aes_key(&self) -> &Aes128Key {
+        &self.0
+    }
+
+    /// A second zeroizing owner of the same key.
+    const fn second_owner(&self) -> Self {
+        Self(Aes128Key::copy_from(self.0.as_bytes()))
+    }
+}
+
+/// The EAPOL-Key encryption key (KEK, IEEE Std 802.11-2020, 12.7.1.3): the
+/// key that wraps and unwraps the Key Data alone.
+#[derive(Zeroize, ZeroizeOnDrop)]
+pub struct Kek(Aes128Key);
+
+impl Kek {
+    /// Lend the key's octets, for a test's key wrap.
+    pub const fn as_bytes(&self) -> &[u8; RSN_KEK_LEN] {
+        self.0.as_bytes()
+    }
+
+    /// The zeroizing owner a key-wrap or key-unwrap request takes and
+    /// erases when it ends.
+    pub(crate) const fn request_key(&self) -> Aes128Key {
+        Aes128Key::copy_from(self.0.as_bytes())
+    }
+
+    /// A second zeroizing owner of the same key.
+    const fn second_owner(&self) -> Self {
+        Self(self.request_key())
+    }
 }
 
 /// Connected-state EAPOL authentication authority derived from one PTK.
@@ -207,46 +273,44 @@ pub struct Ptk {
 pub(crate) struct RsnKeyConfirmationKey {
     #[zeroize(skip)]
     akm: Akm,
-    bytes: [u8; RSN_KCK_LEN],
+    kck: Kck,
 }
-
-/// Connected-state key-data unwrap authority derived from one PTK.
-///
-/// This is retained only for an authenticated Group Message 1. It is separate
-/// from the completed-Message-3 context so that path owns exactly its KCK and
-/// protocol binding, never the installed temporal key.
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub(crate) struct RsnKeyEncryptionKey([u8; RSN_KEK_LEN]);
 
 impl Ptk {
     pub const fn akm(&self) -> Akm {
         self.akm
     }
 
-    pub fn kck(&self) -> &[u8; RSN_KCK_LEN] {
-        let [kck, _, _] = &self.bytes;
-        kck
+    pub const fn kck(&self) -> &Kck {
+        &self.kck
     }
-    pub fn kek(&self) -> &[u8; RSN_KEK_LEN] {
-        let [_, kek, _] = &self.bytes;
-        kek
+    pub const fn kek(&self) -> &Kek {
+        &self.kek
     }
-    pub fn temporal_key(&self) -> &[u8; 16] {
-        let [_, _, tk] = &self.bytes;
-        tk
+    /// The temporal key, lent for software CCMP.
+    pub const fn temporal_key(&self) -> &Ccmp128Key {
+        &self.temporal_key
     }
 
-    pub(crate) fn into_connected_keys(mut self) -> (RsnKeyConfirmationKey, RsnKeyEncryptionKey) {
-        let kck = *self.kck();
-        let kek = *self.kek();
+    /// A second owner of the temporal key, for its installation.
+    pub const fn install_key(&self) -> Ccmp128Key {
+        Ccmp128Key::new(self.temporal_key.as_bytes())
+    }
+
+    /// The connected state's KCK and KEK (the KEK retained only for an
+    /// authenticated Group Message 1), without the installed temporal key.
+    pub(crate) fn into_connected_keys(mut self) -> (RsnKeyConfirmationKey, Kek) {
+        let keys = (
+            RsnKeyConfirmationKey {
+                akm: self.akm,
+                kck: self.kck.second_owner(),
+            },
+            self.kek.second_owner(),
+        );
         // Do not retain a second software copy of the installed temporal key
         // until this value happens to leave scope.
-        let akm = self.akm;
         self.zeroize();
-        (
-            RsnKeyConfirmationKey { akm, bytes: kck },
-            RsnKeyEncryptionKey(kek),
-        )
+        keys
     }
 }
 
@@ -255,14 +319,8 @@ impl RsnKeyConfirmationKey {
         self.akm
     }
 
-    pub(crate) const fn as_bytes(&self) -> &[u8; RSN_KCK_LEN] {
-        &self.bytes
-    }
-}
-
-impl RsnKeyEncryptionKey {
-    pub(crate) const fn as_bytes(&self) -> &[u8; RSN_KEK_LEN] {
-        &self.0
+    pub(crate) const fn kck(&self) -> &Kck {
+        &self.kck
     }
 }
 

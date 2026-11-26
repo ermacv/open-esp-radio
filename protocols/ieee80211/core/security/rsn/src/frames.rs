@@ -3,9 +3,7 @@
 use oer_protocols_ieee80211_wire::eapol::{KdeDataType, KeyInformation};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::{
-    Akm, EapolKeyFrame, Ptk, RSN_KCK_LEN, RSN_MIC_LEN, RsnInterface, RsnKeyConfirmationKey,
-};
+use crate::{Akm, EapolKeyFrame, Kck, Ptk, RSN_MIC_LEN, RsnInterface, RsnKeyConfirmationKey};
 
 pub const RSN_IE_CAPACITY: usize = 64;
 pub const RSN_ASSOC_SECURITY_IES_CAPACITY: usize = 128;
@@ -50,7 +48,8 @@ mod security_ies;
 mod transmit;
 
 pub use key_data::{
-    RsnGroupKeys, RsnGtk, RsnIgtk, RsnPlainKeyData, parse_group_gtk_key_data, parse_gtk_key_data,
+    Igtk, RsnGroupKeys, RsnGtk, RsnIgtk, RsnPlainKeyData, parse_group_gtk_key_data,
+    parse_gtk_key_data,
 };
 pub use security_ies::{OwnedAssociationSecurityIes, OwnedRsnIe};
 pub use transmit::RsnTxFrame;

@@ -78,7 +78,7 @@ impl CcmpAssociation {
         let (body, mic) = body_and_mic
             .split_at_mut_checked(blocks.body_len)
             .ok_or(CcmpMpduError::Truncated)?;
-        let tag = match ccm::seal(engine, key.as_bytes(), &blocks.nonce, &blocks.aad, body) {
+        let tag = match ccm::seal(engine, key.aes_key(), &blocks.nonce, &blocks.aad, body) {
             Ok(tag) => tag,
             Err(error) => {
                 if let CcmError::Engine(_) = error {
@@ -112,14 +112,8 @@ impl CcmpAssociation {
         let mic = mic
             .first_chunk::<MIC_LEN>()
             .ok_or(CcmpMpduError::Truncated)?;
-        if let Err(error) = ccm::open(
-            engine,
-            key.as_bytes(),
-            &blocks.nonce,
-            &blocks.aad,
-            body,
-            mic,
-        ) {
+        if let Err(error) = ccm::open(engine, key.aes_key(), &blocks.nonce, &blocks.aad, body, mic)
+        {
             body.zeroize();
             return Err(error.into());
         }

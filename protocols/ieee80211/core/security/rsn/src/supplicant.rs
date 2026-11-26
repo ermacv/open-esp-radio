@@ -14,8 +14,7 @@
 use crate::AkmKeys;
 use crate::MicFailure;
 use crate::{
-    Akm, EapolKeyFrame, Pmk, Ptk, PtkContext, RSN_KEK_LEN, RsnInterface, RsnKeyConfirmationKey,
-    RsnKeyEncryptionKey,
+    Akm, EapolKeyFrame, Kek, Pmk, Ptk, PtkContext, RsnInterface, RsnKeyConfirmationKey,
     element::{RsnElementError, validate_rsn_element},
     frames::{
         OwnedAssociationSecurityIes, OwnedRsnIe, RsnFrameError, RsnGroupKeys, RsnIgtk, RsnTxFrame,
@@ -25,7 +24,7 @@ use crate::{
     state::RsnStateError,
 };
 use oer_portable_crypto::{
-    Aes128Key, KeyUnwrapError, KeyUnwrapRequest,
+    KeyUnwrapError, KeyUnwrapRequest,
     block::{Aes128Engine, BlockError},
 };
 use oer_portable_time::{Duration, Instant};
@@ -261,13 +260,13 @@ pub enum RsnStaEapol<const N: usize> {
 /// Unwrap `wrapped` under `kek` to completion over `engine`.
 fn unwrap_key_data<E: Aes128Engine>(
     engine: &mut E,
-    kek: &[u8; RSN_KEK_LEN],
+    kek: &Kek,
     wrapped: &[u8],
 ) -> Result<RsnKeyData, KeyDataError> {
     let wrapped = RsnKeyData::try_copy(wrapped).map_err(|_| KeyDataError::TooLong)?;
     oer_portable_crypto::block::unwrap_now(
         engine,
-        KeyUnwrapRequest::new(Aes128Key::copy_from(kek), wrapped),
+        KeyUnwrapRequest::new(kek.request_key(), wrapped),
     )
     .into_plaintext()
     .map_err(KeyDataError::Unwrap)
@@ -508,7 +507,7 @@ enum RsnCompletedKeyMessage {
 pub struct RsnConnectedSupplicant {
     authenticator: Eui48,
     key_confirmation: RsnKeyConfirmationKey,
-    key_encryption: RsnKeyEncryptionKey,
+    key_encryption: Kek,
     authenticator_security_ies: OwnedAssociationSecurityIes,
     /// The Message 3 whose keys are installed, which a repeat must match.
     completed_message3: RsnCompletedMessage3,
@@ -689,7 +688,7 @@ impl RsnConnectedSupplicant {
         }
         let key = frame.key_frame()?;
         let replay_counter = key.replay_counter();
-        let plain = unwrap_key_data(engine, self.key_encryption.as_bytes(), key.key_data())
+        let plain = unwrap_key_data(engine, &self.key_encryption, key.key_data())
             .map_err(KeyDataError::into_connected)?;
         let (keys, commitment, response) = match key.message() {
             crate::EapolKeyMessage::PairwiseMessage3 => (

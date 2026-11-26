@@ -6,7 +6,8 @@ and a backend:
 
 - construction copies borrowed material into the owner, never a by-value
   array;
-- the bytes are only lent (`as_bytes`); there is no `Clone`, `Copy` or owned
+- it holds the key as `oer_portable_crypto::Aes128Key` and lends it: the
+  bytes to a backend (`as_bytes`), the key to an AES engine (`aes_key`); there is no `Clone`, `Copy` or owned
   extraction, and `Debug` prints `Ccmp128Key(..)`;
 - an ordinary drop zeroizes the owner's storage; a quarantined owner is not
   dropped, so its key stays in memory until the chip resets.

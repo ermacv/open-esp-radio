@@ -53,7 +53,7 @@ fn gtk_key_data_round_trips_with_key_wrap_padding() {
         .unwrap();
     assert_eq!(parsed.key_id().get(), 2);
     assert_eq!(parsed.tx(), GtkTx::ReceiveOnly);
-    assert_eq!(parsed.key(), &[0x5a; 16]);
+    assert_eq!(parsed.key().as_bytes(), &[0x5a; 16]);
 }
 
 #[test]
@@ -76,14 +76,14 @@ fn protected_key_data_carries_the_rsnxe_and_an_igtk_the_station_reads() {
     let data = RsnPlainKeyData::<96>::build(&elements, &gtk, Some(&igtk)).unwrap();
     assert_eq!(data.as_bytes().len() % 8, 0);
     let keys = parse_gtk_key_data(data.as_bytes(), rsn.as_bytes(), &rsnxe, BIP).unwrap();
-    assert_eq!(keys.gtk.key(), &[0x5a; 16]);
+    assert_eq!(keys.gtk.key().as_bytes(), &[0x5a; 16]);
     let parsed = keys.igtk.unwrap();
     assert_eq!(
         parsed.key_id(),
         oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four
     );
     assert_eq!(parsed.packet_number(), [1, 0, 0, 0, 0, 0]);
-    assert_eq!(parsed.key(), &[0x6b; 16]);
+    assert_eq!(parsed.key().as_bytes(), &[0x6b; 16]);
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn parser_validates_authenticator_rsnxe_without_ignoring_unknown_elements() {
         .map(|keys| keys.gtk)
         .unwrap();
     assert_eq!(parsed.key_id().get(), 1);
-    assert_eq!(parsed.key(), &[7; 16]);
+    assert_eq!(parsed.key().as_bytes(), &[7; 16]);
 
     assert_eq!(
         parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &[], None)
@@ -286,7 +286,7 @@ fn protected_management_requires_exactly_one_igtk_beside_the_gtk() {
         oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four
     );
     assert_eq!(igtk.packet_number(), [1, 2, 3, 4, 5, 6]);
-    assert_eq!(igtk.key(), &[0x77; 16]);
+    assert_eq!(igtk.key().as_bytes(), &[0x77; 16]);
 
     assert_eq!(
         parse_gtk_key_data(&with_igtk, rsn.as_bytes(), &[], None).err(),
@@ -326,4 +326,34 @@ fn a_group_rekey_carries_the_igtk_of_a_protected_association() {
         parse_group_gtk_key_data(&body, None).err(),
         Some(RsnFrameError::UnexpectedIgtk)
     );
+}
+
+/// A GTK and an IGTK erase their keys and the IGTK its IPN, as their arrays
+/// were; a second owner of an IGTK is a copy erased on its own.
+#[test]
+fn group_key_owners_erase_their_keys() {
+    use zeroize::Zeroize;
+    let mut gtk = RsnGtk::new(
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
+        &[0x5a; 16],
+    );
+    let installed = gtk.install_key();
+    gtk.zeroize();
+    assert_eq!(gtk.key().as_bytes(), &[0; 16]);
+    assert_eq!(installed.as_bytes(), &[0x5a; 16]);
+
+    let mut igtk = RsnIgtk::new(
+        oer_protocols_ieee80211_wire::bip::IgtkKeyId::Four,
+        [1, 2, 3, 4, 5, 6],
+        &[0x6b; 16],
+    );
+    let mut announced = igtk.with_packet_number([9; 6]);
+    igtk.zeroize();
+    assert_eq!(igtk.key().as_bytes(), &[0; 16]);
+    assert_eq!(igtk.packet_number(), [0; 6]);
+    assert_eq!(announced.key().as_bytes(), &[0x6b; 16]);
+    assert_eq!(announced.packet_number(), [9; 6]);
+    announced.set_packet_number([7; 6]);
+    assert_eq!(announced.packet_number(), [7; 6]);
 }

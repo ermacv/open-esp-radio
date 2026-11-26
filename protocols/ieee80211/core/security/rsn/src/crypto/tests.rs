@@ -72,7 +72,12 @@ fn derives_known_ptk_and_builds_message_2() {
     };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context);
     assert_eq!(
-        ptk.bytes.as_flattened(),
+        [
+            *ptk.kck().as_bytes(),
+            *ptk.kek().as_bytes(),
+            *ptk.temporal_key().as_bytes()
+        ]
+        .as_flattened(),
         [
             0x35, 0x07, 0x82, 0xa5, 0x49, 0x8c, 0x27, 0x32, 0x15, 0xbf, 0x37, 0x70, 0x79, 0xe3,
             0x65, 0x0f, 0x63, 0x13, 0xd9, 0x26, 0xdb, 0xe9, 0xed, 0x87, 0x53, 0xa6, 0x0f, 0x1b,
@@ -125,4 +130,37 @@ fn derives_known_ptk_and_builds_message_2() {
             .verify_mic(&ptk, &mut SoftwareAes128)
             .unwrap()
     );
+}
+
+/// A PTK erases its KCK, KEK and temporal key, as its one array of the three
+/// did; the connected keys it leaves erase theirs.
+#[test]
+fn a_ptk_and_its_connected_keys_erase_every_key_they_hold() {
+    let context = PtkContext {
+        authenticator_address: Eui48::new([2; 6]),
+        supplicant_address: Eui48::new([4; 6]),
+        authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce::new([6; 32]),
+        supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]),
+    };
+    let ptk = Pmk([1; 32]).derive_ptk(crate::Akm::Psk, context);
+    let mut erased = Pmk([1; 32]).derive_ptk(crate::Akm::Psk, context);
+    erased.zeroize();
+    assert_eq!(erased.kck().as_bytes(), &[0; 16]);
+    assert_eq!(erased.kek().as_bytes(), &[0; 16]);
+    assert_eq!(erased.temporal_key().as_bytes(), &[0; 16]);
+    assert_ne!(ptk.kck().as_bytes(), &[0; 16]);
+
+    let kck = *ptk.kck().as_bytes();
+    let kek = *ptk.kek().as_bytes();
+    let (mut confirmation, mut encryption) = ptk.into_connected_keys();
+    assert_eq!(confirmation.kck().as_bytes(), &kck);
+    assert_eq!(encryption.as_bytes(), &kek);
+    confirmation.zeroize();
+    encryption.zeroize();
+    assert_eq!(confirmation.kck().as_bytes(), &[0; 16]);
+    assert_eq!(encryption.as_bytes(), &[0; 16]);
+
+    let mut pmk = Pmk([1; 32]);
+    pmk.zeroize();
+    assert_eq!(pmk.as_bytes(), &[0; 32]);
 }

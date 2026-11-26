@@ -82,7 +82,7 @@ fn encrypted_message3(
     key_rsc: [u8; 8],
     plain_key_data: &[u8],
 ) -> crate::OwnedEapolFrame<512> {
-    let wrapped = software_wrap(ptk.kek(), plain_key_data).unwrap();
+    let wrapped = software_wrap(ptk.kek().as_bytes(), plain_key_data).unwrap();
     let frame = RsnTxFrame::<512>::message3(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
@@ -100,7 +100,7 @@ fn encrypted_message3(
 /// The key data of the tests' Group Message 1: one GTK KDE (key 1, bytes
 /// 0x6a) wrapped under `ptk`'s KEK.
 fn group_key_data(ptk: &Ptk) -> oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData {
-    software_wrap(ptk.kek(), &group_kde(1, 0x6a)).unwrap()
+    software_wrap(ptk.kek().as_bytes(), &group_kde(1, 0x6a)).unwrap()
 }
 
 enum GroupStep {
@@ -168,7 +168,7 @@ fn resign_eapol_key_variant(
     mutate(&mut bytes[..len]);
     if let Mic::Resigned = mic {
         bytes[81..97].fill(0);
-        let mut mac = hmac::Hmac::<sha1::Sha1>::new_from_slice(ptk.kck()).unwrap();
+        let mut mac = hmac::Hmac::<sha1::Sha1>::new_from_slice(ptk.kck().as_bytes()).unwrap();
         mac.update(&bytes[..len]);
         let digest = mac.finalize().into_bytes();
         bytes[81..97].copy_from_slice(&digest[..16]);
@@ -229,7 +229,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     assert_eq!(request.pairwise().peer(), Eui48::new(*&AP));
     assert_eq!(
         request.pairwise().key().as_bytes(),
-        expected_ptk.temporal_key()
+        expected_ptk.temporal_key().as_bytes()
     );
     assert_eq!(
         request.group().kind(),
@@ -1032,7 +1032,9 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
         Eui48::new(LOCAL),
         oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
-        software_wrap(ptk.kek(), &[0; 24]).unwrap().as_bytes(),
+        software_wrap(ptk.kek().as_bytes(), &[0; 24])
+            .unwrap()
+            .as_bytes(),
     )
     .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
@@ -1306,7 +1308,7 @@ fn a_refused_message4_mic_ends_the_handshake() {
         &[0x5a; 16],
     );
     let plain = RsnPlainKeyData::<64>::build(rsn_ie.as_bytes(), &gtk, None).unwrap();
-    let wrapped = software_wrap(ptk.kek(), plain.as_bytes()).unwrap();
+    let wrapped = software_wrap(ptk.kek().as_bytes(), plain.as_bytes()).unwrap();
     let message3 = RsnTxFrame::<512>::message3(
         crate::Akm::PskSha256,
         Eui48::new(LOCAL),
@@ -1340,7 +1342,7 @@ fn a_newer_group_message1_after_an_installed_one_installs() {
             Eui48::new(LOCAL),
             oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
             [9; 8],
-            software_wrap(ptk.kek(), &group_kde(1, key))
+            software_wrap(ptk.kek().as_bytes(), &group_kde(1, key))
                 .unwrap()
                 .as_bytes(),
         )

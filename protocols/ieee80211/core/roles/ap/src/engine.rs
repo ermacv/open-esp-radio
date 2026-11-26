@@ -221,8 +221,6 @@ pub enum ApReceived<'f> {
 pub enum ApEapol {
     /// Nothing to do: a stale, duplicate or refused frame.
     Nothing,
-    /// Send the next message.
-    Transmit(ApEapolTransmit<AP_EAPOL_CAPACITY>),
     /// Message 2 is verified and derived a new PTK: install the peer's
     /// pairwise key ([`ApEngine::pairwise_key`]) with its controlled port
     /// closed, tell the engine on the key's terminal
@@ -741,34 +739,18 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         ) else {
             return Ok(ApEapol::Nothing);
         };
-        let before = self.temporal_key(peer);
         Ok(match self.service.on_eapol(peer, frame, group_key)? {
             ApWpa2Progress::None => ApEapol::Nothing,
-            // A Message 3 for a PTK the peer had not derived before: a
-            // retried Message 3 or a repeated Message 2 of the same PTK
-            // installs nothing again.
-            ApWpa2Progress::Transmit(transmit)
-                if self
-                    .temporal_key(peer)
-                    .is_some_and(|key| Some(key) != before) =>
-            {
-                ApEapol::Install {
-                    peer,
-                    message3: transmit,
-                }
-            }
-            ApWpa2Progress::Transmit(transmit) => ApEapol::Transmit(transmit),
+            // The one message an EAPOL-Key frame answers is Message 3, to a
+            // Message 2 that derived a PTK the handshake did not hold: the
+            // authenticator builds it only while it awaits Message 2, which
+            // holds no PTK. A repeated Message 2 and Message 3's retry
+            // install nothing again: the first answers nothing, the second
+            // comes from the retry timer.
+            ApWpa2Progress::Transmit(message3) => ApEapol::Install { peer, message3 },
             ApWpa2Progress::AuthorizePeer => ApEapol::Authorize { peer },
             ApWpa2Progress::DeauthenticatePeer => ApEapol::Deauthenticate { peer },
         })
-    }
-
-    /// The temporal key `peer`'s handshake derived, if any.
-    fn temporal_key(&self, peer: [u8; 6]) -> Option<[u8; 16]> {
-        self.service
-            .pending_ptk(peer)
-            .ok()
-            .map(|ptk| *ptk.temporal_key())
     }
 
     /// `peer`'s pairwise key is installed: a new receive replay owner reads
@@ -810,10 +792,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         let ptk = self.service.pending_ptk(peer)?;
         let address =
             IndividualAddress::new(Eui48::new(peer)).ok_or(ApServiceError::UnknownPeer)?;
-        Ok((
-            oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(ptk.temporal_key()),
-            address,
-        ))
+        Ok((ptk.install_key(), address))
     }
 
     /// Whether the network takes `msdu`: addressed to the access point or

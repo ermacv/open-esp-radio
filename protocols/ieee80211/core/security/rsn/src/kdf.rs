@@ -2,16 +2,23 @@
 use hmac::Mac;
 use zeroize::Zeroize;
 
-pub(crate) fn kdf_sha256<const N: usize>(
+/// The KDF of `key` over `label` and `context` into `output`, written in
+/// order across its `M` blocks of `B` octets: the keys one derivation splits
+/// into (a block each), or one block of a single output
+/// (`core::array::from_mut`).
+pub(crate) fn kdf_sha256<const B: usize, const M: usize>(
     key: &[u8],
     label: &[u8],
     context: &[u8],
-    output: &mut [u8; N],
+    output: &mut [[u8; B]; M],
 ) {
     // The output's Length in bits, counted at build: eight a octet.
     let bits = const {
         let mut bits: u16 = 0;
-        let mut octets = N;
+        let mut octets = match B.checked_mul(M) {
+            Some(octets) => octets,
+            None => panic!("KDF output length must fit usize"),
+        };
         while octets > 0 {
             bits = match bits.checked_add(8) {
                 Some(bits) => bits,
@@ -21,7 +28,7 @@ pub(crate) fn kdf_sha256<const N: usize>(
         }
         bits
     };
-    let mut remaining = output.iter_mut().peekable();
+    let mut remaining = output.as_flattened_mut().iter_mut().peekable();
     for counter in 1_u16..=u16::MAX {
         if remaining.peek().is_none() {
             break;
