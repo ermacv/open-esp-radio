@@ -63,7 +63,8 @@ fn compressed_andi_has_the_signed_six_bit_immediate() {
     // with the ordinary ANDI encoding.
     for register in 8u16..16 {
         for signed in -32i32..32 {
-            let bits = (signed as u16) & 63;
+            let [low, ..] = signed.to_le_bytes();
+            let bits = u16::from(low) & 63;
             let half = 0x8801 | ((register - 8) << 7) | ((bits & 31) << 2) | ((bits & 32) << 7);
             let word = ((signed as u32 & 0xfff) << 20)
                 | (u32::from(register) << 15)

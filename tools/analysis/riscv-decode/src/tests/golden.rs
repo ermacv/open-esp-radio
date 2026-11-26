@@ -453,7 +453,7 @@ fn the_encoding_spaces_decode_as_they_did() {
 
 const HALVES_HELD: Digest = Digest {
     text: 0xa7d4_1f70_60e7_f547,
-    structure: 0xf7d3_8022_c4e3_8d7f,
+    structure: 0x9f4d_a557_a38d_906b,
 };
 const SHORT_HELD: Digest = Digest {
     text: 0xc8fc_6446_6a20_8287,
@@ -463,7 +463,7 @@ const SHORT_HELD: Digest = Digest {
 const MAJORS_HELD: [Digest; 10] = [
     Digest {
         text: 0xe216_3ea8_66de_8b9b,
-        structure: 0x8638_435d_a717_6deb,
+        structure: 0xb58c_ccc2_1240_0dc1,
     },
     Digest {
         text: 0x6b12_5c99_ec6c_96a3,
@@ -483,22 +483,22 @@ const MAJORS_HELD: [Digest; 10] = [
     },
     Digest {
         text: 0xde0d_35e2_4538_6ec5,
-        structure: 0xc4e4_8dca_6b56_be55,
+        structure: 0x1607_5f1b_aec6_735d,
     },
     Digest {
         text: 0x600e_9e01_3ce5_5fa5,
-        structure: 0x5dc1_3778_e8d5_7345,
+        structure: 0xaaa5_43cc_6212_7645,
     },
     Digest {
         text: 0x4c6b_1d96_93b9_4435,
-        structure: 0x0743_841d_37c3_3bad,
+        structure: 0x0841_d859_5150_2d25,
     },
     Digest {
         text: 0x3174_26e0_5719_6bb5,
-        structure: 0x4fbd_f8fc_fa95_4a5d,
+        structure: 0x4186_8580_d67a_b7fd,
     },
     Digest {
         text: 0x3624_b524_1874_5c89,
-        structure: 0x8aae_7906_245b_78ba,
+        structure: 0xb28d_c703_3cf6_a0da,
     },
 ];

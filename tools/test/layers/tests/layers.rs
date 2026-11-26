@@ -11120,6 +11120,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unknown, to read",
     ),
     (
+        "tools/analysis/riscv-decode/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/analysis/riscv-lift/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,

@@ -36,7 +36,10 @@ fn stack_forms_decode_as_the_assembler_wrote_them() {
         );
     }
     // The frame stores s11 at the top and ra at the bottom.
-    assert_eq!(list_registers(9).collect::<Vec<_>>(), [20, 19, 18, 9, 8, 1]);
+    assert_eq!(
+        list_registers(RegisterList::S4).collect::<Vec<_>>(),
+        [20, 19, 18, 9, 8, 1]
+    );
     // Zcmt table jumps and a register list below {ra} are not decoded.
     assert!(decode(&0xa002u16.to_le_bytes(), Extensions::ALL).is_none());
     assert!(decode(&0xb832u16.to_le_bytes(), Extensions::ALL).is_none());
@@ -66,7 +69,7 @@ fn integer_forms_decode_to_their_operations() {
         (0x60259513, PopCount, 10, 11, I(0)),
         (0x60459513, SignExtendByte, 10, 11, I(0)),
         (0x60559513, SignExtendHalf, 10, 11, I(0)),
-        (0x0805c533, And, 10, 11, I(0xffff)),
+        (0x0805c533, ZeroExtendHalf, 10, 11, I(0)),
         (0x2875d513, OrCombineBytes, 10, 11, I(0)),
         (0x6985d513, ByteReverse, 10, 11, I(0)),
         (0x28c59533, BitSet, 10, 11, R(12)),
@@ -92,9 +95,9 @@ fn integer_forms_decode_to_their_operations() {
         assert_eq!(decode(&word.to_le_bytes(), Extensions::ALL).unwrap().1, 4);
     }
     let halves: &[(u16, IntegerOp, u8, Operand)] = &[
-        (0x9c61, And, 8, I(0xff)),
+        (0x9c61, ZeroExtendByte, 8, I(0)),
         (0x9ce5, SignExtendByte, 9, I(0)),
-        (0x9d69, And, 10, I(0xffff)),
+        (0x9d69, ZeroExtendHalf, 10, I(0)),
         (0x9ded, SignExtendHalf, 11, I(0)),
         (0x9e75, Xor, 12, I(u32::MAX)),
         (0x9ed9, Mul, 13, R(14)),

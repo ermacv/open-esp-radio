@@ -9,7 +9,7 @@
 //! Encodings: <https://docs.riscv.org/reference/isa/unpriv/b-st-ext.html> and
 //! <https://docs.riscv.org/reference/isa/unpriv/zc.html> and
 //! <https://docs.riscv.org/reference/isa/unpriv/zicsr.html>.
-use crate::{ExtensionOp as IntegerOp, Operand};
+use crate::{ExtensionOp as IntegerOp, Operand, field, prime};
 use core::fmt;
 
 /// One decoded extension instruction.
@@ -32,12 +32,12 @@ pub enum Extension {
         signed: bool,
     },
     /// `cm.push`: store the listed registers below `sp`, then lower `sp`.
-    Push { list: u8, adjustment: u32 },
+    Push { list: RegisterList, adjustment: u32 },
     /// `cm.pop`, `cm.popret` and `cm.popretz`: raise `sp` after loading the
     /// listed registers; the returning forms zero `a0` when asked and return
     /// through `ra`.
     Pop {
-        list: u8,
+        list: RegisterList,
         adjustment: u32,
         ret: Option<bool>,
     },
@@ -76,69 +76,156 @@ pub const A0: u8 = 10;
 pub const A1: u8 = 11;
 pub const RA: u8 = 1;
 
-/// Saved register `s<index>`.
-const fn saved(index: u8) -> u8 {
-    match index {
+/// The saved registers `s0`..`s11`, in their order.
+const SAVED: [u8; 12] = [8, 9, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
+
+/// Zcmp's three-bit saved-register field at bit `AT`: `s0`..`s7`.
+const fn saved_prime<const AT: u32>(word: u32) -> u8 {
+    match field::<AT, 3>(word) {
         0 => 8,
         1 => 9,
-        _ => 16 + index,
+        2 => 18,
+        3 => 19,
+        4 => 20,
+        5 => 21,
+        6 => 22,
+        _ => 23,
     }
 }
 
-/// Zcmp's three-bit saved-register field: `s0`, `s1`, then `s2..=s7`.
-const fn saved_prime(field: u16) -> u8 {
-    saved(field as u8)
+/// The registers a Zcmp stack form stores or loads: `ra` alone, or `ra` and
+/// the saved registers from `s0` to the one the variant names. No list ends
+/// at `s10`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum RegisterList {
+    Ra,
+    S0,
+    S1,
+    S2,
+    S3,
+    S4,
+    S5,
+    S6,
+    S7,
+    S8,
+    S9,
+    S11,
 }
 
-/// Saved registers a Zcmp register list names besides `ra`.
-const fn saved_count(list: u8) -> u8 {
-    if list == 15 { 12 } else { list - 4 }
+impl RegisterList {
+    /// The list the four-bit `rlist` field of `word` names; the values
+    /// below 4 name none.
+    const fn of(word: u32) -> Option<Self> {
+        Some(match field::<4, 4>(word) {
+            4 => Self::Ra,
+            5 => Self::S0,
+            6 => Self::S1,
+            7 => Self::S2,
+            8 => Self::S3,
+            9 => Self::S4,
+            10 => Self::S5,
+            11 => Self::S6,
+            12 => Self::S7,
+            13 => Self::S8,
+            14 => Self::S9,
+            15 => Self::S11,
+            _ => return None,
+        })
+    }
+
+    /// The saved registers the list names besides `ra`.
+    const fn saved(self) -> usize {
+        match self {
+            Self::Ra => 0,
+            Self::S0 => 1,
+            Self::S1 => 2,
+            Self::S2 => 3,
+            Self::S3 => 4,
+            Self::S4 => 5,
+            Self::S5 => 6,
+            Self::S6 => 7,
+            Self::S7 => 8,
+            Self::S8 => 9,
+            Self::S9 => 10,
+            Self::S11 => 12,
+        }
+    }
+
+    /// The stack adjustment of the list with the two-bit `spimm` field of
+    /// `word`: the frame the registers need, rounded to the 16-byte stack
+    /// alignment, and up to three further 16-byte blocks.
+    const fn adjustment(self, word: u32) -> u32 {
+        let [none, one, two, three] = match self {
+            Self::Ra | Self::S0 | Self::S1 | Self::S2 => [16, 32, 48, 64],
+            Self::S3 | Self::S4 | Self::S5 | Self::S6 => [32, 48, 64, 80],
+            Self::S7 | Self::S8 | Self::S9 => [48, 64, 80, 96],
+            Self::S11 => [64, 80, 96, 112],
+        };
+        match field::<2, 2>(word) {
+            0 => none,
+            1 => one,
+            2 => two,
+            _ => three,
+        }
+    }
+
+    /// The assembler's register-list syntax.
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Ra => "{ra}",
+            Self::S0 => "{ra, s0}",
+            Self::S1 => "{ra, s0-s1}",
+            Self::S2 => "{ra, s0-s2}",
+            Self::S3 => "{ra, s0-s3}",
+            Self::S4 => "{ra, s0-s4}",
+            Self::S5 => "{ra, s0-s5}",
+            Self::S6 => "{ra, s0-s6}",
+            Self::S7 => "{ra, s0-s7}",
+            Self::S8 => "{ra, s0-s8}",
+            Self::S9 => "{ra, s0-s9}",
+            Self::S11 => "{ra, s0-s11}",
+        }
+    }
 }
 
 /// Registers of a Zcmp list in the order the specification stores them from
-/// the top of the frame down: `s11` first, `ra` last.
-pub fn list_registers(list: u8) -> impl Iterator<Item = u8> {
-    (0..saved_count(list))
+/// the top of the frame down: the last saved register first, `ra` last.
+pub fn list_registers(list: RegisterList) -> impl Iterator<Item = u8> {
+    SAVED
+        .into_iter()
+        .take(list.saved())
         .rev()
-        .map(saved)
         .chain(core::iter::once(RA))
-}
-
-/// The frame a register list needs, rounded to the 16-byte stack alignment.
-const fn base_adjustment(list: u8) -> u32 {
-    let bytes = (saved_count(list) as u32 + 1) * 4;
-    bytes.div_ceil(16) * 16
 }
 
 /// Classify one instruction's bytes.
 pub(crate) fn classify(bytes: &[u8]) -> Classified {
-    if bytes.len() < 2 {
+    let Some(&[low, high]) = bytes.first_chunk() else {
         return Classified::Base;
-    }
-    let half = u16::from_le_bytes([bytes[0], bytes[1]]);
+    };
+    let half = u16::from_le_bytes([low, high]);
     if half & 3 != 3 {
         return compressed(half);
     }
-    let Ok(raw) = <[u8; 4]>::try_from(bytes.get(..4).unwrap_or_default()) else {
+    let Some(raw) = bytes.first_chunk() else {
         return Classified::Base;
     };
-    match word(u32::from_le_bytes(raw)) {
+    match word(u32::from_le_bytes(*raw)) {
         Some(extension) => Classified::Extension(extension, 4),
         None => Classified::Base,
     }
 }
 
 fn compressed(half: u16) -> Classified {
-    let (quadrant, funct3) = (half & 3, half >> 13);
+    let word = u32::from(half);
     let found = |extension| Classified::Extension(extension, 2);
-    let prime = |shift: u16| 8 + ((half >> shift) & 7) as u8;
-    match (quadrant, funct3) {
+    match (field::<0, 2>(word), field::<13, 3>(word)) {
         // Zcb loads and stores.
         (0, 4) => {
-            let (base, register) = (prime(7), prime(2));
-            let byte_offset = (((half >> 6) & 1) | (((half >> 5) & 1) << 1)) as u8;
-            let half_offset = (((half >> 5) & 1) << 1) as u8;
-            let bit6 = (half >> 6) & 1;
+            let (base, register) = (prime::<7>(word), prime::<2>(word));
+            let (bit5, bit6) = (field::<5, 1>(word), field::<6, 1>(word));
+            let byte_offset = bit6 | (bit5 << 1);
+            let half_offset = bit5 << 1;
             let memory = |load, offset, width, signed| {
                 found(Extension::Memory {
                     load,
@@ -149,7 +236,7 @@ fn compressed(half: u16) -> Classified {
                     signed,
                 })
             };
-            match half >> 10 {
+            match field::<10, 6>(word) {
                 0b100000 => memory(true, byte_offset, 1, false),
                 0b100001 => memory(true, half_offset, 2, bit6 == 1),
                 0b100010 => memory(false, byte_offset, 1, false),
@@ -158,68 +245,59 @@ fn compressed(half: u16) -> Classified {
             }
         }
         // Zcb arithmetic; other quadrant-1 funct3=4 forms are base C.
-        (1, 4) if half >> 10 == 0b100111 => {
-            let dest = prime(7);
-            let unary = |op, right| {
+        (1, 4) if field::<10, 6>(word) == 0b100111 => {
+            let dest = prime::<7>(word);
+            let integer = |op, right| {
                 found(Extension::Integer {
                     op,
                     dest,
                     left: dest,
-                    right: Operand::Immediate(right),
+                    right,
                 })
             };
-            match ((half >> 5) & 3, (half >> 2) & 7) {
-                (3, 0) => unary(IntegerOp::And, 0xff),
-                (3, 1) => unary(IntegerOp::SignExtendByte, 0),
-                (3, 2) => unary(IntegerOp::And, 0xffff),
-                (3, 3) => unary(IntegerOp::SignExtendHalf, 0),
-                (3, 5) => unary(IntegerOp::Xor, u32::MAX),
-                (2, _) => found(Extension::Integer {
-                    op: IntegerOp::Mul,
-                    dest,
-                    left: dest,
-                    right: Operand::Register(prime(2)),
-                }),
+            let unary = |op| integer(op, Operand::Immediate(0));
+            match (field::<5, 2>(word), field::<2, 3>(word)) {
+                (3, 0) => unary(IntegerOp::ZeroExtendByte),
+                (3, 1) => unary(IntegerOp::SignExtendByte),
+                (3, 2) => unary(IntegerOp::ZeroExtendHalf),
+                (3, 3) => unary(IntegerOp::SignExtendHalf),
+                (3, 5) => integer(IntegerOp::Xor, Operand::Immediate(u32::MAX)),
+                (2, _) => integer(IntegerOp::Mul, Operand::Register(prime::<2>(word))),
                 _ => Classified::Reserved,
             }
         }
         // Zcmp and Zcmt.
         (2, 5) => {
-            let list = ((half >> 4) & 0xf) as u8;
-            let adjustment = base_adjustment(list.max(4)) + u32::from((half >> 2) & 3) * 16;
-            let stack = |extension| {
-                if list < 4 {
-                    Classified::Reserved
-                } else {
-                    found(extension)
-                }
+            let frame = RegisterList::of(word).map(|list| (list, list.adjustment(word)));
+            let stack =
+                |extension: Option<Extension>| extension.map_or(Classified::Reserved, found);
+            let pop = |ret| {
+                stack(frame.map(|(list, adjustment)| Extension::Pop {
+                    list,
+                    adjustment,
+                    ret,
+                }))
             };
-            match ((half >> 8) & 0x1f, half >> 10, (half >> 5) & 3) {
-                (0b11000, ..) => stack(Extension::Push { list, adjustment }),
-                (0b11010, ..) => stack(Extension::Pop {
-                    list,
-                    adjustment,
-                    ret: None,
-                }),
-                (0b11100, ..) => stack(Extension::Pop {
-                    list,
-                    adjustment,
-                    ret: Some(true),
-                }),
-                (0b11110, ..) => stack(Extension::Pop {
-                    list,
-                    adjustment,
-                    ret: Some(false),
-                }),
-                (_, 0b101011, 1) if (half >> 7) & 7 != (half >> 2) & 7 => {
+            match (
+                field::<8, 5>(word),
+                field::<10, 6>(word),
+                field::<5, 2>(word),
+            ) {
+                (0b11000, ..) => {
+                    stack(frame.map(|(list, adjustment)| Extension::Push { list, adjustment }))
+                }
+                (0b11010, ..) => pop(None),
+                (0b11100, ..) => pop(Some(true)),
+                (0b11110, ..) => pop(Some(false)),
+                (_, 0b101011, 1) if field::<7, 3>(word) != field::<2, 3>(word) => {
                     found(Extension::MoveToSaved {
-                        first: saved_prime((half >> 7) & 7),
-                        second: saved_prime((half >> 2) & 7),
+                        first: saved_prime::<7>(word),
+                        second: saved_prime::<2>(word),
                     })
                 }
                 (_, 0b101011, 3) => found(Extension::MoveFromSaved {
-                    first: saved_prime((half >> 7) & 7),
-                    second: saved_prime((half >> 2) & 7),
+                    first: saved_prime::<7>(word),
+                    second: saved_prime::<2>(word),
                 }),
                 _ => Classified::Reserved,
             }
@@ -228,12 +306,18 @@ fn compressed(half: u16) -> Classified {
     }
 }
 
+/// The twelve bits of a CSR's number, the word's highest.
+const fn csr(word: u32) -> u16 {
+    let [low, high, ..] = (word >> 20).to_le_bytes();
+    u16::from_le_bytes([low, high])
+}
+
 fn word(word: u32) -> Option<Extension> {
-    let dest = ((word >> 7) & 31) as u8;
-    let funct3 = (word >> 12) & 7;
-    let left = ((word >> 15) & 31) as u8;
-    let field = (word >> 20) & 31;
-    let funct7 = word >> 25;
+    let dest = field::<7, 5>(word);
+    let funct3 = field::<12, 3>(word);
+    let left = field::<15, 5>(word);
+    let rs2 = field::<20, 5>(word);
+    let funct7 = field::<25, 7>(word);
     let integer = |op, right| {
         Some(Extension::Integer {
             op,
@@ -242,11 +326,11 @@ fn word(word: u32) -> Option<Extension> {
             right,
         })
     };
-    let register = Operand::Register(field as u8);
-    let shamt = Operand::Immediate(field);
+    let register = Operand::Register(rs2);
+    let shamt = Operand::Immediate(u32::from(rs2));
     let none = Operand::Immediate(0);
     use IntegerOp::*;
-    match (word & 0x7f, funct7, funct3) {
+    match (field::<0, 7>(word), funct7, funct3) {
         (0x33, 0x10, 2) => integer(ShiftAdd1, register),
         (0x33, 0x10, 4) => integer(ShiftAdd2, register),
         (0x33, 0x10, 6) => integer(ShiftAdd3, register),
@@ -259,12 +343,12 @@ fn word(word: u32) -> Option<Extension> {
         (0x33, 0x05, 7) => integer(Maxu, register),
         (0x33, 0x30, 1) => integer(RotateLeft, register),
         (0x33, 0x30, 5) => integer(RotateRight, register),
-        (0x33, 0x04, 4) if field == 0 => integer(And, Operand::Immediate(0xffff)),
+        (0x33, 0x04, 4) if rs2 == 0 => integer(ZeroExtendHalf, none),
         (0x33, 0x14, 1) => integer(BitSet, register),
         (0x33, 0x24, 1) => integer(BitClear, register),
         (0x33, 0x34, 1) => integer(BitInvert, register),
         (0x33, 0x24, 5) => integer(BitExtract, register),
-        (0x13, 0x30, 1) => match field {
+        (0x13, 0x30, 1) => match rs2 {
             0 => integer(CountLeadingZeros, none),
             1 => integer(CountTrailingZeros, none),
             2 => integer(PopCount, none),
@@ -277,8 +361,8 @@ fn word(word: u32) -> Option<Extension> {
         (0x13, 0x34, 1) => integer(BitInvert, shamt),
         (0x13, 0x24, 5) => integer(BitExtract, shamt),
         (0x13, 0x30, 5) => integer(RotateRight, shamt),
-        (0x13, 0x14, 5) if field == 7 => integer(OrCombineBytes, none),
-        (0x13, 0x34, 5) if field == 0x18 => integer(ByteReverse, none),
+        (0x13, 0x14, 5) if rs2 == 7 => integer(OrCombineBytes, none),
+        (0x13, 0x34, 5) if rs2 == 0x18 => integer(ByteReverse, none),
         (0x73, _, 1..=3 | 5..=7) => Some(Extension::Csr {
             op: match funct3 & 3 {
                 1 => CsrOp::Write,
@@ -291,7 +375,7 @@ fn word(word: u32) -> Option<Extension> {
             } else {
                 Operand::Immediate(u32::from(left))
             },
-            csr: (word >> 20) as u16,
+            csr: csr(word),
         }),
         _ => None,
     }
@@ -310,13 +394,6 @@ pub fn register_name(register: u8) -> &'static str {
 
 impl fmt::Display for Extension {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // The assembler's register-list syntax: `{ra}`, `{ra, s0}` or
-        // `{ra, s0-sN}`.
-        let list = |f: &mut fmt::Formatter<'_>, list: u8| match saved_count(list) {
-            0 => write!(f, "{{ra}}"),
-            1 => write!(f, "{{ra, s0}}"),
-            count => write!(f, "{{ra, s0-s{}}}", count - 1),
-        };
         match *self {
             Extension::Integer {
                 op,
@@ -326,40 +403,39 @@ impl fmt::Display for Extension {
             } => {
                 use IntegerOp::*;
                 let immediate = matches!(right, Operand::Immediate(_));
-                let (mnemonic, unary) = match (op, right) {
-                    (And, Operand::Immediate(0xff)) => ("zext.b", true),
-                    (And, Operand::Immediate(0xffff)) => ("zext.h", true),
-                    (Xor, _) => ("not", true),
-                    (Mul, _) => ("mul", false),
-                    (ShiftAdd1, _) => ("sh1add", false),
-                    (ShiftAdd2, _) => ("sh2add", false),
-                    (ShiftAdd3, _) => ("sh3add", false),
-                    (AndNot, _) => ("andn", false),
-                    (OrNot, _) => ("orn", false),
-                    (XorNot, _) => ("xnor", false),
-                    (Min, _) => ("min", false),
-                    (Minu, _) => ("minu", false),
-                    (Max, _) => ("max", false),
-                    (Maxu, _) => ("maxu", false),
-                    (RotateLeft, _) => ("rol", false),
-                    (RotateRight, _) if immediate => ("rori", false),
-                    (RotateRight, _) => ("ror", false),
-                    (CountLeadingZeros, _) => ("clz", true),
-                    (CountTrailingZeros, _) => ("ctz", true),
-                    (PopCount, _) => ("cpop", true),
-                    (SignExtendByte, _) => ("sext.b", true),
-                    (SignExtendHalf, _) => ("sext.h", true),
-                    (OrCombineBytes, _) => ("orc.b", true),
-                    (ByteReverse, _) => ("rev8", true),
-                    (BitSet, _) if immediate => ("bseti", false),
-                    (BitSet, _) => ("bset", false),
-                    (BitClear, _) if immediate => ("bclri", false),
-                    (BitClear, _) => ("bclr", false),
-                    (BitInvert, _) if immediate => ("binvi", false),
-                    (BitInvert, _) => ("binv", false),
-                    (BitExtract, _) if immediate => ("bexti", false),
-                    (BitExtract, _) => ("bext", false),
-                    _ => unreachable!("extension decoding produces no other operation"),
+                let (mnemonic, unary) = match op {
+                    ZeroExtendByte => ("zext.b", true),
+                    ZeroExtendHalf => ("zext.h", true),
+                    Xor => ("not", true),
+                    Mul => ("mul", false),
+                    ShiftAdd1 => ("sh1add", false),
+                    ShiftAdd2 => ("sh2add", false),
+                    ShiftAdd3 => ("sh3add", false),
+                    AndNot => ("andn", false),
+                    OrNot => ("orn", false),
+                    XorNot => ("xnor", false),
+                    Min => ("min", false),
+                    Minu => ("minu", false),
+                    Max => ("max", false),
+                    Maxu => ("maxu", false),
+                    RotateLeft => ("rol", false),
+                    RotateRight if immediate => ("rori", false),
+                    RotateRight => ("ror", false),
+                    CountLeadingZeros => ("clz", true),
+                    CountTrailingZeros => ("ctz", true),
+                    PopCount => ("cpop", true),
+                    SignExtendByte => ("sext.b", true),
+                    SignExtendHalf => ("sext.h", true),
+                    OrCombineBytes => ("orc.b", true),
+                    ByteReverse => ("rev8", true),
+                    BitSet if immediate => ("bseti", false),
+                    BitSet => ("bset", false),
+                    BitClear if immediate => ("bclri", false),
+                    BitClear => ("bclr", false),
+                    BitInvert if immediate => ("binvi", false),
+                    BitInvert => ("binv", false),
+                    BitExtract if immediate => ("bexti", false),
+                    BitExtract => ("bext", false),
                 };
                 write!(
                     f,
@@ -420,16 +496,11 @@ impl fmt::Display for Extension {
                     register_name(base)
                 )
             }
-            Extension::Push {
-                list: l,
-                adjustment,
-            } => {
-                write!(f, "cm.push ")?;
-                list(f, l)?;
-                write!(f, ", -{adjustment}")
+            Extension::Push { list, adjustment } => {
+                write!(f, "cm.push {}, -{adjustment}", list.name())
             }
             Extension::Pop {
-                list: l,
+                list,
                 adjustment,
                 ret,
             } => {
@@ -438,9 +509,7 @@ impl fmt::Display for Extension {
                     Some(false) => "cm.popret",
                     Some(true) => "cm.popretz",
                 };
-                write!(f, "{kind} ")?;
-                list(f, l)?;
-                write!(f, ", {adjustment}")
+                write!(f, "{kind} {}, {adjustment}", list.name())
             }
             Extension::MoveToSaved { first, second } => {
                 write!(
