@@ -24,7 +24,7 @@ oer-tools-lab-model = { path = "../model" }
 oer-tools-lab-fixture = { path = "../fixture" }
 oer-tools-lab-client = { path = "../client" }
 oer-tools-os-toolchain = { path = "../../os/toolchain" }
-rustix = { version = "=1.1.4", features = ["process"] }
+rustix = { version = "=1.1.6", features = ["process"] }
 serde_json = "=1.0.151"
 
 [dev-dependencies]
