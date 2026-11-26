@@ -1,6 +1,6 @@
 //! Durable host files shared by every repository tool: atomic replacement,
-//! content digests (remembered across processes by [`digests`]),
-//! JSON Lines logs ([`jsonl`]), wall-clock timestamps and the user's state directories ([`xdg`]).
+//! content digests, JSON Lines logs ([`jsonl`]), wall-clock timestamps and
+//! the user's state directories ([`xdg`]).
 #![forbid(unsafe_code)]
 #![cfg_attr(
     test,
@@ -15,7 +15,6 @@
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write as _},
-    os::unix::fs::OpenOptionsExt as _,
     path::Path,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
@@ -24,7 +23,6 @@ use std::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-pub mod digests;
 pub mod inputs;
 pub mod jsonl;
 pub mod xdg;
@@ -33,7 +31,7 @@ pub mod xdg;
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// Distinguishes concurrent temporary files written by one process.
-pub static UNIQUE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static UNIQUE_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Replace `path` atomically with `value` as pretty JSON and a final newline.
 pub fn atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
@@ -46,16 +44,6 @@ pub fn atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
 /// content, never a part, and the new content survives a crash once this
 /// returns. Creates the parent directory.
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
-    atomic_write_mode(path, bytes, 0o666)
-}
-
-/// The durable replacement of [`atomic_write`], with an owner-only file.
-/// The caller owns directory permissions; the temporary is private from creation.
-pub fn atomic_write_private(path: &Path, bytes: &[u8]) -> Result<()> {
-    atomic_write_mode(path, bytes, 0o600)
-}
-
-fn atomic_write_mode(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("path has no parent: {}", path.display()))?;
@@ -70,7 +58,6 @@ fn atomic_write_mode(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
         let mut file = OpenOptions::new()
             .create_new(true)
             .write(true)
-            .mode(mode)
             .open(&temporary)?;
         file.write_all(bytes)?;
         file.flush()?;
@@ -213,29 +200,5 @@ mod tests {
         let error = atomic_write(&blocked, b"bytes").unwrap_err();
         assert!(error.downcast_ref::<std::io::Error>().is_some(), "{error}");
         assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
-    }
-}
-
-#[cfg(test)]
-mod private_tests {
-    use super::*;
-    use std::os::unix::fs::PermissionsExt as _;
-
-    #[test]
-    fn private_replacement_restricts_an_existing_file_and_failed_rename_cleans_up() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("record");
-        fs::write(&path, b"old").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
-        atomic_write_private(&path, b"new").unwrap();
-        assert_eq!(
-            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-        let blocked = directory.path().join("blocked");
-        fs::create_dir(&blocked).unwrap();
-        assert!(atomic_write_private(&blocked, b"cannot rename over directory").is_err());
-        assert_eq!(fs::read(&path).unwrap(), b"new");
-        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 2);
     }
 }

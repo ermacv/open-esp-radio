@@ -1,8 +1,8 @@
 //! The host tools that repository builds run, located one way.
 //!
 //! Every tool has an override variable ([`Tool::variable`]); a non-empty
-//! value names the program. Otherwise Cargo, `rustc` and `espflash` are
-//! looked up on `PATH`, and the LLVM tools are the `llvm-tools` component of
+//! value names the program. Otherwise Cargo and `rustc` are looked up on
+//! `PATH`, and the LLVM tools are the `llvm-tools` component of
 //! the active Rust toolchain (`rust-toolchain.toml` pins it): its sysroot's
 //! `lib/rustlib/<host>/bin`, never an unrelated LLVM on `PATH`, whose bitcode
 //! and relocation support need not match the compiler's.
@@ -35,7 +35,6 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 pub enum Tool {
     Cargo,
     Rustc,
-    Espflash,
     LlvmNm,
     LlvmObjcopy,
     LlvmObjdump,
@@ -43,13 +42,12 @@ pub enum Tool {
 
 impl Tool {
     /// Every tool, in the order evidence records them.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 5] = [
         Self::Rustc,
         Self::Cargo,
         Self::LlvmObjcopy,
         Self::LlvmNm,
         Self::LlvmObjdump,
-        Self::Espflash,
     ];
 
     /// The tool's program name.
@@ -57,7 +55,6 @@ impl Tool {
         match self {
             Self::Cargo => "cargo",
             Self::Rustc => "rustc",
-            Self::Espflash => "espflash",
             Self::LlvmNm => "llvm-nm",
             Self::LlvmObjcopy => "llvm-objcopy",
             Self::LlvmObjdump => "llvm-objdump",
@@ -69,7 +66,6 @@ impl Tool {
         match self {
             Self::Cargo => "CARGO",
             Self::Rustc => "RUSTC",
-            Self::Espflash => "ESPFLASH",
             Self::LlvmNm => "LLVM_NM",
             Self::LlvmObjcopy => "LLVM_OBJCOPY",
             Self::LlvmObjdump => "LLVM_OBJDUMP",

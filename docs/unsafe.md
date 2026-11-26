@@ -788,7 +788,7 @@ make safe: `child_setup` for what a child does between fork and exec,
 `launch_handoff` for the descriptor a fixed launcher passes its
 helper across `exec` (the LAB service adopts the socket systemd hands it the
 same way), and, behind the `linux-socket` feature, `linux_socket` for the
-link-layer, HCI and L2CAP addresses and three socket options. `oer-tools-os-serial`
+link-layer address. `oer-tools-os-serial`
 takes an open serial port's descriptor; it is its own crate so that the root
 fixture installer, which links `oer-tools-os-process`, does not link `serialport`.
 

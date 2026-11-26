@@ -31,8 +31,8 @@ fn a_non_empty_override_names_the_program() {
 
 #[test]
 fn without_an_override_path_tools_are_their_names() {
-    let env = environment(&[("CARGO", ""), ("ESPFLASH", "")]);
-    for tool in [Tool::Cargo, Tool::Rustc, Tool::Espflash] {
+    let env = environment(&[("CARGO", "")]);
+    for tool in [Tool::Cargo, Tool::Rustc] {
         assert_eq!(
             program_in(tool, &env, no_sysroot).unwrap(),
             OsString::from(tool.name())
@@ -76,14 +76,7 @@ fn every_recorded_tool_is_listed_once_with_llvm_objdump() {
     let names: Vec<_> = Tool::ALL.into_iter().map(Tool::name).collect();
     assert_eq!(
         names,
-        [
-            "rustc",
-            "cargo",
-            "llvm-objcopy",
-            "llvm-nm",
-            "llvm-objdump",
-            "espflash"
-        ]
+        ["rustc", "cargo", "llvm-objcopy", "llvm-nm", "llvm-objdump"]
     );
 }
 
