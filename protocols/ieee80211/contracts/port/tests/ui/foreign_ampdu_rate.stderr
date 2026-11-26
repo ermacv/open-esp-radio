@@ -1,12 +1,12 @@
 error: lifetime may not live long enough
-  --> tests/ui/foreign_ampdu_rate.rs:21:16
+  --> tests/ui/foreign_ampdu_rate.rs:22:16
    |
- 9 | pub fn publish<'a, 'b, P: DataPort<'a>>(
+ 9 | pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
    |                --  -- lifetime `'b` defined here
    |                |
    |                lifetime `'a` defined here
 ...
-21 |     let rate = foreign; // ui-error: lifetime may not live long enough
+22 |     let rate = foreign; // ui-error: lifetime may not live long enough
    |                ^^^^^^^ assignment requires that `'a` must outlive `'b`
    |
    = help: consider adding the following bound: `'a: 'b`
@@ -15,14 +15,14 @@ error: lifetime may not live long enough
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
 error: lifetime may not live long enough
-  --> tests/ui/foreign_ampdu_rate.rs:24:78
+  --> tests/ui/foreign_ampdu_rate.rs:25:78
    |
- 9 | pub fn publish<'a, 'b, P: DataPort<'a>>(
+ 9 | pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
    |                --  -- lifetime `'b` defined here
    |                |
    |                lifetime `'a` defined here
 ...
-24 |     let how = Ppdu::Aggregate { rate, spacing, protection: Protection::None, alone }; // ui-error: lifetime may not live long enough
+25 |     let how = Ppdu::Aggregate { rate, spacing, protection: Protection::None, alone }; // ui-error: lifetime may not live long enough
    |                                                                              ^^^^^ this usage requires that `'b` must outlive `'a`
    |
    = help: consider adding the following bound: `'b: 'a`

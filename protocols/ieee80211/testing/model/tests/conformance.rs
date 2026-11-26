@@ -26,8 +26,9 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_testing_conformance as suite;
 use oer_protocols_ieee80211_testing_model::{
-    AccessPointModel, Air, Anomaly, HardwareState, MODEL_PLACES, MODEL_SHORT_AMPDU_MCS,
+    AccessPointModel, Air, Anomaly, Fault, HardwareState, MODEL_PLACES, MODEL_SHORT_AMPDU_MCS,
     MODEL_TX_BODY, ModelCaps, ModelLink, ModelMemory, ModelPort, Programmed, Served, StationModel,
+    StationModelOf,
 };
 use oer_protocols_radio_port::{Mint, branded};
 
@@ -94,6 +95,9 @@ impl<'id, L: Served> suite::Harness<'id, L> for Model<'id, L> {
     }
     fn expire_next(&mut self) {
         self.port.expire_next();
+    }
+    fn chains_on(&self, category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory) -> usize {
+        self.port.chains_on(category)
     }
     fn hold_air(&mut self) {
         for category in oer_protocols_ieee80211_contracts_port::QUEUES {
@@ -303,5 +307,54 @@ fn the_receive_rule_is_a_right() {
             StationReceive::OtherBssManagement,
             StationReceive::Bss { bssid: bss, filter },
         );
+    });
+}
+
+/// A chain on best effort and a chain of one on voice, each on its own
+/// queue, each returning its own queue's right.
+#[test]
+fn chains_on_two_queues_end_each_with_its_queue() {
+    installed(|mut model, rights| {
+        suite::chains_on_two_queues_end_each_with_its_queue(&mut model, rights);
+    });
+}
+
+/// The case fails on a model that puts every chain on best effort: a
+/// second chain on a busy queue.
+#[test]
+#[should_panic(expected = "each chain is on the queue it was published on")]
+fn chains_on_two_queues_fails_when_the_model_puts_both_on_one() {
+    installed(|mut model, rights| {
+        model.port.fault(Fault::ChainsOnBestEffort);
+        suite::chains_on_two_queues_end_each_with_its_queue(&mut model, rights);
+    });
+}
+
+/// A stop with chains on two queues returns every chain, every queue's
+/// right and every frame's memory.
+#[test]
+fn a_stop_returns_every_chain_and_queue() {
+    installed(|mut model, rights| {
+        suite::a_stop_returns_every_chain_and_queue(&mut model, rights);
+    });
+}
+
+/// The case fails on a model whose stop leaves the chains on the air.
+#[test]
+#[should_panic(expected = "the long chain ended")]
+fn a_stop_returns_every_chain_and_queue_fails_when_the_stop_leaves_them() {
+    installed(|mut model, rights| {
+        model.port.fault(Fault::StopLeavesChains);
+        suite::a_stop_returns_every_chain_and_queue(&mut model, rights);
+    });
+}
+
+/// A layout whose long chains have one descriptor builds, and its chains of
+/// both kinds are on the air together, each in its own buffer and on its
+/// own queue: the radio numbers its chains once.
+#[test]
+fn chains_of_one_descriptor_of_both_kinds_are_apart() {
+    installed_as::<StationModelOf<SINGLES, 1>>(|mut model, rights| {
+        suite::chains_on_two_queues_end_each_with_its_queue(&mut model, rights);
     });
 }

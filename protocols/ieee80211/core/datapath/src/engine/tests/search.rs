@@ -18,7 +18,7 @@
 //! shorter prefix, one to `k - 1`.
 
 use super::*;
-use oer_protocols_ieee80211_contracts_port::{ArenaSide, GateClosed};
+use oer_protocols_ieee80211_contracts_port::GateClosed;
 use oer_protocols_ieee80211_testing_model::ModelRights;
 use oer_protocols_ieee80211_testing_model::StationModel;
 use oer_protocols_ieee80211_testing_model::Went;
@@ -487,9 +487,9 @@ impl<'id> World<'id> {
 
     /// The MSDUs the arenas hold.
     fn arena_ids(&self) -> Vec<u32> {
-        [ArenaSide::First, ArenaSide::Second]
+        [0, 1]
             .into_iter()
-            .flat_map(|side| self.around.port.arena_memories(side))
+            .flat_map(|chain| self.around.port.arena_memories(chain))
             .collect()
     }
 
@@ -501,8 +501,8 @@ impl<'id> World<'id> {
     fn on_air_ids(&self) -> Vec<u32> {
         self.around
             .port
-            .on_air_side()
-            .map(|side| self.around.port.arena_memories(side))
+            .on_air_chain()
+            .map(|chain| self.around.port.arena_memories(chain))
             .unwrap_or_default()
     }
 
@@ -534,6 +534,10 @@ impl<'id> World<'id> {
             // One arena on the air at a time: the step's publication is the
             // arena on the air after it, its frames the prefix that went.
             let ids: Vec<u32> = self.on_air_ids().into_iter().take(frames.len()).collect();
+            if index == 0 && ids.len() != frames.len() {
+                self.problems
+                    .push("a publication's frames are not the arena's on the air");
+            }
             if index == 0
                 && !before.kept.is_empty()
                 && !ids.iter().any(|id| before.kept.contains(id))
@@ -867,9 +871,9 @@ impl<'id> World<'id> {
 
     /// The MSDUs in each place.
     fn places(&self) -> (Vec<u32>, Vec<u32>, usize) {
-        let arenas = [ArenaSide::First, ArenaSide::Second]
+        let arenas = [0, 1]
             .into_iter()
-            .flat_map(|side| self.around.port.arena_memories(side))
+            .flat_map(|chain| self.around.port.arena_memories(chain))
             .collect();
         let waiting = self
             .around

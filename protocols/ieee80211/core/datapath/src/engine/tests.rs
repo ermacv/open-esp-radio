@@ -22,8 +22,8 @@ use oer_protocols_ieee80211_testing_model::AccessPointModel;
 use oer_protocols_ieee80211_testing_model::Served;
 use oer_protocols_ieee80211_testing_model::StationModel;
 use oer_protocols_ieee80211_testing_model::{
-    Air, MODEL_AGREEMENTS, MODEL_GROUPS, MODEL_PLACES, ModelCaps, ModelLent, ModelLink,
-    ModelMemory, ModelPort,
+    Air, MODEL_AGREEMENTS, MODEL_CHAIN_SLOTS, MODEL_GROUPS, MODEL_PLACES, ModelCaps, ModelLent,
+    ModelLink, ModelMemory, ModelPort,
 };
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::phy::{
@@ -89,6 +89,7 @@ pub(super) type StationEngineOn<'id, const POOL: usize, const P: usize, const W:
     STATION_SINGLES,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
+    MODEL_CHAIN_SLOTS,
     W,
 >;
 
@@ -103,6 +104,7 @@ pub(super) type ApEngine<'id, const PEERS: usize, const POOL: usize> = Engine<
     AP_SINGLES,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
+    MODEL_CHAIN_SLOTS,
     MODEL_WINDOW,
 >;
 
@@ -1767,6 +1769,7 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         STATION_SINGLES,
         MODEL_GROUPS,
         MODEL_AGREEMENTS,
+        MODEL_CHAIN_SLOTS,
         MODEL_WINDOW,
     >;
     type Ap = super::Running<
@@ -1778,6 +1781,7 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         AP_SINGLES,
         MODEL_GROUPS,
         MODEL_AGREEMENTS,
+        MODEL_CHAIN_SLOTS,
         MODEL_WINDOW,
     >;
     std::println!(
@@ -1787,11 +1791,11 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         size_of::<StationLink<ModelLink>>(),
         size_of::<StationEntry<ModelLink>>(),
         size_of::<ClientLink>(),
-        size_of::<DataPlane<'static, ModelCaps>>(),
+        size_of::<DataPlane<'static, ModelCaps, MODEL_CHAIN_SLOTS>>(),
         size_of::<Station>(),
         size_of::<Ap>(),
     );
-    assert!(size_of::<DataPlane<'static, ModelCaps>>() <= size_of::<Station>());
+    assert!(size_of::<DataPlane<'static, ModelCaps, MODEL_CHAIN_SLOTS>>() <= size_of::<Station>());
 }
 
 /// The lifetime: the search leaves it out (its paths last microseconds, the

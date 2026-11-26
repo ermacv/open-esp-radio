@@ -1,12 +1,12 @@
 error: lifetime may not live long enough
-  --> tests/ui/foreign_rate.rs:18:16
+  --> tests/ui/foreign_rate.rs:19:16
    |
- 8 | pub fn publish<'a, 'b, P: DataPort<'a>>(
+ 8 | pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
    |                --  -- lifetime `'b` defined here
    |                |
    |                lifetime `'a` defined here
 ...
-18 |     let rate = foreign; // ui-error: lifetime may not live long enough
+19 |     let rate = foreign; // ui-error: lifetime may not live long enough
    |                ^^^^^^^ assignment requires that `'a` must outlive `'b`
    |
    = help: consider adding the following bound: `'a: 'b`
@@ -15,15 +15,15 @@ error: lifetime may not live long enough
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
 error: lifetime may not live long enough
-  --> tests/ui/foreign_rate.rs:26:5
+  --> tests/ui/foreign_rate.rs:27:5
    |
- 8 | pub fn publish<'a, 'b, P: DataPort<'a>>(
+ 8 | pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
    |                --  -- lifetime `'b` defined here
    |                |
    |                lifetime `'a` defined here
 ...
-26 |     port.publish(arena, Ppdu::Single(plan), gate, now) // ui-error: lifetime may not live long enough
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'b` must outlive `'a`
+27 |     port.publish(arena, queue, Ppdu::Single(plan), gate, now) // ui-error: lifetime may not live long enough
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'b` must outlive `'a`
    |
    = help: consider adding the following bound: `'b: 'a`
    = note: requirement occurs because of the type `Ppdu<'_, <P as RadioPort<'_>>::Caps>`, which makes the generic argument `'_` invariant

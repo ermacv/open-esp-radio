@@ -101,15 +101,6 @@ impl Facts {
     }
 }
 
-/// One of the two arenas.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum ArenaSide {
-    /// The first.
-    First,
-    /// The second.
-    Second,
-}
-
 /// The frames of an arena by their positions, the first frame at bit 0.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct FrameSet(u64);
@@ -208,19 +199,38 @@ macro_rules! interface_right {
     };
 }
 
-right!(
-    /// An arena that holds nothing: what an installation gives and a
-    /// settlement or a withdrawal returns. The radio's: an arena's
-    /// interface is its link's.
-    IdleArena { side: ArenaSide }
+/// A right of one of the radio's chains of `S` descriptors.
+macro_rules! chain_right {
+    ($(#[$doc:meta])* $name:ident { $($field:ident: $ty:ty),* }) => {
+        $(#[$doc])*
+        #[must_use = "a right is the only way to the call that takes it"]
+        #[derive(Debug)]
+        pub struct $name<'id, const S: usize> {
+            $($field: $ty,)*
+            brand: Brand<'id>,
+        }
+    };
+}
+
+chain_right!(
+    /// A chain of `S` descriptors that holds nothing: what an installation
+    /// gives and a settlement or a withdrawal returns. The radio's: a
+    /// chain's interface is its link's. Its index is its place among the
+    /// installation's chains of `S`.
+    IdleChain { index: u8 }
 );
-right!(
-    /// An arena opened for a link and a TID, being filled.
-    Arena { side: ArenaSide, frames: u8 }
+chain_right!(
+    /// A chain opened for a link and a TID, being filled.
+    Chain { index: u8, frames: u8 }
 );
-right!(
-    /// An arena on the air: the frames of its prefix that went.
-    OnAir { side: ArenaSide, sent: u8 }
+chain_right!(
+    /// A chain on the air: the frames of its prefix that went, and the
+    /// right of the queue it is on, which its settlement gives back.
+    OnAir {
+        index: u8,
+        sent: u8,
+        queue: QueueRight<'id>
+    }
 );
 interface_right!(
     /// A single's place of the interface `I`: one of a purpose of its
@@ -271,17 +281,17 @@ interface_right!(
     Receiving {}
 );
 
-impl IdleArena<'_> {
-    /// The arena.
-    pub const fn side(&self) -> ArenaSide {
-        self.side
+impl<const S: usize> IdleChain<'_, S> {
+    /// The chain's place among the installation's chains of `S`.
+    pub const fn index(&self) -> u8 {
+        self.index
     }
 }
 
-impl Arena<'_> {
-    /// The arena.
-    pub const fn side(&self) -> ArenaSide {
-        self.side
+impl<const S: usize> Chain<'_, S> {
+    /// The chain's place among the installation's chains of `S`.
+    pub const fn index(&self) -> u8 {
+        self.index
     }
 
     /// The frames it holds.
@@ -290,10 +300,15 @@ impl Arena<'_> {
     }
 }
 
-impl OnAir<'_> {
-    /// The arena.
-    pub const fn side(&self) -> ArenaSide {
-        self.side
+impl<const S: usize> OnAir<'_, S> {
+    /// The chain's place among the installation's chains of `S`.
+    pub const fn index(&self) -> u8 {
+        self.index
+    }
+
+    /// The queue it is on.
+    pub const fn category(&self) -> WmmAccessCategory {
+        self.queue.category()
     }
 
     /// The frames of the prefix that went; the others stay in their
@@ -347,21 +362,21 @@ pub const QUEUES: [WmmAccessCategory; 4] = [
 
 mod layout;
 pub use layout::{
-    AccessPointData, InterfaceLayout, InterfaceRights, Layout, LayoutRights, Member,
-    PublishedSingle, RadioRights, SingleOfTwo,
+    AccessPointData, InterfaceLayout, InterfaceRights, Interfaces, Layout, LayoutRights, Member,
+    PublishedSingle, RadioLayout, RadioRights, SingleOfTwo,
 };
 pub(crate) use layout::{access_point_data, station_data};
 
-/// What a settlement leaves of the arena.
+/// What a settlement leaves of the chain.
 #[derive(Debug)]
-pub enum Settled<'id> {
+pub enum Settled<'id, const S: usize> {
     /// The kept frames stay in their places for the retry.
-    Kept(Arena<'id>),
-    /// The arena holds nothing.
-    Idle(IdleArena<'id>),
+    Kept(Chain<'id, S>),
+    /// The chain holds nothing.
+    Idle(IdleChain<'id, S>),
 }
 
-/// The arena takes no more frames: its slots are full. The one answer of
+/// The chain takes no more frames: its descriptors are full. The one answer of
 /// the path that is not an outcome; what comes next is `publish`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Complete;
@@ -577,10 +592,44 @@ impl<'id, P: DataPort<'id>, const BODY: usize, const LEN: usize> TxSlotOf<'id, P
     };
 }
 
-/// How an arena goes on the air.
+/// How a chain goes on the air: the one description of a publication.
+/// Each kind names the response its frame solicits, and a kind whose
+/// response follows from its header carries the checked header
+/// ([`SizedFrame`](crate::SizedFrame)), as a buffer request's did: a frame
+/// and its response never disagree.
 pub enum Ppdu<'id, K> {
-    /// The arena's first frame as one MPDU, acknowledged, by this plan.
+    /// The chain's first frame as one MPDU, acknowledged, by this plan.
     Single(RetryPlan<PortRate<'id, K>>),
+    /// The chain's first frame, individually addressed, as one MPDU that
+    /// solicits no ACK and says so, at a rate that carries one without it.
+    NoAck {
+        /// Its checked unacknowledged header and its MPDU's length.
+        frame: crate::SizedFrame<crate::NoAckHeader, K>,
+        /// The rate.
+        rate: crate::SupportedNoAck<'id, K>,
+    },
+    /// The chain's first frame, group-addressed, as one MPDU that solicits
+    /// no response.
+    Group {
+        /// Its checked group receiver, header and MPDU length.
+        frame: crate::SizedFrame<crate::HeaderSpec<oer_protocols_ieee802_wire::GroupAddress>, K>,
+        /// The rate.
+        rate: PortRate<'id, K>,
+    },
+    /// The chain's first frame, a BlockAckReq, which solicits a BlockAck,
+    /// at a non-HT rate.
+    BlockAckRequest {
+        /// The peer asked to return its Block Ack state.
+        receiver: IndividualAddress,
+        /// The address of the requesting transmitter.
+        transmitter: oer_protocols_ieee802_wire::Eui48,
+        /// The traffic identifier of the agreement.
+        tid: Tid,
+        /// The first sequence number requested in the window.
+        starting_sequence: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
+        /// The non-HT rates and retry budget of the request.
+        plan: RetryPlan<crate::LegacyPortRate<'id, K>>,
+    },
     /// The longest prefix the rate admits as an A-MPDU; if that prefix is
     /// one frame, that frame as one MPDU by `alone`.
     Aggregate {
@@ -615,7 +664,7 @@ pub enum ArenaOutcome<A, B, D> {
 }
 
 /// An arena's end, kept by the port and read in place through the
-/// reference [`DataPort::aggregate_ended`] returns: what the prefix's frames
+/// reference [`DataPort::ended`] returns: what the prefix's frames
 /// did on the air.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ended<A, B, D> {
@@ -926,70 +975,76 @@ pub trait DataPort<'id>: RadioPort<'id> {
     /// The clock cannot be read now.
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError>;
 
-    /// Open an idle arena for `link` and `tid`.
-    fn open<I: InterfaceRole>(
+    /// Open an idle chain for `link`, of the interface `I` its frames go
+    /// as, and `tid`.
+    fn open<I: InterfaceRole, const S: usize>(
         &mut self,
-        idle: IdleArena<'id>,
+        idle: IdleChain<'id, S>,
         link: &Self::Link<I>,
         tid: Tid,
-    ) -> Arena<'id>;
+    ) -> Chain<'id, S>;
 
-    /// The next frame's place of `length` in the arena, or [`Complete`]
-    /// when its slots are full.
-    fn place<'a>(
+    /// The next frame's place of `length` in the chain, or [`Complete`]
+    /// when its `S` descriptors are full.
+    fn place<'a, const S: usize>(
         &'a mut self,
-        arena: &'a mut Arena<'id>,
+        chain: &'a mut Chain<'id, S>,
         length: MpduLength<Self::Caps>,
-    ) -> Result<Place<'a, 'id, Self>, Complete>
+    ) -> Result<Place<'a, 'id, Self, S>, Complete>
     where
         Self: Sized;
 
     /// Write a frame into its place: the body by its handle, in place, and
     /// the header once into the headroom the port lends. The port's
     /// primitive, reached through [`Place::write`].
-    fn write_frame(
+    fn write_frame<const S: usize>(
         &mut self,
         token: Sealed,
-        arena: &mut Arena<'id>,
+        chain: &mut Chain<'id, S>,
         body: Self::Memory,
         header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen,
     );
 
-    /// Publish the arena as `how` says: a single its first frame; an
-    /// aggregate the longest prefix of its frames the rate admits, one
-    /// frame at least, which goes alone by its plan. The others stay in
-    /// their places with no attempt spent.
-    fn publish(
+    /// Publish the chain on the free queue `queue` as `how` says: a single
+    /// its first frame; an aggregate the longest prefix of its frames the
+    /// rate admits, one frame at least, which goes alone by its plan. The
+    /// others stay in their places with no attempt spent. The queue's right
+    /// is the chain's on the air until its settlement gives it back: no
+    /// other chain is published on the queue meanwhile.
+    fn publish<const S: usize>(
         &mut self,
-        arena: Arena<'id>,
+        chain: Chain<'id, S>,
+        queue: QueueRight<'id>,
         how: Ppdu<'id, Self::Caps>,
         gate: &GateOpen<'id>,
         now: Instant,
-    ) -> OnAir<'id>;
+    ) -> OnAir<'id, S>;
 
-    /// Withdraw an arena's frames: each body goes home.
-    fn withdraw(
+    /// Withdraw a chain's frames: each body goes home.
+    fn withdraw<const S: usize>(
         &mut self,
-        arena: Arena<'id>,
+        chain: Chain<'id, S>,
         home: &mut impl FnMut(Self::Memory),
-    ) -> IdleArena<'id>;
+    ) -> IdleChain<'id, S>;
 
-    /// The end of the arena on the air, read in place, once it ended.
-    fn aggregate_ended(
+    /// The end of the chain on the air, read in place, once it ended: the
+    /// one end of every chain, pulled.
+    fn ended<const S: usize>(
         &mut self,
         facts: TxFacts,
-        on_air: &OnAir<'id>,
+        on_air: &OnAir<'id, S>,
         now: Instant,
     ) -> Option<&Ended<Self::Ack, Self::BlockAck, Self::Denial>>;
 
-    /// Settle an ended arena: the frames of `keep` stay in their places for
-    /// a retry, every other body goes home.
-    fn settle(
+    /// Settle an ended chain: the frames of `keep` stay in their places for
+    /// a retry, every other body goes home, and the queue's right comes
+    /// back.
+    fn settle<const S: usize>(
         &mut self,
-        on_air: OnAir<'id>,
+        on_air: OnAir<'id, S>,
         keep: FrameSet,
         home: &mut impl FnMut(Self::Memory),
-    ) -> Settled<'id>;
+    ) -> (Settled<'id, S>, QueueRight<'id>);
 
     /// Serve the transmit facts: singles' ends, the queues' next, the TBTT.
     fn serve(
@@ -1132,11 +1187,11 @@ impl Sealed {
     }
 }
 
-/// A frame's place in an arena, borrowed for one write.
+/// A frame's place in a chain, borrowed for one write.
 #[must_use = "a place is written once"]
-pub struct Place<'a, 'id, P: DataPort<'id>> {
+pub struct Place<'a, 'id, P: DataPort<'id>, const S: usize> {
     port: &'a mut P,
-    arena: &'a mut Arena<'id>,
+    chain: &'a mut Chain<'id, S>,
 }
 
 /// The port's word that it found a free place in an arena, made by its
@@ -1147,57 +1202,78 @@ pub struct Placing<'id> {
     brand: Brand<'id>,
 }
 
-impl<'a, 'id, P: DataPort<'id>> Place<'a, 'id, P> {
-    /// The port's place in `arena`, which it found free.
-    pub fn new(placing: Placing<'id>, port: &'a mut P, arena: &'a mut Arena<'id>) -> Self {
+impl<'a, 'id, P: DataPort<'id>, const S: usize> Place<'a, 'id, P, S> {
+    /// The port's place in `chain`, which it found free.
+    pub fn new(placing: Placing<'id>, port: &'a mut P, chain: &'a mut Chain<'id, S>) -> Self {
         let Placing { brand: _ } = placing;
-        Self { port, arena }
+        Self { port, chain }
     }
 
     /// Write the frame: the body by its handle, in place, the header once
     /// into the headroom the port lends.
     pub fn write(self, body: P::Memory, header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen) {
-        let Self { port, arena } = self;
-        port.write_frame(Sealed::new(), arena, body, header);
-        arena.frames = arena.frames.saturating_add(1);
+        let Self { port, chain } = self;
+        port.write_frame(Sealed::new(), chain, body, header);
+        chain.frames = chain.frames.saturating_add(1);
     }
 }
 
 impl<'id> PortKey<'id> {
-    /// An arena opened.
-    pub const fn open(&self, idle: IdleArena<'id>) -> Arena<'id> {
-        let IdleArena { side, brand } = idle;
-        Arena {
-            side,
+    /// A chain opened.
+    pub const fn open<const S: usize>(&self, idle: IdleChain<'id, S>) -> Chain<'id, S> {
+        let IdleChain { index, brand } = idle;
+        Chain {
+            index,
             frames: 0,
             brand,
         }
     }
 
-    /// An arena published: its first `sent` frames went.
-    pub const fn publish(&self, arena: Arena<'id>, sent: u8) -> OnAir<'id> {
-        let Arena { side, brand, .. } = arena;
-        OnAir { side, sent, brand }
+    /// A chain published on `queue`: its first `sent` frames went.
+    pub const fn publish<const S: usize>(
+        &self,
+        chain: Chain<'id, S>,
+        queue: QueueRight<'id>,
+        sent: u8,
+    ) -> OnAir<'id, S> {
+        let Chain { index, brand, .. } = chain;
+        OnAir {
+            index,
+            sent,
+            queue,
+            brand,
+        }
     }
 
-    /// An arena withdrawn.
-    pub const fn withdraw(&self, arena: Arena<'id>) -> IdleArena<'id> {
-        let Arena { side, brand, .. } = arena;
-        IdleArena { side, brand }
+    /// A chain withdrawn.
+    pub const fn withdraw<const S: usize>(&self, chain: Chain<'id, S>) -> IdleChain<'id, S> {
+        let Chain { index, brand, .. } = chain;
+        IdleChain { index, brand }
     }
 
-    /// An arena settled with `kept` frames left in their places.
-    pub const fn settle(&self, on_air: OnAir<'id>, kept: u8) -> Settled<'id> {
-        let OnAir { side, brand, .. } = on_air;
-        if kept == 0 {
-            Settled::Idle(IdleArena { side, brand })
+    /// A chain settled with `kept` frames left in their places, and its
+    /// queue's right back.
+    pub fn settle<const S: usize>(
+        &self,
+        on_air: OnAir<'id, S>,
+        kept: u8,
+    ) -> (Settled<'id, S>, QueueRight<'id>) {
+        let OnAir {
+            index,
+            brand,
+            queue,
+            ..
+        } = on_air;
+        let settled = if kept == 0 {
+            Settled::Idle(IdleChain { index, brand })
         } else {
-            Settled::Kept(Arena {
-                side,
+            Settled::Kept(Chain {
+                index,
                 frames: kept,
                 brand,
             })
-        }
+        };
+        (settled, queue)
     }
 
     /// The port found a free place in an arena.
@@ -1380,6 +1456,8 @@ mod tests {
 
     type StationOf = InterfaceLayout<crate::Station, 2, 1, 2, 2>;
     type AccessPointOf = InterfaceLayout<crate::AccessPoint, 3, 2, 2, 0>;
+    type Both = RadioLayout<3, 16, (StationOf, AccessPointOf)>;
+    type Reversed = RadioLayout<2, 16, (AccessPointOf, StationOf)>;
 
     /// A layout's mint gives the radio's rights once and each interface's
     /// bundle, each index the interface's own: the access point's data
@@ -1387,11 +1465,11 @@ mod tests {
     #[test]
     fn a_layout_gives_the_radios_rights_and_each_interfaces() {
         let (radio, (station, access_point)) =
-            <(StationOf, AccessPointOf) as Layout>::mint::<'static>(crate::MintSeal(()));
-        assert_eq!(
-            radio.arenas.map(|arena| arena.side()),
-            [ArenaSide::First, ArenaSide::Second]
-        );
+            <Both as Layout>::mint::<'static>(crate::MintSeal(()));
+        // The radio's chains are numbered once: the layout's chains of 16,
+        // then a chain of one a queue.
+        assert_eq!(radio.chains.map(|chain| chain.index()), [0, 1, 2]);
+        assert_eq!(radio.ones.map(|chain| chain.index()), [3, 4, 5, 6]);
         assert_eq!(radio.queues.map(|queue| queue.category()), QUEUES);
         assert_eq!(station.singles.map(|place| place.index()), [0, 1]);
         assert_eq!(station.pairwise.map(|slot| slot.index()), [0]);
@@ -1401,13 +1479,43 @@ mod tests {
         assert_eq!(access_point.groups.map(|slot| slot.index()), [0, 1]);
     }
 
+    /// A chain keeps its index from its opening to its settlement; a
+    /// settlement that keeps frames leaves it open with them, one that keeps
+    /// none leaves it idle, and each gives back the queue's right the
+    /// chain took.
+    #[test]
+    fn a_chain_keeps_its_index_and_gives_its_queue_back() {
+        let key = PortKey::<'static>::new_for_tests();
+        let (radio, _) = <Both as Layout>::mint::<'static>(crate::MintSeal(()));
+        let [_, second, _] = radio.chains;
+        let [voice, video, ..] = radio.queues;
+        let chain = key.open(second);
+        assert_eq!((chain.index(), chain.frames()), (1, 0));
+        let on_air = key.publish(chain, video, 3);
+        assert_eq!(on_air.index(), 1);
+        assert_eq!(on_air.category(), WmmAccessCategory::Video);
+        let (Settled::Kept(kept), queue) = key.settle(on_air, 2) else {
+            panic!("a settlement that keeps frames leaves the chain open");
+        };
+        assert_eq!((kept.index(), kept.frames()), (1, 2));
+        assert_eq!(queue.category(), WmmAccessCategory::Video);
+        let on_air = key.publish(kept, voice, 2);
+        let (Settled::Idle(idle), queue) = key.settle(on_air, 0) else {
+            panic!("a settlement that keeps none leaves the chain idle");
+        };
+        assert_eq!(idle.index(), 1);
+        assert_eq!(queue.category(), WmmAccessCategory::Voice);
+        let chain = key.open(idle);
+        assert_eq!(key.withdraw(chain).index(), 1);
+    }
+
     /// A single ends as the interface it was published as, whichever is
     /// first in the layout, with its index and its queue.
     #[test]
     fn a_single_ends_as_the_interface_it_was_published_as() {
         let key = PortKey::<'static>::new_for_tests();
         let (radio, (station, access_point)) =
-            <(StationOf, AccessPointOf) as Layout>::mint::<'static>(crate::MintSeal(()));
+            <Both as Layout>::mint::<'static>(crate::MintSeal(()));
         let [voice, video, ..] = radio.queues;
         let [_, station_place] = station.singles;
         let [_, _, access_point_place] = access_point.singles;
@@ -1417,9 +1525,7 @@ mod tests {
             (published.index(), published.category()),
             (2, WmmAccessCategory::Video)
         );
-        let (SingleOfTwo::Second(place), queue) =
-            key.single_end::<(StationOf, AccessPointOf)>(published)
-        else {
+        let (SingleOfTwo::Second(place), queue) = key.single_end::<Both>(published) else {
             panic!("an access point's single ends as the access point's");
         };
         assert_eq!(
@@ -1427,9 +1533,7 @@ mod tests {
             (2, WmmAccessCategory::Video)
         );
         let published = key.single_published(station_place, voice);
-        let (SingleOfTwo::First(place), queue) =
-            key.single_end::<(StationOf, AccessPointOf)>(published)
-        else {
+        let (SingleOfTwo::First(place), queue) = key.single_end::<Both>(published) else {
             panic!("a station's single ends as the station's");
         };
         assert_eq!(
@@ -1438,13 +1542,11 @@ mod tests {
         );
         // The other order of the members: the role, not the position, names it.
         let (radio, (access_point, _station)) =
-            <(AccessPointOf, StationOf) as Layout>::mint::<'static>(crate::MintSeal(()));
+            <Reversed as Layout>::mint::<'static>(crate::MintSeal(()));
         let [voice, ..] = radio.queues;
         let [first, ..] = access_point.singles;
         let published = key.single_published(first, voice);
-        let (SingleOfTwo::First(place), _) =
-            key.single_end::<(AccessPointOf, StationOf)>(published)
-        else {
+        let (SingleOfTwo::First(place), _) = key.single_end::<Reversed>(published) else {
             panic!("an access point's single ends as the access point's");
         };
         assert_eq!(place.index(), 0);

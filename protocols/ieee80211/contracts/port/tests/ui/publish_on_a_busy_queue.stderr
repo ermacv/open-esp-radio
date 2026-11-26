@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `queue`
+  --> tests/ui/publish_on_a_busy_queue.rs:18:40
+   |
+11 |     queue: QueueRight<'id>,
+   |     ----- move occurs because `queue` has type `QueueRight<'_>`, which does not implement the `Copy` trait
+...
+16 |     let on_air = port.publish(first, queue, how, gate, now);
+   |                                      ----- value moved here
+17 |     #[cfg(all())]
+18 |     let _second = port.publish(second, queue, how, gate, now); // ui-error: E0382
+   |                                        ^^^^^ value used here after move

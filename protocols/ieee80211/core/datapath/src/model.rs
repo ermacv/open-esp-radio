@@ -6,11 +6,11 @@ use core::task::{Context, Waker};
 
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
-    Channel, ChannelWidth, DataPort, GateClosed, GateOpen, IdleArena, PortPools, RadioPort,
-    RegulatedChannel, StartPoll, SupportedChannel,
+    Channel, ChannelWidth, DataPort, GateClosed, GateOpen, IdleChain, PortPools, QueueRight,
+    RadioPort, RegulatedChannel, StartPoll, SupportedChannel,
 };
 use oer_protocols_ieee80211_testing_model::{
-    MODEL_PLACES, ModelCaps, ModelPort, ModelRights, Served, StationModel,
+    MODEL_CHAIN_SLOTS, MODEL_PLACES, ModelCaps, ModelPort, ModelRights, Served, StationModel,
 };
 use oer_protocols_radio_port::{Mint, branded};
 
@@ -20,8 +20,10 @@ pub(crate) const SINGLES: usize = 8;
 /// A model installation, its radio running and its gate open.
 pub(crate) struct Installed<'id> {
     pub port: ModelPort<'id, StationModel<SINGLES>>,
-    /// The two arenas of the data's rights.
-    pub arenas: [IdleArena<'id>; 2],
+    /// The two long chains of the radio's rights.
+    pub arenas: [IdleChain<'id, MODEL_CHAIN_SLOTS>; 2],
+    /// The four queues' rights.
+    pub queues: [QueueRight<'id>; 4],
     pub gate: GateOpen<'id>,
 }
 
@@ -52,7 +54,8 @@ pub(crate) fn installed<R>(body: impl for<'id> FnOnce(Installed<'id>) -> R) -> R
             let (radio, _station) = install.data;
             body(Installed {
                 port,
-                arenas: radio.arenas,
+                arenas: radio.chains,
+                queues: radio.queues,
                 gate,
             })
         }

@@ -770,6 +770,14 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
 #[derive(Debug)]
 pub struct SupportedNoAck<'p, K>(PortRate<'p, K>);
 
+impl<K> Clone for SupportedNoAck<'_, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for SupportedNoAck<'_, K> {}
+
 impl<'p, K> SupportedNoAck<'p, K> {
     /// The rate.
     pub const fn rate(&self) -> &PortRate<'p, K> {
@@ -781,6 +789,14 @@ impl<'p, K> SupportedNoAck<'p, K> {
 /// [`PortRate::legacy`] checks it.
 #[derive(Debug)]
 pub struct LegacyPortRate<'p, K>(PortRate<'p, K>);
+
+impl<K> Clone for LegacyPortRate<'_, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for LegacyPortRate<'_, K> {}
 
 impl<'p, K> LegacyPortRate<'p, K> {
     /// The rate.
