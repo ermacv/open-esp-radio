@@ -10,7 +10,7 @@ use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
 use super::{
     AgreementSlot, ArenaSide, CommandPlace, GroupSlot, IdleArena, PairwiseSlot, QUEUES, QueueRight,
-    SinglePlace,
+    ReceiveOff, SinglePlace,
 };
 use crate::life::{MintSeal, sealed};
 use crate::{AccessPoint, InterfaceRole, Station, VifRole};
@@ -31,9 +31,10 @@ pub struct RadioRights<'id> {
 
 /// The rights of one interface of the role `I`, all empty: its single
 /// places, its role's data places, `PAIRWISE` pairwise key places, its
-/// group key slots and its receive agreements' slots. Whole, it is the
-/// proof that the interface is taken down in the hardware: its singles
-/// home, its keys removed, its agreements ended. A retirement takes it.
+/// group key slots, its receive agreements' slots and its receive rule,
+/// off. Whole, it is the proof that the interface is taken down in the
+/// hardware: its singles home, its keys removed, its agreements ended, its
+/// address and receive rule cleared. A retirement takes it.
 #[must_use = "an interface's rights each have one holder"]
 #[derive(Debug)]
 pub struct InterfaceRights<
@@ -55,6 +56,8 @@ pub struct InterfaceRights<
     pub groups: [GroupSlot<'id, I>; GROUPS],
     /// The receive agreements' slots.
     pub agreements: [AgreementSlot<'id, I>; AGREEMENTS],
+    /// The receive rule, off.
+    pub receive: ReceiveOff<'id, I>,
 }
 
 /// An access point's data places: one a transmit queue, in the order of
@@ -138,6 +141,10 @@ impl<
                 brand: PhantomData,
                 interface: PhantomData,
             }),
+            receive: ReceiveOff {
+                brand: PhantomData,
+                interface: PhantomData,
+            },
         }
     }
 }

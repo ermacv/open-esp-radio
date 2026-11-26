@@ -69,6 +69,7 @@ places. So the rights are two kinds of bundle:
 | the command's place | `PAIRWISE` pairwise key places: one for a station, one a client for an access point |
 | | its group key slots |
 | | its receive agreements' slots |
+| | its receive rule's right, off (`ReceiveOff`) |
 
 The life, the channel, the gate and the receive ring are the radio's and
 have no place in a bundle.
@@ -96,13 +97,24 @@ as its interface's (`Layout::Single`: the place itself for one interface,
 `PublishedSingle`, one a single on the air, and its key's end takes it and
 makes the place again.
 
+**The receive rule is a right.** An interface's bundle holds
+`ReceiveOff<'id, I>`. `ReceiveCommand::Set` gives the port the interface's
+own address and its role's rule (`I::Receive<K>`: `StationReceive`,
+`AccessPointReceive`) and ends `Receiving<'id, I>`; `Change` takes and gives
+back `Receiving`; `End` takes `Receiving` and ends `ReceiveOff`. As a key's
+command, its end always returns the right, set or off: a setting that
+expires ends off, the hardware as before it; a change that expires ends off,
+the port having cleared the address and the rule. Receiving nothing is the
+right off, no value of a rule.
+
 **Who holds what.** The machine holds every bundle while the data is
 stopped (the radio stopped, or running with the data stopped); the engine
 holds them while the data flows. An engine has one interface: its form
 takes the radio's bundle and its interface's at the data's start and gives
 both back at its stop. An interface's bundle, whole, is the proof that
 the interface is taken down in the hardware: its singles home, its keys
-removed, its agreements ended. `retire` takes every bundle.
+removed, its agreements ended, its address and receive rule cleared.
+`retire` takes every bundle.
 
 ## The radio's life
 
@@ -175,14 +187,16 @@ role's frame always has its place.
 
 **Commands**, one kind a call, each carrying the right it needs:
 `CloseGate` (`begin_close`, `poll_close`), `PairwiseCommand`
-(`begin_pairwise`, `poll_pairwise`), `GroupCommand`, `AgreementCommand`
-and `ValueCommand` (configuration, EDCA, the BSS color, HE). A command in
+(`begin_pairwise`, `poll_pairwise`), `GroupCommand`, `AgreementCommand`,
+`ReceiveCommand` (`begin_receive`, `poll_receive`) and `ValueCommand`
+(EDCA, the BSS color, HE). A command in
 progress is `InCommand<'id, H>`, typed by its kind: `H` holds the kind
 and the rights its end returns, no value (the begin consumes the key, the
 peer and the parameters). Its poll ends only
 with that kind's end: the closed gate; `PairwiseEnd`, `GroupEnd` or
 `AgreementEnd`, the slot always back, installed or empty (an expired key
-command with its slot empty); `ValueEnd::Done` or `Expired`. Every end gives
+command with its slot empty); `ReceiveEnd`, the rule's right always back,
+`Receiving` or `Off`; `ValueEnd::Done` or `Expired`. Every end gives
 the command's place back (`tests/ui/pairwise_end_is_not_a_gates.rs`).
 
 ## Receive as a round

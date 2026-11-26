@@ -241,6 +241,8 @@ pub trait InterfaceRole: crate::life::sealed::Sealed + 'static {
     /// The role's data places: none (a station's data goes in the arenas),
     /// or one a transmit queue (an access point's).
     type Data<'id>;
+    /// The role's receive rule over the capabilities `K`.
+    type Receive<K>;
     /// The role's data places, for the installation's mint alone, indexed
     /// from `first`.
     fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id>;
@@ -260,6 +262,7 @@ impl crate::life::sealed::Sealed for AccessPoint {}
 impl InterfaceRole for Station {
     const ROLE: VifRole = VifRole::Station;
     type Data<'id> = ();
+    type Receive<K> = StationReceive<K>;
 
     fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id> {
         crate::data::station_data(seal, first)
@@ -269,6 +272,7 @@ impl InterfaceRole for Station {
 impl InterfaceRole for AccessPoint {
     const ROLE: VifRole = VifRole::AccessPoint;
     type Data<'id> = crate::AccessPointData<'id>;
+    type Receive<K> = crate::AccessPointReceive<K>;
 
     fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id> {
         crate::data::access_point_data(seal, first)
@@ -317,11 +321,10 @@ impl<K, R> core::fmt::Debug for SupportedFilter<K, R> {
     }
 }
 
-/// What a station receives: nothing, other BSSs' management only (outside
-/// a BSS), or a BSS with its rules.
+/// What a station receives while its rule is set: other BSSs' management
+/// only (outside a BSS), or a BSS with its rules. Receiving nothing is the
+/// rule's right off ([`ReceiveOff`](crate::ReceiveOff)), no value.
 pub enum StationReceive<K> {
-    /// Deliver no station frames.
-    Off,
     /// Deliver beacons and Probe Responses from every BSS for scanning.
     OtherBssManagement,
     /// Apply the station's receive rules within the named BSS.

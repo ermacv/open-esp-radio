@@ -926,14 +926,14 @@ impl<'id, const G: usize> World<'id, G> {
                     }
                     StaAction::Configure(receive) => {
                         self.seen.push(Seen::Configure(match receive {
-                            StationReceive::Off => "off",
-                            StationReceive::OtherBssManagement => "scan",
-                            StationReceive::Bss { filter, .. }
+                            StaReceive::Off => "off",
+                            StaReceive::Rule(StationReceive::OtherBssManagement) => "scan",
+                            StaReceive::Rule(StationReceive::Bss { filter, .. })
                                 if filter.get() == ReceiveFilter::BSS_MEMBER =>
                             {
                                 "bss"
                             }
-                            StationReceive::Bss { .. } => "bss+scan",
+                            StaReceive::Rule(StationReceive::Bss { .. }) => "bss+scan",
                         }));
                         assert!(!self.switches.raise(Switch::Configuring));
                     }
@@ -3559,7 +3559,7 @@ fn leave_without_lease_reports_before_waiting() {
         let mut world = World::new(mint, 3);
         world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.command(at(0), 2, StaCommand::Disconnect).unwrap();
-        let Some(StaAction::Configure(StationReceive::Off)) = poll!(world, at(0)) else {
+        let Some(StaAction::Configure(StaReceive::Off)) = poll!(world, at(0)) else {
             panic!("disconnect first disables reception");
         };
         world.input(at(0), StaInput::Configured);
@@ -3828,7 +3828,7 @@ fn association_waits_for_its_frame_without_consuming_a_request_and_still_expires
         assert_eq!(world.station.sequence, after_first);
         assert_eq!(world.station.poll_deadline(), Some(at(1100)));
         world.input(at(1100), StaInput::Tick);
-        let Some(StaAction::Configure(StationReceive::Off)) = poll!(world, at(1100)) else {
+        let Some(StaAction::Configure(StaReceive::Off)) = poll!(world, at(1100)) else {
             panic!("association must leave at its absolute deadline")
         };
         world.input(at(1100), StaInput::Configured);
@@ -4188,7 +4188,7 @@ fn refused_scan_disables_reception_before_reporting() {
             at(0),
             StaInput::Answer(Answer::Refused(Refusal::Unservable, place)),
         );
-        let Some(StaAction::Configure(StationReceive::Off)) = poll!(world, at(0)) else {
+        let Some(StaAction::Configure(StaReceive::Off)) = poll!(world, at(0)) else {
             panic!("a refused scan still disables reception before reporting");
         };
         assert!(poll!(world, at(0)).is_none());
@@ -4683,7 +4683,7 @@ fn probe_encoding_failure_leaves_and_missing_epoch_reports_link_change() {
         world.station.frame.limit = 0;
         assert!(matches!(
             poll!(world, at(0)),
-            Some(StaAction::Configure(StationReceive::Off))
+            Some(StaAction::Configure(StaReceive::Off))
         ));
         world.station.epoch = None;
         assert!(matches!(

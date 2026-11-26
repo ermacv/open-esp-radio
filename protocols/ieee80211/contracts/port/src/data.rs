@@ -23,8 +23,8 @@ use oer_protocols_radio_port::ClockError;
 use crate::life::{PortKey, RadioPort};
 use crate::{
     AggregateOutcome, AmpduRate, GateClosed, GateOpen, Ieee80211Instant, InterfaceRole, MpduLength,
-    PortRate, Protection, RetryPlan, SingleOutcome, StationHe, StationReceive, SupportedBlockAck,
-    SupportedEdca, TbttEvent, TxFrame,
+    PortRate, Protection, RetryPlan, SingleOutcome, StationHe, SupportedBlockAck, SupportedEdca,
+    TbttEvent, TxFrame,
 };
 
 /// The brand of one installation, invariant in `'id`.
@@ -259,6 +259,16 @@ interface_right!(
 interface_right!(
     /// One of the interface's receive Block Ack agreements, running.
     Agreement { index: u8 }
+);
+interface_right!(
+    /// The interface's receive rule, off: the hardware holds neither its
+    /// address nor a rule of it.
+    ReceiveOff {}
+);
+interface_right!(
+    /// The interface's receive rule, set: the hardware holds its address
+    /// and its rule.
+    Receiving {}
 );
 
 impl IdleArena<'_> {
@@ -766,10 +776,53 @@ pub enum AgreementEnd<'id, I> {
     Empty(AgreementSlot<'id, I>),
 }
 
+/// A command on the interface `I`'s receive rule.
+pub enum ReceiveCommand<'id, I: InterfaceRole, K> {
+    /// Set the interface's own address and its rule.
+    Set {
+        /// The rule, off.
+        off: ReceiveOff<'id, I>,
+        /// The interface's own address.
+        address: IndividualAddress,
+        /// The rule.
+        rule: I::Receive<K>,
+    },
+    /// Change the rule of the set interface.
+    Change {
+        /// The rule, set.
+        receiving: Receiving<'id, I>,
+        /// The new rule.
+        rule: I::Receive<K>,
+    },
+    /// End the rule: the address and the rule leave the hardware.
+    End(Receiving<'id, I>),
+}
+
+/// What a receive command in progress holds: its kind and the rule's
+/// right.
+#[derive(Debug)]
+pub enum ReceiveHeld<'id, I> {
+    /// A setting's rule, off.
+    Setting(ReceiveOff<'id, I>),
+    /// A change's rule, set.
+    Changing(Receiving<'id, I>),
+    /// An end's rule, set.
+    Ending(Receiving<'id, I>),
+}
+
+/// A receive command's end: the right always comes back, set or off.
+#[derive(Debug)]
+pub enum ReceiveEnd<'id, I> {
+    /// The rule is set: a setting or a change took effect.
+    Receiving(Receiving<'id, I>),
+    /// The rule is off: an end, or a setting or a change that expired (the
+    /// port cleared the address and the rule, the hardware as before the
+    /// setting).
+    Off(ReceiveOff<'id, I>),
+}
+
 /// A command of values: it carries no right.
 pub enum ValueCommand<K> {
-    /// Configure the station's receive.
-    Configure(StationReceive<K>),
     /// Set the station's EDCA parameters.
     SetEdca(SupportedEdca<K>),
     /// Set the BSS color.
@@ -781,8 +834,6 @@ pub enum ValueCommand<K> {
 /// What a command of values in progress holds: its kind alone.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValueKind {
-    /// The station's receive configured.
-    Configure,
     /// The station's EDCA parameters set.
     SetEdca,
     /// The BSS color set.
@@ -1034,6 +1085,22 @@ pub trait DataPort<'id>: RadioPort<'id> {
         sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
     ) -> CommandPoll<'id, AgreementHeld<'id, I>, AgreementEnd<'id, I>>;
 
+    /// Begin a command on an interface's receive rule.
+    fn begin_receive<I: InterfaceRole>(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: ReceiveCommand<'id, I, Self::Caps>,
+        now: Instant,
+    ) -> InCommand<'id, ReceiveHeld<'id, I>>;
+
+    /// Poll a receive command.
+    fn poll_receive<I: InterfaceRole>(
+        &mut self,
+        command: InCommand<'id, ReceiveHeld<'id, I>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, ReceiveHeld<'id, I>, ReceiveEnd<'id, I>>;
+
     /// Begin a command of values.
     fn begin_value(
         &mut self,
@@ -1260,6 +1327,18 @@ impl<'id> PortKey<'id> {
             brand,
             interface,
         }
+    }
+
+    /// The receive rule set.
+    pub const fn receive_set<I>(&self, off: ReceiveOff<'id, I>) -> Receiving<'id, I> {
+        let ReceiveOff { brand, interface } = off;
+        Receiving { brand, interface }
+    }
+
+    /// The receive rule off: an end, or a setting or a change that expired.
+    pub const fn receive_ended<I>(&self, receiving: Receiving<'id, I>) -> ReceiveOff<'id, I> {
+        let Receiving { brand, interface } = receiving;
+        ReceiveOff { brand, interface }
     }
 
     /// An agreement ended.

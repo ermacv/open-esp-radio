@@ -66,12 +66,12 @@ use oer_protocols_ieee80211_contracts_port::{
     InCommand, IndeterminateCause, InterfaceLayout, InterfaceRole, Layout, LayoutRights, Lendable,
     LowerMacCapabilities, MpduLength, OnAir, OutsideTheUnit, PairwiseCommand, PairwiseEnd,
     PairwiseHeld, PhyFormatSet, Place, PortKey, PortSink, Ppdu, Protection, PublishedSingle,
-    QUEUES, QueueRight, RadioPort, RateSupport, ReceiveFilter, ReceivePort, Rest, Retired,
-    RetunePoll, Retuning, Running, RxHead, RxMeta, Settled, Signal, SingleEnd, SingleOutcome,
-    SinglePlace, SingleResponse, Staged, StagedPlaces, StartFailure, StartPoll, Starting, Station,
-    StopFrom, StopPoll, StopRight, Stopped, Stopping, SupportedChannel, TxFacts, TxFrame,
-    TxOutcome, TxSlot, TxSlotOf, UnitsHome, ValueCommand, ValueEnd, ValueKind, WidthSet,
-    WithdrawCause,
+    QUEUES, QueueRight, RadioPort, RateSupport, ReceiveCommand, ReceiveEnd, ReceiveFilter,
+    ReceiveHeld, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead, RxMeta,
+    Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces,
+    StartFailure, StartPoll, Starting, Station, StopFrom, StopPoll, StopRight, Stopped, Stopping,
+    SupportedChannel, TxFacts, TxFrame, TxOutcome, TxSlot, TxSlotOf, UnitsHome, ValueCommand,
+    ValueEnd, ValueKind, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -306,8 +306,9 @@ pub enum Programmed {
     Group(u8, bool),
     /// A receive agreement begun or ended.
     Agreement(u8, bool),
-    /// The station's receive configured.
-    Configure,
+    /// An interface's receive rule set with its address, changed (the same
+    /// address) or ended (none).
+    Receive(Option<IndividualAddress>),
     /// The EDCA parameters set.
     Edca,
     /// The BSS color set.
@@ -424,6 +425,8 @@ pub struct HardwareState {
     /// The pairwise key places, by their index: the peer of the key each
     /// holds, or none.
     pub pairwise: Vec<Option<IndividualAddress>>,
+    /// The address the interface's receive rule is set with, or none.
+    pub receive: Option<IndividualAddress>,
     /// The group key slots installed.
     pub groups: [bool; MODEL_GROUPS],
     /// The agreements running.
@@ -519,13 +522,14 @@ struct Unit {
 }
 
 /// Whether a command runs on the model's one command place: a pairwise
-/// key's installation keeps its peer across its polls, as a port keeps a
-/// command's values.
+/// key's installation keeps its peer, a receive rule's setting its
+/// address, across their polls, as a port keeps a command's values.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Commanding {
     Idle,
     Running,
     InstallingPairwise(IndividualAddress),
+    SettingReceive(IndividualAddress),
 }
 
 /// A unit lent to the network: its drop returns it to the model's ring.
@@ -567,6 +571,8 @@ pub struct ModelPort<
     /// The pairwise key places, by their index: the peer of the key each
     /// holds.
     pairwise: Vec<Option<IndividualAddress>>,
+    /// The address the receive rule is set with.
+    receive: Option<IndividualAddress>,
     groups: [bool; MODEL_GROUPS],
     agreements: [bool; MODEL_AGREEMENTS],
     anomaly: Option<Anomaly>,
@@ -677,6 +683,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
             start_failure: None,
             parts: Parts(0),
             pairwise: std::vec![None; L::PAIRWISE],
+            receive: None,
             groups: [false; MODEL_GROUPS],
             agreements: [false; MODEL_AGREEMENTS],
             anomaly: None,
@@ -827,6 +834,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
         HardwareState {
             parts: self.parts.held(),
             pairwise: self.pairwise.clone(),
+            receive: self.receive,
             groups: self.groups,
             agreements: self.agreements,
             on_air: self.queues.iter().any(|queue| queue.single.is_some())
@@ -855,7 +863,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
             self.receive_key(),
             self.phase,
             self.parts,
-            (&self.pairwise, self.groups),
+            (&self.pairwise, self.receive, self.groups),
             self.agreements,
             self.anomaly,
             self.arenas,
@@ -1070,6 +1078,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> RadioPort<'id>
             // key table included, and the stop runs that programming again.
             self.program(Programmed::BlockReset);
             self.pairwise.iter_mut().for_each(|place| *place = None);
+            self.receive = None;
             self.groups = [false; MODEL_GROUPS];
             self.agreements = [false; MODEL_AGREEMENTS];
             self.program(Programmed::OwnerTaking);
@@ -1615,7 +1624,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         let expire = self.parts.take(Part::Expire);
         let peer = match self.commanding {
             Commanding::InstallingPairwise(peer) => Some(peer),
-            Commanding::Idle | Commanding::Running => None,
+            Commanding::Idle | Commanding::Running | Commanding::SettingReceive(_) => None,
         };
         let (place, running) = self.ended(command);
         let end = match running {
@@ -1732,6 +1741,59 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         CommandPoll::Ended(place, end)
     }
 
+    fn begin_receive<I: InterfaceRole>(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: ReceiveCommand<'id, I, Self::Caps>,
+        _now: Instant,
+    ) -> InCommand<'id, ReceiveHeld<'id, I>> {
+        // The model programs the rule as a whole; only the address is kept.
+        let (held, address) = match command {
+            ReceiveCommand::Set { off, address, .. } => (ReceiveHeld::Setting(off), Some(address)),
+            ReceiveCommand::Change { receiving, .. } => (ReceiveHeld::Changing(receiving), None),
+            ReceiveCommand::End(receiving) => (ReceiveHeld::Ending(receiving), None),
+        };
+        let command = self.begin(place, held);
+        if let Some(address) = address {
+            self.commanding = Commanding::SettingReceive(address);
+        }
+        command
+    }
+
+    fn poll_receive<I: InterfaceRole>(
+        &mut self,
+        command: InCommand<'id, ReceiveHeld<'id, I>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, L, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, ReceiveHeld<'id, I>, ReceiveEnd<'id, I>> {
+        self.polled(now, sink);
+        let expire = self.parts.take(Part::Expire);
+        let address = match self.commanding {
+            Commanding::SettingReceive(address) => Some(address),
+            Commanding::Idle | Commanding::Running | Commanding::InstallingPairwise(_) => None,
+        };
+        let (place, running) = self.ended(command);
+        let end = match running {
+            ReceiveHeld::Setting(off) if !expire => {
+                self.set_receive(address);
+                ReceiveEnd::Receiving(self.key.receive_set(off))
+            }
+            // An expired setting leaves the hardware as before it.
+            ReceiveHeld::Setting(off) => ReceiveEnd::Off(off),
+            ReceiveHeld::Changing(receiving) if !expire => {
+                self.set_receive(self.receive);
+                ReceiveEnd::Receiving(receiving)
+            }
+            // An end, or an expired change: the port cleared the address
+            // and the rule.
+            ReceiveHeld::Changing(receiving) | ReceiveHeld::Ending(receiving) => {
+                self.set_receive(None);
+                ReceiveEnd::Off(self.key.receive_ended(receiving))
+            }
+        };
+        CommandPoll::Ended(place, end)
+    }
+
     fn begin_value(
         &mut self,
         place: CommandPlace<'id>,
@@ -1739,7 +1801,6 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         _now: Instant,
     ) -> InCommand<'id, ValueKind> {
         let kind = match command {
-            ValueCommand::Configure(_) => ValueKind::Configure,
             ValueCommand::SetEdca(_) => ValueKind::SetEdca,
             ValueCommand::SetBssColor(_) => ValueKind::SetBssColor,
             ValueCommand::SetHe(_) => ValueKind::SetHe,
@@ -1762,7 +1823,6 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         let (place, running) = self.ended(command);
         if end == ValueEnd::Done {
             self.program(match running {
-                ValueKind::Configure => Programmed::Configure,
                 ValueKind::SetEdca => Programmed::Edca,
                 ValueKind::SetBssColor => Programmed::Color,
                 ValueKind::SetHe => Programmed::He,
@@ -1782,6 +1842,12 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
 impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
     ModelPort<'id, L, PLACES, TX_FRONT>
 {
+    /// The receive rule is set with `address`, or none.
+    fn set_receive(&mut self, address: Option<IndividualAddress>) {
+        self.receive = address;
+        self.program(Programmed::Receive(address));
+    }
+
     /// A pairwise key place now holds the key of `peer`, or none.
     fn set_pairwise(&mut self, index: u8, peer: Option<IndividualAddress>) {
         if let Some(place) = self.pairwise.get_mut(usize::from(index)) {
