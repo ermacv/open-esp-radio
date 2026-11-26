@@ -358,46 +358,66 @@ fn fnv(hash: u64, bytes: &[u8]) -> u64 {
     })
 }
 
-/// `hash` continued with what `bytes` decode to: the width, the text and the
-/// typed instruction, or that they do not decode.
-fn decoded(hash: u64, bytes: &[u8]) -> u64 {
-    let line = match decode(bytes, Extensions::ALL) {
-        Some((instruction, width)) => {
-            format!("{bytes:02x?} {width} {instruction} {instruction:?}\n")
-        }
-        None => format!("{bytes:02x?} none\n"),
-    };
-    fnv(hash, line.as_bytes())
+/// Two digests of what encodings decode to: of the text a consumer prints,
+/// and of the typed instruction a consumer reads. A change of a public type
+/// moves the second and must leave the first.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Digest {
+    text: u64,
+    structure: u64,
 }
 
-const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const EMPTY: Digest = Digest {
+    text: 0xcbf2_9ce4_8422_2325,
+    structure: 0xcbf2_9ce4_8422_2325,
+};
+
+/// `digest` continued with what `bytes` decode to, or that they do not.
+fn decoded(digest: Digest, bytes: &[u8]) -> Digest {
+    let (text, structure) = match decode(bytes, Extensions::ALL) {
+        Some((instruction, width)) => (
+            format!("{bytes:02x?} {width} {instruction}\n"),
+            format!("{bytes:02x?} {width} {instruction:?}\n"),
+        ),
+        None => (
+            format!("{bytes:02x?} none\n"),
+            format!("{bytes:02x?} none\n"),
+        ),
+    };
+    Digest {
+        text: fnv(digest.text, text.as_bytes()),
+        structure: fnv(digest.structure, structure.as_bytes()),
+    }
+}
 
 /// The major opcodes of the 32-bit forms this crate decodes itself.
 const MAJORS: [u32; 10] = [0x33, 0x13, 0x73, 0x07, 0x27, 0x43, 0x47, 0x4b, 0x4f, 0x53];
 
-/// Every 16-bit encoding; then every slice too short for its instruction.
-fn halves_digest() -> (u64, u64) {
-    let whole = (0..=u16::MAX).fold(FNV_OFFSET, |hash, half| decoded(hash, &half.to_le_bytes()));
-    let mut short = decoded(FNV_OFFSET, &[]);
-    for byte in 0..=u8::MAX {
-        short = decoded(short, &[byte]);
-        // A 32-bit encoding lent three bytes, with every value of its first.
-        short = decoded(short, &[byte, 0xc5, 0x20]);
-    }
-    (whole, short)
+/// Every 16-bit encoding.
+fn halves() -> Digest {
+    (0..=u16::MAX).fold(EMPTY, |digest, half| decoded(digest, &half.to_le_bytes()))
+}
+
+/// Every slice too short for its instruction: none, one byte of every
+/// value, and a 32-bit encoding lent three bytes with every value of its
+/// first.
+fn short() -> Digest {
+    (0..=u8::MAX).fold(decoded(EMPTY, &[]), |digest, byte| {
+        decoded(decoded(digest, &[byte]), &[byte, 0xc5, 0x20])
+    })
 }
 
 /// Every `funct7`, `funct3` and `rs2` of `major` with four pairs of the other
 /// registers; then every register number in every place of every `funct7`
 /// and `funct3`.
-fn major_digest(major: u32) -> u64 {
-    let mut hash = FNV_OFFSET;
+fn major(major: u32) -> Digest {
+    let mut digest = EMPTY;
     for funct7 in 0..128 {
         for funct3 in 0..8 {
             for rs2 in 0..32 {
                 for (rd, rs1) in [(0, 0), (8, 9), (10, 11), (31, 17)] {
-                    hash = decoded(
-                        hash,
+                    digest = decoded(
+                        digest,
                         &word(funct7, rs2, rs1, funct3, rd, major).to_le_bytes(),
                     );
                 }
@@ -405,35 +425,80 @@ fn major_digest(major: u32) -> u64 {
             for register in 0..32 {
                 let rs2 = (register * 7 + 3) % 32;
                 let encoding = word(funct7, rs2, 31 - register, funct3, register, major);
-                hash = decoded(hash, &encoding.to_le_bytes());
+                digest = decoded(digest, &encoding.to_le_bytes());
             }
         }
     }
-    hash
+    digest
 }
 
 #[test]
 fn the_encoding_spaces_decode_as_they_did() {
-    let (whole, short) = halves_digest();
-    let majors = MAJORS.map(major_digest);
+    let (halves, short, majors) = (halves(), short(), MAJORS.map(major));
     assert_eq!(
-        (whole, short, majors),
-        (HALVES_DIGEST, SHORT_DIGEST, MAJOR_DIGESTS),
-        "the decoded text or structure of an encoding changed"
+        (halves.text, short.text, majors.map(|digest| digest.text)),
+        (
+            HALVES_HELD.text,
+            SHORT_HELD.text,
+            MAJORS_HELD.map(|digest| digest.text)
+        ),
+        "the decoded text of an encoding changed"
+    );
+    assert_eq!(
+        (halves, short, majors),
+        (HALVES_HELD, SHORT_HELD, MAJORS_HELD),
+        "the typed instruction of an encoding changed"
     );
 }
 
-const HALVES_DIGEST: u64 = 0x4ccc_e381_c310_d2e3;
-const SHORT_DIGEST: u64 = 0xe59b_069a_c1ed_b1b7;
-const MAJOR_DIGESTS: [u64; 10] = [
-    0x6346_4dcd_a3b4_24c3,
-    0x8dbb_108b_9592_04b4,
-    0x8e98_19b1_4ae0_07fa,
-    0x5a3e_0a89_2f21_0263,
-    0x7e0b_ba92_2f28_4871,
-    0x2985_f6de_6e9b_df15,
-    0x81fc_ce88_d757_62dd,
-    0x86cb_5734_ec1b_85cd,
-    0x286a_a8e0_db28_13d5,
-    0xea9d_9938_ba72_ebd4,
+const HALVES_HELD: Digest = Digest {
+    text: 0xa7d4_1f70_60e7_f547,
+    structure: 0xf7d3_8022_c4e3_8d7f,
+};
+const SHORT_HELD: Digest = Digest {
+    text: 0xc8fc_6446_6a20_8287,
+    structure: 0x3869_632b_e77f_52db,
+};
+/// In the order of [`MAJORS`].
+const MAJORS_HELD: [Digest; 10] = [
+    Digest {
+        text: 0xe216_3ea8_66de_8b9b,
+        structure: 0x8638_435d_a717_6deb,
+    },
+    Digest {
+        text: 0x6b12_5c99_ec6c_96a3,
+        structure: 0x2446_449a_0b4c_f1b0,
+    },
+    Digest {
+        text: 0x5e1f_2fc0_72df_2b3b,
+        structure: 0xf9e2_9274_5783_74cc,
+    },
+    Digest {
+        text: 0x1f1f_5a84_c386_e8b3,
+        structure: 0xfcc0_4506_7601_417b,
+    },
+    Digest {
+        text: 0xe340_178e_e71d_18bd,
+        structure: 0xbb99_e8fe_9f1c_5763,
+    },
+    Digest {
+        text: 0xde0d_35e2_4538_6ec5,
+        structure: 0xc4e4_8dca_6b56_be55,
+    },
+    Digest {
+        text: 0x600e_9e01_3ce5_5fa5,
+        structure: 0x5dc1_3778_e8d5_7345,
+    },
+    Digest {
+        text: 0x4c6b_1d96_93b9_4435,
+        structure: 0x0743_841d_37c3_3bad,
+    },
+    Digest {
+        text: 0x3174_26e0_5719_6bb5,
+        structure: 0x4fbd_f8fc_fa95_4a5d,
+    },
+    Digest {
+        text: 0x3624_b524_1874_5c89,
+        structure: 0x8aae_7906_245b_78ba,
+    },
 ];
