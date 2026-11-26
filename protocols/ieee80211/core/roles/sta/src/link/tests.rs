@@ -62,7 +62,7 @@ fn admitted<'f>(
     meta: &RxMeta,
     carriage: crate::link::Carriage,
     eapol: StaEapol,
-) -> Result<(Vec<MsduDelivery<'f>>, Vec<&'f [u8]>), StaRxError> {
+) -> Result<(Vec<MsduDelivery<'f>>, Vec<&'f [u8]>), StaRxError<core::convert::Infallible>> {
     let header = DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?;
     let mut data = Vec::new();
     let mut station = Vec::new();
@@ -84,7 +84,7 @@ fn received<'f>(
     link: &mut RxLink,
     frame: &'f [u8],
     meta: &RxMeta,
-) -> Result<Vec<MsduDelivery<'f>>, StaRxError> {
+) -> Result<Vec<MsduDelivery<'f>>, StaRxError<core::convert::Infallible>> {
     admitted(
         link,
         frame,
@@ -282,7 +282,7 @@ fn a_fault_the_station_reports_later_ends_the_links_data() {
             DecodedHeader::decode(&frame),
             &meta(RxEvidence::Unavailable),
             |_| count += 1,
-            |_, _| Ok(StaEapol::Taken),
+            |_, _| Ok::<_, StaRxError<core::convert::Infallible>>(StaEapol::Taken),
         );
         (routed, count)
     };

@@ -13,10 +13,7 @@
 //! Received frames reach this module; nothing here panics on them.
 
 use crate::ccm::{self, MIC_LEN, NONCE_LEN};
-use oer_portable_crypto::{
-    block::{Aes128Engine, BlockError},
-    ccm::CcmError,
-};
+use oer_portable_crypto::{block::Aes128Engine, ccm::CcmError};
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::ccmp::protected::{CcmpAad, ProtectedMpdu, ProtectedMpduError};
 use oer_protocols_ieee80211_wire::security::Spp;
@@ -24,19 +21,19 @@ use zeroize::Zeroize;
 
 /// Why a protected data or management MPDU cannot be authenticated.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CcmpMpduError {
+pub enum CcmpMpduError<S> {
     MalformedHeader,
     NotProtected,
     InvalidCcmpHeader,
     Truncated,
     TooLong,
     InvalidMic,
-    /// The AES engine refused the key or a block; the frame's body is erased.
-    Engine(BlockError),
+    /// The AES engine stopped; the frame's body is erased.
+    Engine(S),
 }
 
-impl From<CcmError> for CcmpMpduError {
-    fn from(error: CcmError) -> Self {
+impl<S> From<CcmError<S>> for CcmpMpduError<S> {
+    fn from(error: CcmError<S>) -> Self {
         match error {
             // The CCMP AAD is at most 30 bytes, so only the body can be too long.
             CcmError::AadTooLong | CcmError::BodyTooLong => Self::TooLong,
@@ -70,7 +67,7 @@ impl CcmpAssociation {
         engine: &mut E,
         key: &Ccmp128Key,
         frame: &mut [u8],
-    ) -> Result<(), CcmpMpduError> {
+    ) -> Result<(), CcmpMpduError<E::Stop>> {
         let blocks = self.blocks(frame)?;
         let (_, body_and_mic) = frame
             .split_at_mut_checked(blocks.body_start)
@@ -101,7 +98,7 @@ impl CcmpAssociation {
         engine: &mut E,
         key: &Ccmp128Key,
         frame: &'a mut [u8],
-    ) -> Result<&'a [u8], CcmpMpduError> {
+    ) -> Result<&'a [u8], CcmpMpduError<E::Stop>> {
         let blocks = self.blocks(frame)?;
         let (_, body_and_mic) = frame
             .split_at_mut_checked(blocks.body_start)
@@ -120,7 +117,7 @@ impl CcmpAssociation {
         Ok(body)
     }
 
-    fn blocks(&self, frame: &[u8]) -> Result<Blocks, CcmpMpduError> {
+    fn blocks<S>(&self, frame: &[u8]) -> Result<Blocks, CcmpMpduError<S>> {
         let mpdu = ProtectedMpdu::parse(frame).map_err(|error| match error {
             ProtectedMpduError::MalformedHeader => CcmpMpduError::MalformedHeader,
             ProtectedMpduError::NotProtected => CcmpMpduError::NotProtected,

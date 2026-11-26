@@ -1,17 +1,13 @@
 //! Stateless BIP-CMAC-128 management-frame integrity transforms.
 
-use oer_portable_crypto::{
-    Aes128Key,
-    block::{Aes128Engine, BlockError},
-    cmac::{Cmac, CmacVerifyError},
-};
+use oer_portable_crypto::{Aes128Key, block::Aes128Engine, cmac::CmacVerifyError};
 use oer_protocols_ieee80211_wire::bip::IgtkKeyId;
 use oer_protocols_ieee80211_wire::bip::{BIP_MIC_LEN, BipFormatError, BipProtection};
 use zeroize::Zeroize;
 
 /// Why a group-addressed management frame failed BIP.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BipError {
+pub enum BipError<S> {
     /// The frame is shorter than a management header and its MIC element.
     Truncated,
     /// The header is not that of a protocol-version-0 management frame.
@@ -22,18 +18,18 @@ pub enum BipError {
     UnknownKeyId,
     /// The MIC does not verify.
     InvalidMic,
-    /// The AES engine refused the key or a block.
-    Engine(BlockError),
+    /// The AES engine stopped.
+    Engine(S),
 }
 
 /// Why a group-addressed management frame was not protected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BipProtectError {
+pub enum BipProtectError<S> {
     /// The length or the output capacity cannot hold the frame and its MMIE.
     InvalidFrame,
-    /// The AES engine refused the key or a block. The frame's first `length`
-    /// bytes are unchanged; the bytes after them are not a valid MMIE.
-    Engine(BlockError),
+    /// The AES engine stopped. The frame's first `length` bytes are
+    /// unchanged; the bytes after them are not a valid MMIE.
+    Engine(S),
 }
 
 /// A parsed BIP frame of the expected IGTK; replay admission remains with
@@ -41,7 +37,7 @@ pub enum BipProtectError {
 pub struct BipFrame<'a>(oer_protocols_ieee80211_wire::bip::BipFrame<'a>);
 
 impl<'a> BipFrame<'a> {
-    pub fn parse(frame: &'a [u8], key_id: IgtkKeyId) -> Result<Self, BipError> {
+    pub fn parse<S>(frame: &'a [u8], key_id: IgtkKeyId) -> Result<Self, BipError<S>> {
         let frame =
             oer_protocols_ieee80211_wire::bip::BipFrame::parse(frame).map_err(
                 |error| match error {
@@ -61,17 +57,18 @@ impl<'a> BipFrame<'a> {
         self.0.packet_number()
     }
 
-    pub fn verify<E: Aes128Engine>(self, engine: &mut E, key: &Aes128Key) -> Result<(), BipError> {
+    pub fn verify<E: Aes128Engine>(
+        self,
+        engine: &mut E,
+        key: &Aes128Key,
+    ) -> Result<(), BipError<E::Stop>> {
         let keyed = engine.load(key).map_err(BipError::Engine)?;
-        let mut mac = Cmac::new(keyed).map_err(BipError::Engine)?;
-        for part in self.0.mic_input() {
-            mac.update(part).map_err(BipError::Engine)?;
-        }
-        mac.verify_truncated(self.0.mic())
-            .map_err(|error| match error {
+        oer_portable_crypto::cmac::verify(keyed, self.0.mic_input(), self.0.mic()).map_err(
+            |error| match error {
                 CmacVerifyError::InvalidTag => BipError::InvalidMic,
-                CmacVerifyError::Engine(error) => BipError::Engine(error),
-            })
+                CmacVerifyError::Engine(stop) => BipError::Engine(stop),
+            },
+        )
     }
 }
 
@@ -83,15 +80,12 @@ pub fn protect<E: Aes128Engine>(
     packet_number: oer_portable_wire::U64<48>,
     frame: &mut [u8],
     length: usize,
-) -> Result<usize, BipProtectError> {
+) -> Result<usize, BipProtectError<E::Stop>> {
     let protection = BipProtection::append(frame, length, key_id, packet_number)
         .map_err(|_| BipProtectError::InvalidFrame)?;
     let keyed = engine.load(key).map_err(BipProtectError::Engine)?;
-    let mut mac = Cmac::new(keyed).map_err(BipProtectError::Engine)?;
-    for part in protection.mic_input() {
-        mac.update(part).map_err(BipProtectError::Engine)?;
-    }
-    let mut tag = mac.finalize().map_err(BipProtectError::Engine)?;
+    let mut tag = oer_portable_crypto::cmac::tag(keyed, protection.mic_input())
+        .map_err(BipProtectError::Engine)?;
     let mut mic = [0; BIP_MIC_LEN];
     for (out, byte) in mic.iter_mut().zip(tag) {
         *out = byte;

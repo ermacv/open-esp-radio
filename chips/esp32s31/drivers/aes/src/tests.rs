@@ -258,18 +258,19 @@ const STOP: [&str; 5] = [
 /// running a block once it answers idle.
 #[test]
 fn a_failed_block_ends_its_run_and_the_next_load_starts_again() {
-    for (answer, error) in [
+    for (answer, observed) in [
         (
             Answer::Stuck,
-            BlockError::Timeout {
+            AesStop::Timeout {
                 observation: WORK.get(),
             },
         ),
         (
             Answer::Code(AesStateField::constant::<3>()),
-            BlockError::InvalidState { observation: 3 },
+            AesStop::InvalidState { observation: 3 },
         ),
     ] {
+        let error = EngineStopped;
         let port = Rc::new(RefCell::new(Port {
             answer,
             ..Port::default()
@@ -299,6 +300,11 @@ fn a_failed_block_ends_its_run_and_the_next_load_starts_again() {
         assert_eq!(later, plain, "a later block is not touched");
         assert!(port.borrow().calls.is_empty(), "nor is the hardware");
         drop(keyed);
+        assert_eq!(
+            engine.last_stop(),
+            Some(observed),
+            "the driver keeps what the stop observed"
+        );
         assert_eq!(port.borrow().calls, STOP);
         assert_erased(&port);
 
@@ -345,9 +351,10 @@ fn a_not_idle_accelerator_refuses_the_key_and_the_next_load_starts_again() {
     }));
     let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
     let key = Aes128Key::copy_from(&RFC3394_4_1_KEK);
+    assert_eq!(engine.load(&key).err(), Some(EngineStopped));
     assert_eq!(
-        engine.load(&key).err(),
-        Some(BlockError::InvalidState {
+        engine.last_stop(),
+        Some(AesStop::InvalidState {
             observation: WORK.get()
         })
     );

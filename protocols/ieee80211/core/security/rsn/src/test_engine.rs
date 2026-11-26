@@ -2,17 +2,18 @@
 
 use oer_portable_crypto::{
     Aes128Key,
-    block::{Aes128Engine, Block, BlockEngine, BlockError},
+    block::{Aes128Engine, Block, BlockEngine, EngineStopped},
 };
 
 /// An engine that refuses every key.
 pub(crate) struct Refusing;
 
 impl Aes128Engine for Refusing {
+    type Stop = EngineStopped;
     type Keyed<'a> = NeverKeyed;
 
-    fn load(&mut self, _key: &Aes128Key) -> Result<Self::Keyed<'_>, BlockError> {
-        Err(BlockError::InvalidState { observation: 3 })
+    fn load(&mut self, _key: &Aes128Key) -> Result<Self::Keyed<'_>, EngineStopped> {
+        Err(EngineStopped)
     }
 }
 
@@ -20,10 +21,12 @@ impl Aes128Engine for Refusing {
 pub(crate) struct NeverKeyed;
 
 impl BlockEngine for NeverKeyed {
-    fn encrypt(&mut self, _block: &mut Block) -> Result<(), BlockError> {
-        Err(BlockError::InvalidState { observation: 3 })
+    type Stop = EngineStopped;
+
+    fn encrypt(&mut self, _block: &mut Block) -> Result<(), EngineStopped> {
+        Err(EngineStopped)
     }
-    fn decrypt(&mut self, _block: &mut Block) -> Result<(), BlockError> {
-        Err(BlockError::InvalidState { observation: 3 })
+    fn decrypt(&mut self, _block: &mut Block) -> Result<(), EngineStopped> {
+        Err(EngineStopped)
     }
 }

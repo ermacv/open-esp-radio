@@ -1,3 +1,4 @@
+use core::convert::Infallible;
 use hmac::Mac;
 use oer_protocols_ieee80211_wire::eapol::GtkTx;
 
@@ -24,7 +25,7 @@ fn process(
     handshake: &mut RsnStaHandshake,
     frame: crate::OwnedEapolFrame<512>,
     pmk: &Pmk,
-) -> Result<RsnStaEapol<512>, RsnStaError> {
+) -> Result<RsnStaEapol<512, Infallible>, RsnStaError<Infallible>> {
     handshake.on_eapol(frame, pmk, &mut SoftwareAes128)
 }
 
@@ -59,9 +60,8 @@ fn installed(request: RsnStaKeyInstallRequest) -> RsnStaInstalled {
     group.installed()
 }
 
-const REFUSED: oer_portable_crypto::KeyUnwrapError = oer_portable_crypto::KeyUnwrapError::Engine(
-    oer_portable_crypto::block::BlockError::InvalidState { observation: 3 },
-);
+const REFUSED: oer_portable_crypto::KeyUnwrapError<oer_portable_crypto::block::EngineStopped> =
+    oer_portable_crypto::KeyUnwrapError::Engine(oer_portable_crypto::block::EngineStopped);
 
 fn owned(frame: &RsnTxFrame<512>) -> crate::OwnedEapolFrame<512> {
     crate::OwnedEapolFrame::try_copy(RsnInterface::Station, Eui48::new(AP), frame.as_bytes())
@@ -112,7 +112,7 @@ enum GroupStep {
 fn group_message1(
     connected: &mut RsnConnectedSupplicant,
     frame: crate::OwnedEapolFrame<512>,
-) -> Result<GroupStep, RsnConnectedProcessError> {
+) -> Result<GroupStep, RsnConnectedProcessError<Infallible>> {
     match connected
         .on_group_message1(frame, &mut SoftwareAes128)
         .map_err(RsnConnectedProcessError::Supplicant)?
@@ -1132,7 +1132,7 @@ fn software_wrap(
     plaintext: &[u8],
 ) -> Result<
     oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
-    oer_portable_crypto::rfc3394::KeyWrapError,
+    oer_portable_crypto::rfc3394::KeyWrapError<Infallible>,
 > {
     let plaintext = oer_portable_crypto::KeyData::try_copy(plaintext)
         .map_err(|_| oer_portable_crypto::rfc3394::KeyWrapError::CapacityExceeded)?;

@@ -60,7 +60,7 @@ fn test_unwrap(
     >,
 ) -> Result<
     oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
-    oer_portable_crypto::KeyUnwrapError,
+    oer_portable_crypto::KeyUnwrapError<core::convert::Infallible>,
 > {
     oer_portable_crypto::block::unwrap_now(
         &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
@@ -76,7 +76,7 @@ pub(crate) fn test_unwrap_bytes(
     wrapped: &[u8],
 ) -> Result<
     oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
-    oer_portable_crypto::KeyUnwrapError,
+    oer_portable_crypto::KeyUnwrapError<core::convert::Infallible>,
 > {
     test_unwrap(oer_portable_crypto::KeyUnwrapRequest::new(
         kek.request_key(),

@@ -198,15 +198,15 @@ impl RxLink {
     /// replay check passes it once, then each MSDU goes on, EAPOL to
     /// `eapol` and data to `deliver` while the link carries data. A frame
     /// refused for a typed reason keeps the MSDUs delivered before it.
-    pub(crate) fn receive<'f>(
+    pub(crate) fn receive<'f, S>(
         &mut self,
         header: DecodedHeader<'f>,
         frame: &'f [u8],
         integrity: Integrity,
         carriage: Carriage,
         mut deliver: impl FnMut(MsduDelivery<'f>),
-        mut eapol: impl FnMut(&'f [u8], EapolProtection) -> Result<StaEapol, StaRxError>,
-    ) -> Result<StaReceived, StaRxError> {
+        mut eapol: impl FnMut(&'f [u8], EapolProtection) -> Result<StaEapol, StaRxError<S>>,
+    ) -> Result<StaReceived, StaRxError<S>> {
         let admitted = AdmittedData::admit(
             header,
             self.address,
@@ -266,11 +266,11 @@ pub(crate) enum LinkMsdu<'f> {
 /// the profile protects or not (`protection`): an unprotected EAPOL frame of
 /// a protected link that names neither the station nor the PAE group goes
 /// nowhere (`None`), and unprotected data of a protected link is refused.
-pub(crate) fn msdus<'f>(
+pub(crate) fn msdus<'f, S>(
     admitted: &AdmittedData<'f>,
     address: OwnAddress,
     protection: LinkProtection,
-) -> Result<impl Iterator<Item = Result<Option<LinkMsdu<'f>>, StaRxError>> + 'f, StaRxError> {
+) -> Result<impl Iterator<Item = Result<Option<LinkMsdu<'f>>, StaRxError<S>>> + 'f, StaRxError<S>> {
     let frame_protected = admitted.protected();
     let protected = protection == LinkProtection::Ccmp;
     Ok(admitted.msdus()?.map(move |parts| {
@@ -301,12 +301,12 @@ pub(crate) fn msdus<'f>(
 
 /// What the link's holder did with a received frame.
 #[derive(Debug, Eq, PartialEq)]
-pub enum LinkRx {
+pub enum LinkRx<S> {
     /// It is not a data frame of the link: the station takes it
     /// ([`Station::receive`](crate::machine::Station::receive)).
     Station,
     /// The link took it: what it was to the station, or why it was refused.
-    Taken(Result<StaReceived, StaRxError>),
+    Taken(Result<StaReceived, StaRxError<S>>),
 }
 
 /// The link a station hands over at connect: its connection, the data
@@ -455,13 +455,13 @@ impl<P> LinkHandover<P> {
     /// `header` is the frame's MAC header as its receive buffer decoded it
     /// ([`RxBuffer::header`](oer_protocols_ieee80211_contracts_port::RxBuffer::header)),
     /// `None` for one that does not decode, which is the station's.
-    pub fn receive<'f, M: RxMetadata>(
+    pub fn receive<'f, M: RxMetadata, S>(
         &mut self,
         header: Option<DecodedHeader<'f>>,
         meta: &M,
         deliver: impl FnMut(MsduDelivery<'f>),
-        eapol: impl FnMut(&'f [u8], EapolProtection) -> Result<StaEapol, StaRxError>,
-    ) -> LinkRx {
+        eapol: impl FnMut(&'f [u8], EapolProtection) -> Result<StaEapol, StaRxError<S>>,
+    ) -> LinkRx<S> {
         let header = match header.map(sort) {
             Some(Received::Data(header)) => header,
             Some(Received::Management(_)) | None => return LinkRx::Station,

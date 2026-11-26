@@ -8,18 +8,14 @@ const RFC4493_KEY: [u8; 16] = [
     0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c,
 ];
 
-fn tag(key: &[u8; 16], pieces: &[&[u8]]) -> Block {
-    let mut mac = Cmac::new(Engine::new(key)).unwrap();
-    for piece in pieces {
-        mac.update(piece).unwrap();
-    }
-    mac.finalize().unwrap()
+fn tag_of(key: &[u8; 16], pieces: &[&[u8]]) -> Block {
+    tag(Engine::new(key), pieces.iter().copied()).unwrap()
 }
 
 #[test]
 fn rfc4493_examples_1_and_2() {
     assert_eq!(
-        tag(&RFC4493_KEY, &[]),
+        tag_of(&RFC4493_KEY, &[]),
         [
             0xbb, 0x1d, 0x69, 0x29, 0xe9, 0x59, 0x37, 0x28, 0x7f, 0xa3, 0x7d, 0x12, 0x9b, 0x75,
             0x67, 0x46
@@ -30,7 +26,7 @@ fn rfc4493_examples_1_and_2() {
         0x2a,
     ];
     assert_eq!(
-        tag(&RFC4493_KEY, &[&message]),
+        tag_of(&RFC4493_KEY, &[&message]),
         [
             0x07, 0x0a, 0x16, 0xb4, 0x6b, 0x4d, 0x41, 0x44, 0xf7, 0x9b, 0xdd, 0x9d, 0xd0, 0x4a,
             0x28, 0x7c
@@ -46,11 +42,15 @@ fn every_length_and_split_matches_rustcrypto_cmac() {
         let mut reference = <cmac::Cmac<aes::Aes128> as cmac::digest::KeyInit>::new(&key.into());
         reference.update(&message);
         let expected: Block = reference.finalize().into_bytes().into();
-        assert_eq!(tag(&key, &[&message]), expected, "{length}");
+        assert_eq!(tag_of(&key, &[&message]), expected, "{length}");
         for split in [0, 1, 7, 16, 17, length / 2, length] {
             let split = split.min(length);
             let (head, tail) = message.split_at(split);
-            assert_eq!(tag(&key, &[head, &[], tail]), expected, "{length} {split}");
+            assert_eq!(
+                tag_of(&key, &[head, &[], tail]),
+                expected,
+                "{length} {split}"
+            );
         }
     }
 }
@@ -58,34 +58,37 @@ fn every_length_and_split_matches_rustcrypto_cmac() {
 #[test]
 fn verification_compares_the_truncated_tag() {
     let message = b"a deauthentication body";
-    let full = tag(&RFC4493_KEY, &[message]);
+    let full = tag_of(&RFC4493_KEY, &[message]);
     let mut first: [u8; 8] = full[..8].try_into().unwrap();
-    let verify = |expected: &[u8; 8]| {
-        let mut mac = Cmac::new(Engine::new(&RFC4493_KEY)).unwrap();
-        mac.update(message).unwrap();
-        mac.verify_truncated(expected)
-    };
+    let verify =
+        |expected: &[u8; 8]| verify(Engine::new(&RFC4493_KEY), [message.as_slice()], expected);
     assert_eq!(verify(&first), Ok(()));
     first[0] ^= 0x80;
     assert_eq!(verify(&first), Err(CmacVerifyError::InvalidTag));
 }
 
 #[test]
-fn the_first_refusal_poisons_the_computation() {
+fn a_refused_block_ends_the_computation_with_the_stop() {
+    // `L` is refused.
     assert_eq!(
-        Cmac::new(Engine::refusing_from(&RFC4493_KEY, 0)).err(),
-        Some(REFUSAL)
+        tag(Engine::refusing_from(&RFC4493_KEY, 0), []),
+        Err(REFUSAL)
     );
-    // L, then the first 16 bytes once more arrive.
-    let mut mac = Cmac::new(Engine::refusing_from(&RFC4493_KEY, 1)).unwrap();
-    assert_eq!(mac.update(&[1; 16]), Ok(()));
-    assert_eq!(mac.update(&[2]), Err(REFUSAL));
-    assert_eq!(mac.update(&[]), Err(REFUSAL));
-    assert_eq!(mac.finalize(), Err(REFUSAL));
-    let mut mac = Cmac::new(Engine::refusing_from(&RFC4493_KEY, 1)).unwrap();
-    mac.update(&[3; 5]).unwrap();
+    // `L`, then the first full block once more arrives.
     assert_eq!(
-        mac.verify_truncated(&[0; 8]),
+        tag(
+            Engine::refusing_from(&RFC4493_KEY, 1),
+            [[1; 16].as_slice(), &[2]]
+        ),
+        Err(REFUSAL)
+    );
+    // `L`, then the last block.
+    assert_eq!(
+        verify(
+            Engine::refusing_from(&RFC4493_KEY, 1),
+            [[3; 5].as_slice()],
+            &[0; 8]
+        ),
         Err(CmacVerifyError::Engine(REFUSAL))
     );
 }

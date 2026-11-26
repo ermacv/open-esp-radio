@@ -255,11 +255,10 @@ fn a_refused_message4_mic_ends_the_handshake_and_removes_its_keys() {
         world.run(at(35));
         let group = world.pending_installs.pop().unwrap();
         world.switches.off(Switch::HoldKeyInstalls);
-        world.station.config.callbacks.blocks.refuse =
-            Some(oer_portable_crypto::block::BlockError::Timeout { observation: 1 });
+        world.station.config.callbacks.blocks.refuse = true;
         world.input(at(36), group);
         world.run(at(36));
-        world.station.config.callbacks.blocks.refuse = None;
+        world.station.config.callbacks.blocks.refuse = false;
         world.run(at(37));
         assert!(!world.station.is_connected());
         assert_eq!(world.eapol.len(), eapol, "no Message 4 goes");

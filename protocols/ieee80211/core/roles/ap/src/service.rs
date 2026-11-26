@@ -396,11 +396,11 @@ impl From<TxBlockAckOriginatorError> for ApServiceError {
 pub enum ApWpa2Error {
     Service(ApServiceError),
     Frame(RsnFrameError),
-    KeyWrap(KeyWrapError),
+    /// The access point's software engine cannot stop: no wrap failure
+    /// is its.
+    KeyWrap(KeyWrapError<core::convert::Infallible>),
     UnexpectedAction,
     Retry(RsnRetryError),
-    /// The AES engine refused an EAPOL-Key MIC's key or block.
-    Engine(oer_portable_crypto::block::BlockError),
     /// The installed GTK lent for Message 3's Key RSC is not the GTK
     /// installation this BSS announces (Key ID or generation differ). The
     /// call was refused before any handshake state changed.
@@ -447,20 +447,20 @@ impl From<RsnFrameError> for ApWpa2Error {
     }
 }
 
-impl From<KeyWrapError> for ApWpa2Error {
-    fn from(error: KeyWrapError) -> Self {
+impl From<KeyWrapError<core::convert::Infallible>> for ApWpa2Error {
+    fn from(error: KeyWrapError<core::convert::Infallible>) -> Self {
         Self::KeyWrap(error)
     }
 }
 
-impl From<RsnApError> for ApWpa2Error {
-    fn from(error: RsnApError) -> Self {
+impl From<RsnApError<core::convert::Infallible>> for ApWpa2Error {
+    fn from(error: RsnApError<core::convert::Infallible>) -> Self {
         match error {
             RsnApError::Rejected(error) => error.into(),
             RsnApError::ReplayCounterExhausted => RsnStateError::ReplayCounterExhausted.into(),
             RsnApError::Frame(error) => Self::Frame(error),
             RsnApError::KeyWrap(error) => Self::KeyWrap(error),
-            RsnApError::Engine(error) => Self::Engine(error),
+            RsnApError::Engine(never) => match never {},
         }
     }
 }

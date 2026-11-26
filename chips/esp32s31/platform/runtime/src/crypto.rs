@@ -10,6 +10,10 @@ use oer_chips_family_platform_interrupt_table::Silent;
 /// counted on the adopted CPU rate's counter.
 pub type AesEngine = oer_chips_esp32s31_drivers_aes::AesBlocks<AesRegisters, CycleCounter>;
 
+/// What the engine's last stop observed, its driver's record
+/// ([`AesEngine`]'s `last_stop`).
+pub use oer_chips_esp32s31_drivers_aes::AesStop;
+
 /// Transfer AES by value to its one engine. IRQ55 stays silent.
 pub fn aes_engine(
     parts: AesParts,

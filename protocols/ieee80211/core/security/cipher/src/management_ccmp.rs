@@ -1,7 +1,7 @@
 //! Stateless validation and decryption of protected management MPDUs.
 
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
-use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_portable_crypto::block::Aes128Engine;
 use oer_protocols_ieee802_wire::Eui48Kind;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::{
@@ -13,7 +13,7 @@ use oer_protocols_ieee80211_wire::{
 };
 /// Why a protected management frame did not open.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ManagementCcmpError {
+pub enum ManagementCcmpError<S> {
     /// The MAC header is malformed or does not describe management traffic.
     MalformedHeader,
     /// The CCMP header has reserved bits or bytes set.
@@ -32,8 +32,8 @@ pub enum ManagementCcmpError {
     MissingExtendedIv,
     /// The MIC does not verify.
     InvalidMic,
-    /// The AES engine refused the key or a block.
-    Engine(BlockError),
+    /// The AES engine stopped.
+    Engine(S),
 }
 
 /// One validated management MPDU; the caller owns its replay decision.
@@ -43,7 +43,7 @@ pub struct ManagementCcmpFrame<'a> {
 }
 
 impl<'a> ManagementCcmpFrame<'a> {
-    pub fn parse(frame: &'a mut [u8]) -> Result<Self, ManagementCcmpError> {
+    pub fn parse<S>(frame: &'a mut [u8]) -> Result<Self, ManagementCcmpError<S>> {
         // Room for a management header, the CCMP header and the MIC comes
         // first; a frame of that length whose header does not decode is
         // malformed, not short.
@@ -88,7 +88,7 @@ impl<'a> ManagementCcmpFrame<'a> {
         self,
         engine: &mut E,
         temporal_key: &Ccmp128Key,
-    ) -> Result<&'a [u8], ManagementCcmpError> {
+    ) -> Result<&'a [u8], ManagementCcmpError<E::Stop>> {
         let frame = self.frame;
         // SPP only affects QoS data; management uses the same transform in
         // either association mode. The receiver owns its separate PN frontier.
@@ -99,8 +99,8 @@ impl<'a> ManagementCcmpFrame<'a> {
     }
 }
 
-impl From<CcmpMpduError> for ManagementCcmpError {
-    fn from(error: CcmpMpduError) -> Self {
+impl<S> From<CcmpMpduError<S>> for ManagementCcmpError<S> {
+    fn from(error: CcmpMpduError<S>) -> Self {
         match error {
             CcmpMpduError::MalformedHeader => Self::MalformedHeader,
             CcmpMpduError::NotProtected => Self::NotProtected,

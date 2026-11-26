@@ -23,10 +23,7 @@ use crate::{
     keys::RsnKeyInstall,
     state::RsnStateError,
 };
-use oer_portable_crypto::{
-    KeyUnwrapError, KeyUnwrapRequest,
-    block::{Aes128Engine, BlockError},
-};
+use oer_portable_crypto::{KeyUnwrapError, KeyUnwrapRequest, block::Aes128Engine};
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
@@ -133,7 +130,7 @@ pub enum RsnStaNewError {
 /// Why a step of the handshake refused its input; the handshake is as it
 /// was.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RsnStaError {
+pub enum RsnStaError<S> {
     /// The received EAPOL-Key frame was refused: unsupported, stale,
     /// forged or otherwise unauthenticated peer input.
     Rejected(RsnStateError),
@@ -142,10 +139,10 @@ pub enum RsnStaError {
     /// A previously validated local security-IE owner lost its invariant.
     RetainedSecurityIes(RsnFrameError),
     /// The AES engine refused a MIC's key or block.
-    Engine(BlockError),
+    Engine(S),
 }
 
-impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStaError {
+impl<S> From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStaError<S> {
     fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::InvalidFrame(error)
     }
@@ -154,16 +151,16 @@ impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStaError 
 /// Why a handshake ended. Its holder drops it, takes down what it
 /// installed and deauthenticates.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RsnStaEnd {
+pub enum RsnStaEnd<S> {
     /// The authenticated Key Data field is longer than
     /// [`oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY`].
     KeyDataTooLong,
     /// The authenticated key data did not unwrap.
-    KeyUnwrap(KeyUnwrapError),
+    KeyUnwrap(KeyUnwrapError<S>),
     /// The unwrapped key data did not parse.
     KeyData(RsnFrameError),
     /// The AES engine refused Message 4's MIC.
-    Engine(BlockError),
+    Engine(S),
     /// `complete` was given an install another handshake requested: this
     /// one requested none.
     Unrequested,
@@ -244,7 +241,7 @@ pub struct RsnStaConnected<const N: usize> {
 
 /// What a received EAPOL-Key frame did.
 #[must_use]
-pub enum RsnStaEapol<const N: usize> {
+pub enum RsnStaEapol<const N: usize, S> {
     /// Nothing: a frame the handshake ignores (a repeat).
     None,
     /// Message 2, built, to transmit: the answer to a new Message 1 or the
@@ -254,7 +251,7 @@ pub enum RsnStaEapol<const N: usize> {
     /// [`RsnStaHandshake::complete`].
     Install(RsnStaKeyInstallRequest),
     /// The handshake ended.
-    End(RsnStaEnd),
+    End(RsnStaEnd<S>),
 }
 
 /// Unwrap `wrapped` under `kek` to completion over `engine`.
@@ -262,7 +259,7 @@ fn unwrap_key_data<E: Aes128Engine>(
     engine: &mut E,
     kek: &Kek,
     wrapped: &[u8],
-) -> Result<RsnKeyData, KeyDataError> {
+) -> Result<RsnKeyData, KeyDataError<E::Stop>> {
     let wrapped = RsnKeyData::try_copy(wrapped).map_err(|_| KeyDataError::TooLong)?;
     oer_portable_crypto::block::unwrap_now(
         engine,
@@ -273,20 +270,20 @@ fn unwrap_key_data<E: Aes128Engine>(
 }
 
 /// Why authenticated key data yields no plaintext.
-enum KeyDataError {
+enum KeyDataError<S> {
     TooLong,
-    Unwrap(KeyUnwrapError),
+    Unwrap(KeyUnwrapError<S>),
 }
 
-impl KeyDataError {
-    const fn into_end(self) -> RsnStaEnd {
+impl<S> KeyDataError<S> {
+    fn into_end(self) -> RsnStaEnd<S> {
         match self {
             Self::TooLong => RsnStaEnd::KeyDataTooLong,
             Self::Unwrap(error) => RsnStaEnd::KeyUnwrap(error),
         }
     }
 
-    const fn into_connected(self) -> RsnConnectedProcessError {
+    fn into_connected(self) -> RsnConnectedProcessError<S> {
         match self {
             Self::TooLong => RsnConnectedProcessError::KeyDataTooLong,
             Self::Unwrap(error) => RsnConnectedProcessError::KeyUnwrap(error),
@@ -295,7 +292,7 @@ impl KeyDataError {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RsnConnectedSupplicantError {
+pub enum RsnConnectedSupplicantError<S> {
     WrongInterface,
     WrongPeer,
     ProtocolVersionMismatch,
@@ -313,43 +310,45 @@ pub enum RsnConnectedSupplicantError {
     /// A previously validated local security-IE owner lost its invariant.
     RetainedSecurityIes(RsnFrameError),
     /// The AES engine refused a MIC's key or block.
-    Engine(BlockError),
+    Engine(S),
 }
 
 /// Why the connected supplicant refused a frame or the key data of an
 /// authenticated Message 3 or Group Message 1.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RsnConnectedProcessError {
-    Supplicant(RsnConnectedSupplicantError),
+pub enum RsnConnectedProcessError<S> {
+    Supplicant(RsnConnectedSupplicantError<S>),
     /// The authenticated Key Data field is longer than
     /// [`oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY`].
     KeyDataTooLong,
     /// The authenticated key data did not unwrap.
-    KeyUnwrap(KeyUnwrapError),
+    KeyUnwrap(KeyUnwrapError<S>),
 }
 
-impl From<RsnConnectedSupplicantError> for RsnConnectedProcessError {
-    fn from(error: RsnConnectedSupplicantError) -> Self {
+impl<S> From<RsnConnectedSupplicantError<S>> for RsnConnectedProcessError<S> {
+    fn from(error: RsnConnectedSupplicantError<S>) -> Self {
         Self::Supplicant(error)
     }
 }
 
-impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnConnectedSupplicantError {
+impl<S> From<oer_protocols_ieee80211_wire::eapol::EapolParseError>
+    for RsnConnectedSupplicantError<S>
+{
     fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::InvalidFrame(error)
     }
 }
-impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnConnectedProcessError {
+impl<S> From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnConnectedProcessError<S> {
     fn from(error: oer_protocols_ieee80211_wire::eapol::EapolParseError) -> Self {
         Self::Supplicant(error.into())
     }
 }
-impl From<RsnFrameError> for RsnConnectedSupplicantError {
+impl<S> From<RsnFrameError> for RsnConnectedSupplicantError<S> {
     fn from(error: RsnFrameError) -> Self {
         Self::Frame(error)
     }
 }
-impl From<RsnFrameError> for RsnConnectedProcessError {
+impl<S> From<RsnFrameError> for RsnConnectedProcessError<S> {
     fn from(error: RsnFrameError) -> Self {
         Self::Supplicant(error.into())
     }
@@ -451,11 +450,11 @@ impl RsnCompletedMessage3 {
         }
     }
 
-    fn validate_fields(
+    fn validate_fields<S>(
         &self,
         akm: Akm,
         frame: EapolKeyFrame<'_>,
-    ) -> Result<(), RsnConnectedSupplicantError> {
+    ) -> Result<(), RsnConnectedSupplicantError<S>> {
         if frame.protocol_version() != self.protocol_version {
             return Err(RsnConnectedSupplicantError::ProtocolVersionMismatch);
         }
@@ -549,7 +548,7 @@ impl RsnConnectedSupplicant {
         &mut self,
         frame: crate::OwnedEapolFrame<N>,
         engine: &mut E,
-    ) -> Result<RsnConnectedAction<N>, RsnConnectedSupplicantError> {
+    ) -> Result<RsnConnectedAction<N>, RsnConnectedSupplicantError<E::Stop>> {
         if frame.interface() != RsnInterface::Station {
             return Err(RsnConnectedSupplicantError::WrongInterface);
         }
@@ -595,7 +594,7 @@ impl RsnConnectedSupplicant {
         &mut self,
         frame: crate::OwnedEapolFrame<N>,
         engine: &mut E,
-    ) -> Result<RsnConnectedAction<N>, RsnConnectedSupplicantError> {
+    ) -> Result<RsnConnectedAction<N>, RsnConnectedSupplicantError<E::Stop>> {
         if frame.interface() != RsnInterface::Station {
             return Err(RsnConnectedSupplicantError::WrongInterface);
         }
@@ -650,10 +649,10 @@ impl RsnConnectedSupplicant {
         self.request_group_unwrap(frame)
     }
 
-    fn request_group_unwrap<const N: usize>(
+    fn request_group_unwrap<const N: usize, S>(
         &mut self,
         frame: crate::OwnedEapolFrame<N>,
-    ) -> Result<RsnConnectedAction<N>, RsnConnectedSupplicantError> {
+    ) -> Result<RsnConnectedAction<N>, RsnConnectedSupplicantError<S>> {
         let key = frame.key_frame()?;
         if !key.key_info().encrypted_key_data() || key.key_data().is_empty() {
             return Err(RsnConnectedSupplicantError::MissingEncryptedKeyData);
@@ -674,7 +673,7 @@ impl RsnConnectedSupplicant {
         &mut self,
         frame: RsnGroupKeyFrame<N>,
         engine: &mut E,
-    ) -> Result<RsnGroupKeyInstallRequest<N>, RsnConnectedProcessError> {
+    ) -> Result<RsnGroupKeyInstallRequest<N>, RsnConnectedProcessError<E::Stop>> {
         let RsnGroupKeyFrame {
             frame,
             replay_counter: verified,
@@ -746,7 +745,7 @@ impl RsnConnectedSupplicant {
     pub fn complete_group_key_install<const N: usize>(
         &mut self,
         request: RsnGroupKeyInstallRequest<N>,
-    ) -> Result<RsnTxFrame<N>, RsnConnectedSupplicantError> {
+    ) -> Result<RsnTxFrame<N>, RsnConnectedSupplicantError<core::convert::Infallible>> {
         if request.replay_counter <= self.replay_counter() {
             return Err(RsnConnectedSupplicantError::StaleCompletion);
         }
@@ -884,7 +883,7 @@ impl RsnStaHandshake {
         frame: crate::OwnedEapolFrame<N>,
         pmk: &Pmk,
         engine: &mut E,
-    ) -> Result<RsnStaEapol<N>, RsnStaError> {
+    ) -> Result<RsnStaEapol<N, E::Stop>, RsnStaError<E::Stop>> {
         if frame.interface() != RsnInterface::Station {
             return Err(RsnStaError::Rejected(RsnStateError::WrongInterface));
         }
@@ -909,7 +908,7 @@ impl RsnStaHandshake {
         key: EapolKeyFrame<'_>,
         pmk: &Pmk,
         engine: &mut E,
-    ) -> Result<RsnStaEapol<N>, RsnStaError> {
+    ) -> Result<RsnStaEapol<N, E::Stop>, RsnStaError<E::Stop>> {
         let replay = key.replay_counter();
         let nonce = key.nonce();
         if nonce.is_zero() {
@@ -969,7 +968,7 @@ impl RsnStaHandshake {
         &mut self,
         key: EapolKeyFrame<'_>,
         engine: &mut E,
-    ) -> Result<RsnStaEapol<N>, RsnStaError> {
+    ) -> Result<RsnStaEapol<N, E::Stop>, RsnStaError<E::Stop>> {
         let Self {
             akm,
             authenticator,
@@ -1054,7 +1053,7 @@ impl RsnStaHandshake {
         self,
         installed: RsnStaInstalled,
         engine: &mut E,
-    ) -> Result<RsnStaConnected<N>, RsnStaEnd> {
+    ) -> Result<RsnStaConnected<N>, RsnStaEnd<E::Stop>> {
         let RsnStaInstalled(()) = installed;
         let Self {
             akm,
@@ -1119,7 +1118,7 @@ fn message2<const N: usize, E: Aes128Engine>(
     facts: Message2Facts<'_>,
     ptk: &Ptk,
     engine: &mut E,
-) -> Result<RsnTxFrame<N>, RsnStaError> {
+) -> Result<RsnTxFrame<N>, RsnStaError<E::Stop>> {
     RsnTxFrame::message2_with_security_ies(
         facts.akm,
         facts.authenticator,

@@ -1,9 +1,9 @@
 //! The software AES-128 block primitive and the RSN key-data bound over the
 //! RFC 3394 algorithm of `oer-portable-crypto`.
 //!
-//! [`SoftwareAes128`] implements `oer_portable_crypto::block::Aes128Blocks` with the
-//! RustCrypto cipher, so `oer_portable_crypto::block::unwrap_now` runs the shared
-//! RFC 3394 unwrap over it. WPA2 key data is bounded by [`RSN_KEY_DATA_CAPACITY`].
+//! [`SoftwareAes128`] implements `oer_portable_crypto::block::Aes128Engine` with
+//! the RustCrypto cipher. It cannot stop (its `Stop` is `Infallible`), so its
+//! callers have no engine error path. WPA2 key data is bounded by [`RSN_KEY_DATA_CAPACITY`].
 
 use ::aes::{
     Aes128,
@@ -11,7 +11,7 @@ use ::aes::{
 };
 use oer_portable_crypto::{
     Aes128Key, KeyData,
-    block::{Aes128Blocks, Block, BlockCipher},
+    block::{Aes128Engine, Block, BlockEngine},
 };
 use zeroize::Zeroize;
 
@@ -27,27 +27,34 @@ pub struct SoftwareAes128;
 /// [`SoftwareAes128`] with a key loaded; the key schedule is erased on drop.
 pub struct SoftwareAes128Keyed(Aes128);
 
-impl Aes128Blocks for SoftwareAes128 {
+impl Aes128Engine for SoftwareAes128 {
+    type Stop = core::convert::Infallible;
     type Keyed<'a> = SoftwareAes128Keyed;
 
-    fn load_key(&mut self, key: &Aes128Key) -> SoftwareAes128Keyed {
-        SoftwareAes128Keyed(Aes128::new(&GenericArray::from(*key.as_bytes())))
+    fn load(&mut self, key: &Aes128Key) -> Result<SoftwareAes128Keyed, Self::Stop> {
+        Ok(SoftwareAes128Keyed(Aes128::new(&GenericArray::from(
+            *key.as_bytes(),
+        ))))
     }
 }
 
-impl BlockCipher for SoftwareAes128Keyed {
-    fn encrypt_block(&mut self, block: &mut Block) {
+impl BlockEngine for SoftwareAes128Keyed {
+    type Stop = core::convert::Infallible;
+
+    fn encrypt(&mut self, block: &mut Block) -> Result<(), Self::Stop> {
         let mut array = GenericArray::from(*block);
         self.0.encrypt_block(&mut array);
         *block = array.into();
         array.zeroize();
+        Ok(())
     }
 
-    fn decrypt_block(&mut self, block: &mut Block) {
+    fn decrypt(&mut self, block: &mut Block) -> Result<(), Self::Stop> {
         let mut array = GenericArray::from(*block);
         self.0.decrypt_block(&mut array);
         *block = array.into();
         array.zeroize();
+        Ok(())
     }
 }
 

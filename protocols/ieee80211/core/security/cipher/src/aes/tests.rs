@@ -1,7 +1,10 @@
 use super::*;
 use oer_portable_crypto::{KeyUnwrapError, KeyUnwrapRequest, conformance, rfc3394::KeyWrapError};
 
-fn unwrap(kek: &[u8; 16], wrapped: &[u8]) -> Result<RsnKeyData, KeyUnwrapError> {
+fn unwrap(
+    kek: &[u8; 16],
+    wrapped: &[u8],
+) -> Result<RsnKeyData, KeyUnwrapError<core::convert::Infallible>> {
     oer_portable_crypto::block::unwrap_now(
         &mut SoftwareAes128,
         KeyUnwrapRequest::new(
@@ -59,7 +62,7 @@ fn rfc3394_uses_the_full_bounded_buffer_and_refuses_the_next_block() {
 fn software_wrap(
     kek: &[u8; 16],
     plaintext: &[u8],
-) -> Result<RsnKeyData, oer_portable_crypto::rfc3394::KeyWrapError> {
+) -> Result<RsnKeyData, oer_portable_crypto::rfc3394::KeyWrapError<core::convert::Infallible>> {
     let plaintext = oer_portable_crypto::KeyData::try_copy(plaintext)
         .map_err(|_| oer_portable_crypto::rfc3394::KeyWrapError::CapacityExceeded)?;
     oer_portable_crypto::block::wrap_now(

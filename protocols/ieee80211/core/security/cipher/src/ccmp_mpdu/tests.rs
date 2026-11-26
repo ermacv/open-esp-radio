@@ -1,5 +1,6 @@
 use super::*;
 use crate::aes::SoftwareAes128;
+use oer_portable_crypto::block::{BlockEngine, EngineStopped};
 use std::vec::Vec;
 
 // Independent Python cryptography AESCCM fixtures, explicit 802.11 AAD/nonce.
@@ -153,32 +154,39 @@ struct RefusingKeyed {
 }
 
 impl Aes128Engine for Refusing {
+    type Stop = EngineStopped;
     type Keyed<'a> = RefusingKeyed;
 
-    fn load(&mut self, key: &oer_portable_crypto::Aes128Key) -> Result<RefusingKeyed, BlockError> {
+    fn load(
+        &mut self,
+        key: &oer_portable_crypto::Aes128Key,
+    ) -> Result<RefusingKeyed, EngineStopped> {
+        let Ok(blocks) = SoftwareAes128.load(key);
         Ok(RefusingKeyed {
-            blocks: oer_portable_crypto::block::Aes128Blocks::load_key(&mut SoftwareAes128, key),
+            blocks,
             left: self.refuse_from,
         })
     }
 }
 
-impl oer_portable_crypto::block::BlockEngine for RefusingKeyed {
-    fn encrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), BlockError> {
-        self.left = self
-            .left
-            .checked_sub(1)
-            .ok_or(BlockError::Timeout { observation: 1 })?;
-        oer_portable_crypto::block::BlockCipher::encrypt_block(&mut self.blocks, block);
+impl BlockEngine for RefusingKeyed {
+    type Stop = EngineStopped;
+
+    fn encrypt(
+        &mut self,
+        block: &mut oer_portable_crypto::block::Block,
+    ) -> Result<(), EngineStopped> {
+        self.left = self.left.checked_sub(1).ok_or(EngineStopped)?;
+        let Ok(()) = self.blocks.encrypt(block);
         Ok(())
     }
 
-    fn decrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), BlockError> {
-        self.left = self
-            .left
-            .checked_sub(1)
-            .ok_or(BlockError::Timeout { observation: 1 })?;
-        oer_portable_crypto::block::BlockCipher::decrypt_block(&mut self.blocks, block);
+    fn decrypt(
+        &mut self,
+        block: &mut oer_portable_crypto::block::Block,
+    ) -> Result<(), EngineStopped> {
+        self.left = self.left.checked_sub(1).ok_or(EngineStopped)?;
+        let Ok(()) = self.blocks.decrypt(block);
         Ok(())
     }
 }
@@ -193,9 +201,7 @@ fn a_refused_block_is_an_engine_error_that_erases_the_body() {
         let mut frame = wire.clone();
         assert_eq!(
             mode(spp).open(&mut Refusing { refuse_from }, &key(), &mut frame),
-            Err(CcmpMpduError::Engine(BlockError::Timeout {
-                observation: 1
-            })),
+            Err(CcmpMpduError::Engine(EngineStopped)),
             "open {refuse_from}"
         );
         assert!(
@@ -205,9 +211,7 @@ fn a_refused_block_is_an_engine_error_that_erases_the_body() {
         let mut frame = wire.clone();
         assert_eq!(
             mode(spp).seal(&mut Refusing { refuse_from }, &key(), &mut frame),
-            Err(CcmpMpduError::Engine(BlockError::Timeout {
-                observation: 1
-            })),
+            Err(CcmpMpduError::Engine(EngineStopped)),
             "seal {refuse_from}"
         );
         assert!(

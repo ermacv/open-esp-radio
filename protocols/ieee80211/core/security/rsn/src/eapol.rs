@@ -4,17 +4,17 @@
 
 use crate::AkmKeys;
 use crate::{Akm, Kck, Ptk, RsnInterface, RsnKeyConfirmationKey};
-use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_portable_crypto::block::Aes128Engine;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_wire::eapol::{EapolKey, EapolParseError, KeyInformation};
 
 /// Why an EAPOL-Key frame's MIC did not verify.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MicFailure {
+pub enum MicFailure<S> {
     /// The MIC is not the frame's under the key: a peer's frame to refuse.
     Mismatch,
-    /// The AES engine refused the MIC's key or a block.
-    Engine(BlockError),
+    /// The AES engine stopped.
+    Engine(S),
 }
 
 pub const DEFAULT_EAPOL_FRAME_CAPACITY: usize = 512;
@@ -129,7 +129,11 @@ impl<'a> EapolKeyFrame<'a> {
     /// The MIC checked under the PTK's KCK: it verifies, or the failure.
     /// An AES-CMAC suite runs on `engine`; its refusal is
     /// [`MicFailure::Engine`].
-    pub fn check_mic<E: Aes128Engine>(self, ptk: &Ptk, engine: &mut E) -> Result<(), MicFailure> {
+    pub fn check_mic<E: Aes128Engine>(
+        self,
+        ptk: &Ptk,
+        engine: &mut E,
+    ) -> Result<(), MicFailure<E::Stop>> {
         self.verify_mic_with_kck(ptk.akm(), ptk.kck(), engine)
     }
 
@@ -137,7 +141,7 @@ impl<'a> EapolKeyFrame<'a> {
         self,
         key: &RsnKeyConfirmationKey,
         engine: &mut E,
-    ) -> Result<(), MicFailure> {
+    ) -> Result<(), MicFailure<E::Stop>> {
         self.verify_mic_with_kck(key.akm(), key.kck(), engine)
     }
 
@@ -146,12 +150,8 @@ impl<'a> EapolKeyFrame<'a> {
         akm: Akm,
         kck: &Kck,
         engine: &mut E,
-    ) -> Result<(), MicFailure> {
-        let mut mac = akm.mic(kck, engine).map_err(MicFailure::Engine)?;
-        for part in self.0.mic_input() {
-            mac.update(part).map_err(MicFailure::Engine)?;
-        }
-        mac.verify(self.0.mic())
+    ) -> Result<(), MicFailure<E::Stop>> {
+        akm.verify_mic(kck, engine, self.0.mic_input(), self.0.mic())
     }
 }
 

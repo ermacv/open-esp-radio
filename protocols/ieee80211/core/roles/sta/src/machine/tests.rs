@@ -146,25 +146,41 @@ static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
 /// failed accelerator does.
 struct CountingBlocks {
     loads: usize,
-    refuse: Option<oer_portable_crypto::block::BlockError>,
+    refuse: bool,
+}
+/// [`CountingBlocks`] with a key loaded: the software block, which may
+/// stop only because its engine may.
+struct CountingKeyed(oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128Keyed);
+impl oer_portable_crypto::block::BlockEngine for CountingKeyed {
+    type Stop = oer_portable_crypto::block::EngineStopped;
+    fn encrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), Self::Stop> {
+        let Ok(()) = self.0.encrypt(block);
+        Ok(())
+    }
+    fn decrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), Self::Stop> {
+        let Ok(()) = self.0.decrypt(block);
+        Ok(())
+    }
 }
 impl oer_portable_crypto::block::Aes128Engine for CountingBlocks {
+    type Stop = oer_portable_crypto::block::EngineStopped;
     type Keyed<'a>
-        = oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128Keyed
+        = CountingKeyed
     where
         Self: 'a;
     fn load(
         &mut self,
         key: &oer_portable_crypto::Aes128Key,
-    ) -> Result<Self::Keyed<'_>, oer_portable_crypto::block::BlockError> {
+    ) -> Result<Self::Keyed<'_>, Self::Stop> {
         self.loads += 1;
-        if let Some(error) = self.refuse {
-            return Err(error);
+        if self.refuse {
+            return Err(oer_portable_crypto::block::EngineStopped);
         }
-        Ok(oer_portable_crypto::block::Aes128Blocks::load_key(
+        let Ok(keyed) = oer_portable_crypto::block::Aes128Engine::load(
             &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
             key,
-        ))
+        );
+        Ok(CountingKeyed(keyed))
     }
 }
 
@@ -523,7 +539,7 @@ impl<'id> World<'id> {
                 nonce_calls: 0,
                 blocks: CountingBlocks {
                     loads: 0,
-                    refuse: None,
+                    refuse: false,
                 },
             },
         };
@@ -1099,7 +1115,7 @@ impl<'id, const G: usize> World<'id, G> {
         now: Instant,
         frame: &[u8],
         meta: RxMeta,
-    ) -> Result<StaReceived, StaRxError> {
+    ) -> Result<StaReceived, StaRxError<oer_portable_crypto::block::EngineStopped>> {
         self.deliver_with(now, frame, meta, |_| {})
     }
 
@@ -1110,7 +1126,7 @@ impl<'id, const G: usize> World<'id, G> {
         frame: &'f [u8],
         meta: RxMeta,
         deliver: impl FnMut(crate::data::MsduDelivery<'f>),
-    ) -> Result<StaReceived, StaRxError> {
+    ) -> Result<StaReceived, StaRxError<oer_portable_crypto::block::EngineStopped>> {
         let station = &mut self.station;
         let routed = match self.link.as_mut() {
             Some(link) => link.receive(
@@ -5373,7 +5389,9 @@ fn received_data_is_admitted_by_the_link_without_the_station() {
                     assert_eq!(delivery.parts.payload, b"data");
                     delivered += 1
                 },
-                |_, _| panic!("data is not the station's"),
+                |_, _| -> Result<StaEapol, StaRxError<core::convert::Infallible>> {
+                    panic!("data is not the station's")
+                },
             ),
             crate::link::LinkRx::Taken(Ok(StaReceived::Data))
         );
@@ -5778,7 +5796,7 @@ fn software_wrap(
     plaintext: &[u8],
 ) -> Result<
     oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData,
-    oer_portable_crypto::rfc3394::KeyWrapError,
+    oer_portable_crypto::rfc3394::KeyWrapError<core::convert::Infallible>,
 > {
     let plaintext = oer_portable_crypto::KeyData::try_copy(plaintext)
         .map_err(|_| oer_portable_crypto::rfc3394::KeyWrapError::CapacityExceeded)?;

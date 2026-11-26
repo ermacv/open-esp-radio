@@ -12,7 +12,7 @@
 //! Received frames reach [`BipReceiver::verify`]; nothing here panics on them.
 
 use crate::frames::{Igtk, RSN_IPN_LEN, RsnIgtk};
-use oer_portable_crypto::block::{Aes128Engine, BlockError};
+use oer_portable_crypto::block::Aes128Engine;
 use oer_protocols_ieee80211_core_security_cipher::bip::{
     self, BipError, BipFrame, BipProtectError,
 };
@@ -88,7 +88,7 @@ impl BipReceiver {
         &mut self,
         engine: &mut E,
         frame: &[u8],
-    ) -> Result<(), BipReceiveError> {
+    ) -> Result<(), BipReceiveError<E::Stop>> {
         let frame = BipFrame::parse(frame, self.key_id)?;
         // BipFrame::parse decodes exactly six octets, so this is already bounded.
         let received = BipPacketNumber(frame.packet_number());
@@ -104,15 +104,15 @@ impl BipReceiver {
 
 /// Why a received group-addressed management frame is refused.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BipReceiveError {
+pub enum BipReceiveError<S> {
     /// The frame failed BIP.
-    Frame(BipError),
+    Frame(BipError<S>),
     /// The IPN does not exceed the last accepted one.
     Replay,
 }
 
-impl From<BipError> for BipReceiveError {
-    fn from(error: BipError) -> Self {
+impl<S> From<BipError<S>> for BipReceiveError<S> {
+    fn from(error: BipError<S>) -> Self {
         Self::Frame(error)
     }
 }
@@ -130,14 +130,14 @@ pub struct BipTransmitter {
 
 /// Why a group-addressed management frame could not be protected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BipTransmitError {
+pub enum BipTransmitError<S> {
     /// No larger 48-bit IPN remains; replace the IGTK before sending again.
     Exhausted,
     /// The supplied length or output capacity cannot hold the frame and MMIE.
     InvalidFrame,
     /// The AES engine refused the key or a block. The frame's first `length`
     /// bytes are unchanged; the bytes after them are not a valid MMIE.
-    Engine(BlockError),
+    Engine(S),
 }
 
 impl BipTransmitter {
@@ -165,7 +165,7 @@ impl BipTransmitter {
         engine: &mut E,
         frame: &mut [u8],
         length: usize,
-    ) -> Result<usize, BipTransmitError> {
+    ) -> Result<usize, BipTransmitError<E::Stop>> {
         let candidate = self
             .packet_numbers
             .prepare_next(core::num::NonZeroU8::MIN)

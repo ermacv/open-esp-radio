@@ -122,14 +122,13 @@ fn an_engine_that_refuses_the_unwrap_is_a_counted_drop_and_the_link_stays() {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
         let before = world.losses.rsn;
         let frames = world.frames.len();
-        world.station.config.callbacks.blocks.refuse =
-            Some(oer_portable_crypto::block::BlockError::Timeout { observation: 1 });
+        world.station.config.callbacks.blocks.refuse = true;
         world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, KeyData::Intact));
         world.run(at(50));
         assert_eq!(world.losses.rsn, before + 1);
         assert_eq!(world.frames.len(), frames, "no GM2 for an engine refusal");
         assert!(world.station.is_connected());
-        world.station.config.callbacks.blocks.refuse = None;
+        world.station.config.callbacks.blocks.refuse = false;
         world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, KeyData::Intact));
         world.run(at(51));
         assert_eq!(world.frames.len(), frames + 1);

@@ -11,6 +11,11 @@ use super::{AesPeripheral, Boot, Error};
 /// so it is free again on return.
 pub type AesEngine = oer_chips_esp32s31_platform_runtime::crypto::AesEngine;
 
+/// What the engine's last stop observed: its record, which the engine's
+/// holder reads (`AesEngine::last_stop`); the engine's callers see only that
+/// it stopped.
+pub use oer_chips_esp32s31_platform_runtime::crypto::AesStop;
+
 impl AesPeripheral {
     /// The accelerator as the image's AES engine, owned by the caller from
     /// here.

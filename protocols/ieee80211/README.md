@@ -137,8 +137,8 @@ steps out on the port: `installation::drive` for the [installation
 machine](core/installation/README.md). It decides no protocol question and
 neither parses nor builds frames; it depends on neither `wire` nor
 `core/security/cipher`. The station unwraps RSN key data in its step over the
-synchronous block primitive its composition supplies (`oer-portable-crypto`'s
-`Aes128Blocks`). The cores never wait. `cargo test -p oer-tools-test-layers` checks both,
+synchronous AES-128 engine its composition supplies (`oer-portable-crypto`'s
+`Aes128Engine`). The cores never wait. `cargo test -p oer-tools-test-layers` checks both,
 and that `core/security/cipher`, `contracts/port` and `testing/model` take only the layers below them.
 
 The [RSN crate](core/security/rsn/README.md) separates secret ownership and derivation

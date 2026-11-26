@@ -69,7 +69,7 @@ const fn executor_observer<const SLOT: usize>() -> oer_portable_trace::Noop {
 }
 
 mod aes;
-pub use aes::AesEngine;
+pub use aes::{AesEngine, AesStop};
 
 #[cfg(feature = "console")]
 mod console;
