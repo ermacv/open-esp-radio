@@ -11396,18 +11396,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the ban covers the code an image reaches",
     ),
     (
-        "tools/image/compare/src/lib.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/image/compare/src/lib.rs",
-        "clippy::indexing_slicing",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
         "tools/image/large-values/src/main.rs",
         "clippy::cast_possible_truncation",
         1,

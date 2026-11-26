@@ -2877,14 +2877,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-tools-image-compare"
-version = "0.1.0"
-dependencies = [
- "oer-tools-analysis-elf",
- "oer-tools-analysis-riscv-lift",
-]
-
-[[package]]
 name = "oer-tools-image-esp-idf"
 version = "0.1.0"
 dependencies = [

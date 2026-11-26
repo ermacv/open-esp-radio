@@ -28,7 +28,7 @@ tools/analysis/{blobray-analysis, blobray-application, blobray-artifacts,
     elf, riscv-analysis, riscv-decode, riscv-lift, riscv-model, riscv-program}/
 tools/chip/profile/
 tools/hil/{cli, harness, link}/
-tools/image/{build, bundle, checks, cli, compare, esp-idf, large-values, linker,
+tools/image/{build, bundle, checks, cli, esp-idf, large-values, linker,
     stack}/
 tools/lab/{arbiter, board, cli, client, fixture, fixture-helpers,
     fixture-install, model, router, service}/
