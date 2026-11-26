@@ -334,7 +334,7 @@ fn a_newcomer_at_the_last_free_place_is_refused_and_the_place_stays_free() {
 /// order, and a late head of one does not refuse the other's younger unit.
 #[test]
 fn a_held_clients_unit_leaves_at_the_head_and_the_others_go_in_order() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.lend_limit = 1;
@@ -599,7 +599,7 @@ fn a_stop_delivers_nothing_and_sends_back_what_waited() {
 /// of no linked client to the controller, of no peer.
 #[test]
 fn an_access_points_client_data_goes_to_the_network() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         let mut to_ds = data(1, IPV4, 6);

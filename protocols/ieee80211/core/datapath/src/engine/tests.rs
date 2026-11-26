@@ -95,7 +95,7 @@ pub(super) type StationEngineOn<'id, const POOL: usize, const P: usize, const W:
 /// An access point's engine of `PEERS` clients over the model port.
 pub(super) type ApEngine<'id, const PEERS: usize, const POOL: usize> = Engine<
     'id,
-    ModelPort<'id, AccessPointModel<AP_SINGLES>>,
+    ModelPort<'id, AccessPointModel<AP_SINGLES, PEERS>>,
     Singles,
     Key,
     PEERS,
@@ -1513,9 +1513,9 @@ fn a_stop_with_an_arena_on_the_air_ends_once_it_ended_and_the_gate_closed() {
 /// An access point's engine of `PEERS` flowing, its gate open, with two
 /// clients linked.
 fn access_point<'id, const PEERS: usize, const POOL: usize>(
-    run: Running<'id, AccessPointModel<AP_SINGLES>>,
+    run: Running<'id, AccessPointModel<AP_SINGLES, PEERS>>,
     engine: &mut ApEngine<'id, PEERS, POOL>,
-) -> Around<'id, AccessPointModel<AP_SINGLES>> {
+) -> Around<'id, AccessPointModel<AP_SINGLES, PEERS>> {
     let Running {
         port,
         data: rights,
@@ -1551,7 +1551,7 @@ fn data_place(category: WmmAccessCategory) -> u8 {
 
 #[test]
 fn an_access_points_msdu_is_copied_into_its_queues_place_and_its_memory_goes_home_at_the_write() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.offer(7, WmmUserPriority::UP0, CLIENT_B);
@@ -1582,7 +1582,7 @@ fn an_access_points_msdu_is_copied_into_its_queues_place_and_its_memory_goes_hom
 /// on the air ended, and its next data MPDU carries it.
 #[test]
 fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         let client = Peer::new(1).unwrap();
@@ -1642,7 +1642,7 @@ fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
 
 #[test]
 fn an_access_points_queue_carries_one_single_and_the_next_waits_for_its_end() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
@@ -1664,7 +1664,7 @@ fn an_access_points_queue_carries_one_single_and_the_next_waits_for_its_end() {
 
 #[test]
 fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
@@ -1678,7 +1678,7 @@ fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
 /// the air when the link ended charges them at its end, after the unlink.
 #[test]
 fn a_second_link_of_a_peer_starts_without_the_first_links_account() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         let queue = QueueId::new(0, WmmUserPriority::UP0).unwrap();
@@ -1711,7 +1711,7 @@ fn a_second_link_of_a_peer_starts_without_the_first_links_account() {
 
 #[test]
 fn an_access_points_stop_waits_for_its_singles_and_every_right_comes_home() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
@@ -1763,6 +1763,7 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         Arenas,
         ModelCaps,
         Key,
+        1,
         STATION_SINGLES,
         MODEL_GROUPS,
         MODEL_AGREEMENTS,
@@ -1773,6 +1774,7 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         Singles,
         ModelCaps,
         Key,
+        2,
         AP_SINGLES,
         MODEL_GROUPS,
         MODEL_AGREEMENTS,
@@ -1918,7 +1920,7 @@ fn a_kept_member_that_ages_while_the_gate_closes_goes_once_more_and_its_miss_exp
 /// stop gives the proof back.
 #[test]
 fn a_single_that_ends_during_the_commands_poll_gives_its_place_and_queue_back() {
-    running::<AccessPointModel<AP_SINGLES>, _>(|run| {
+    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.port.set_air(BEST_EFFORT, Air::Hold);
