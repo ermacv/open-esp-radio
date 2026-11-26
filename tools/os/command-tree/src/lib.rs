@@ -39,8 +39,12 @@ pub fn requested() -> bool {
 }
 
 /// The tree as the JSON array the documentation check reads.
-pub fn json(nodes: &[CommandNode]) -> String {
-    serde_json::to_string_pretty(nodes).expect("a command tree serializes")
+///
+/// # Errors
+///
+/// The serializer's own refusal.
+pub fn json(nodes: &[CommandNode]) -> serde_json::Result<String> {
+    serde_json::to_string_pretty(nodes)
 }
 
 /// Every command of `command` below `prefix`, depth first. Hidden commands

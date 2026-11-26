@@ -22,6 +22,10 @@
 //!
 //! `ui_reject` needs no check-cfg registration: case files are no target of
 //! any ordinary build, and both generated copies have the cfg rewritten.
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 #![expect(
     clippy::panic,
@@ -427,11 +431,11 @@ impl Expected {
 /// in source order.
 fn markers(source: &str) -> Result<Vec<Expected>, String> {
     let mut expected = Vec::new();
-    for (index, line) in source.lines().enumerate() {
+    // A marker's line is counted from one, as rustc reports it.
+    for (number, line) in (1_usize..).zip(source.lines()) {
         let Some((_, rest)) = line.split_once(MARKER) else {
             continue;
         };
-        let number = index + 1;
         let Some((offset, error)) = rest.split_once(':') else {
             return Err(format!("line {number}: `{MARKER}` needs `:` and an error"));
         };

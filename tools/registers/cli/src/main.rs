@@ -118,8 +118,16 @@ fn main() -> std::process::ExitCode {
         use clap::CommandFactory as _;
         let tree =
             oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("registers")]);
-        println!("{}", oer_tools_os_command_tree::json(&tree));
-        return std::process::ExitCode::SUCCESS;
+        return match oer_tools_os_command_tree::json(&tree) {
+            Ok(json) => {
+                println!("{json}");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("register publication failed: {error}");
+                std::process::ExitCode::FAILURE
+            }
+        };
     }
     match run() {
         Ok(()) => std::process::ExitCode::SUCCESS,

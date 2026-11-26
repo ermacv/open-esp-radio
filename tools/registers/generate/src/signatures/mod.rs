@@ -73,11 +73,11 @@ pub fn run(ctx: &Checkout, options: Options) -> Result<()> {
         return Err("signature generation supports esp32s31".into());
     }
     let manifest = oer_tools_pins_artifacts::Manifest::load(&ctx.root, &options.chip)?;
-    let revision = manifest
-        .source("esp-idf")?
-        .revision
-        .as_deref()
-        .ok_or("ESP-IDF has no revision pin")?;
+    let revision = match manifest.source("esp-idf")? {
+        oer_tools_pins_artifacts::Source::Fetched(source) => source.revision.as_deref(),
+        oer_tools_pins_artifacts::Source::Firmware(_) => None,
+    }
+    .ok_or("ESP-IDF has no revision pin")?;
     let actual = oer_tools_os_process::git::text(&options.idf, ["rev-parse", "HEAD"])?;
     if actual != revision {
         return Err(format!("ESP-IDF is {actual}, pinned revision is {revision}").into());

@@ -15,7 +15,9 @@
 //! `cargo pins fetch` and the vendor checks read the pins here.
 //! [`project::Project`] names the fixed files of a chip's verification
 //! project (its shards, provenance registry and scenarios).
-use crate::{Artifact, CACHE, Manifest, Source, SourceKind, cache_directory};
+use crate::{
+    Artifact, CACHE, FetchedSource, Manifest, Origin, Source, SourceKind, cache_directory,
+};
 use std::path::{Path, PathBuf};
 
 pub mod conformance;
@@ -85,10 +87,13 @@ fn merge_into(from: &Path, into: &Path) -> Result<()> {
 pub fn fetched(root: &Path, chip: &str, id: &str) -> Result<PathBuf> {
     let manifest = Manifest::load(root, chip)?;
     let artifact = manifest.artifact(id)?;
-    let source = manifest.source_of(artifact);
-    if source.kind == SourceKind::Firmware {
+    let Origin::Fetched {
+        source,
+        sha256: pin,
+    } = &artifact.origin
+    else {
         return Err(format!("`{id}` is a firmware build output, not a fetched artifact").into());
-    }
+    };
     let path = cache_directory(&store()?, source)?.join(&artifact.path);
     if !path.is_file() {
         return Err(format!(
@@ -97,19 +102,10 @@ pub fn fetched(root: &Path, chip: &str, id: &str) -> Result<PathBuf> {
         )
         .into());
     }
-    let pin = pinned_sha256(artifact)?;
     if !verified(&path, pin)? {
         return Err(format!("{} differs from its pin {pin}", path.display()).into());
     }
     Ok(path)
-}
-
-/// The pinned SHA-256 of the fetched `artifact`.
-fn pinned_sha256(artifact: &Artifact) -> Result<&str> {
-    artifact
-        .sha256
-        .as_deref()
-        .ok_or_else(|| format!("{} pins no SHA-256", artifact.id).into())
 }
 
 /// Whether `path` is a file whose SHA-256 is `expected`.
@@ -142,17 +138,33 @@ pub(crate) fn download(url: &str, destination: &Path) -> Result<()> {
         .arg(url)
         .status()?;
     if !status.success() {
-        let _ = std::fs::remove_file(&partial);
-        return Err(format!("download failed: {url}").into());
+        return Err(after_cleanup(
+            format!("download failed: {url}"),
+            &partial,
+            std::fs::remove_file(&partial),
+        )
+        .into());
     }
     std::fs::rename(&partial, destination)?;
     Ok(())
 }
 
-fn fetch(root: &Path, source: &Source, artifact: &Artifact) -> Result<PathBuf> {
+/// `refusal` once the file it would leave at `left` was removed: itself when
+/// nothing stays there (the file is gone, or was never made), else with the
+/// file that stays and why.
+fn after_cleanup(refusal: String, left: &Path, cleanup: std::io::Result<()>) -> String {
+    match cleanup {
+        Ok(()) => refusal,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => refusal,
+        Err(error) => format!("{refusal}; {} was not removed: {error}", left.display()),
+    }
+}
+
+/// The artifact of `source` pinned as `pin`, fetched into the checkout's
+/// cache unless it already lies there as pinned.
+fn fetch(root: &Path, artifact: &Artifact, source: &FetchedSource, pin: &str) -> Result<PathBuf> {
     let directory = cache_directory(&root.join(CACHE), source)?;
     let destination = directory.join(&artifact.path);
-    let pin = pinned_sha256(artifact)?;
     if verified(&destination, pin)? {
         return Ok(destination);
     }
@@ -201,7 +213,6 @@ fn fetch(root: &Path, source: &Source, artifact: &Artifact) -> Result<PathBuf> {
                 return Err(format!("{asset} lacks member {}", artifact.path).into());
             }
         }
-        SourceKind::Firmware => unreachable!("firmware outputs are not fetched"),
     }
     let actual = oer_tools_os_durable::sha256_file(&destination)?;
     if actual != pin {
@@ -249,11 +260,10 @@ pub fn fetch_vendor_sources(root: &Path, chip: &str) -> Result<()> {
     let manifest = Manifest::load(root, chip)?;
     let mut failures = vec![];
     for artifact in &manifest.artifact {
-        let source = manifest.source_of(artifact);
-        if source.kind == SourceKind::Firmware {
+        let Origin::Fetched { source, sha256 } = &artifact.origin else {
             continue;
-        }
-        if let Err(error) = fetch(root, source, artifact) {
+        };
+        if let Err(error) = fetch(root, artifact, source, sha256) {
             failures.push(format!("{}: {error}", artifact.id));
         }
     }
@@ -289,11 +299,10 @@ pub fn ensure_with_inputs(
     link_store(root, &store()?)?;
     let manifest = Manifest::load_with_inputs(root, chip, inputs)?;
     let artifact = manifest.artifact(id)?;
-    let source = manifest.source_of(artifact);
-    if source.kind == SourceKind::Firmware {
+    let Origin::Fetched { source, sha256 } = &artifact.origin else {
         return Err(format!("`{id}` is a firmware build output, not a fetched artifact").into());
-    }
-    fetch(root, source, artifact)
+    };
+    fetch(root, artifact, source, sha256)
 }
 
 /// The firmware catalog images whose outputs `chip` pins, in pin order:
@@ -306,8 +315,10 @@ fn images(manifest: Manifest) -> Vec<String> {
     manifest
         .source
         .into_iter()
-        .filter(|source| source.kind == SourceKind::Firmware)
-        .filter_map(|source| source.image)
+        .filter_map(|source| match source {
+            Source::Firmware(source) => Some(source.image),
+            Source::Fetched(_) => None,
+        })
         .collect()
 }
 
@@ -334,21 +345,27 @@ fn resolve_manifest(root: &Path, manifest: &Manifest) -> Result<Resolved> {
         unfetched: vec![],
         unbuilt: vec![],
     };
-    for artifact in manifest.artifact.iter().cloned() {
-        let firmware = manifest.source_of(&artifact).kind == SourceKind::Firmware;
-        let path = manifest.location(root, &artifact)?;
-        if firmware {
-            if !path.is_file() {
-                resolved.unbuilt.push(artifact.id);
-                continue;
+    for artifact in &manifest.artifact {
+        let path = manifest.location(root, artifact)?;
+        let firmware = match &artifact.origin {
+            Origin::Firmware(_) => {
+                if !path.is_file() {
+                    resolved.unbuilt.push(artifact.id.clone());
+                    continue;
+                }
+                true
             }
-        } else if !verified(&path, pinned_sha256(&artifact)?)? {
-            resolved.unfetched.push(artifact.id);
-            continue;
-        }
+            Origin::Fetched { sha256, .. } => {
+                if !verified(&path, sha256)? {
+                    resolved.unfetched.push(artifact.id.clone());
+                    continue;
+                }
+                false
+            }
+        };
         resolved.pinned.push(Pinned {
-            id: artifact.id,
-            source: artifact.source,
+            id: artifact.id.clone(),
+            source: artifact.source().to_owned(),
             path,
             firmware,
         });
@@ -364,22 +381,21 @@ pub fn run(root: &Path, chip: &str, only: &[String]) -> Result<()> {
     let artifacts = selected(manifest.artifact.clone(), only)?;
     let mut failures = vec![];
     for artifact in &artifacts {
-        let source = manifest.source_of(artifact);
-        let result = if source.kind == SourceKind::Firmware {
-            let path = manifest.location(root, artifact)?;
-            if !path.is_file() {
-                // Firmware outputs are optional here: a host builds them
-                // when a scenario needs them.
-                println!(
-                    "{:<16} skipped: not built; run `cargo fw idf build {}`",
-                    artifact.id,
-                    source.image.as_deref().unwrap_or_default()
-                );
-                continue;
+        let result = match &artifact.origin {
+            Origin::Firmware(source) => {
+                let path = manifest.location(root, artifact)?;
+                if !path.is_file() {
+                    // Firmware outputs are optional here: a host builds them
+                    // when a scenario needs them.
+                    println!(
+                        "{:<16} skipped: not built; run `cargo fw idf build {}`",
+                        artifact.id, source.image
+                    );
+                    continue;
+                }
+                Ok(path)
             }
-            Ok(path)
-        } else {
-            fetch(root, source, artifact)
+            Origin::Fetched { source, sha256 } => fetch(root, artifact, source, sha256),
         };
         match result {
             Ok(path) => println!("{:<16} {}", artifact.id, path.display()),
@@ -419,9 +435,18 @@ mod tests {
     fn an_artifact_selection_keeps_only_the_named_artifacts() {
         let artifact = |id: &str| Artifact {
             id: id.to_owned(),
-            source: "s".to_owned(),
             path: "p".to_owned(),
-            sha256: Some("h".to_owned()),
+            origin: Origin::Fetched {
+                source: FetchedSource {
+                    id: "s".to_owned(),
+                    kind: SourceKind::Git,
+                    repository: None,
+                    revision: None,
+                    asset: None,
+                    sha256: None,
+                },
+                sha256: "h".to_owned(),
+            },
         };
         let all = || vec![artifact("rom"), artifact("phy")];
         assert_eq!(selected(all(), &[]).unwrap().len(), 2);
@@ -443,12 +468,39 @@ mod tests {
             };
             assert!(manifest.artifact("libphy").is_ok(), "{chip}");
             for source in &manifest.source {
-                if source.kind != SourceKind::Firmware {
+                if let Source::Fetched(source) = source {
                     github(source.repository.as_deref().unwrap()).unwrap();
                     assert!(source.revision.is_some());
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_refusal_names_the_file_its_cleanup_could_not_remove() {
+        let directory = tempfile::tempdir().unwrap();
+        let refusal = || "download failed: u".to_owned();
+        // Nothing was written, or it is gone: the refusal alone.
+        let partial = directory.path().join("a.partial");
+        assert_eq!(
+            after_cleanup(refusal(), &partial, std::fs::remove_file(&partial)),
+            refusal()
+        );
+        std::fs::write(&partial, b"part").unwrap();
+        assert_eq!(
+            after_cleanup(refusal(), &partial, std::fs::remove_file(&partial)),
+            refusal()
+        );
+        // What the host refuses to remove stays, and is named.
+        std::fs::create_dir(&partial).unwrap();
+        let left = after_cleanup(refusal(), &partial, std::fs::remove_file(&partial));
+        assert!(
+            left.starts_with(&format!(
+                "download failed: u; {} was not removed: ",
+                partial.display()
+            )),
+            "{left}"
+        );
     }
 
     #[test]

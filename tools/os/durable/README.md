@@ -4,6 +4,8 @@
 
 - `atomic_write` and `atomic_json` replace a file atomically (a temporary
   file in the same directory, synced, renamed, then the directory synced);
+  a replacement that fails removes its temporary, and its error names one
+  it could not remove;
 - `atomic_write_private` uses the same durable sequence with a mode-0600
   temporary and replacement; callers own directory permissions;
 - `sha256_file` and `sha256_bytes`, lowercase hex; `digests::DigestCache`

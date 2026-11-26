@@ -143,7 +143,7 @@ fn run() -> Result<ExitCode> {
     use clap::{CommandFactory as _, Parser as _};
     let cli = Cli::try_parse_from(std::env::args_os().skip(1))?;
     if matches!(cli.command, Some(StandCommand::CommandTree)) {
-        println!("{}", oer_tools_os_command_tree::json(&command_tree()));
+        println!("{}", oer_tools_os_command_tree::json(&command_tree())?);
         return Ok(ExitCode::SUCCESS);
     }
     let ctx = cli.checkout.checkout("cargo stand")?;

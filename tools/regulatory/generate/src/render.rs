@@ -96,8 +96,10 @@ fn flags(rule: &Rule) -> String {
 fn group(value: u32) -> String {
     let digits = value.to_string();
     let mut grouped = String::new();
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+    // Each digit with the count of digits from it to the end: an underscore
+    // goes before every third from the end, never before the first.
+    for (remaining, digit) in (1..=digits.len()).rev().zip(digits.chars()) {
+        if !grouped.is_empty() && remaining.is_multiple_of(3) {
             grouped.push('_');
         }
         grouped.push(digit);

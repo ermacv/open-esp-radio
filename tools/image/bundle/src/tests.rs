@@ -186,6 +186,23 @@ fn schema_six_and_missing_purpose_cannot_default_to_flash() {
 }
 
 #[test]
+fn a_manifest_without_its_schema_is_refused_by_the_key_s_name() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("bundle");
+    staged(&output, b"app").publish(&output).unwrap();
+    let path = output.join(MANIFEST);
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    manifest.as_object_mut().unwrap().remove("schema");
+    std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let error = ImageBundle::load(&output).unwrap_err().to_string();
+    assert!(
+        error.contains("has no `schema`") && error.contains("reads schema 9"),
+        "{error}"
+    );
+}
+
+#[test]
 fn a_bundle_says_what_it_was_built_from_and_one_that_does_not_is_refused() {
     let directory = tempfile::tempdir().unwrap();
     let output = directory.path().join("bundle");

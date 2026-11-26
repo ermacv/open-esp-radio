@@ -259,8 +259,16 @@ fn main() -> ExitCode {
             &Cli::command(),
             &[String::from("vendor-check")],
         );
-        println!("{}", oer_tools_os_command_tree::json(&tree));
-        return ExitCode::SUCCESS;
+        return match oer_tools_os_command_tree::json(&tree) {
+            Ok(json) => {
+                println!("{json}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("vendor-check: {error}");
+                ExitCode::FAILURE
+            }
+        };
     }
     match run() {
         Ok(status) => status,

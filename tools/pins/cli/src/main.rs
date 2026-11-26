@@ -59,8 +59,16 @@ fn main() -> ExitCode {
     if oer_tools_os_command_tree::requested() {
         let tree =
             oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("pins")]);
-        println!("{}", oer_tools_os_command_tree::json(&tree));
-        return ExitCode::SUCCESS;
+        return match oer_tools_os_command_tree::json(&tree) {
+            Ok(json) => {
+                println!("{json}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("pins: {error}");
+                ExitCode::FAILURE
+            }
+        };
     }
     let cli = Cli::parse();
     let result = (|| -> artifacts::Result<()> {

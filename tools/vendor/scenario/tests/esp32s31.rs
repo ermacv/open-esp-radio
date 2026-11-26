@@ -2,7 +2,7 @@
 //! a test process of its own, apart from the engine's tests with their test
 //! chip.
 
-use oer_tools_pins_artifacts::SourceKind;
+use oer_tools_pins_artifacts::{Origin, Source, SourceKind};
 use oer_tools_vendor_scenario::esp32s31::{
     artifacts::{manifest, sha256},
     install,
@@ -33,20 +33,24 @@ fn tracked_manifest_pins_every_scenario_input_once() {
         assert_eq!(sha256(id).unwrap().len(), 64, "{id}");
     }
     for id in ["sdk", "phy-sdk"] {
-        assert_eq!(manifest.artifact(id).unwrap().sha256, None, "{id}");
+        assert!(
+            matches!(manifest.artifact(id).unwrap().origin, Origin::Firmware(_)),
+            "{id}"
+        );
     }
     let mut ids: Vec<_> = manifest.artifact.iter().map(|a| a.id.as_str()).collect();
     ids.sort_unstable();
     ids.dedup();
     assert_eq!(ids.len(), manifest.artifact.len());
     for source in &manifest.source {
-        if source.kind != SourceKind::Firmware {
-            assert!(
-                source.repository.is_some() && source.revision.is_some(),
-                "{}",
-                source.id
-            );
-        }
+        let Source::Fetched(source) = source else {
+            continue;
+        };
+        assert!(
+            source.repository.is_some() && source.revision.is_some(),
+            "{}",
+            source.id
+        );
         if source.kind == SourceKind::Release {
             assert!(
                 source.asset.is_some() && source.sha256.is_some(),

@@ -201,3 +201,31 @@ fn elf_validation_rejects_missing_noncode_wrong_image_and_malformed_catalogs() {
         .is_err()
     );
 }
+
+#[test]
+fn an_elf_without_its_catalog_section_or_an_entry_symbol_is_refused_by_name() {
+    let declaration: Declaration =
+        syn::parse_str("pub fn example(value: i32) -> u32 => value as u32;").unwrap();
+    let catalog = Catalog {
+        schema: SCHEMA,
+        image: "fixture".into(),
+        entries: vec![declaration.entry()],
+    };
+    let bytes = serde_json::to_vec(&catalog).unwrap();
+    let refusal = |elf: &[u8]| validate_elf(elf, "fixture").unwrap_err().to_string();
+
+    // The section table names the catalog once; under another name the
+    // image holds none.
+    let mut renamed = fixture(&bytes, "example", object::SectionKind::Text);
+    let name = renamed
+        .windows(SECTION.len())
+        .position(|window| window == SECTION.as_bytes())
+        .unwrap();
+    renamed[name + 1] = b'_';
+    assert_eq!(refusal(&renamed), "expected one probe catalog section");
+
+    assert_eq!(
+        refusal(&fixture(&bytes, "absent", object::SectionKind::Text)),
+        "missing or ambiguous entry example"
+    );
+}

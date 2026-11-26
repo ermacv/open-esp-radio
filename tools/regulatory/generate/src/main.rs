@@ -35,8 +35,12 @@ fn main() -> ExitCode {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
-            let _ = error.print();
-            return ExitCode::from(2);
+            // The refused command line exits 2; one whose refusal could not
+            // be written says that instead.
+            return match error.print() {
+                Ok(()) => ExitCode::from(2),
+                Err(_) => ExitCode::FAILURE,
+            };
         }
     };
     match run(&cli.db, &cli.revision, &cli.out) {

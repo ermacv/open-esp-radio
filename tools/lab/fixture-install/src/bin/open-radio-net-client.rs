@@ -63,6 +63,25 @@ fn run() -> Result<()> {
         _ => Err("unknown station helper operation".into()),
     }
 }
+/// The host's clock cannot name the instant a wait would end at.
+#[derive(Debug, Eq, PartialEq)]
+struct DeadlineBeyondClock {
+    wait: Duration,
+}
+impl std::fmt::Display for DeadlineBeyondClock {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "the host's clock cannot name the end of a wait of {:?}",
+            self.wait
+        )
+    }
+}
+impl std::error::Error for DeadlineBeyondClock {}
+/// The instant `wait` after `start`.
+fn deadline(start: Instant, wait: Duration) -> std::result::Result<Instant, DeadlineBeyondClock> {
+    start.checked_add(wait).ok_or(DeadlineBeyondClock { wait })
+}
 fn now() -> Result<u64> {
     // DHCP hooks and the session share one suspend-aware monotonic epoch.
     Ok(u64::try_from(
@@ -253,7 +272,7 @@ impl Drop for Session {
 fn session() -> Result<()> {
     let _signals = process::install_signal_handlers()?;
     let mut session = Session::start()?;
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = deadline(Instant::now(), Duration::from_secs(30))?;
     loop {
         process::check_cancelled()?;
         if session.child.try_wait()?.is_some() {
@@ -365,7 +384,7 @@ fn stop() -> Result<()> {
                     Err(e) => return Err(e.into()),
                 }
             }
-            let end = Instant::now() + Duration::from_secs(20);
+            let end = deadline(Instant::now(), Duration::from_secs(20))?;
             while !exited(&fd)? {
                 if Instant::now() >= end {
                     return Err("station session did not clean up".into());
@@ -388,4 +407,22 @@ fn exited(fd: &std::os::fd::OwnedFd) -> Result<bool> {
             tv_nsec: 0,
         }),
     )? > 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_wait_the_clock_cannot_end_is_refused_and_one_it_can_is_its_end() {
+        let start = Instant::now();
+        let wait = Duration::from_secs(30);
+        assert_eq!(deadline(start, wait).unwrap().duration_since(start), wait);
+        assert_eq!(
+            deadline(start, Duration::MAX),
+            Err(DeadlineBeyondClock {
+                wait: Duration::MAX
+            })
+        );
+    }
 }
