@@ -1,5 +1,7 @@
 use super::*;
 
+mod golden;
+
 fn decodes(bytes: &[u8], extensions: Extensions) -> bool {
     decode(bytes, extensions).is_some()
 }
