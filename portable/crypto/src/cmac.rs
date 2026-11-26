@@ -5,7 +5,10 @@
 //! knows whether it is the message's final block, and pads the final block
 //! with `10*` under the second subkey otherwise. The first refused block
 //! poisons the computation: every later call returns the same [`BlockError`].
-//! The chaining value, the held-back block and `L` are erased on drop.
+//! Every secret block lies in the computation's own fields, where it is
+//! erased: the subkeys are derived from `L` in its place and the final block
+//! is padded in the held-back block's, and finishing erases all three on
+//! every exit; the returned tag is the caller's.
 
 use crate::block::{Block, BlockEngine, BlockError};
 use zeroize::Zeroize;
@@ -70,32 +73,37 @@ impl<E: BlockEngine> Cmac<E> {
 
     /// The full 128-bit tag.
     pub fn finalize(mut self) -> Result<Block, BlockError> {
+        self.finish()
+    }
+
+    /// The tag, with `L`, the chaining value and the held-back block erased
+    /// in their places on every exit.
+    fn finish(&mut self) -> Result<Block, BlockError> {
+        let tag = self.tag();
+        self.l.zeroize();
+        self.state.zeroize();
+        self.pending.zeroize();
+        tag
+    }
+
+    /// The tag, computed in place: `L` becomes `K1`, and `K2` when the last
+    /// block is partial; the held-back block becomes the masked last block;
+    /// the chaining value becomes the tag.
+    fn tag(&mut self) -> Result<Block, BlockError> {
         if let Some(error) = self.failed {
             return Err(error);
         }
-        let k1 = double(&self.l);
-        let mut last = self.pending;
-        if self.filled >= BLOCK {
-            xor_into(&mut last, &k1);
-        } else {
-            let k2 = double(&k1);
-            if let Some(pad) = last.get_mut(self.filled) {
+        double(&mut self.l);
+        if self.filled < BLOCK {
+            double(&mut self.l);
+            if let Some(pad) = self.pending.get_mut(self.filled) {
                 *pad = 0x80;
             }
-            xor_into(&mut last, &k2);
-            erase(k2);
         }
-        erase(k1);
-        let mut tag = self.state;
-        xor_into(&mut tag, &last);
-        erase(last);
-        match self.engine.encrypt(&mut tag) {
-            Ok(()) => Ok(tag),
-            Err(error) => {
-                tag.zeroize();
-                Err(error)
-            }
-        }
+        xor_into(&mut self.pending, &self.l);
+        xor_into(&mut self.state, &self.pending);
+        self.engine.encrypt(&mut self.state)?;
+        Ok(self.state)
     }
 
     /// Compare the tag's first `T` bytes with `expected` in constant time.
@@ -120,30 +128,25 @@ impl<E: BlockEngine> Drop for Cmac<E> {
     }
 }
 
-/// The RFC 4493 subkey step: shift left by one bit, then add `const_Rb` when
-/// the shifted-out bit was set.
-fn double(block: &Block) -> Block {
-    let mut out = [0; BLOCK];
+/// The RFC 4493 subkey step, in place: shift left by one bit, then add
+/// `const_Rb` when the shifted-out bit was set.
+fn double(block: &mut Block) {
     let mut carry = 0;
-    for (target, source) in out.iter_mut().zip(block).rev() {
-        *target = (source << 1) | carry;
-        carry = source >> 7;
+    for byte in block.iter_mut().rev() {
+        let next = *byte >> 7;
+        *byte = (*byte << 1) | carry;
+        carry = next;
     }
-    if let Some(last) = out.last_mut() {
+    if let Some(last) = block.last_mut() {
         // Branch-free: `carry` is 0 or 1.
         *last ^= RB & 0_u8.wrapping_sub(carry);
     }
-    out
 }
 
 fn xor_into(target: &mut Block, source: &Block) {
     for (out, byte) in target.iter_mut().zip(source) {
         *out ^= byte;
     }
-}
-
-fn erase(mut block: Block) {
-    block.zeroize();
 }
 
 #[cfg(test)]
