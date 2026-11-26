@@ -160,7 +160,7 @@ mod tests {
     )]
     use super::*;
     use crate::test_engine::Refusing;
-    use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+    use oer_portable_aes_software::SoftwareAes128;
 
     fn expanded(akm: Akm, pmk: &[u8; 32], context: &[u8; 76]) -> [[u8; 16]; 3] {
         let mut bytes = [[0; 16]; 3];

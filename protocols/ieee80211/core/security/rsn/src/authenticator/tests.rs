@@ -3,7 +3,7 @@ use crate::{
     EapolKeyMessage, RsnInterface,
     frames::{OwnedRsnIe, RsnGtk, parse_gtk_key_data},
 };
-use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_wire::{
     ccmp::{CcmpPacketNumber, GroupKeyId},
     security::rsn::Akm,

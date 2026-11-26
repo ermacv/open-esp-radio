@@ -201,7 +201,7 @@ impl<S: SppScope> AccessPointService<'_, S> {
             .ok_or(ApGroupManagementError::NoManagementKey)?;
         let protected = sender
             .protect(
-                &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                &mut oer_portable_aes_software::SoftwareAes128,
                 frame,
                 length,
             )

@@ -34,6 +34,7 @@ oer-protocols-radio-port = { path = "../../../../radio/port" }
 oer-protocols-radio-regulatory = { path = "../../../../radio/regulatory" }
 
 [dev-dependencies]
+oer-portable-aes-software = { path = "../../../../../portable/aes-software" }
 oer-portable-clock = { path = "../../../../../portable/clock" }
 oer-protocols-ieee80211-core-security-rsn = { path = "../../security/rsn", features = ["test-support"] }
 oer-portable-time-virtual = { path = "../../../../../portable/time-virtual" }

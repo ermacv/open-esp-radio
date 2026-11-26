@@ -15,10 +15,9 @@ use super::amsdu::{RoundStop, at};
 use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start, tx_phase};
 use super::*;
 use crate::case_c::{CASES, Case, TEMPORAL_KEY, byte, order, protected_byte};
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
-use oer_protocols_ieee80211_core_security_cipher::{
-    aes::SoftwareAes128, ccmp_mpdu::CcmpAssociation,
-};
+use oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
 use oer_protocols_ieee80211_wire::security::Spp;
 
 /// Unprotected frames before the cell, each its own round of one frame: a

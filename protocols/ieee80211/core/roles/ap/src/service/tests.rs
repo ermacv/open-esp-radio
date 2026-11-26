@@ -74,8 +74,9 @@ mod transmit;
 
 use super::*;
 use crate::security_policy::AP_WPA2_PERSONAL_RSN_ELEMENT;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee802_wire::Eui48;
-use oer_protocols_ieee80211_core_security_cipher::aes::{RsnKeyData, SoftwareAes128};
+use oer_protocols_ieee80211_core_security_cipher::key_data::RsnKeyData;
 use oer_protocols_ieee80211_core_security_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
     frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnGtk, RsnTxFrame, parse_gtk_key_data},

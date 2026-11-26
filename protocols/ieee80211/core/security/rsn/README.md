@@ -29,9 +29,9 @@ removed when the roles are written (the plan's step "the radio's controller
 and the roles").
 
 `oer-protocols-ieee80211-core-security-cipher` owns CCMP and BIP-CMAC-128 over the
-caller's AES-128 engine, and the software AES-128 block primitive with its
-key-unwrap engine; the CCM, AES-CMAC and RFC 3394 algorithms are
-`oer-portable-crypto`'s. `bip`, `management_ccmp` and the EAPOL-Key MIC of PSK-SHA256
+caller's AES-128 engine and the WPA2 key data's place (`key_data::RsnKeyData`);
+the software AES-128 engine is `oer-portable-aes-software`'s, and the CCM,
+AES-CMAC and RFC 3394 algorithms are `oer-portable-crypto`'s. `bip`, `management_ccmp` and the EAPOL-Key MIC of PSK-SHA256
 and SAE take the same `Aes128Engine` as the unwrap; its refusal is each
 call's typed `Engine` error, never a software fallback. The AAD, nonce and Management MIC element it authenticates
 are `oer-protocols-ieee80211-wire`'s (`ccmp::protected`, `bip`). Key data is bounded by
@@ -68,7 +68,7 @@ directly into the zeroizing PTK, and GTK parsing borrows the key-data buffer
 into a zeroizing GTK. Pending actions, PMF reception and retained station
 records use the common owner; adapters and comparisons borrow its bytes.
 This covers those owners, not arbitrary compiler temporaries. The software
-engine's AES-128 key schedule enables RustCrypto's `zeroize` feature and wipes
+engine's (`oer-portable-aes-software`) AES-128 key schedule enables RustCrypto's `zeroize` feature and wipes
 on drop; the CCM and AES-CMAC states erase their chaining values on drop. HMAC and SHA-1/SHA-2
 internal state derived from KCK/PMK material does not wipe on drop; zeroizing
 the input owners does not erase that state. SAE passwords, password elements,

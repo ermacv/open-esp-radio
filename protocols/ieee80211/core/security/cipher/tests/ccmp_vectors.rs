@@ -24,11 +24,9 @@
 //! sets A-MSDU-present, masked in ordinary CCMP. These are generated peer
 //! vectors, not additional published Annex J vectors. No C code is ported.
 
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
-use oer_protocols_ieee80211_core_security_cipher::{
-    aes::SoftwareAes128,
-    ccmp_mpdu::{CcmpAssociation, CcmpMpduError},
-};
+use oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
 use oer_protocols_ieee80211_wire::security::Spp;
 
 struct Vector {

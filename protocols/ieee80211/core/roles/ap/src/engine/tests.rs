@@ -506,7 +506,7 @@ fn a_departing_peer_is_forgotten() {
 
 mod handshake {
     use super::*;
-    use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+    use oer_portable_aes_software::SoftwareAes128;
     use oer_protocols_ieee80211_core_security_rsn::{
         Ptk, PtkContext,
         frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnTxFrame},

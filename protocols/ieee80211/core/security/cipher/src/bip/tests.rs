@@ -1,5 +1,5 @@
 use super::*;
-use crate::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 
 const KEY: Aes128Key = Aes128Key::copy_from(&[0x77; 16]);
 /// A management header and a two-octet body.

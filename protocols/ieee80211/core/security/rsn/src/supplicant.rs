@@ -29,7 +29,7 @@ use oer_portable_crypto::{
 };
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee802_wire::Eui48;
-use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
+use oer_protocols_ieee80211_core_security_cipher::key_data::RsnKeyData;
 use oer_protocols_ieee80211_wire::eapol::KeyInformation;
 use oer_protocols_ieee80211_wire::security::GroupManagementCipher;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -156,7 +156,7 @@ impl<S> From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStaErr
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnStaEnd<S> {
     /// The authenticated Key Data field is longer than
-    /// [`oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY`].
+    /// [`oer_protocols_ieee80211_core_security_cipher::key_data::RSN_KEY_DATA_CAPACITY`].
     KeyDataTooLong,
     /// The authenticated key data did not unwrap.
     KeyUnwrap(KeyUnwrapError<S>),
@@ -321,7 +321,7 @@ pub enum RsnConnectedSupplicantError<S> {
 pub enum RsnConnectedProcessError<S> {
     Supplicant(RsnConnectedSupplicantError<S>),
     /// The authenticated Key Data field is longer than
-    /// [`oer_protocols_ieee80211_core_security_cipher::aes::RSN_KEY_DATA_CAPACITY`].
+    /// [`oer_protocols_ieee80211_core_security_cipher::key_data::RSN_KEY_DATA_CAPACITY`].
     KeyDataTooLong,
     /// The authenticated key data did not unwrap.
     KeyUnwrap(KeyUnwrapError<S>),

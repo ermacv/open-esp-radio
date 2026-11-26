@@ -1,5 +1,7 @@
 use super::*;
 use core::convert::Infallible;
+use oer_portable_aes_software::SoftwareAes128;
+use oer_portable_crypto::Aes128Key;
 use oer_portable_crypto::{
     conformance,
     rfc3394::{KeyUnwrapError, KeyWrapError, unwrap, wrap},
@@ -21,11 +23,6 @@ fn software_wrap(kek: &[u8; 16], plaintext: &[u8]) -> Result<Vec<u8>, KeyWrapErr
     let buffer = buffer.plaintext(plaintext).unwrap();
     wrap(&mut SoftwareAes128, &Aes128Key::copy_from(kek), buffer)?;
     Ok(buffer.to_vec())
-}
-
-#[test]
-fn the_software_engine_passes_the_key_unwrap_conformance_cases() {
-    conformance::key_unwrap_rfc3394(&mut SoftwareAes128);
 }
 
 #[test]

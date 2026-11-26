@@ -19,7 +19,7 @@ use oer_protocols_ieee80211_wire::eapol::GtkTx;
 const BIP: Option<oer_protocols_ieee80211_wire::security::GroupManagementCipher> =
     Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128);
 use crate::{Akm, EapolKeyFrame, EapolKeyMessage, PtkContext};
-use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 
 pub(crate) const MESSAGE3: [u8; 187] = [
     0x02, 0x03, 0x00, 0xb7, 0x02, 0x13, 0xcb, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

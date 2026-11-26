@@ -15,7 +15,7 @@ use oer_portable_clock::Clock;
 use oer_portable_time::Instant;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, RxCryptoStatus, RxEvidence};
-use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_core_security_rsn::authenticator::{
     RsnAuthenticator, RsnAuthenticatorStep,
 };
