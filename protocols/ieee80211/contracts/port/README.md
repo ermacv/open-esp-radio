@@ -66,7 +66,7 @@ places. So the rights are two kinds of bundle:
 | --- | --- |
 | the two arenas | its single places, by purpose |
 | a right a transmit queue | its role's data places (`I::Data`: none for a station, one a queue for an access point) |
-| the command's place | `PAIRWISE` pairwise key places |
+| the command's place | `PAIRWISE` pairwise key places: one for a station, one a client for an access point |
 | | its group key slots |
 | | its receive agreements' slots |
 

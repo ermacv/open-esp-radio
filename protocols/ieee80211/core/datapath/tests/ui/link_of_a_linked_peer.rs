@@ -9,7 +9,7 @@ pub type Station<'id, T> =
     Engine<'id, ModelPort<'id, StationModel<8>>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS, 7>;
 pub type AccessPoint<'id, T> = Engine<
     'id,
-    ModelPort<'id, AccessPointModel<17>>,
+    ModelPort<'id, AccessPointModel<17, 2>>,
     Singles,
     T,
     2,

@@ -20,14 +20,13 @@
 
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::{
-    Channel, ChannelWidth, EthernetAddresses, MpduLength, PortPools, RadioPort, RegulatedChannel,
-    Round, RxMeta, SupportedChannel,
+    Channel, ChannelWidth, EthernetAddresses, InterfaceRole, MpduLength, PortPools, RadioPort,
+    RegulatedChannel, Round, RxMeta, SupportedChannel,
 };
 use oer_protocols_ieee80211_testing_conformance as suite;
 use oer_protocols_ieee80211_testing_model::{
-    Air, Anomaly, HardwareState, MODEL_AGREEMENTS, MODEL_GROUPS, MODEL_PLACES,
-    MODEL_SHORT_AMPDU_MCS, MODEL_TX_BODY, ModelCaps, ModelLink, ModelMemory, ModelPort, Programmed,
-    StationModel,
+    AccessPointModel, Air, Anomaly, HardwareState, MODEL_PLACES, MODEL_SHORT_AMPDU_MCS,
+    MODEL_TX_BODY, ModelCaps, ModelLink, ModelMemory, ModelPort, Programmed, Served, StationModel,
 };
 use oer_protocols_radio_port::{Mint, branded};
 
@@ -52,13 +51,13 @@ fn channel(number: u8) -> SupportedChannel<ModelCaps> {
     .unwrap()
 }
 
-struct Model<'id> {
-    port: ModelPort<'id, StationModel<SINGLES>>,
+struct Model<'id, L: Served = StationModel<SINGLES>> {
+    port: ModelPort<'id, L>,
     memory: u32,
 }
 
-impl<'id> suite::Harness<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS> for Model<'id> {
-    type Port = ModelPort<'id, StationModel<SINGLES>>;
+impl<'id, L: Served> suite::Harness<'id, L> for Model<'id, L> {
+    type Port = ModelPort<'id, L>;
     type Record = Vec<Programmed>;
     type State = HardwareState;
 
@@ -76,7 +75,7 @@ impl<'id> suite::Harness<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS> for Model
             front: [0; oer_protocols_ieee80211_contracts_port::HEADROOM],
         }
     }
-    fn link(&self) -> ModelLink {
+    fn link<I: InterfaceRole>(&self) -> ModelLink {
         ModelLink { protected: false }
     }
     fn land(&mut self, bytes: &[u8]) {
@@ -117,28 +116,29 @@ impl<'id> suite::Harness<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS> for Model
     }
 }
 
-/// Run `body` with a fresh installation of the model.
-fn installed(
-    body: impl for<'id> FnOnce(Model<'id>, suite::Rights<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>),
-) {
-    let future = core::pin::pin!(branded(
-        async |mint: Mint<'_, PortPools<StationModel<SINGLES>>>| {
-            let install = mint.into_pools();
-            let model = Model {
-                port: ModelPort::new(install.key, install.issuer, channel(1)),
-                memory: 0,
-            };
-            body(
-                model,
-                suite::Rights {
-                    stopped: Some(install.stopped),
-                    right: install.right,
-                    data: Some(install.data),
-                    gate: Some(install.gate),
-                },
-            );
-        }
-    ));
+/// Run `body` with a fresh installation of the model's station.
+fn installed(body: impl for<'id> FnOnce(Model<'id>, suite::Rights<'id, StationModel<SINGLES>>)) {
+    installed_as::<StationModel<SINGLES>>(body);
+}
+
+/// Run `body` with a fresh installation of the model of the layout `L`.
+fn installed_as<L: Served>(body: impl for<'id> FnOnce(Model<'id, L>, suite::Rights<'id, L>)) {
+    let future = core::pin::pin!(branded(async |mint: Mint<'_, PortPools<L>>| {
+        let install = mint.into_pools();
+        let model = Model {
+            port: ModelPort::new(install.key, install.issuer, channel(1)),
+            memory: 0,
+        };
+        body(
+            model,
+            suite::Rights {
+                stopped: Some(install.stopped),
+                right: install.right,
+                data: Some(install.data),
+                gate: Some(install.gate),
+            },
+        );
+    }));
     let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
     assert!(core::future::Future::poll(future, &mut cx).is_ready());
 }
@@ -271,5 +271,13 @@ fn a_units_addresses_are_written_before_its_ether_type() {
         assert_eq!(round.unit(&handle).unwrap().bytes, expected);
         round.release(handle);
         let _ = round.close();
+    });
+}
+
+/// An access point of two clients: each client's key goes alone.
+#[test]
+fn a_clients_key_goes_alone() {
+    installed_as::<AccessPointModel<SINGLES, 2>>(|mut model, rights| {
+        suite::a_clients_key_goes_alone(&mut model, rights);
     });
 }

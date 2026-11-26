@@ -243,12 +243,16 @@ mod sealed {
 
 /// The layout of a station alone: what a station's engine runs on.
 pub type StationLayout<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
-    <Arenas as Form>::Layout<SINGLES, GROUPS, AGREEMENTS>;
+    <Arenas as Form>::Layout<1, SINGLES, GROUPS, AGREEMENTS>;
 
-/// The layout of an access point alone: what an access point's engine runs
-/// on.
-pub type AccessPointLayout<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
-    <Singles as Form>::Layout<SINGLES, GROUPS, AGREEMENTS>;
+/// The layout of an access point of `PEERS` clients alone, a pairwise key
+/// place a client: what an access point's engine runs on.
+pub type AccessPointLayout<
+    const PEERS: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> = <Singles as Form>::Layout<PEERS, SINGLES, GROUPS, AGREEMENTS>;
 
 /// How an interface's data goes: a closed set, a form a role.
 pub trait Form: sealed::Sealed {
@@ -258,12 +262,26 @@ pub trait Form: sealed::Sealed {
     type Running<'id, K>;
     /// What a linked peer's entry keeps of its link.
     type Entry<L, T>;
+    /// The interface's pairwise key places as the form holds them while
+    /// its data runs, a place a peer.
+    type Keys<'id, T, const PEERS: usize>: KeyPlaces<'id, Self::Role>;
     /// The rights of the form's layout, the radio's and its interface's
-    /// bundle, which the installation machine hands over when the data
-    /// flows and takes back when it stops.
-    type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize>;
+    /// bundle of a pairwise place a peer, which the installation machine
+    /// hands over when the data flows and takes back when it stops.
+    type Rights<
+        'id,
+        const PEERS: usize,
+        const SINGLES: usize,
+        const GROUPS: usize,
+        const AGREEMENTS: usize,
+    >;
     /// The layout of an installation of this form's one interface.
-    type Layout<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize>;
+    type Layout<
+        const PEERS: usize,
+        const SINGLES: usize,
+        const GROUPS: usize,
+        const AGREEMENTS: usize,
+    >;
 }
 
 /// A station's data, in the port's two arenas.
@@ -281,24 +299,46 @@ impl Form for Arenas {
     type Role = StationRole;
     type Running<'id, K> = StationRunning<'id, K>;
     type Entry<L, T> = StationEntry<L>;
-    type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> = (
+    type Keys<'id, T, const PEERS: usize> = StationKey<'id, T>;
+    type Rights<
+        'id,
+        const PEERS: usize,
+        const SINGLES: usize,
+        const GROUPS: usize,
+        const AGREEMENTS: usize,
+    > = (
         RadioRights<'id>,
-        InterfaceRights<'id, StationRole, SINGLES, 1, GROUPS, AGREEMENTS>,
+        InterfaceRights<'id, StationRole, SINGLES, PEERS, GROUPS, AGREEMENTS>,
     );
-    type Layout<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
-        (InterfaceLayout<StationRole, SINGLES, 1, GROUPS, AGREEMENTS>,);
+    type Layout<
+        const PEERS: usize,
+        const SINGLES: usize,
+        const GROUPS: usize,
+        const AGREEMENTS: usize,
+    > = (InterfaceLayout<StationRole, SINGLES, PEERS, GROUPS, AGREEMENTS>,);
 }
 
 impl Form for Singles {
     type Role = AccessPointRole;
     type Running<'id, K> = ApRunning<'id, K>;
     type Entry<L, T> = ClientLink;
-    type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> = (
+    type Keys<'id, T, const PEERS: usize> = ApKeys<'id, PEERS>;
+    type Rights<
+        'id,
+        const PEERS: usize,
+        const SINGLES: usize,
+        const GROUPS: usize,
+        const AGREEMENTS: usize,
+    > = (
         RadioRights<'id>,
-        InterfaceRights<'id, AccessPointRole, SINGLES, 1, GROUPS, AGREEMENTS>,
+        InterfaceRights<'id, AccessPointRole, SINGLES, PEERS, GROUPS, AGREEMENTS>,
     );
-    type Layout<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
-        (InterfaceLayout<AccessPointRole, SINGLES, 1, GROUPS, AGREEMENTS>,);
+    type Layout<
+        const PEERS: usize,
+        const SINGLES: usize,
+        const GROUPS: usize,
+        const AGREEMENTS: usize,
+    > = (InterfaceLayout<AccessPointRole, SINGLES, PEERS, GROUPS, AGREEMENTS>,);
 }
 
 /// A station's link to its access point, as its controller links it: the
@@ -373,12 +413,292 @@ enum Gate<'id> {
     Open(GateOpen<'id>),
 }
 
-/// The interface's pairwise key: its slot empty, or the port's key installed
+/// The station's pairwise key: its slot empty, or the port's key installed
 /// with the link's transmit key of packet numbers `T`, which exists exactly
 /// while the port's does.
-enum StationKey<'id, I, T> {
-    Empty(PairwiseSlot<'id, I>),
-    Installed(InstalledPairwise<'id, I>, T),
+pub enum StationKey<'id, T> {
+    /// The slot is empty.
+    Empty(PairwiseSlot<'id, StationRole>),
+    /// The port's key is installed, the link's transmit key with it.
+    Installed(InstalledPairwise<'id, StationRole>, T),
+}
+
+/// An access point's pairwise key places, a place a client, all empty:
+/// the engine holds them idle, the clients' keys being its controller's
+/// (step 16 of the plan installs them through the engine).
+pub struct ApKeys<'id, const PEERS: usize>([PairwiseSlot<'id, AccessPointRole>; PEERS]);
+
+mod keys_sealed {
+    /// The key places of this crate's forms.
+    pub trait Sealed {}
+}
+
+impl<T> keys_sealed::Sealed for StationKey<'_, T> {}
+impl<const PEERS: usize> keys_sealed::Sealed for ApKeys<'_, PEERS> {}
+
+/// Whether a key's command began: the command, or nothing to do now, the
+/// places and the command's place back with their owner.
+pub enum KeyBegun<'id, K, C> {
+    /// The command began; the places are the port's command's.
+    Started(C),
+    /// Nothing to do: the places and the command's place stay their
+    /// owner's.
+    Idle { places: K, place: CommandPlace<'id> },
+}
+
+/// A key command's poll: in progress, or ended with the places it leaves,
+/// the command's place, how it ended and what the places become next.
+pub enum KeyPoll<'id, K, C, N> {
+    /// In progress.
+    Pending(C),
+    /// It ended.
+    Ended {
+        places: K,
+        place: CommandPlace<'id>,
+        end: KeyEnd,
+        then: N,
+    },
+}
+
+/// What an interface's pairwise key places are while its data runs, as its
+/// form holds them, with the command that changes them: a closed set. An
+/// access point's command and next step are of no value, so its arms are
+/// none.
+pub trait KeyPlaces<'id, I: InterfaceRole>: keys_sealed::Sealed + Sized {
+    /// A key's command in progress, with what its end makes of the places.
+    type Command;
+    /// What the places become after a command's end.
+    type Then;
+
+    /// Begin taking the installed key down, the data's stop: the command,
+    /// or the places and the command's place back when none is installed.
+    fn remove<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        self,
+        place: CommandPlace<'id>,
+        port: &mut P,
+        now: Instant,
+    ) -> KeyBegun<'id, Self, Self::Command>;
+
+    /// Begin what a command's end said the places become next, or nothing
+    /// when it is nothing.
+    fn begin<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        self,
+        then: Self::Then,
+        place: CommandPlace<'id>,
+        port: &mut P,
+        now: Instant,
+    ) -> KeyBegun<'id, Self, Self::Command>;
+
+    /// Poll the command through `sink`.
+    fn poll<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        command: Self::Command,
+        port: &mut P,
+        now: Instant,
+        sink: &mut impl PortSink<'id, P::Layout, P::Ack, P::Denial>,
+    ) -> KeyPoll<'id, Self, Self::Command, Self::Then>;
+
+    /// The places, as the search that merges equal states names them.
+    #[cfg(test)]
+    fn describe(&self) -> &'static str;
+
+    /// The command, as the search names it.
+    #[cfg(test)]
+    fn describe_command(command: &Self::Command) -> &'static str;
+}
+
+/// A station's key command in progress: the port's command on its slot and
+/// where the change is.
+pub struct StationKeying<'id, T> {
+    command: InCommand<'id, PairwiseHeld<'id, StationRole>>,
+    step: KeyStep<T>,
+}
+
+impl<'id, T> StationKey<'id, T> {
+    /// Begin a key's command toward `target`: the installed key's removal
+    /// (then `target`), or `target`'s installation in the empty slot.
+    fn toward<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        self,
+        target: KeyTarget<T>,
+        place: CommandPlace<'id>,
+        port: &mut P,
+        now: Instant,
+    ) -> KeyBegun<'id, Self, StationKeying<'id, T>> {
+        match (self, target) {
+            (Self::Installed(installed, old), then) => KeyBegun::Started(StationKeying {
+                command: port.begin_pairwise(place, PairwiseCommand::Remove(installed), now),
+                step: KeyStep::Removing { old, then },
+            }),
+            (
+                Self::Empty(slot),
+                KeyTarget::Install(KeyChange {
+                    peer,
+                    key,
+                    spp,
+                    transmit,
+                }),
+            ) => KeyBegun::Started(StationKeying {
+                command: port.begin_pairwise(
+                    place,
+                    PairwiseCommand::Install {
+                        slot,
+                        peer,
+                        key,
+                        spp,
+                    },
+                    now,
+                ),
+                step: KeyStep::Installing { transmit },
+            }),
+            (empty @ Self::Empty(_), KeyTarget::Empty) => KeyBegun::Idle {
+                places: empty,
+                place,
+            },
+        }
+    }
+}
+
+impl<'id, T> KeyPlaces<'id, StationRole> for StationKey<'id, T> {
+    type Command = StationKeying<'id, T>;
+    type Then = KeyTarget<T>;
+
+    fn remove<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        self,
+        place: CommandPlace<'id>,
+        port: &mut P,
+        now: Instant,
+    ) -> KeyBegun<'id, Self, Self::Command> {
+        self.toward(KeyTarget::Empty, place, port, now)
+    }
+
+    fn begin<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        self,
+        then: Self::Then,
+        place: CommandPlace<'id>,
+        port: &mut P,
+        now: Instant,
+    ) -> KeyBegun<'id, Self, Self::Command> {
+        // After an end, "empty" asks for nothing: the slot is as the end
+        // left it. Only an installation follows a removal.
+        match then {
+            KeyTarget::Empty => KeyBegun::Idle {
+                places: self,
+                place,
+            },
+            install @ KeyTarget::Install(_) => self.toward(install, place, port, now),
+        }
+    }
+
+    fn poll<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        command: Self::Command,
+        port: &mut P,
+        now: Instant,
+        sink: &mut impl PortSink<'id, P::Layout, P::Ack, P::Denial>,
+    ) -> KeyPoll<'id, Self, Self::Command, Self::Then> {
+        let StationKeying { command, step } = command;
+        match port.poll_pairwise(command, now, sink) {
+            CommandPoll::Pending(command) => KeyPoll::Pending(StationKeying { command, step }),
+            CommandPoll::Ended(place, end) => {
+                let (places, end, then) = match (end, step) {
+                    (PairwiseEnd::Installed(installed), KeyStep::Installing { transmit }) => (
+                        Self::Installed(installed, transmit),
+                        KeyEnd::Installed,
+                        KeyTarget::Empty,
+                    ),
+                    (PairwiseEnd::Empty(slot), KeyStep::Installing { .. }) => {
+                        (Self::Empty(slot), KeyEnd::Expired, KeyTarget::Empty)
+                    }
+                    (PairwiseEnd::Empty(slot), KeyStep::Removing { then, .. }) => {
+                        (Self::Empty(slot), KeyEnd::Removed, then)
+                    }
+                    // A removal ends with the slot empty; a key still
+                    // installed stays so, and the controller is told it.
+                    (PairwiseEnd::Installed(installed), KeyStep::Removing { old, .. }) => (
+                        Self::Installed(installed, old),
+                        KeyEnd::Installed,
+                        KeyTarget::Empty,
+                    ),
+                };
+                KeyPoll::Ended {
+                    places,
+                    place,
+                    end,
+                    then,
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn describe(&self) -> &'static str {
+        match self {
+            Self::Empty(_) => "empty",
+            Self::Installed(..) => "installed",
+        }
+    }
+
+    #[cfg(test)]
+    fn describe_command(command: &Self::Command) -> &'static str {
+        match command.step {
+            KeyStep::Removing {
+                then: KeyTarget::Install(_),
+                ..
+            } => "removing, then installing",
+            KeyStep::Removing {
+                then: KeyTarget::Empty,
+                ..
+            } => "removing",
+            KeyStep::Installing { .. } => "installing",
+        }
+    }
+}
+
+impl<'id, const PEERS: usize> KeyPlaces<'id, AccessPointRole> for ApKeys<'id, PEERS> {
+    /// The engine begins no command on an access point's places.
+    type Command = core::convert::Infallible;
+    /// Nor anything after one.
+    type Then = core::convert::Infallible;
+
+    /// Nothing is installed: the clients' keys are the controller's.
+    fn remove<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        self,
+        place: CommandPlace<'id>,
+        _port: &mut P,
+        _now: Instant,
+    ) -> KeyBegun<'id, Self, Self::Command> {
+        KeyBegun::Idle {
+            places: self,
+            place,
+        }
+    }
+
+    fn begin<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        self,
+        then: Self::Then,
+        _place: CommandPlace<'id>,
+        _port: &mut P,
+        _now: Instant,
+    ) -> KeyBegun<'id, Self, Self::Command> {
+        match then {}
+    }
+
+    fn poll<P: oer_protocols_ieee80211_contracts_port::DataPort<'id>>(
+        command: Self::Command,
+        _port: &mut P,
+        _now: Instant,
+        _sink: &mut impl PortSink<'id, P::Layout, P::Ack, P::Denial>,
+    ) -> KeyPoll<'id, Self, Self::Command, Self::Then> {
+        match command {}
+    }
+
+    #[cfg(test)]
+    fn describe(&self) -> &'static str {
+        "idle"
+    }
+
+    #[cfg(test)]
+    fn describe_command(command: &Self::Command) -> &'static str {
+        match *command {}
+    }
 }
 
 /// A key the controller installs: the port's entry (its peer, the key and
@@ -411,18 +731,17 @@ enum KeyStep<T> {
 /// What the interface's command place is doing, each variant holding what
 /// exists beside it. A key's command and the gate's closing stop the
 /// intake; no other command runs in this half yet.
-enum Interface<'id, I, T> {
+enum Interface<'id, I: InterfaceRole, K: KeyPlaces<'id, I>> {
     /// No command runs.
     Idle {
         gate: Gate<'id>,
         place: CommandPlace<'id>,
-        key: StationKey<'id, I, T>,
+        key: K,
     },
     /// A key's command runs: the key's slot is the port's.
     Keying {
         gate: Gate<'id>,
-        command: InCommand<'id, PairwiseHeld<'id, I>>,
-        step: KeyStep<T>,
+        command: K::Command,
     },
     /// A receive agreement's command runs (its addition or its end, for
     /// the reorder's bank `bank`); the data goes on.
@@ -430,12 +749,12 @@ enum Interface<'id, I, T> {
         gate: Gate<'id>,
         command: InCommand<'id, AgreementHeld<'id, I>>,
         ticket: BankTicket,
-        key: StationKey<'id, I, T>,
+        key: K,
     },
     /// The gate's closing runs: the gate is the port's.
     Closing {
         command: InCommand<'id, GateOpen<'id>>,
-        key: StationKey<'id, I, T>,
+        key: K,
     },
     /// Inside one method, between two of the above: the port's command
     /// takes the place and its right by value, and no variant is without
@@ -482,12 +801,13 @@ fn agreement_slots<
     F: Form,
     K: Ieee80211Capabilities,
     T,
+    const PEERS: usize,
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
     const WINDOW: usize,
 >(
-    data: &mut Data<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS, WINDOW>,
+    data: &mut Data<'id, F, K, T, PEERS, SINGLES, GROUPS, AGREEMENTS, WINDOW>,
 ) -> Option<[AgreementSlot<'id, F::Role>; AGREEMENTS]> {
     match data {
         Data::Stopping(running) => running.agreements.slots_home().ok(),
@@ -501,6 +821,7 @@ struct Running<
     F: Form,
     K: Ieee80211Capabilities,
     T,
+    const PEERS: usize,
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
@@ -509,7 +830,7 @@ struct Running<
     form: F::Running<'id, K>,
     /// The controller's single places, which the engine does not lend.
     singles: [SinglePlace<'id, F::Role>; SINGLES],
-    interface: Interface<'id, F::Role, T>,
+    interface: Interface<'id, F::Role, F::Keys<'id, T, PEERS>>,
     groups: [GroupSlot<'id, F::Role>; GROUPS],
     /// The receive agreements and the reorder: a station's, which phase B
     /// alone admits; an access point's banks stay free.
@@ -524,6 +845,7 @@ enum Data<
     F: Form,
     K: Ieee80211Capabilities,
     T,
+    const PEERS: usize,
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
@@ -532,10 +854,10 @@ enum Data<
     /// The installation machine holds the rights.
     Stopped,
     /// The data flows.
-    Flowing(Running<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS, WINDOW>),
+    Flowing(Running<'id, F, K, T, PEERS, SINGLES, GROUPS, AGREEMENTS, WINDOW>),
     /// Asked to stop: every link ended; what is on the air or in the gate's
     /// closing ends first.
-    Stopping(Running<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS, WINDOW>),
+    Stopping(Running<'id, F, K, T, PEERS, SINGLES, GROUPS, AGREEMENTS, WINDOW>),
 }
 
 /// A link's state.
@@ -650,7 +972,7 @@ pub struct Engine<
     /// The links made: a link's generation, which its receive agreements
     /// belong to.
     links: u8,
-    data: Data<'id, F, P::Caps, T, SINGLES, GROUPS, AGREEMENTS, WINDOW>,
+    data: Data<'id, F, P::Caps, T, PEERS, SINGLES, GROUPS, AGREEMENTS, WINDOW>,
     /// Linked only while the data flows: a stop ends every link.
     entries: [Entry<EntryOf<'id, P, F, T>>; PEERS],
     queues: TxQueues<P::Memory, POOL, PEERS>,
@@ -677,6 +999,8 @@ pub trait Sections<'id, P: ReceivePort<'id>> {
     type Role: InterfaceRole;
     /// The link's transmit key.
     type Key;
+    /// What the interface's key places become after a command's end.
+    type Then;
 
     /// The data flows, with its rights.
     fn start(&mut self, _seal: Seal, rights: Self::Rights);
@@ -734,7 +1058,7 @@ pub trait Sections<'id, P: ReceivePort<'id>> {
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Option<Ending<'id, Self::Role, Self::Key>>;
+    ) -> Option<Ending<'id, Self::Role, Self::Then>>;
 
     /// The link's transmit key changed: what the form holds unpublished,
     /// written under the old one, goes home first.
@@ -864,7 +1188,9 @@ impl<
     }
 
     /// The interface's command place, while the data runs.
-    const fn interface_mut(&mut self) -> Option<&mut Interface<'id, F::Role, T>> {
+    const fn interface_mut(
+        &mut self,
+    ) -> Option<&mut Interface<'id, F::Role, F::Keys<'id, T, PEERS>>> {
         match &mut self.data {
             Data::Flowing(running) | Data::Stopping(running) => Some(&mut running.interface),
             Data::Stopped => None,
@@ -940,77 +1266,43 @@ impl<
         };
     }
 
-    /// Begin a key's command toward `target`, when no command runs: the
-    /// installed key's removal (then `target`), or `target`'s installation
-    /// in the empty slot; [`Begun::Busy`] with the target back while a
-    /// command runs.
+    /// Begin the key places' command, when no command runs: the installed
+    /// key's removal when `then` is `None` (the data's stop), else what a
+    /// command's end said comes next; [`Begun::Busy`] while a command runs.
     fn begin_key<N, R, E, C>(
         &mut self,
-        target: KeyTarget<T>,
+        then: Option<ThenOf<'id, F, T, PEERS>>,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Begun<T> {
+    ) -> Begun {
         let Some(interface) = self.interface_mut() else {
-            return Begun::Busy(target);
+            return Begun::Busy;
         };
         let Interface::Idle { .. } = interface else {
-            return Begun::Busy(target);
+            return Begun::Busy;
         };
         let (next, begun) = match core::mem::replace(interface, Interface::InTransition) {
-            Interface::Idle {
-                gate,
-                place,
-                key: StationKey::Installed(installed, old),
-            } => (
-                Interface::Keying {
-                    gate,
-                    command: turn.port.begin_pairwise(
-                        place,
-                        PairwiseCommand::Remove(installed),
-                        turn.now,
-                    ),
-                    step: KeyStep::Removing { old, then: target },
-                },
-                Begun::Started,
-            ),
-            Interface::Idle {
-                gate,
-                place,
-                key: StationKey::Empty(slot),
-            } => match target {
-                KeyTarget::Install(KeyChange {
-                    peer,
-                    key,
-                    spp,
-                    transmit,
-                }) => (
-                    Interface::Keying {
-                        gate,
-                        command: turn.port.begin_pairwise(
+            Interface::Idle { gate, place, key } => {
+                let begun = match then {
+                    None => key.remove(place, turn.port, turn.now),
+                    Some(then) => key.begin(then, place, turn.port, turn.now),
+                };
+                match begun {
+                    KeyBegun::Started(command) => {
+                        (Interface::Keying { gate, command }, Begun::Started)
+                    }
+                    KeyBegun::Idle { places, place } => (
+                        Interface::Idle {
+                            gate,
                             place,
-                            PairwiseCommand::Install {
-                                slot,
-                                peer,
-                                key,
-                                spp,
-                            },
-                            turn.now,
-                        ),
-                        step: KeyStep::Installing { transmit },
-                    },
-                    Begun::Started,
-                ),
-                KeyTarget::Empty => (
-                    Interface::Idle {
-                        gate,
-                        place,
-                        key: StationKey::Empty(slot),
-                    },
-                    Begun::Nothing,
-                ),
-            },
+                            key: places,
+                        },
+                        Begun::Nothing,
+                    ),
+                }
+            }
             // Checked idle above: this does not happen. Should it, the
             // interface keeps what it was.
-            other => (other, Begun::Busy(target)),
+            other => (other, Begun::Busy),
         };
         *interface = next;
         begun
@@ -1019,11 +1311,11 @@ impl<
     /// The interface's command polled through `sink`: its end puts the
     /// command's place back with what the end returns, and says what ended.
     fn poll_interface(
-        interface: &mut Interface<'id, F::Role, T>,
+        interface: &mut Interface<'id, F::Role, F::Keys<'id, T, PEERS>>,
         port: &mut P,
         now: Instant,
         sink: &mut impl PortSink<'id, P::Layout, P::Ack, P::Denial>,
-    ) -> Option<Ending<'id, F::Role, T>> {
+    ) -> Option<Ending<'id, F::Role, ThenOf<'id, F, T, PEERS>>> {
         let (Interface::Keying { .. } | Interface::Closing { .. } | Interface::Agreeing { .. }) =
             interface
         else {
@@ -1041,56 +1333,26 @@ impl<
                     Some(Ending::GateClosed(closed)),
                 ),
             },
-            Interface::Keying {
-                gate,
-                command,
-                step,
-            } => match port.poll_pairwise(command, now, sink) {
-                CommandPoll::Pending(command) => (
-                    Interface::Keying {
-                        gate,
-                        command,
-                        step,
-                    },
-                    None,
-                ),
-                CommandPoll::Ended(place, end) => {
-                    let (key, ending) = match (end, step) {
-                        (PairwiseEnd::Installed(installed), KeyStep::Installing { transmit }) => (
-                            StationKey::Installed(installed, transmit),
-                            Ending::Key {
-                                end: KeyEnd::Installed,
-                                then: KeyTarget::Empty,
-                            },
-                        ),
-                        (PairwiseEnd::Empty(slot), KeyStep::Installing { .. }) => (
-                            StationKey::Empty(slot),
-                            Ending::Key {
-                                end: KeyEnd::Expired,
-                                then: KeyTarget::Empty,
-                            },
-                        ),
-                        (PairwiseEnd::Empty(slot), KeyStep::Removing { then, .. }) => (
-                            StationKey::Empty(slot),
-                            Ending::Key {
-                                end: KeyEnd::Removed,
-                                then,
-                            },
-                        ),
-                        (PairwiseEnd::Installed(installed), KeyStep::Removing { old, .. }) => (
-                            // A removal ends with the slot empty; a key
-                            // still installed stays so, and the controller
-                            // is told it.
-                            StationKey::Installed(installed, old),
-                            Ending::Key {
-                                end: KeyEnd::Installed,
-                                then: KeyTarget::Empty,
-                            },
-                        ),
-                    };
-                    (Interface::Idle { gate, place, key }, Some(ending))
+            Interface::Keying { gate, command } => {
+                match <F::Keys<'id, T, PEERS> as KeyPlaces<'id, F::Role>>::poll(
+                    command, port, now, sink,
+                ) {
+                    KeyPoll::Pending(command) => (Interface::Keying { gate, command }, None),
+                    KeyPoll::Ended {
+                        places,
+                        place,
+                        end,
+                        then,
+                    } => (
+                        Interface::Idle {
+                            gate,
+                            place,
+                            key: places,
+                        },
+                        Some(Ending::Key { end, then }),
+                    ),
                 }
-            },
+            }
             Interface::Agreeing {
                 gate,
                 command,
@@ -1119,17 +1381,21 @@ impl<
 }
 
 /// Whether a command began.
-enum Begun<T> {
+enum Begun {
     Started,
     /// Nothing to begin.
     Nothing,
-    /// A command runs: the target back.
-    Busy(KeyTarget<T>),
+    /// A command runs.
+    Busy,
 }
+
+/// What the key places of form `F` become after a command's end.
+type ThenOf<'id, F, T, const PEERS: usize> =
+    <<F as Form>::Keys<'id, T, PEERS> as KeyPlaces<'id, <F as Form>::Role>>::Then;
 
 /// What a command's end leaves for the engine to tell: made by the
 /// engine's sections alone ([`Seal`]).
-pub enum Ending<'id, I, T> {
+pub enum Ending<'id, I, N> {
     GateClosed(GateClosed<'id>),
     /// A receive agreement's command ended, for the reorder's `bank`.
     Agreement {
@@ -1138,8 +1404,8 @@ pub enum Ending<'id, I, T> {
     },
     Key {
         end: KeyEnd,
-        /// What the slot is to become now, after a removal.
-        then: KeyTarget<T>,
+        /// What the places are to become now, after a removal.
+        then: N,
     },
 }
 
@@ -1171,9 +1437,10 @@ where
     Self: Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -1275,7 +1542,7 @@ where
 
     /// The rights back, when the data is stopping, the gate shut and
     /// nothing the port's.
-    fn finish(&mut self) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
+    fn finish(&mut self) -> DataStop<F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>> {
         // The engine's own places are quiet: the stop's round sent back
         // every unit that waited for the network, and a stopping round takes
         // none. The units the network holds are the installation machine's
@@ -1387,11 +1654,9 @@ where
                     // once: the intake stands between them.
                     // A stop ended the link the rekey was for: its key is
                     // not installed, and the removal is told.
-                    let begun = match (then, &self.data) {
-                        (KeyTarget::Install(change), Data::Flowing(_)) => {
-                            self.begin_key(KeyTarget::Install(change), turn)
-                        }
-                        (KeyTarget::Install(_) | KeyTarget::Empty, _) => Begun::Nothing,
+                    let begun = match &self.data {
+                        Data::Flowing(_) => self.begin_key(Some(then), turn),
+                        Data::Stopping(_) | Data::Stopped => Begun::Nothing,
                     };
                     if !matches!(begun, Begun::Started) {
                         turn.told.key_ended(end);
@@ -1488,7 +1753,7 @@ where
         // The receive agreements end first, then the installed key, then
         // the gate.
         self.begin_agreement(turn);
-        if let Begun::Nothing = self.begin_key(KeyTarget::Empty, turn) {
+        if let Begun::Nothing = self.begin_key(None, turn) {
             self.close_gate(turn);
         }
     }
@@ -1706,9 +1971,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -1785,7 +2051,7 @@ where
     >(
         self,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
+    ) -> DataStop<F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>> {
         let engine = self.0;
         for peer in 0..PEERS {
             if let Ok(peer) = u8::try_from(peer)
@@ -1829,9 +2095,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -1846,7 +2113,7 @@ where
     >(
         self,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
+    ) -> DataStop<F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>> {
         let engine = self.0;
         engine.command(turn);
         // The ring's next units go back unread; the machine polls again
@@ -1873,9 +2140,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -2030,9 +2298,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -2078,9 +2347,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -2121,9 +2391,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -2179,9 +2450,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -2210,9 +2482,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -2259,9 +2532,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -2301,9 +2575,10 @@ where
     engine!(): Sections<
             'id,
             P,
-            Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+            Rights = F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
             Key = T,
             Role = F::Role,
+            Then = ThenOf<'id, F, T, PEERS>,
         >,
     P::Ack: Copy,
     P::Denial: Copy,
@@ -2311,7 +2586,7 @@ where
     /// The data flows: the installation machine hands its rights over.
     pub fn flows(
         self,
-        rights: F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+        rights: F::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>,
     ) -> FlowingData<'a, engine!()> {
         let engine = self.0;
         engine.start(Seal(()), rights);
@@ -2377,7 +2652,7 @@ impl<
     const WINDOW: usize,
 > FreePeer<'a, access_point!()>
 where
-    P: ReceivePort<'id, Layout = AccessPointLayout<SINGLES, GROUPS, AGREEMENTS>>,
+    P: ReceivePort<'id, Layout = AccessPointLayout<PEERS, SINGLES, GROUPS, AGREEMENTS>>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
@@ -2462,7 +2737,7 @@ where
     ) -> Rest {
         let engine = self.0;
         // The handle is an idle place's: the key's command begins.
-        let _begun = engine.begin_key(KeyTarget::Install(change), turn);
+        let _begun = engine.begin_key(Some(KeyTarget::Install(change)), turn);
         engine.intake(turn)
     }
 }
@@ -2637,9 +2912,10 @@ where
     P::BlockAck: Copy,
     P::Denial: Copy,
 {
-    type Rights = <Arenas as Form>::Rights<'id, SINGLES, GROUPS, AGREEMENTS>;
+    type Rights = <Arenas as Form>::Rights<'id, 1, SINGLES, GROUPS, AGREEMENTS>;
     type Role = StationRole;
     type Key = T;
+    type Then = KeyTarget<T>;
 
     fn start(&mut self, _seal: Seal, rights: Self::Rights) {
         let (
@@ -2920,7 +3196,7 @@ where
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Option<Ending<'id, Self::Role, T>> {
+    ) -> Option<Ending<'id, Self::Role, Self::Then>> {
         let (Data::Flowing(running) | Data::Stopping(running)) = &mut self.data else {
             return None;
         };
@@ -3228,7 +3504,7 @@ impl<
     const AGREEMENTS: usize,
     const PEERS: usize,
     const POOL: usize,
-> PortSink<'id, AccessPointLayout<SINGLES, GROUPS, AGREEMENTS>, A, D>
+> PortSink<'id, AccessPointLayout<PEERS, SINGLES, GROUPS, AGREEMENTS>, A, D>
     for ApEnds<'_, 'id, K, R, E, C, M, SINGLES, GROUPS, AGREEMENTS, PEERS, POOL>
 {
     fn single_ended(
@@ -3301,13 +3577,14 @@ impl<
     const WINDOW: usize,
 > Sections<'id, P> for access_point!()
 where
-    P: ReceivePort<'id, Layout = AccessPointLayout<SINGLES, GROUPS, AGREEMENTS>>,
+    P: ReceivePort<'id, Layout = AccessPointLayout<PEERS, SINGLES, GROUPS, AGREEMENTS>>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
-    type Rights = <Singles as Form>::Rights<'id, SINGLES, GROUPS, AGREEMENTS>;
+    type Rights = <Singles as Form>::Rights<'id, PEERS, SINGLES, GROUPS, AGREEMENTS>;
     type Role = AccessPointRole;
     type Key = T;
+    type Then = core::convert::Infallible;
 
     fn start(&mut self, _seal: Seal, rights: Self::Rights) {
         let (
@@ -3325,7 +3602,7 @@ where
                         best_effort_place,
                         background_place,
                     ],
-                pairwise: [pairwise],
+                pairwise,
                 groups,
                 agreements,
             },
@@ -3355,12 +3632,13 @@ where
                 arenas,
             },
             singles,
-            // The access point's clients' keys are its controller's (step
-            // 6): the station's slot stays empty.
+            // The access point's clients' keys are its controller's: the
+            // engine holds their places idle until step 16 installs them
+            // through it.
             interface: Interface::Idle {
                 gate: Gate::Shut,
                 place: command,
-                key: StationKey::Empty(pairwise),
+                key: ApKeys(pairwise),
             },
             groups,
             agreements: RxBlockAckStorage::new(agreements, self.policy.gap),
@@ -3511,7 +3789,7 @@ where
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Option<Ending<'id, Self::Role, T>> {
+    ) -> Option<Ending<'id, Self::Role, Self::Then>> {
         let Self {
             data: Data::Flowing(running) | Data::Stopping(running),
             queues,
@@ -3566,7 +3844,7 @@ where
             interface:
                 Interface::Idle {
                     gate: Gate::Shut,
-                    key: StationKey::Empty(_),
+                    key: ApKeys(_),
                     ..
                 },
             ..
@@ -3622,7 +3900,7 @@ where
                     Interface::Idle {
                         gate: Gate::Shut,
                         place: command,
-                        key: StationKey::Empty(pairwise),
+                        key: ApKeys(pairwise),
                     },
                 groups,
                 agreements: _,
@@ -3641,7 +3919,7 @@ where
                         best_effort_place,
                         background_place,
                     ],
-                    pairwise: [pairwise],
+                    pairwise,
                     groups,
                     agreements: slots,
                 },
@@ -3753,7 +4031,7 @@ impl<
     const WINDOW: usize,
 > access_point!()
 where
-    P: ReceivePort<'id, Layout = AccessPointLayout<SINGLES, GROUPS, AGREEMENTS>>,
+    P: ReceivePort<'id, Layout = AccessPointLayout<PEERS, SINGLES, GROUPS, AGREEMENTS>>,
 {
     /// Write `msdu` of `queue` by copy into its queue's data place and
     /// publish it; its memory goes home at the write. An MSDU that cannot
@@ -3971,6 +4249,7 @@ where
             F,
             P::Caps,
             T,
+            PEERS,
             SINGLES,
             GROUPS,
             AGREEMENTS,
@@ -3980,10 +4259,7 @@ where
                 Gate::Shut => "shut",
                 Gate::Open(_) => "open",
             };
-            let key = |key: &StationKey<'id, F::Role, T>| match key {
-                StationKey::Empty(_) => "empty",
-                StationKey::Installed(..) => "installed",
-            };
+            let key = |key: &F::Keys<'id, T, PEERS>| key.describe();
             std::format!(
                 "{name}|{}|{}|{}",
                 running.receive.key(running.agreements.deadline()),
@@ -3991,20 +4267,12 @@ where
                     Interface::Idle {
                         gate: g, key: k, ..
                     } => std::format!("idle {} {}", gate(g), key(k)),
-                    Interface::Keying { gate: g, step, .. } => std::format!(
+                    Interface::Keying { gate: g, command } => std::format!(
                         "keying {} {}",
                         gate(g),
-                        match step {
-                            KeyStep::Removing {
-                                then: KeyTarget::Install(_),
-                                ..
-                            } => "removing, then installing",
-                            KeyStep::Removing {
-                                then: KeyTarget::Empty,
-                                ..
-                            } => "removing",
-                            KeyStep::Installing { .. } => "installing",
-                        }
+                        <F::Keys<'id, T, PEERS> as KeyPlaces<'id, F::Role>>::describe_command(
+                            command
+                        )
                     ),
                     Interface::Closing { key: k, .. } => std::format!("closing {}", key(k)),
                     Interface::Agreeing {

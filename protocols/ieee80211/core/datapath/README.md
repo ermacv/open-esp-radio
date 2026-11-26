@@ -15,7 +15,11 @@ its own: every instant and every arena is its caller's. It holds today:
   offer only the transitions their variant admits; the rights come in by
   value at `flows` and go back with `DataStop::Stopped`. The command place
   is one sum (`Interface`: idle, a key's command, the gate's closing); the
-  station's key is `StationKey { Empty, Installed(port key, transmit key) }`;
+  key places are the form's (`Form::Keys`, `KeyPlaces`): the station's key
+  is `StationKey { Empty, Installed(port key, transmit key) }`, an access
+  point's places are `ApKeys`, a pairwise place a client held idle (its
+  clients' keys are its controller's until step 16 installs them through
+  the engine; its command type is empty, so the engine begins none);
   a key's command and the gate's closing stop the intake;
 - `plane`: the station's data transmission over the port's two data arenas;
 - `numbers`: the link's transmit numbers (`TxNumbers`: each TID's QoS

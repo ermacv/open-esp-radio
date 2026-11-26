@@ -49,6 +49,7 @@ extern crate std;
 use core::cell::Cell;
 use core::num::NonZeroU16;
 use core::task::{Context, Poll};
+use oer_protocols_ieee802_wire::IndividualAddress;
 use oer_protocols_ieee80211_wire::qos::Tid;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -181,9 +182,9 @@ pub type StationModel<const SINGLES: usize> =
     (InterfaceLayout<Station, SINGLES, 1, MODEL_GROUPS, MODEL_AGREEMENTS>,);
 
 /// The layout of an access point alone, with `SINGLES` single places of its
-/// controller.
-pub type AccessPointModel<const SINGLES: usize> =
-    (InterfaceLayout<AccessPoint, SINGLES, 1, MODEL_GROUPS, MODEL_AGREEMENTS>,);
+/// controller and `PAIRWISE` pairwise key places, one a client.
+pub type AccessPointModel<const SINGLES: usize, const PAIRWISE: usize> =
+    (InterfaceLayout<AccessPoint, SINGLES, PAIRWISE, MODEL_GROUPS, MODEL_AGREEMENTS>,);
 
 /// The model's rights of the layout `L`.
 pub type ModelRights<'id, L> = LayoutRights<'id, L>;
@@ -199,17 +200,24 @@ pub trait Served: served::Sealed + Layout {
     /// The single places of the layout's interface: its controller's and
     /// its data's.
     const SINGLE_PLACES: usize;
+    /// The pairwise key places of the layout's interface.
+    const PAIRWISE: usize;
 }
 
 impl<const SINGLES: usize> served::Sealed for StationModel<SINGLES> {}
-impl<const SINGLES: usize> served::Sealed for AccessPointModel<SINGLES> {}
+impl<const SINGLES: usize, const PAIRWISE: usize> served::Sealed
+    for AccessPointModel<SINGLES, PAIRWISE>
+{
+}
 
 impl<const SINGLES: usize> Served for StationModel<SINGLES> {
     const SINGLE_PLACES: usize = SINGLES;
+    const PAIRWISE: usize = 1;
 }
 
-impl<const SINGLES: usize> Served for AccessPointModel<SINGLES> {
+impl<const SINGLES: usize, const PAIRWISE: usize> Served for AccessPointModel<SINGLES, PAIRWISE> {
     const SINGLE_PLACES: usize = SINGLES + QUEUES.len();
+    const PAIRWISE: usize = PAIRWISE;
 }
 
 /// The network's memory of one MSDU, by its handle.
@@ -292,8 +300,8 @@ pub enum Programmed {
     MacRuntime(bool),
     /// The gate opened or closed.
     Gate(bool),
-    /// The pairwise key installed or cleared.
-    Pairwise(bool),
+    /// A pairwise key place installed or cleared.
+    Pairwise(u8, bool),
     /// A group key slot installed or cleared.
     Group(u8, bool),
     /// A receive agreement begun or ended.
@@ -348,8 +356,6 @@ pub enum Part {
     MacRuntime,
     /// The gate is open.
     Gate,
-    /// The pairwise key is installed.
-    Pairwise,
     /// The port needs a stop.
     NeedsStop,
     /// The lever: the next stop's busy bits hold, so its last resort runs.
@@ -415,6 +421,9 @@ fn places_of(bits: u64) -> Vec<u8> {
 pub struct HardwareState {
     /// The parts of the hardware that are on.
     pub parts: Parts,
+    /// The pairwise key places, by their index: the peer of the key each
+    /// holds, or none.
+    pub pairwise: Vec<Option<IndividualAddress>>,
     /// The group key slots installed.
     pub groups: [bool; MODEL_GROUPS],
     /// The agreements running.
@@ -509,11 +518,14 @@ struct Unit {
     lent: bool,
 }
 
-/// Whether a command runs on the model's one command place.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+/// Whether a command runs on the model's one command place: a pairwise
+/// key's installation keeps its peer across its polls, as a port keeps a
+/// command's values.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Commanding {
     Idle,
     Running,
+    InstallingPairwise(IndividualAddress),
 }
 
 /// A unit lent to the network: its drop returns it to the model's ring.
@@ -552,6 +564,9 @@ pub struct ModelPort<
     channel: SupportedChannel<ModelCaps>,
     start_failure: Option<StartFailure>,
     parts: Parts,
+    /// The pairwise key places, by their index: the peer of the key each
+    /// holds.
+    pairwise: Vec<Option<IndividualAddress>>,
     groups: [bool; MODEL_GROUPS],
     agreements: [bool; MODEL_AGREEMENTS],
     anomaly: Option<Anomaly>,
@@ -661,6 +676,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
             channel,
             start_failure: None,
             parts: Parts(0),
+            pairwise: std::vec![None; L::PAIRWISE],
             groups: [false; MODEL_GROUPS],
             agreements: [false; MODEL_AGREEMENTS],
             anomaly: None,
@@ -810,6 +826,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
     pub fn state(&self) -> HardwareState {
         HardwareState {
             parts: self.parts.held(),
+            pairwise: self.pairwise.clone(),
             groups: self.groups,
             agreements: self.agreements,
             on_air: self.queues.iter().any(|queue| queue.single.is_some())
@@ -838,7 +855,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
             self.receive_key(),
             self.phase,
             self.parts,
-            self.groups,
+            (&self.pairwise, self.groups),
             self.agreements,
             self.anomaly,
             self.arenas,
@@ -1052,7 +1069,7 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> RadioPort<'id>
             // reset clears what the owner programmed when it took it, the
             // key table included, and the stop runs that programming again.
             self.program(Programmed::BlockReset);
-            self.parts.off(Part::Pairwise);
+            self.pairwise.iter_mut().for_each(|place| *place = None);
             self.groups = [false; MODEL_GROUPS];
             self.agreements = [false; MODEL_AGREEMENTS];
             self.program(Programmed::OwnerTaking);
@@ -1570,11 +1587,17 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         _now: Instant,
     ) -> InCommand<'id, PairwiseHeld<'id, I>> {
         // The model programs none of the key's values: they end here.
-        let held = match command {
-            PairwiseCommand::Install { slot, .. } => PairwiseHeld::Installing(slot),
-            PairwiseCommand::Remove(installed) => PairwiseHeld::Removing(installed),
+        let (held, peer) = match command {
+            PairwiseCommand::Install { slot, peer, .. } => {
+                (PairwiseHeld::Installing(slot), Some(peer))
+            }
+            PairwiseCommand::Remove(installed) => (PairwiseHeld::Removing(installed), None),
         };
-        self.begin(place, held)
+        let command = self.begin(place, held);
+        if let Some(peer) = peer {
+            self.commanding = Commanding::InstallingPairwise(peer);
+        }
+        command
     }
 
     fn poll_pairwise<I: InterfaceRole>(
@@ -1590,22 +1613,24 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
             return CommandPoll::Pending(command);
         }
         let expire = self.parts.take(Part::Expire);
+        let peer = match self.commanding {
+            Commanding::InstallingPairwise(peer) => Some(peer),
+            Commanding::Idle | Commanding::Running => None,
+        };
         let (place, running) = self.ended(command);
         let end = match running {
             PairwiseHeld::Installing(slot) => {
+                let index = slot.index();
                 if expire {
-                    self.parts.off(Part::Pairwise);
-                    self.program(Programmed::Pairwise(false));
+                    self.set_pairwise(index, None);
                     PairwiseEnd::Empty(slot)
                 } else {
-                    self.parts.on(Part::Pairwise);
-                    self.program(Programmed::Pairwise(true));
+                    self.set_pairwise(index, peer);
                     PairwiseEnd::Installed(self.key.pairwise_installed(slot))
                 }
             }
             PairwiseHeld::Removing(key) => {
-                self.parts.off(Part::Pairwise);
-                self.program(Programmed::Pairwise(false));
+                self.set_pairwise(key.index(), None);
                 PairwiseEnd::Empty(self.key.pairwise_removed(key))
             }
         };
@@ -1757,6 +1782,14 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
 impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
     ModelPort<'id, L, PLACES, TX_FRONT>
 {
+    /// A pairwise key place now holds the key of `peer`, or none.
+    fn set_pairwise(&mut self, index: u8, peer: Option<IndividualAddress>) {
+        if let Some(place) = self.pairwise.get_mut(usize::from(index)) {
+            *place = peer;
+        }
+        self.program(Programmed::Pairwise(index, peer.is_some()));
+    }
+
     fn set_group(&mut self, index: u8, slot: Slot) {
         let installed = matches!(slot, Slot::Held);
         if let Some(place) = self.groups.get_mut(usize::from(index)) {
@@ -2027,8 +2060,11 @@ mod places {
     fn the_model_holds_every_single_place_of_its_layout() {
         assert_eq!(<StationModel<3> as Served>::SINGLE_PLACES, 3);
         assert_eq!(
-            <AccessPointModel<2> as Served>::SINGLE_PLACES,
+            <AccessPointModel<2, 3> as Served>::SINGLE_PLACES,
             2 + QUEUES.len()
         );
+        // A pairwise place a station's one access point, or a client.
+        assert_eq!(<StationModel<3> as Served>::PAIRWISE, 1);
+        assert_eq!(<AccessPointModel<2, 3> as Served>::PAIRWISE, 3);
     }
 }
