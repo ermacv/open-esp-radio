@@ -706,10 +706,10 @@ impl HeOperation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HePeerState {
     pub capability_prefix: [u8; HE_CAPABILITIES_IE_MIN_LEN],
-    /// The packet padding the peer asks for, in units of 8 µs: its Nominal
-    /// Packet Padding, or with PPE Thresholds present those of the 242-tone
-    /// RU, the RU of a 20 MHz PPDU (IEEE Std 802.11ax-2021, 9.4.2.248.5).
-    pub packet_padding_eight_us: u8,
+    /// The packet padding the peer asks for: its Nominal Packet Padding, or
+    /// with PPE Thresholds present those of the 242-tone RU, the RU of a
+    /// 20 MHz PPDU (IEEE Std 802.11ax-2021, 9.4.2.248.5).
+    pub packet_padding: HePacketPadding,
     pub operation: HeOperationFields,
     /// The HE Operation's Max Co-Hosted BSSID Indicator, present exactly
     /// when its Co-Hosted BSS bit is set.
@@ -723,7 +723,7 @@ pub struct HePeerState {
 }
 
 impl HePeerState {
-    pub const fn default_packet_extension_duration(self) -> u8 {
+    pub const fn default_packet_extension_duration(self) -> DefaultPeDuration {
         self.operation.default_pe()
     }
 
@@ -914,6 +914,59 @@ pub enum HeElementError {
     LengthMismatch,
     TooShort,
     WrongExtension,
+    /// The HE Capabilities name Nominal Packet Padding code 3, which IEEE
+    /// Std 802.11ax-2021 9.4.2.248.3 reserves.
+    ReservedPacketPadding,
+}
+
+/// The packet padding a peer asks for (IEEE Std 802.11ax-2021, 9.4.2.248.3
+/// and .5): none, 8 µs or 16 µs.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum HePacketPadding {
+    #[default]
+    /// No additional packet padding or protection exchange.
+    None,
+    /// Eight microseconds of nominal packet padding.
+    Us8,
+    /// Sixteen microseconds of nominal packet padding.
+    Us16,
+}
+
+impl HePacketPadding {
+    /// The padding a Nominal Packet Padding code names; code 3 is reserved.
+    pub const fn from_nominal_code(code: oer_portable_wire::U8<2>) -> Result<Self, HeElementError> {
+        match code.get() {
+            0 => Ok(Self::None),
+            1 => Ok(Self::Us8),
+            2 => Ok(Self::Us16),
+            _ => Err(HeElementError::ReservedPacketPadding),
+        }
+    }
+
+    /// Nominal packet padding in microseconds.
+    pub const fn micros(self) -> u8 {
+        match self {
+            Self::None => 0,
+            Self::Us8 => 8,
+            Self::Us16 => 16,
+        }
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// The Default PE Duration subfield of the HE Operation Parameters, in
+    /// units of 4 µs; codes 5 to 7 are reserved (IEEE Std 802.11ax-2021,
+    /// 9.4.2.249).
+    pub enum DefaultPeDuration: u8 [3] {
+        Us0 = 0,
+        Us4 = 1,
+        Us8 = 2,
+        Us12 = 3,
+        Us16 = 4,
+        Reserved5 = 5,
+        Reserved6 = 6,
+        Reserved7 = 7,
+    }
 }
 
 /// The extension element `element`, split into its fixed `MINIMUM_LEN`-byte
@@ -998,8 +1051,8 @@ pub fn parse_he_peer_state(
     let fields =
         HeOperationFields::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
     let capability_prefix = *capability;
-    let packet_padding_eight_us = if !phy.ppe_present() {
-        phy.nominal_padding().get()
+    let packet_padding = if !phy.ppe_present() {
+        HePacketPadding::from_nominal_code(phy.nominal_padding())?
     } else {
         // The PPE Thresholds field follows the fixed prefix.
         let [ppe0, ppe1, ..] = *thresholds else {
@@ -1008,9 +1061,9 @@ pub fn parse_he_peer_state(
         let ppe = PpeFields::from_bytes([ppe0, ppe1]);
         let ppet8 = ppe.ppet8();
         if ppe.ru0() && ppe.ppet16() == 7 && ppet8 == 0 {
-            2
+            HePacketPadding::Us16
         } else {
-            0
+            HePacketPadding::None
         }
     };
 
@@ -1030,7 +1083,7 @@ pub fn parse_he_peer_state(
 
     Ok(HePeerState {
         capability_prefix,
-        packet_padding_eight_us,
+        packet_padding,
         operation: fields,
         max_co_hosted_bssid_indicator,
     })
@@ -1168,7 +1221,7 @@ impl HePhyCapabilities {
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.249 (HE Operation element).
     pub struct HeOperationFields[6] (little) {
-        pub default_pe, with_default_pe: u8 = 0..3;
+        pub default_pe, with_default_pe: (DefaultPeDuration) = 0..3;
         pub rts_threshold, with_rts_threshold: u16 = 4..14;
         pub vht_operation_present, with_vht_operation_present: bool = 14..15;
         pub co_hosted_bss, with_co_hosted_bss: bool = 15..16;

@@ -35,7 +35,9 @@ pub enum HtSecondaryChannel {
 /// ESP32-S31 MAC are independently confirmed by complete
 /// `libnet80211.a[ieee80211_he.o]::ieee80211_parse_heopr` and
 /// `libpp.a[hal_mac_ctl.o]::hal_he_set_default_pe`.
-pub fn he_default_packet_extension_duration(he_operation_ie: &[u8]) -> Option<u8> {
+pub fn he_default_packet_extension_duration(
+    he_operation_ie: &[u8],
+) -> Option<crate::he::DefaultPeDuration> {
     match *he_operation_ie {
         [_, _, _, parameters, ..] if named_he_operation(he_operation_ie) => {
             Some(crate::he::HeOperationFields::from_bytes([parameters, 0, 0, 0, 0, 0]).default_pe())
@@ -728,11 +730,11 @@ mod record_tests {
     fn he_operation_fields_are_read_from_its_element_alone() {
         assert_eq!(
             he_default_packet_extension_duration(&[255, 4, 36, 0b1010_1100, 0, 0]),
-            Some(4)
+            Some(crate::he::DefaultPeDuration::Us16)
         );
         assert_eq!(
             he_default_packet_extension_duration(&[255, 4, 36, 0, 0, 0]),
-            Some(0)
+            Some(crate::he::DefaultPeDuration::Us0)
         );
         for (parameters, disabled) in [(0, false), (1, true)] {
             assert_eq!(

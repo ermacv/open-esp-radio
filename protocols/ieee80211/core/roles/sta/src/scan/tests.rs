@@ -167,7 +167,7 @@ fn a_record_keeps_the_time_of_its_latest_observation() {
 fn extracts_default_pe_duration_from_complete_he_operation_ie() {
     assert_eq!(
         he_default_packet_extension_duration(&[255, 4, 36, 0b1010_1100, 0, 0]),
-        Some(4)
+        Some(oer_protocols_ieee80211_wire::he::DefaultPeDuration::Us16)
     );
     assert_eq!(
         he_default_packet_extension_duration(&[255, 4, 35, 4, 0, 0]),
@@ -825,7 +825,7 @@ fn a_rich_frame_keeps_every_retained_element() {
     assert_eq!(record.he_capability_ie_bytes().len(), 9);
     assert_eq!(
         he_default_packet_extension_duration(record.he_operation_ie_bytes()),
-        Some(4)
+        Some(oer_protocols_ieee80211_wire::he::DefaultPeDuration::Us16)
     );
     assert_eq!(
         he_extended_range_single_user_disabled(record.he_operation_ie_bytes()),

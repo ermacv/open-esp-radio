@@ -2,7 +2,9 @@
 
 use super::{BssColorScope, BssColorUse, HeAssociation, HeAssociationError, HeBssColor};
 use crate::BssColor;
-use oer_protocols_ieee80211_wire::he::{HeOperation, HeOperationFields, HePeerState};
+use oer_protocols_ieee80211_wire::he::{
+    DefaultPeDuration, HeOperation, HeOperationFields, HePacketPadding, HePeerState,
+};
 
 fn aid(value: u16) -> oer_protocols_ieee80211_wire::management::AidField {
     oer_protocols_ieee80211_wire::management::AidField::from_bytes(value.to_le_bytes())
@@ -12,8 +14,8 @@ fn aid(value: u16) -> oer_protocols_ieee80211_wire::management::AidField {
 /// set `0xfffc`.
 fn operation_fields() -> HeOperationFields {
     HeOperationFields::from_bytes([0; 6])
-        .with_default_pe(4)
-        .and_then(|fields| fields.with_bss_color(42))
+        .with_default_pe(DefaultPeDuration::Us16)
+        .with_bss_color(42)
         .map(|fields| fields.with_basic_mcs_nss(0xfffc))
         .unwrap()
         .with_partial_bss_color(true)
@@ -22,7 +24,7 @@ fn operation_fields() -> HeOperationFields {
 fn peer() -> HePeerState {
     HePeerState {
         capability_prefix: [0; 24],
-        packet_padding_eight_us: 2,
+        packet_padding: HePacketPadding::Us16,
         operation: operation_fields().with_er_su_disabled(true),
         max_co_hosted_bssid_indicator: Some(3),
     }
@@ -33,8 +35,11 @@ fn an_association_keeps_the_peer_values_it_was_made_of() {
     let association = HeAssociation::new(&peer(), aid(1), 7).expect("in range");
     assert_eq!(association.association_id().value(), 1);
     assert_eq!(association.minimum_mpdu_start_spacing(), 7);
-    assert_eq!(association.packet_padding_eight_us(), 2);
-    assert_eq!(association.default_packet_extension(), 4);
+    assert_eq!(association.packet_padding(), HePacketPadding::Us16);
+    assert_eq!(
+        association.default_packet_extension(),
+        DefaultPeDuration::Us16
+    );
     assert_eq!(association.max_co_hosted_bssid_indicator(), Some(3));
     assert_eq!(
         association.color().get(),
@@ -82,12 +87,6 @@ fn values_outside_their_fields_make_no_association() {
     assert_eq!(
         HeAssociation::new(&peer(), aid(1), 8),
         Err(HeAssociationError::MinimumMpduStartSpacing(8))
-    );
-    let mut padded = peer();
-    padded.packet_padding_eight_us = 3;
-    assert_eq!(
-        HeAssociation::new(&padded, aid(1), 0),
-        Err(HeAssociationError::PacketPadding(3))
     );
     let mut hosted = peer();
     hosted.max_co_hosted_bssid_indicator = Some(9);

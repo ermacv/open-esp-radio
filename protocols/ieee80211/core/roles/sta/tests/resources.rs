@@ -78,12 +78,6 @@ impl oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks
     fn aes_engine(&mut self) -> &mut Self::AesEngine {
         &mut self.0
     }
-    fn he_packet_padding(
-        &self,
-        _: &[u8],
-    ) -> oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding {
-        oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding::None
-    }
 }
 
 #[test]

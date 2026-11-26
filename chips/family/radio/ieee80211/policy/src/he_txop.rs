@@ -5,60 +5,8 @@ use core::num::NonZeroU64;
 
 use crate::narrow::low_halfword;
 use oer_protocols_ieee80211_core_upper_mac::HeTxopRtsBudget;
-use oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding;
-use oer_protocols_ieee80211_wire::he::HeTxopDurationRtsThreshold;
+use oer_protocols_ieee80211_wire::he::{HePacketPadding, HeTxopDurationRtsThreshold};
 use oer_protocols_ieee80211_wire::phy::{HeGiLtf, HeRate};
-
-/// The nominal packet padding code the vendor stores from the peer's HE
-/// Capabilities.
-///
-/// SOURCE(esp32s31): complete `libnet80211[ieee80211_he.o]::ieee80211_parse_hecap`
-/// stores this code at node offset `0x354`; complete
-/// `libpp[if_hwctrl.o]::ic_set_he_rts_threshold_bytes_tab` subtracts 8 µs
-/// for code one, 16 µs for code two and nothing for any other code.
-pub const fn packet_padding_from_code(code: u8) -> HePacketPadding {
-    match code {
-        1 => HePacketPadding::Us8,
-        2 => HePacketPadding::Us16,
-        _ => HePacketPadding::None,
-    }
-}
-
-/// The nominal packet padding code the vendor keeps for a peer whose HE
-/// Capabilities element is `he_capability_ie` (the complete element, ID and
-/// length included): zero, one or two.
-///
-/// SOURCE(esp32s31): complete `libnet80211[ieee80211_he.o]::ieee80211_parse_hecap`.
-/// HE PHY Capabilities byte six (PPE Thresholds Present, bit seven) is
-/// element byte 15 and byte nine is element byte 18. Without PPE Thresholds
-/// the vendor stores Nominal Packet Padding (byte 18 bits 7:6). With PPE
-/// Thresholds it stores code two only when the NSS1/RU242 PPET16 is zero and
-/// PPET8 is None (element bytes 24/25); otherwise the freshly allocated node
-/// keeps zero.
-pub fn nominal_packet_padding_code(he_capability_ie: &[u8]) -> u8 {
-    let Some(&phy_byte_six) = he_capability_ie.get(15) else {
-        return 0;
-    };
-    if phy_byte_six & 0x80 == 0 {
-        return he_capability_ie.get(18).map_or(0, |byte| byte >> 6);
-    }
-    let (Some(&first), Some(&second)) = (he_capability_ie.get(24), he_capability_ie.get(25)) else {
-        return 0;
-    };
-    let ru242 = (first >> 3) & 0x01 != 0;
-    let ppet16 = (first >> 7) | ((second & 0x03) << 1);
-    if ru242 && ppet16 == 0 && second & 0x1c == 0x1c {
-        2
-    } else {
-        0
-    }
-}
-
-/// The packet padding the vendor applies to a peer whose HE Capabilities
-/// element is `he_capability_ie`.
-pub fn packet_padding(he_capability_ie: &[u8]) -> HePacketPadding {
-    packet_padding_from_code(nominal_packet_padding_code(he_capability_ie))
-}
 
 /// The largest HE SU APEP length whose TXOP stays below the threshold.
 ///
@@ -201,25 +149,6 @@ impl HeTxopRtsBudget for EspressifHeTxopRtsBudget {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn the_padding_follows_nominal_padding_or_the_ru242_ppe_exception() {
-        use super::{HePacketPadding, nominal_packet_padding_code, packet_padding};
-        let mut element = [0_u8; 26];
-        element[18] = 0x40;
-        assert_eq!(packet_padding(&element[..24]), HePacketPadding::Us8);
-        element[18] = 0x00;
-        assert_eq!(nominal_packet_padding_code(&element[..24]), 0);
-
-        // PPE Thresholds present: RU242 selected, PPET16 zero and PPET8 None.
-        element[15] |= 0x80;
-        element[24] = 0x08;
-        element[25] = 0x1c;
-        assert_eq!(packet_padding(&element), HePacketPadding::Us16);
-        element[25] = 0x00;
-        assert_eq!(packet_padding(&element), HePacketPadding::None);
-        assert_eq!(nominal_packet_padding_code(&element[..10]), 0);
-    }
-
     use oer_protocols_ieee80211_wire::phy::{FecCoding, HeMcs, PpduBandwidth, SpatialStreams};
 
     use super::*;
@@ -381,8 +310,6 @@ mod tests {
             maximum_unprotected_apep_bytes(threshold, HePacketPadding::None, he(11)),
             0
         );
-        assert_eq!(packet_padding_from_code(2), HePacketPadding::Us16);
-        assert_eq!(packet_padding_from_code(3), HePacketPadding::None);
     }
 
     #[test]

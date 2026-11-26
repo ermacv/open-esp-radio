@@ -259,8 +259,11 @@ fn recovers_vendor_ap_he20_peer_state() {
     ];
     let operation = [0xff, 0x07, 0x24, 0x04, 0x00, 0x01, 0x1b, 0xfc, 0xff];
     let state = parse_he_peer_state(&capability, &operation).unwrap();
-    assert_eq!(state.packet_padding_eight_us, 2);
-    assert_eq!(state.default_packet_extension_duration(), 4);
+    assert_eq!(state.packet_padding, HePacketPadding::Us16);
+    assert_eq!(
+        state.default_packet_extension_duration(),
+        DefaultPeDuration::Us16
+    );
     assert_eq!(state.bss_color(), 27);
     assert!(state.bss_color_enabled());
     assert!(!state.partial_bss_color());
@@ -492,9 +495,11 @@ fn the_element_has_no_ppe_thresholds_and_a_20_mhz_only_width_set() {
     assert!(advertised.su_beamformee());
     assert_eq!(advertised.nominal_padding().get(), 3);
     // Without PPE Thresholds the peer state needs no bytes after the prefix
-    // and takes the nominal padding.
-    let state = parse_he_peer_state(&element, &SEED_OPERATION).unwrap();
-    assert_eq!(state.packet_padding_eight_us, 3);
+    // and takes the nominal padding, whose code 3 is reserved.
+    assert_eq!(
+        parse_he_peer_state(&element, &SEED_OPERATION),
+        Err(HeElementError::ReservedPacketPadding)
+    );
 }
 
 #[test]
@@ -653,7 +658,7 @@ fn an_operation_s_color_is_enabled_by_its_clear_disabled_bit_and_rts_disabled_at
     assert!(!operation.bss_color_enabled() && operation.effective_bss_color() == 0);
     let state = |threshold| HePeerState {
         capability_prefix: [0; HE_CAPABILITIES_IE_MIN_LEN],
-        packet_padding_eight_us: 0,
+        packet_padding: HePacketPadding::None,
         operation: fields.with_rts_threshold(threshold).unwrap(),
         max_co_hosted_bssid_indicator: None,
     };
@@ -711,4 +716,44 @@ fn an_enabled_rts_threshold_keeps_its_units_and_spans_them_at_32_microseconds() 
         assert_eq!(threshold.units_32_us(), units);
         assert_eq!(threshold.span::<Air>().as_micros(), u64::from(units) * 32);
     }
+}
+
+/// The padding a peer asks for: its Nominal Packet Padding without PPE
+/// Thresholds, and with them 16 µs only for the 242-tone RU's PPET16 of
+/// none and PPET8 of zero, as the vendor's `ieee80211_parse_hecap` stores
+/// it.
+#[test]
+fn the_padding_follows_nominal_padding_or_the_ru242_ppe_exception() {
+    let operation = [0xff, 0x07, 0x24, 0x04, 0x00, 0x01, 0x1b, 0xfc, 0xff];
+    let mut capability = [
+        0xff, 0x1a, 0x23, 0x05, 0x00, 0x18, 0x12, 0x00, 0x10, 0x22, 0x20, 0x02, 0xc0, 0x0f, 0x41,
+        0x95, 0x08, 0x00, 0xcc, 0x00, 0xfa, 0xff, 0xfa, 0xff, 0x19, 0x1c, 0xc7, 0x71,
+    ];
+    let padding = |capability: &[u8]| {
+        parse_he_peer_state(capability, &operation).map(|state| state.packet_padding)
+    };
+    // PPE Thresholds present: RU242 selected, PPET16 none and PPET8 zero.
+    capability[24] = 0x08;
+    capability[25] = 0x1c;
+    assert_eq!(padding(&capability), Ok(HePacketPadding::Us16));
+    capability[25] = 0x00;
+    assert_eq!(padding(&capability), Ok(HePacketPadding::None));
+    // Without PPE Thresholds the nominal code is read.
+    capability[15] &= 0x7f;
+    for (code, expected) in [
+        (0, Ok(HePacketPadding::None)),
+        (1, Ok(HePacketPadding::Us8)),
+        (2, Ok(HePacketPadding::Us16)),
+        (3, Err(HeElementError::ReservedPacketPadding)),
+    ] {
+        capability[18] = (capability[18] & 0x3f) | (code << 6);
+        assert_eq!(padding(&capability), expected, "code {code}");
+    }
+}
+
+#[test]
+fn a_packet_padding_is_its_microseconds() {
+    assert_eq!(HePacketPadding::None.micros(), 0);
+    assert_eq!(HePacketPadding::Us8.micros(), 8);
+    assert_eq!(HePacketPadding::Us16.micros(), 16);
 }
