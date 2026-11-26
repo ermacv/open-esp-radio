@@ -3,7 +3,7 @@
 use oer_portable_crypto::{
     Aes128Key,
     block::{Aes128Engine, BlockError},
-    cmac::Cmac,
+    cmac::{Cmac, CmacVerifyError},
 };
 use oer_protocols_ieee80211_wire::bip::IgtkKeyId;
 use oer_protocols_ieee80211_wire::bip::{BIP_MIC_LEN, BipFormatError, BipProtection};
@@ -67,14 +67,11 @@ impl<'a> BipFrame<'a> {
         for part in self.0.mic_input() {
             mac.update(part).map_err(BipError::Engine)?;
         }
-        if mac
-            .verify_truncated(self.0.mic())
-            .map_err(BipError::Engine)?
-        {
-            Ok(())
-        } else {
-            Err(BipError::InvalidMic)
-        }
+        mac.verify_truncated(self.0.mic())
+            .map_err(|error| match error {
+                CmacVerifyError::InvalidTag => BipError::InvalidMic,
+                CmacVerifyError::Engine(error) => BipError::Engine(error),
+            })
     }
 }
 

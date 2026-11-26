@@ -105,11 +105,21 @@ impl<'e, E: Aes128Engine + 'e> EapolMic<'e, E> {
         }
     }
 
-    /// Constant-time comparison against a received MIC.
-    pub(crate) fn verify(self, mic: &[u8; RSN_MIC_LEN]) -> Result<bool, BlockError> {
+    /// Constant-time comparison against a received MIC: it verifies, or
+    /// the failure.
+    pub(crate) fn verify(self, mic: &[u8; RSN_MIC_LEN]) -> Result<(), crate::MicFailure> {
         match self {
-            Self::HmacSha1(mac) => Ok(mac.verify_truncated_left(mic).is_ok()),
-            Self::AesCmac(mac) => mac.verify_truncated(mic),
+            Self::HmacSha1(mac) => mac
+                .verify_truncated_left(mic)
+                .map_err(|_| crate::MicFailure::Mismatch),
+            Self::AesCmac(mac) => mac.verify_truncated(mic).map_err(|error| match error {
+                oer_portable_crypto::cmac::CmacVerifyError::InvalidTag => {
+                    crate::MicFailure::Mismatch
+                }
+                oer_portable_crypto::cmac::CmacVerifyError::Engine(error) => {
+                    crate::MicFailure::Engine(error)
+                }
+            }),
         }
     }
 }
@@ -213,10 +223,10 @@ mod tests {
             let value = mic.finalize().unwrap();
             let mut check = akm.mic(&kck, engine).unwrap();
             check.update(b"frame").unwrap();
-            assert!(check.verify(&value).unwrap());
+            assert_eq!(check.verify(&value), Ok(()));
             let mut tampered = akm.mic(&kck, engine).unwrap();
             tampered.update(b"framf").unwrap();
-            assert!(!tampered.verify(&value).unwrap());
+            assert_eq!(tampered.verify(&value), Err(crate::MicFailure::Mismatch));
         }
     }
 

@@ -376,8 +376,8 @@ fn disabled_returns_both_deferred_frame_owners_at_finish() {
                     frame
                         .key_frame()
                         .unwrap()
-                        .verify_mic(&ptk, &mut SoftwareAes128)
-                        .unwrap()
+                        .check_mic(&ptk, &mut SoftwareAes128)
+                        .is_ok()
                 );
             }
         });

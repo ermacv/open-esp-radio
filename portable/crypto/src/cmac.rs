@@ -18,8 +18,20 @@ const BLOCK: usize = 16;
 /// RFC 4493 `const_Rb` for a 128-bit block.
 const RB: u8 = 0x87;
 
-/// One AES-CMAC computation over the keyed engine `E`.
+/// Why a tag did not verify.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CmacVerifyError {
+    /// The tag is not the message's under the key.
+    InvalidTag,
+    /// The engine refused a block.
+    Engine(BlockError),
+}
+
+/// One AES-CMAC computation over the keyed engine `E`. `L`, the chaining
+/// value and the held-back block are erased when it is dropped.
+#[derive(zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct Cmac<E: BlockEngine> {
+    #[zeroize(skip)]
     engine: E,
     /// `L = E(K, 0^128)`, from which both subkeys follow.
     l: Block,
@@ -28,8 +40,10 @@ pub struct Cmac<E: BlockEngine> {
     /// The bytes not yet processed: at most one block, zero beyond `filled`.
     pending: Block,
     /// How many bytes of `pending` hold message data, `0..=16`.
+    #[zeroize(skip)]
     filled: usize,
     /// The first refusal of the engine.
+    #[zeroize(skip)]
     failed: Option<BlockError>,
 }
 
@@ -53,20 +67,25 @@ impl<E: BlockEngine> Cmac<E> {
         if let Some(error) = self.failed {
             return Err(error);
         }
-        for byte in bytes {
-            if self.filled >= BLOCK {
-                xor_into(&mut self.state, &self.pending);
-                self.pending.zeroize();
-                self.filled = 0;
-                if let Err(error) = self.engine.encrypt(&mut self.state) {
-                    self.failed = Some(error);
-                    return Err(error);
-                }
-            }
-            if let Some(slot) = self.pending.get_mut(self.filled) {
+        let mut rest = bytes.iter();
+        loop {
+            // Fill the held-back block from where it stopped.
+            for (slot, byte) in self.pending.iter_mut().skip(self.filled).zip(rest.by_ref()) {
                 *slot = *byte;
+                self.filled = self.filled.saturating_add(1);
             }
-            self.filled = self.filled.saturating_add(1);
+            if rest.len() == 0 {
+                break;
+            }
+            // The held-back block is full and more follows: it is not the
+            // last block.
+            xor_into(&mut self.state, &self.pending);
+            self.pending.zeroize();
+            self.filled = 0;
+            if let Err(error) = self.engine.encrypt(&mut self.state) {
+                self.failed = Some(error);
+                return Err(error);
+            }
         }
         Ok(())
     }
@@ -94,11 +113,11 @@ impl<E: BlockEngine> Cmac<E> {
             return Err(error);
         }
         double(&mut self.l);
-        if self.filled < BLOCK {
+        // A partial last block is padded with `10*` under `K2`; a full one
+        // has no byte after its data and takes `K1`.
+        if let Some(pad) = self.pending.get_mut(self.filled) {
+            *pad = 0x80;
             double(&mut self.l);
-            if let Some(pad) = self.pending.get_mut(self.filled) {
-                *pad = 0x80;
-            }
         }
         xor_into(&mut self.pending, &self.l);
         xor_into(&mut self.state, &self.pending);
@@ -106,25 +125,25 @@ impl<E: BlockEngine> Cmac<E> {
         Ok(self.state)
     }
 
-    /// Compare the tag's first `T` bytes with `expected` in constant time.
-    pub fn verify_truncated<const T: usize>(self, expected: &[u8; T]) -> Result<bool, BlockError> {
+    /// Compare the tag's first `T` bytes with `expected` in constant time:
+    /// it verifies, or the refusal.
+    pub fn verify_truncated<const T: usize>(
+        self,
+        expected: &[u8; T],
+    ) -> Result<(), CmacVerifyError> {
         const {
             if T == 0 || T > BLOCK {
                 panic!("a CMAC tag is 1 to 16 bytes");
             }
         }
-        let mut tag = self.finalize()?;
+        let mut tag = self.finalize().map_err(CmacVerifyError::Engine)?;
         let equal = crate::compare::constant_time_eq(tag.iter().take(T), expected.iter());
         tag.zeroize();
-        Ok(equal)
-    }
-}
-
-impl<E: BlockEngine> Drop for Cmac<E> {
-    fn drop(&mut self) {
-        self.l.zeroize();
-        self.state.zeroize();
-        self.pending.zeroize();
+        if equal {
+            Ok(())
+        } else {
+            Err(CmacVerifyError::InvalidTag)
+        }
     }
 }
 
@@ -137,10 +156,9 @@ fn double(block: &mut Block) {
         *byte = (*byte << 1) | carry;
         carry = next;
     }
-    if let Some(last) = block.last_mut() {
-        // Branch-free: `carry` is 0 or 1.
-        *last ^= RB & 0_u8.wrapping_sub(carry);
-    }
+    let [.., last] = block;
+    // Branch-free: `carry` is 0 or 1.
+    *last ^= RB & 0_u8.wrapping_sub(carry);
 }
 
 fn xor_into(target: &mut Block, source: &Block) {

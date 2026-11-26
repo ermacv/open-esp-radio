@@ -200,8 +200,8 @@ fn handshake_message3(
         message2
             .key_frame()
             .unwrap()
-            .verify_mic(&ptk, &mut SoftwareAes128)
-            .unwrap(),
+            .check_mic(&ptk, &mut SoftwareAes128)
+            .is_ok(),
         "wire M2 must use the authenticated PMK"
     );
     let mut plain = advertisement[55..].to_vec();

@@ -21,131 +21,149 @@ const LAST_ROUND: u8 = 5;
 /// One semiblock.
 const SEMIBLOCK: usize = 8;
 
+/// The admitted semiblocks of a buffer: the integrity register `A` and the
+/// registers `R[1..=n]`, `n >= 2`, a whole number of semiblocks (RFC 3394
+/// §2). The one length check of either direction makes it, and the passes
+/// walk its registers.
+struct Semiblocks<'a> {
+    first: &'a mut [u8; SEMIBLOCK],
+    registers: &'a mut [u8],
+}
+
+impl Semiblocks<'_> {
+    /// The registers `R[1..=n]`, one semiblock at a time.
+    fn registers(&mut self) -> Registers<'_> {
+        Registers(&mut *self.registers)
+    }
+}
+
+/// `bytes` as semiblocks, if RFC 3394 admits their length.
+fn semiblocks(bytes: &mut [u8]) -> Option<Semiblocks<'_>> {
+    let (first, registers) = bytes.split_first_chunk_mut::<SEMIBLOCK>()?;
+    if registers.len() < 2 * SEMIBLOCK || !registers.len().is_multiple_of(SEMIBLOCK) {
+        return None;
+    }
+    Some(Semiblocks { first, registers })
+}
+
+/// The registers of admitted semiblocks, from either end. Admission left no
+/// partial semiblock, so the walk ends exactly at the last register.
+struct Registers<'a>(&'a mut [u8]);
+
+impl<'a> Iterator for Registers<'a> {
+    type Item = &'a mut [u8; SEMIBLOCK];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (register, rest) = core::mem::take(&mut self.0).split_first_chunk_mut::<SEMIBLOCK>()?;
+        self.0 = rest;
+        Some(register)
+    }
+}
+
+impl DoubleEndedIterator for Registers<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let (rest, register) = core::mem::take(&mut self.0).split_last_chunk_mut::<SEMIBLOCK>()?;
+        self.0 = rest;
+        Some(register)
+    }
+}
+
+/// `6n`, the `t` of the wrap's last step and of the unwrap's first.
+fn last_step(semiblocks: &mut Semiblocks<'_>) -> u64 {
+    // Six steps a register of a buffer that fits memory: far below `u64::MAX`.
+    semiblocks.registers().fold(0_u64, |steps, _| {
+        steps.wrapping_add(u64::from(LAST_ROUND) + 1)
+    })
+}
+
 /// Unwrap `wrapped` (`n + 1` semiblocks with `n >= 2`) in place, decrypting
 /// each block over the engine `load` returns. A length refusal returns before
 /// `load` runs; a refused key or block ends the operation with
-/// [`KeyUnwrapError::Engine`]. The engine is dropped after the last block, and
-/// the integrity register and the block are erased on every exit; a refusal
-/// clears the buffer.
+/// [`KeyUnwrapError::Engine`]. The engine is dropped after the last block, the
+/// block is erased on every exit, and a refusal clears the buffer.
 pub fn unwrap<K: BlockEngine, const N: usize>(
     wrapped: KeyData<N>,
     load: impl FnOnce() -> Result<K, BlockError>,
 ) -> KeyUnwrapResponse<N> {
     let mut data = wrapped;
-    let Some(semiblocks) = admitted_semiblocks(data.as_bytes().len()) else {
-        return refuse(data, KeyUnwrapError::InvalidLength);
-    };
-    let mut cipher = match load() {
-        Ok(cipher) => cipher,
-        Err(error) => return refuse(data, KeyUnwrapError::Engine(error)),
-    };
-    let mut accumulator = [0; SEMIBLOCK];
-    let mut block = [0; 16];
-    let blocks = unwrap_blocks(
-        &mut cipher,
-        &mut data,
-        semiblocks,
-        &mut accumulator,
-        &mut block,
-    );
-    drop(cipher);
-    block.zeroize();
-    let outcome = blocks
-        .and_then(|()| verify(&accumulator))
-        .and_then(|()| shift_plaintext(&mut data));
-    accumulator.zeroize();
-    match outcome {
-        Ok(()) => KeyUnwrapResponse {
-            data,
-            outcome: Ok(()),
-        },
+    match unwrap_in_place(data.held_mut(), load) {
+        Ok(()) => {
+            // The shift left the last semiblock clear.
+            data.len = data.len.saturating_sub(SEMIBLOCK);
+            KeyUnwrapResponse {
+                data,
+                outcome: Ok(()),
+            }
+        }
         Err(error) => refuse(data, error),
     }
 }
 
-/// `n` for `len` bytes of wrapped data, if RFC 3394 admits them.
-fn admitted_semiblocks(len: usize) -> Option<u64> {
-    if !len.is_multiple_of(SEMIBLOCK) || len < 3 * SEMIBLOCK {
-        return None;
+fn unwrap_in_place<K: BlockEngine>(
+    bytes: &mut [u8],
+    load: impl FnOnce() -> Result<K, BlockError>,
+) -> Result<(), KeyUnwrapError> {
+    let Some(mut semiblocks) = semiblocks(bytes) else {
+        return Err(KeyUnwrapError::InvalidLength);
+    };
+    let mut cipher = load().map_err(KeyUnwrapError::Engine)?;
+    let mut block = [0; 16];
+    let blocks = unwrap_blocks(&mut cipher, &mut semiblocks, &mut block);
+    drop(cipher);
+    block.zeroize();
+    blocks.map_err(KeyUnwrapError::Engine)?;
+    if !crate::compare::constant_time_eq(semiblocks.first.iter(), IV.iter()) {
+        return Err(KeyUnwrapError::IntegrityCheckFailed);
     }
-    u64::try_from(len / SEMIBLOCK).ok()?.checked_sub(1)
+    shift_plaintext(semiblocks);
+    Ok(())
 }
 
 /// The six passes: for `j` from 5 down to 0 and `i` from `n` down to 1,
 /// `B = AES-1(K, (A ^ t) | R[i])` with `t = n * j + i`, then `A = MSB(64, B)`
-/// and `R[i] = LSB(64, B)`.
-fn unwrap_blocks<K: BlockEngine, const N: usize>(
+/// and `R[i] = LSB(64, B)`. `A` is the buffer's first semiblock.
+fn unwrap_blocks<K: BlockEngine>(
     cipher: &mut K,
-    data: &mut KeyData<N>,
-    semiblocks: u64,
-    accumulator: &mut [u8; SEMIBLOCK],
+    semiblocks: &mut Semiblocks<'_>,
     block: &mut [u8; 16],
-) -> Result<(), KeyUnwrapError> {
-    *accumulator = *data
-        .as_bytes()
-        .first_chunk::<SEMIBLOCK>()
-        .ok_or(KeyUnwrapError::InvalidLength)?;
-    for round in (0..=u64::from(LAST_ROUND)).rev() {
-        for index in (1..=semiblocks).rev() {
-            let counter = round
-                .checked_mul(semiblocks)
-                .and_then(|base| base.checked_add(index))
-                .ok_or(KeyUnwrapError::InvalidLength)?;
-            let register = register(data, index).ok_or(KeyUnwrapError::InvalidLength)?;
+) -> Result<(), BlockError> {
+    let mut step = last_step(semiblocks);
+    for _ in 0..=LAST_ROUND {
+        for register in Registers(&mut *semiblocks.registers).rev() {
             for ((out, value), count) in block
                 .iter_mut()
-                .zip(accumulator.iter())
-                .zip(counter.to_be_bytes())
+                .zip(semiblocks.first.iter())
+                .zip(step.to_be_bytes())
             {
                 *out = value ^ count;
             }
             for (out, byte) in block.iter_mut().skip(SEMIBLOCK).zip(register.iter()) {
                 *out = *byte;
             }
-            cipher.decrypt(block).map_err(KeyUnwrapError::Engine)?;
-            for (out, byte) in accumulator
+            cipher.decrypt(block)?;
+            for (out, byte) in semiblocks
+                .first
                 .iter_mut()
                 .chain(register.iter_mut())
                 .zip(block.iter())
             {
                 *out = *byte;
             }
+            step = step.wrapping_sub(1);
         }
     }
     Ok(())
 }
 
-/// Compare the integrity register with the initial value in constant time.
-fn verify(accumulator: &[u8; SEMIBLOCK]) -> Result<(), KeyUnwrapError> {
-    let mut difference = 0;
-    for (actual, expected) in accumulator.iter().zip(IV) {
-        difference |= actual ^ expected;
+/// Move the plaintext `R[1..=n]` one semiblock towards the start, over the
+/// verified integrity register, leaving the last semiblock clear.
+fn shift_plaintext(mut semiblocks: Semiblocks<'_>) {
+    let mut carry = [0; SEMIBLOCK];
+    for register in semiblocks.registers().rev() {
+        core::mem::swap(register, &mut carry);
     }
-    if difference != 0 {
-        return Err(KeyUnwrapError::IntegrityCheckFailed);
-    }
-    Ok(())
-}
-
-/// Move the plaintext `R[1..=n]` to the start of the buffer and clear the
-/// semiblock it leaves.
-fn shift_plaintext<const N: usize>(data: &mut KeyData<N>) -> Result<(), KeyUnwrapError> {
-    let len = data.len;
-    let plain = len.saturating_sub(SEMIBLOCK);
-    let mut target = 0;
-    while target < plain {
-        let source = target.saturating_add(SEMIBLOCK);
-        match (data.bytes.get(source).copied(), data.bytes.get_mut(target)) {
-            (Some(byte), Some(out)) => *out = byte,
-            _ => return Err(KeyUnwrapError::InvalidLength),
-        }
-        target = target.saturating_add(1);
-    }
-    for byte in data.bytes.iter_mut().take(len).skip(plain) {
-        *byte = 0;
-    }
-    data.len = plain;
-    Ok(())
+    *semiblocks.first = carry;
+    carry.zeroize();
 }
 
 /// The refusal: the buffer cleared, with `error`.
@@ -170,58 +188,24 @@ pub enum KeyWrapError {
 
 /// Wrap `plaintext` (`n >= 2` semiblocks, RFC 3394 §2.2.1, index-based
 /// form) in place in its buffer of capacity `N`, encrypting each block over
-/// the engine `load` returns. A length refusal returns before `load` runs; a
-/// refused key or block ends the operation with [`KeyWrapError::Engine`].
-/// The engine is dropped after the last block, the integrity register and the
-/// block are erased on every exit, and a refusal clears the buffer.
+/// the engine `load` returns. The buffer first grows by the integrity
+/// register's semiblock, so a plaintext that does not fit with it is refused
+/// as [`KeyWrapError::CapacityExceeded`] before its length is examined. A
+/// refusal returns before `load` runs; a refused key or block ends the
+/// operation with [`KeyWrapError::Engine`]. The engine is dropped after the
+/// last block, the block is erased on every exit, and a refusal clears the
+/// buffer.
 pub fn wrap<K: BlockEngine, const N: usize>(
     plaintext: KeyData<N>,
     load: impl FnOnce() -> Result<K, BlockError>,
 ) -> KeyWrapResponse<N> {
     let mut data = plaintext;
-    let plain = data.len;
-    if plain < 2 * SEMIBLOCK || !plain.is_multiple_of(SEMIBLOCK) {
-        return refuse_wrap(data, KeyWrapError::InvalidLength);
-    }
-    let Some(len) = plain.checked_add(SEMIBLOCK).filter(|len| *len <= N) else {
+    // The bytes after the held ones are zero: the grown semiblock is.
+    let Some(len) = data.len.checked_add(SEMIBLOCK).filter(|len| *len <= N) else {
         return refuse_wrap(data, KeyWrapError::CapacityExceeded);
     };
-    let Ok(semiblocks) = u64::try_from(plain / SEMIBLOCK) else {
-        return refuse_wrap(data, KeyWrapError::CapacityExceeded);
-    };
-    // Make room for the integrity register: `R[1..=n]` one semiblock on.
-    let mut source = plain;
-    while source > 0 {
-        source = source.saturating_sub(1);
-        let target = source.saturating_add(SEMIBLOCK);
-        match (data.bytes.get(source).copied(), data.bytes.get_mut(target)) {
-            (Some(byte), Some(out)) => *out = byte,
-            _ => return refuse_wrap(data, KeyWrapError::CapacityExceeded),
-        }
-    }
     data.len = len;
-    let mut cipher = match load() {
-        Ok(cipher) => cipher,
-        Err(error) => return refuse_wrap(data, KeyWrapError::Engine(error)),
-    };
-    let mut accumulator = IV;
-    let mut block = [0; 16];
-    let blocks = wrap_blocks(
-        &mut cipher,
-        &mut data,
-        semiblocks,
-        &mut accumulator,
-        &mut block,
-    );
-    drop(cipher);
-    block.zeroize();
-    if blocks.is_ok()
-        && let Some(first) = data.bytes.first_chunk_mut::<SEMIBLOCK>()
-    {
-        *first = accumulator;
-    }
-    accumulator.zeroize();
-    match blocks {
+    match wrap_in_place(data.held_mut(), load) {
         Ok(()) => KeyWrapResponse {
             data,
             outcome: Ok(()),
@@ -230,35 +214,59 @@ pub fn wrap<K: BlockEngine, const N: usize>(
     }
 }
 
+fn wrap_in_place<K: BlockEngine>(
+    bytes: &mut [u8],
+    load: impl FnOnce() -> Result<K, BlockError>,
+) -> Result<(), KeyWrapError> {
+    let Some(mut semiblocks) = semiblocks(bytes) else {
+        return Err(KeyWrapError::InvalidLength);
+    };
+    // Make room for the integrity register: `R[1..=n]` one semiblock on.
+    let mut carry = IV;
+    core::mem::swap(semiblocks.first, &mut carry);
+    for register in semiblocks.registers() {
+        core::mem::swap(register, &mut carry);
+    }
+    // `carry` holds the grown semiblock's zeros.
+    carry.zeroize();
+    let mut cipher = load().map_err(KeyWrapError::Engine)?;
+    let mut block = [0; 16];
+    let blocks = wrap_blocks(&mut cipher, &mut semiblocks, &mut block);
+    drop(cipher);
+    block.zeroize();
+    blocks.map_err(KeyWrapError::Engine)
+}
+
 /// The six passes: for `j` from 0 to 5 and `i` from 1 to `n`,
 /// `B = AES(K, A | R[i])`, then `A = MSB(64, B) ^ t` with `t = n * j + i`
-/// and `R[i] = LSB(64, B)`.
-fn wrap_blocks<K: BlockEngine, const N: usize>(
+/// and `R[i] = LSB(64, B)`. `A` is the buffer's first semiblock.
+fn wrap_blocks<K: BlockEngine>(
     cipher: &mut K,
-    data: &mut KeyData<N>,
-    semiblocks: u64,
-    accumulator: &mut [u8; SEMIBLOCK],
+    semiblocks: &mut Semiblocks<'_>,
     block: &mut [u8; 16],
-) -> Result<(), KeyWrapError> {
-    for round in 0..=u64::from(LAST_ROUND) {
-        for index in 1..=semiblocks {
-            let register = register(data, index).ok_or(KeyWrapError::CapacityExceeded)?;
-            *block = join(accumulator, register);
-            cipher.encrypt(block).map_err(KeyWrapError::Engine)?;
-            let counter = round
-                .checked_mul(semiblocks)
-                .and_then(|base| base.checked_add(index))
-                .ok_or(KeyWrapError::CapacityExceeded)?;
-            let mut high;
-            (high, *register) = split(block);
-            for ((out, value), count) in accumulator
+) -> Result<(), BlockError> {
+    let mut step: u64 = 0;
+    for _ in 0..=LAST_ROUND {
+        for register in Registers(&mut *semiblocks.registers) {
+            step = step.wrapping_add(1);
+            for (out, byte) in block
                 .iter_mut()
-                .zip(high.iter())
-                .zip(counter.to_be_bytes())
+                .zip(semiblocks.first.iter().chain(register.iter()))
+            {
+                *out = *byte;
+            }
+            cipher.encrypt(block)?;
+            for ((out, value), count) in semiblocks
+                .first
+                .iter_mut()
+                .zip(block.iter())
+                .zip(step.to_be_bytes())
             {
                 *out = value ^ count;
             }
-            high.zeroize();
+            for (out, byte) in register.iter_mut().zip(block.iter().skip(SEMIBLOCK)) {
+                *out = *byte;
+            }
         }
     }
     Ok(())
@@ -271,34 +279,4 @@ fn refuse_wrap<const N: usize>(mut data: KeyData<N>, error: KeyWrapError) -> Key
         data,
         outcome: Err(error),
     }
-}
-
-/// The register `R[index]`, `index >= 1`, after the first semiblock.
-fn register<const N: usize>(data: &mut KeyData<N>, index: u64) -> Option<&mut [u8; SEMIBLOCK]> {
-    let start = usize::try_from(index).ok()?.checked_mul(SEMIBLOCK)?;
-    let end = start.checked_add(SEMIBLOCK)?;
-    if end > data.len {
-        return None;
-    }
-    data.bytes
-        .get_mut(start..end)?
-        .first_chunk_mut::<SEMIBLOCK>()
-}
-
-/// The block `high | low`.
-fn join(high: &[u8; SEMIBLOCK], low: &[u8; SEMIBLOCK]) -> [u8; 16] {
-    let mut block = [0; 16];
-    for (out, byte) in block.iter_mut().zip(high.iter().chain(low)) {
-        *out = *byte;
-    }
-    block
-}
-
-/// `(MSB(64, block), LSB(64, block))`.
-fn split(block: &[u8; 16]) -> ([u8; SEMIBLOCK], [u8; SEMIBLOCK]) {
-    let (mut high, mut low) = ([0; SEMIBLOCK], [0; SEMIBLOCK]);
-    for (out, byte) in high.iter_mut().chain(low.iter_mut()).zip(block) {
-        *out = *byte;
-    }
-    (high, low)
 }

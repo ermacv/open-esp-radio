@@ -46,20 +46,19 @@ pub fn seal<E: BlockEngine, const M: usize>(
     aad: &[u8],
     body: &mut [u8],
 ) -> Result<[u8; M], CcmError> {
-    let length = admit::<M>(aad, body)?;
-    let mut tag = cbc_mac::<E, M>(engine, nonce, aad, body, length)?;
-    let result = counter_pass(engine, nonce, body).and_then(|()| mask(engine, nonce, &mut tag));
-    match result {
-        Ok(mic) => {
-            tag.zeroize();
-            Ok(mic)
-        }
-        Err(error) => {
-            tag.zeroize();
-            body.zeroize();
-            Err(CcmError::Engine(error))
-        }
+    let lengths = admit::<M>(aad, body)?;
+    let mut tag = [0; BLOCK];
+    // A refusal before the body is encrypted leaves it as it was.
+    if let Err(error) = cbc_mac::<E, M>(engine, nonce, aad, body, lengths, &mut tag) {
+        tag.zeroize();
+        return Err(CcmError::Engine(error));
     }
+    let result = counter_pass(engine, nonce, body).and_then(|()| mask(engine, nonce, &tag));
+    tag.zeroize();
+    result.map_err(|error| {
+        body.zeroize();
+        CcmError::Engine(error)
+    })
 }
 
 /// Decrypt `body` in place and verify `mic`. On any error after admission the
@@ -71,107 +70,125 @@ pub fn open<E: BlockEngine, const M: usize>(
     body: &mut [u8],
     mic: &[u8; M],
 ) -> Result<(), CcmError> {
-    let length = admit::<M>(aad, body)?;
-    if let Err(error) = counter_pass(engine, nonce, body) {
-        body.zeroize();
-        return Err(CcmError::Engine(error));
-    }
-    let mut tag = match cbc_mac::<E, M>(engine, nonce, aad, body, length) {
-        Ok(tag) => tag,
-        Err(error) => {
-            body.zeroize();
-            return Err(error);
-        }
-    };
-    let expected = match mask::<E, M>(engine, nonce, &mut tag) {
-        Ok(expected) => expected,
-        Err(error) => {
-            tag.zeroize();
-            body.zeroize();
-            return Err(CcmError::Engine(error));
-        }
-    };
+    let lengths = admit::<M>(aad, body)?;
+    let mut tag = [0; BLOCK];
+    let expected = counter_pass(engine, nonce, body)
+        .and_then(|()| cbc_mac::<E, M>(engine, nonce, aad, body, lengths, &mut tag))
+        .and_then(|()| mask::<E, M>(engine, nonce, &tag));
     tag.zeroize();
-    if crate::compare::constant_time_eq(expected.iter(), mic.iter()) {
-        Ok(())
-    } else {
+    let outcome = match expected {
+        Ok(expected) if crate::compare::constant_time_eq(expected.iter(), mic.iter()) => Ok(()),
+        Ok(_) => Err(CcmError::InvalidMic),
+        Err(error) => Err(CcmError::Engine(error)),
+    };
+    if outcome.is_err() {
         body.zeroize();
-        Err(CcmError::InvalidMic)
     }
+    outcome
+}
+
+/// The lengths of one admitted call, each fitting its two-byte field: the
+/// associated data's (below `0xff00`) and the body's.
+#[derive(Clone, Copy)]
+struct Lengths {
+    aad: u16,
+    body: u16,
 }
 
 /// Check the MIC length at compile time and the lengths of this call.
-fn admit<const M: usize>(aad: &[u8], body: &[u8]) -> Result<u16, CcmError> {
+fn admit<const M: usize>(aad: &[u8], body: &[u8]) -> Result<Lengths, CcmError> {
     const {
         if M < 4 || M > BLOCK || !M.is_multiple_of(2) {
             panic!("a CCM MIC is 4, 6, 8, 10, 12, 14 or 16 bytes");
         }
     }
-    if aad.len() >= AAD_LIMIT {
-        return Err(CcmError::AadTooLong);
-    }
-    u16::try_from(body.len()).map_err(|_| CcmError::BodyTooLong)
+    let aad = u16::try_from(aad.len())
+        .ok()
+        .filter(|length| usize::from(*length) < AAD_LIMIT)
+        .ok_or(CcmError::AadTooLong)?;
+    let body = u16::try_from(body.len()).map_err(|_| CcmError::BodyTooLong)?;
+    Ok(Lengths { aad, body })
 }
 
-/// The unmasked CBC-MAC `T` over `B_0`, the encoded associated data and the
-/// plaintext `body`.
+/// The unmasked CBC-MAC `T` into `tag` over `B_0`, the encoded associated
+/// data and the plaintext `body`, each segment zero-padded to a block.
 fn cbc_mac<E: BlockEngine, const M: usize>(
     engine: &mut E,
     nonce: &[u8; NONCE_LEN],
     aad: &[u8],
     body: &[u8],
-    length: u16,
-) -> Result<Block, CcmError> {
-    // `M` is checked even and at most 16 by `admit`, so this fits three bits.
-    let mic_field = u8::try_from(M.saturating_sub(2) / 2).unwrap_or(0);
+    lengths: Lengths,
+    tag: &mut Block,
+) -> Result<(), BlockError> {
+    // The flags' MIC field `(M - 2) / 2` (RFC 3610 §2.2), three bits,
+    // counted at build.
+    let mic_field: u8 = const {
+        let mut field = 0_u8;
+        let mut octets = 2;
+        while octets < M {
+            field = match field.checked_add(1) {
+                Some(field) => field,
+                None => panic!("a CCM MIC field fits three bits"),
+            };
+            octets = octets.saturating_add(2);
+        }
+        field
+    };
     let adata = if aad.is_empty() { 0 } else { 0x40 };
     let flags = adata | (mic_field << 3) | LENGTH_FIELD;
-    let mut mac = CbcMac {
-        state: block(flags, nonce, length),
-        pending: [0; BLOCK],
-        filled: 0,
-    };
-    let result = (|| {
-        engine.encrypt(&mut mac.state)?;
-        if !aad.is_empty() {
-            // `admit` bounds the length below 0xff00.
-            let aad_length = u16::try_from(aad.len()).unwrap_or(0);
-            mac.feed(engine, &aad_length.to_be_bytes())?;
-            mac.feed(engine, aad)?;
-            mac.pad(engine)?;
+    *tag = block(flags, nonce, lengths.body);
+    engine.encrypt(tag)?;
+    if !aad.is_empty() {
+        absorb(engine, tag, lengths.aad.to_be_bytes().iter().chain(aad))?;
+    }
+    absorb(engine, tag, body.iter())
+}
+
+/// Absorb `bytes` into the chaining value `state` a block at a time, the
+/// last block zero-padded.
+fn absorb<'a, E: BlockEngine>(
+    engine: &mut E,
+    state: &mut Block,
+    mut bytes: impl Iterator<Item = &'a u8>,
+) -> Result<(), BlockError> {
+    loop {
+        let mut absorbed = false;
+        for (out, byte) in state.iter_mut().zip(&mut bytes) {
+            *out ^= byte;
+            absorbed = true;
         }
-        mac.feed(engine, body)?;
-        mac.pad(engine)
-    })();
-    match result {
-        Ok(()) => Ok(mac.state),
-        Err(error) => Err(CcmError::Engine(error)),
+        if !absorbed {
+            return Ok(());
+        }
+        engine.encrypt(state)?;
     }
 }
 
-/// Encrypt (or decrypt) `body` in place with the counter blocks `A_1..`.
+/// Encrypt (or decrypt) `body` in place with the counter blocks `A_1..`, a
+/// block of the body at a time.
 fn counter_pass<E: BlockEngine>(
     engine: &mut E,
     nonce: &[u8; NONCE_LEN],
     body: &mut [u8],
 ) -> Result<(), BlockError> {
     let mut stream: Block = [0; BLOCK];
-    let mut used = BLOCK;
-    let mut counter: u16 = 0;
     let mut result = Ok(());
-    for byte in body.iter_mut() {
-        if used >= BLOCK {
-            // The body is at most 65535 bytes, so at most 4096 counter blocks.
-            counter = counter.wrapping_add(1);
-            stream = block(LENGTH_FIELD, nonce, counter);
-            if let Err(error) = engine.encrypt(&mut stream) {
-                result = Err(error);
-                break;
-            }
-            used = 0;
+    let mut bytes = body.iter_mut();
+    // An admitted body is at most 65535 bytes: at most 4096 counter blocks,
+    // so the counter never wraps.
+    let mut counter: u16 = 0;
+    while bytes.len() > 0 {
+        counter = counter.wrapping_add(1);
+        stream = block(LENGTH_FIELD, nonce, counter);
+        if let Err(error) = engine.encrypt(&mut stream) {
+            result = Err(error);
+            break;
         }
-        *byte ^= stream.get(used).copied().unwrap_or(0);
-        used = used.saturating_add(1);
+        // The key stream first: a block of it takes at most a block of the
+        // body and leaves the rest.
+        for (key, byte) in stream.iter().zip(&mut bytes) {
+            *byte ^= key;
+        }
     }
     stream.zeroize();
     result
@@ -181,16 +198,18 @@ fn counter_pass<E: BlockEngine>(
 fn mask<E: BlockEngine, const M: usize>(
     engine: &mut E,
     nonce: &[u8; NONCE_LEN],
-    tag: &mut Block,
+    tag: &Block,
 ) -> Result<[u8; M], BlockError> {
     let mut s0 = block(LENGTH_FIELD, nonce, 0);
-    engine.encrypt(&mut s0)?;
-    let mut mic = [0; M];
-    for ((out, value), mask) in mic.iter_mut().zip(tag.iter()).zip(s0.iter()) {
-        *out = value ^ mask;
-    }
+    let result = engine.encrypt(&mut s0).map(|()| {
+        let mut mic = [0; M];
+        for ((out, value), mask) in mic.iter_mut().zip(tag.iter()).zip(s0.iter()) {
+            *out = value ^ mask;
+        }
+        mic
+    });
     s0.zeroize();
-    Ok(mic)
+    result
 }
 
 /// A CCM block: `flags`, the nonce and a two-byte big-endian `field`.
@@ -204,52 +223,6 @@ fn block(flags: u8, nonce: &[u8; NONCE_LEN], field: u16) -> Block {
         *slot = *byte;
     }
     out
-}
-
-/// CBC-MAC over bytes fed in pieces, each segment zero-padded to a block.
-struct CbcMac {
-    state: Block,
-    pending: Block,
-    filled: usize,
-}
-
-impl CbcMac {
-    fn feed<E: BlockEngine>(&mut self, engine: &mut E, bytes: &[u8]) -> Result<(), BlockError> {
-        for byte in bytes {
-            if let Some(slot) = self.pending.get_mut(self.filled) {
-                *slot = *byte;
-            }
-            self.filled = self.filled.saturating_add(1);
-            if self.filled >= BLOCK {
-                self.absorb(engine)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Absorb a partial block, zero-padded.
-    fn pad<E: BlockEngine>(&mut self, engine: &mut E) -> Result<(), BlockError> {
-        if self.filled > 0 {
-            self.absorb(engine)?;
-        }
-        Ok(())
-    }
-
-    fn absorb<E: BlockEngine>(&mut self, engine: &mut E) -> Result<(), BlockError> {
-        for (out, byte) in self.state.iter_mut().zip(&self.pending) {
-            *out ^= byte;
-        }
-        self.pending.zeroize();
-        self.filled = 0;
-        engine.encrypt(&mut self.state)
-    }
-}
-
-impl Drop for CbcMac {
-    fn drop(&mut self) {
-        self.state.zeroize();
-        self.pending.zeroize();
-    }
 }
 
 #[cfg(test)]

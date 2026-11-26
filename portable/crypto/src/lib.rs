@@ -67,8 +67,10 @@ impl Aes128Key {
 pub struct KeyDataCapacityError;
 
 /// Bounded secret bytes of at most `N`: a wrapped or unwrapped key. The whole
-/// buffer is erased when dropped.
+/// buffer is erased when dropped, and the length with it.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct KeyData<const N: usize> {
+    /// The held bytes' count, at most `N`; the bytes after them are zero.
     len: usize,
     bytes: [u8; N],
 }
@@ -90,25 +92,17 @@ impl<const N: usize> KeyData<N> {
     }
 
     /// The held bytes.
+    // The one place where the length's bound is asked again; `KeyData`
+    // leaves with the request objects (tasks/438, PR 3).
     pub fn as_bytes(&self) -> &[u8] {
         self.bytes.get(..self.len).unwrap_or(&[])
     }
-}
 
-impl<const N: usize> Zeroize for KeyData<N> {
-    fn zeroize(&mut self) {
-        self.len = 0;
-        self.bytes.zeroize();
+    /// The held bytes, for the key wrap to work in place.
+    pub(crate) fn held_mut(&mut self) -> &mut [u8] {
+        self.bytes.get_mut(..self.len).unwrap_or(&mut [])
     }
 }
-
-impl<const N: usize> Drop for KeyData<N> {
-    fn drop(&mut self) {
-        self.zeroize();
-    }
-}
-
-impl<const N: usize> ZeroizeOnDrop for KeyData<N> {}
 
 /// Why an RFC 3394 unwrap refused its input or its block engine failed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
