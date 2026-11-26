@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Executor- and chip-independent single-peer Wi-Fi access-point MLME"
 
 [dependencies]
+oer-portable-aes-software = { path = "../../../../../portable/aes-software" }
 oer-portable-crypto = { path = "../../../../../portable/crypto" }
 oer-protocols-ieee80211-core-security-cipher = { path = "../../security/cipher" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../upper-mac" }

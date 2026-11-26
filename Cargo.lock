@@ -1786,6 +1786,7 @@ dependencies = [
  "oer-chips-family-platform-runtime",
  "oer-hil-agent",
  "oer-hil-services-radio-pair",
+ "oer-portable-aes-software",
  "oer-portable-clock",
  "oer-portable-cooperate",
  "oer-portable-diagnostics",
@@ -2078,6 +2079,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-portable-aes-software"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "oer-portable-crypto",
+ "zeroize",
+]
+
+[[package]]
 name = "oer-portable-bounded"
 version = "0.1.0"
 dependencies = [
@@ -2330,6 +2340,7 @@ dependencies = [
 name = "oer-protocols-ieee80211-core-roles-ap"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-aes-software",
  "oer-portable-crypto",
  "oer-portable-time",
  "oer-portable-wire",
@@ -2346,6 +2357,7 @@ name = "oer-protocols-ieee80211-core-roles-sta"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
+ "oer-portable-aes-software",
  "oer-portable-clock",
  "oer-portable-crypto",
  "oer-portable-events",
@@ -2372,7 +2384,7 @@ dependencies = [
 name = "oer-protocols-ieee80211-core-security-cipher"
 version = "0.1.0"
 dependencies = [
- "aes",
+ "oer-portable-aes-software",
  "oer-portable-crypto",
  "oer-portable-wire",
  "oer-protocols-ieee802-wire",
@@ -2390,6 +2402,7 @@ dependencies = [
  "cipher 0.5.2",
  "heapless 0.9.3",
  "hmac",
+ "oer-portable-aes-software",
  "oer-portable-crypto",
  "oer-portable-time",
  "oer-portable-wire",
@@ -2514,6 +2527,7 @@ dependencies = [
  "embassy-futures",
  "heapless 0.9.3",
  "oer-chips-family-radio-ieee80211-policy",
+ "oer-portable-aes-software",
  "oer-portable-clock",
  "oer-portable-events",
  "oer-portable-memory",

@@ -1,5 +1,5 @@
 use super::*;
-use crate::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_portable_crypto::block::{BlockEngine, EngineStopped};
 use std::vec::Vec;
 
@@ -149,7 +149,7 @@ struct Refusing {
 }
 
 struct RefusingKeyed {
-    blocks: crate::aes::SoftwareAes128Keyed,
+    blocks: oer_portable_aes_software::SoftwareAes128Keyed,
     left: usize,
 }
 

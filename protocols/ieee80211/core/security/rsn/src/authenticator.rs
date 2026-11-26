@@ -26,7 +26,7 @@ use oer_portable_crypto::{
     rfc3394::{self, KeyWrapError},
 };
 use oer_protocols_ieee802_wire::Eui48;
-use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
+use oer_protocols_ieee80211_core_security_cipher::key_data::RsnKeyData;
 use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 
 /// How many built transmissions of one handshake message stay awaited.

@@ -30,7 +30,7 @@ use crate::{
     management_ccmp::ManagementCcmpReceiver,
     sae::{SaeCommit, SaeCommitSecret, SaePasswordElement},
 };
-use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_wire::sae::{SaeCommitValues, anti_clogging_token};
 
 /// The captured Message 3's PTK and its decrypted key data.

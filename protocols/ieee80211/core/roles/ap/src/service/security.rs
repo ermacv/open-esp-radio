@@ -2,7 +2,7 @@
 //! Every method borrows the same service and peer storage; no second owner exists.
 
 use super::*;
-use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpTxPacketNumber, InstalledCcmpTxKey};
 use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
 use oer_protocols_ieee80211_wire::scan::ElementOccurrence;

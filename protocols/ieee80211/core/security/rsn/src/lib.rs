@@ -61,12 +61,12 @@ pub(crate) fn test_unwrap_bytes(
     std::vec::Vec<u8>,
     oer_portable_crypto::rfc3394::KeyUnwrapError<core::convert::Infallible>,
 > {
-    let mut buffer = oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::new();
+    let mut buffer = oer_protocols_ieee80211_core_security_cipher::key_data::RsnKeyData::new();
     let wrapped = buffer
         .wrapped(wrapped)
         .map_err(|_| oer_portable_crypto::rfc3394::KeyUnwrapError::InvalidLength)?;
     oer_portable_crypto::rfc3394::unwrap(
-        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+        &mut oer_portable_aes_software::SoftwareAes128,
         kek.aes_key(),
         wrapped,
     )

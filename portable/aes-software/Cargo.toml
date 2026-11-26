@@ -1,0 +1,19 @@
+[package]
+name = "oer-portable-aes-software"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The RustCrypto AES-128 cipher as a synchronous AES-128 engine that cannot stop"
+
+[dependencies]
+aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }
+oer-portable-crypto = { path = "../crypto" }
+zeroize = { version = "1.9.0", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+oer-portable-crypto = { path = "../crypto", features = ["test-support"] }
+
+[lints]
+workspace = true

@@ -1,6 +1,6 @@
 use super::*;
 use crate::{EapolKeyFrame, EapolKeyMessage, frames};
-use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_wire::eapol::EAPOL_KEY_PACKET_LEN;
 
 #[test]

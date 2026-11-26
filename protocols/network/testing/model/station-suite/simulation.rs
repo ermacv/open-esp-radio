@@ -51,7 +51,7 @@ use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame as StationFrame;
 use oer_protocols_ieee80211_core_roles_sta::machine::{
     GroupCapacity, StaCallbacks, StaConfig, StaProfile, StaSecurity, Station, StationResources,
 };
-use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_core_security_rsn::Pmk;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpPacketNumberStep;
 use oer_protocols_ieee80211_runtime::datapath::{

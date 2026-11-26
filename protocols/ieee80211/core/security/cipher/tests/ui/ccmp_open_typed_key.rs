@@ -1,5 +1,6 @@
 #![no_std]
-use oer_protocols_ieee80211_core_security_cipher::{aes::SoftwareAes128, ccmp_mpdu::CcmpAssociation};
+use oer_portable_aes_software::SoftwareAes128;
+use oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 pub fn transform(association: &CcmpAssociation, key: &Ccmp128Key, frame: &mut [u8]) {
     #[cfg(ui_reject)]

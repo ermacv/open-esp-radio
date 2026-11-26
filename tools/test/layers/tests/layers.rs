@@ -2432,9 +2432,9 @@ fn member(path: &str, name: &str, built: Built, dependencies: &[&str]) -> Member
     }
 }
 
-/// Direct normal uses of external async crates. Transitive dependencies of
-/// the network stack and bt-hci are outside this rule; dev dependencies are
-/// outside `Member::dependencies`.
+/// Direct normal uses of external async crates and of the RustCrypto AES
+/// cipher. Transitive dependencies of the network stack and bt-hci are
+/// outside this rule; dev dependencies are outside `Member::dependencies`.
 fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
     match dependency {
         "embassy-futures" => !matches!(
@@ -2454,6 +2454,9 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
         "embassy-time-driver" => path == "chips/family/platform/executor",
         "trouble-host" => path == "portable/embassy/trouble" || image_path(path),
         "bt-hci" => false,
+        // The RustCrypto cipher is a product dependency of the software AES
+        // engine alone; a host tool may take it as its reference.
+        "aes" => path == "portable/aes-software" || role == Role::Tool,
         _ => true,
     }
 }
@@ -2873,6 +2876,33 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
                 "{path} -> {dependency}"
             );
         }
+    }
+    // The RustCrypto AES cipher: the software engine and host tools take it;
+    // the cipher, the cores, the drivers and the HIL services that carried a
+    // software block take the engine's crate instead.
+    for path in [
+        "portable/aes-software",
+        "hil/scenarios/aes",
+        "tools/lab/fixture-helpers",
+    ] {
+        assert!(
+            external_crate_allowed(path, role(path).unwrap(), "aes"),
+            "{path} -> aes"
+        );
+    }
+    for path in [
+        "protocols/ieee80211/core/security/cipher",
+        "protocols/ieee80211/core/security/rsn",
+        "protocols/ieee80211/core/roles/ap",
+        "chips/esp32s31/drivers/aes",
+        "hil/services/aes",
+        "hil/probes/esp32s31-case-c-sender",
+        "portable/crypto",
+    ] {
+        assert!(
+            !external_crate_allowed(path, role(path).unwrap(), "aes"),
+            "{path} -> aes"
+        );
     }
     for (path, allowed) in [
         ("protocols/ieee80211/wire", false),

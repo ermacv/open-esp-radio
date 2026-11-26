@@ -69,9 +69,9 @@ fn construct<'id, const G: usize>(
     )
 }
 
-struct Callbacks(oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128);
+struct Callbacks(oer_portable_aes_software::SoftwareAes128);
 impl oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks {
-    type AesEngine = oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
+    type AesEngine = oer_portable_aes_software::SoftwareAes128;
     fn nonce(&mut self) -> [u8; 32] {
         [0; 32]
     }

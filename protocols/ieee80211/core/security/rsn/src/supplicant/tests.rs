@@ -8,7 +8,8 @@ use crate::{
     frames::{RsnGtk, RsnPlainKeyData},
     keys::RsnKeyKind,
 };
-use oer_protocols_ieee80211_core_security_cipher::aes::{RSN_KEY_DATA_CAPACITY, SoftwareAes128};
+use oer_portable_aes_software::SoftwareAes128;
+use oer_protocols_ieee80211_core_security_cipher::key_data::RSN_KEY_DATA_CAPACITY;
 
 const LOCAL: [u8; 6] = [1; 6];
 const AP: [u8; 6] = [2; 6];
@@ -1141,10 +1142,10 @@ fn software_wrap(
     kek: &[u8; 16],
     plaintext: &[u8],
 ) -> Result<KeyBytes, oer_portable_crypto::rfc3394::KeyWrapError<Infallible>> {
-    let mut buffer = oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::new();
+    let mut buffer = oer_protocols_ieee80211_core_security_cipher::key_data::RsnKeyData::new();
     let buffer = buffer.plaintext(plaintext).unwrap();
     oer_portable_crypto::rfc3394::wrap(
-        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+        &mut oer_portable_aes_software::SoftwareAes128,
         &oer_portable_crypto::Aes128Key::copy_from(kek),
         buffer,
     )?;

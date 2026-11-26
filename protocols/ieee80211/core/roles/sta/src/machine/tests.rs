@@ -5,6 +5,7 @@
 use super::*;
 use crate::join::test_support::{BSSID, LOCAL, answer_authentication, association_response};
 use core::num::NonZeroU16;
+use oer_portable_aes_software::SoftwareAes128;
 use oer_protocols_ieee80211_contracts_port::ArbiterPool;
 use oer_protocols_ieee80211_contracts_port::Width;
 use oer_protocols_ieee80211_contracts_port::{
@@ -14,7 +15,6 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_core_arbiter::{
     AccessPointCommand, AccessPointFact, Arbiter, ArbiterAction, ArbiterPolicy, NoReservation,
 };
-use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_protocols_ieee80211_wire::extensions::wmm::{WmmParameterSet, parse_wmm_parameter_element};
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::qos::Tid;
@@ -150,7 +150,7 @@ struct CountingBlocks {
 }
 /// [`CountingBlocks`] with a key loaded: the software block, which may
 /// stop only because its engine may.
-struct CountingKeyed(oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128Keyed);
+struct CountingKeyed(oer_portable_aes_software::SoftwareAes128Keyed);
 impl oer_portable_crypto::block::BlockEngine for CountingKeyed {
     type Stop = oer_portable_crypto::block::EngineStopped;
     fn encrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), Self::Stop> {
@@ -177,7 +177,7 @@ impl oer_portable_crypto::block::Aes128Engine for CountingBlocks {
             return Err(oer_portable_crypto::block::EngineStopped);
         }
         let Ok(keyed) = oer_portable_crypto::block::Aes128Engine::load(
-            &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+            &mut oer_portable_aes_software::SoftwareAes128,
             key,
         );
         Ok(CountingKeyed(keyed))
@@ -5804,10 +5804,10 @@ fn software_wrap(
     kek: &oer_protocols_ieee80211_core_security_rsn::Kek,
     plaintext: &[u8],
 ) -> Result<KeyBytes, oer_portable_crypto::rfc3394::KeyWrapError<core::convert::Infallible>> {
-    let mut buffer = oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData::new();
+    let mut buffer = oer_protocols_ieee80211_core_security_cipher::key_data::RsnKeyData::new();
     let buffer = buffer.plaintext(plaintext).unwrap();
     oer_portable_crypto::rfc3394::wrap(
-        &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+        &mut oer_portable_aes_software::SoftwareAes128,
         &oer_portable_crypto::Aes128Key::copy_from(kek.as_bytes()),
         buffer,
     )?;
