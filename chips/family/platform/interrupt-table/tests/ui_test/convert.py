@@ -131,7 +131,8 @@ def convert(name: str, source: str, snapshot: str, twin: str, notes: list[str]) 
             continue
         arrow = ("^" if offset < 0 else "v") * abs(offset)
         annotation = f"//~[{reject}]{arrow} {pattern}"
-        body.append(f"{code_line} {annotation}" if code_line.strip() else annotation)
+        indent = line[: len(line) - len(line.lstrip())]
+        body.append(f"{code_line} {annotation}" if code_line.strip() else indent + annotation)
     for target, annotation in moved:
         body[target - 1] = f"{body[target - 1]} {annotation}"
     return "\n".join(header + other_file + body) + "\n"
