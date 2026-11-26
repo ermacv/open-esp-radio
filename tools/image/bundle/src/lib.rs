@@ -8,10 +8,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::indexing_slicing,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 //! The image bundle format: everything one image build made, in one directory, described
 //! by its `bundle.json`.
 //!

@@ -20,11 +20,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::indexing_slicing,
-    clippy::unreachable,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};

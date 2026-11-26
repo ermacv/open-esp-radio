@@ -1,10 +1,6 @@
 //! Durable host files shared by every repository tool: atomic replacement,
 //! content digests (remembered across processes by [`digests`]),
 //! JSON Lines logs ([`jsonl`]), wall-clock timestamps and the user's state directories ([`xdg`]).
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
 #![forbid(unsafe_code)]
 #![cfg_attr(
     test,
@@ -14,11 +10,6 @@
         clippy::unreachable,
         clippy::arithmetic_side_effects
     )
-)]
-#![expect(
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    reason = "host tool: the ban covers the code an image reaches"
 )]
 
 use std::{

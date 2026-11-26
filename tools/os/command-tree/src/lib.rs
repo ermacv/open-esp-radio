@@ -12,10 +12,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::expect_used,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 use serde::{Deserialize, Serialize};
 

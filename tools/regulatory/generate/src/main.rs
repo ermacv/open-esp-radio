@@ -1,13 +1,5 @@
 //! `cargo regdb <db.txt> <revision> <out.rs>`: writes the regulatory tables of
 //! `oer-protocols-radio-regulatory` from a wireless-regdb `db.txt`.
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
 #![forbid(unsafe_code)]
 #![cfg_attr(
     test,
@@ -17,10 +9,6 @@
         clippy::unreachable,
         clippy::arithmetic_side_effects
     )
-)]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "host tool: the ban covers the code an image reaches"
 )]
 
 mod regdb;

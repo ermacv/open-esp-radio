@@ -9,10 +9,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 use oer_tools_lab_fixture::network_client::{
     Hook, Ipv4, Lease, Ping, Profile, SessionCommand, SessionState,

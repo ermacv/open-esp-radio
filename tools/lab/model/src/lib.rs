@@ -32,10 +32,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 pub mod convert;
 pub mod device_id;
