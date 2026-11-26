@@ -65,7 +65,7 @@ impl ReplayCheckingStation {
         {
             return None;
         }
-        assert!(key.verify_mic(&self.ptk, &mut SoftwareAes128).unwrap());
+        assert!(key.check_mic(&self.ptk, &mut SoftwareAes128).is_ok());
         self.rx_replay_counter = Some(key.replay_counter().get());
         let plaintext = software_key_unwrap(self.ptk.kek(), key.key_data()).unwrap();
         parse_gtk_key_data(

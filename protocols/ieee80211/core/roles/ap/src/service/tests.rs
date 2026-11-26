@@ -915,8 +915,8 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         message3
             .key_frame()
             .unwrap()
-            .verify_mic(&ptk, &mut SoftwareAes128)
-            .unwrap()
+            .check_mic(&ptk, &mut SoftwareAes128)
+            .is_ok()
     );
     let plaintext = software_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
         .expect("AP wrapped its Message 3 key data");
@@ -2061,8 +2061,8 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         message3
             .key_frame()
             .unwrap()
-            .verify_mic(&ptk, &mut SoftwareAes128)
-            .unwrap()
+            .check_mic(&ptk, &mut SoftwareAes128)
+            .is_ok()
     );
     let plaintext = software_key_unwrap(ptk.kek(), message3.key_frame().unwrap().key_data())
         .expect("AP wrapped its Message 3 key data");

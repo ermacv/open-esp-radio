@@ -216,7 +216,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     assert_eq!(key.replay_counter().get(), 1);
     assert_eq!(key.key_data(), &RSN);
     assert!(!message2.retransmission());
-    assert!(key.verify_mic(&expected_ptk, &mut SoftwareAes128).unwrap());
+    assert!(key.check_mic(&expected_ptk, &mut SoftwareAes128).is_ok());
 
     let plain = message3_plain();
     let rsc = [7, 6, 5, 4, 3, 2, 1, 0];
@@ -254,8 +254,8 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
         message4
             .key_frame()
             .unwrap()
-            .verify_mic(&expected_ptk, &mut SoftwareAes128)
-            .unwrap()
+            .check_mic(&expected_ptk, &mut SoftwareAes128)
+            .is_ok()
     );
     assert_eq!(connected.supplicant.replay_counter().get(), 2);
 }
@@ -306,8 +306,8 @@ fn connected_exact_duplicate_message3_retransmits_authenticated_m4() {
         message4
             .key_frame()
             .unwrap()
-            .verify_mic(&ptk, &mut SoftwareAes128)
-            .unwrap()
+            .check_mic(&ptk, &mut SoftwareAes128)
+            .is_ok()
     );
 }
 
@@ -492,8 +492,8 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
         response
             .key_frame()
             .unwrap()
-            .verify_mic(&ptk, &mut SoftwareAes128)
-            .unwrap()
+            .check_mic(&ptk, &mut SoftwareAes128)
+            .is_ok()
     );
     assert_eq!(connected.replay_counter().get(), 3);
 
@@ -505,8 +505,8 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
         repeated
             .key_frame()
             .unwrap()
-            .verify_mic(&ptk, &mut SoftwareAes128)
-            .unwrap()
+            .check_mic(&ptk, &mut SoftwareAes128)
+            .is_ok()
     );
 }
 
@@ -1195,8 +1195,8 @@ fn a_repeated_message1_rebuilds_message2_and_a_newer_one_restarts() {
         restart
             .key_frame()
             .unwrap()
-            .verify_mic(&newer_ptk, &mut SoftwareAes128)
-            .unwrap()
+            .check_mic(&newer_ptk, &mut SoftwareAes128)
+            .is_ok()
     );
     // Message 3 of the first ANonce no longer matches.
     let message3 = encrypted_message3(

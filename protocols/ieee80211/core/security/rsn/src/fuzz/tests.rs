@@ -76,7 +76,7 @@ fn eapol(count: usize) {
                 frame.key_identifier(),
                 frame.key_data(),
             );
-            let _ = frame.verify_mic(&ptk, &mut SoftwareAes128);
+            let _ = frame.check_mic(&ptk, &mut SoftwareAes128);
         }
         if let Ok(owned) = OwnedEapolFrame::<256>::try_copy(
             RsnInterface::Station,

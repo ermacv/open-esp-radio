@@ -127,21 +127,9 @@ impl<'a> EapolKeyFrame<'a> {
     }
 
     /// The MIC checked under the PTK's KCK: it verifies, or the failure.
+    /// An AES-CMAC suite runs on `engine`; its refusal is
+    /// [`MicFailure::Engine`].
     pub fn check_mic<E: Aes128Engine>(self, ptk: &Ptk, engine: &mut E) -> Result<(), MicFailure> {
-        match self.verify_mic(ptk, engine) {
-            Ok(true) => Ok(()),
-            Ok(false) => Err(MicFailure::Mismatch),
-            Err(error) => Err(MicFailure::Engine(error)),
-        }
-    }
-
-    /// Whether the MIC verifies under the PTK's KCK. An AES-CMAC suite runs
-    /// on `engine`; its refusal is the error.
-    pub fn verify_mic<E: Aes128Engine>(
-        self,
-        ptk: &Ptk,
-        engine: &mut E,
-    ) -> Result<bool, BlockError> {
         self.verify_mic_with_kck(ptk.akm(), ptk.kck(), engine)
     }
 
@@ -149,7 +137,7 @@ impl<'a> EapolKeyFrame<'a> {
         self,
         key: &RsnKeyConfirmationKey,
         engine: &mut E,
-    ) -> Result<bool, BlockError> {
+    ) -> Result<(), MicFailure> {
         self.verify_mic_with_kck(key.akm(), key.kck(), engine)
     }
 
@@ -158,10 +146,10 @@ impl<'a> EapolKeyFrame<'a> {
         akm: Akm,
         kck: &Kck,
         engine: &mut E,
-    ) -> Result<bool, BlockError> {
-        let mut mac = akm.mic(kck, engine)?;
+    ) -> Result<(), MicFailure> {
+        let mut mac = akm.mic(kck, engine).map_err(MicFailure::Engine)?;
         for part in self.0.mic_input() {
-            mac.update(part)?;
+            mac.update(part).map_err(MicFailure::Engine)?;
         }
         mac.verify(self.0.mic())
     }

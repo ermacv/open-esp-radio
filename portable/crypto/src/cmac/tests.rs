@@ -63,11 +63,11 @@ fn verification_compares_the_truncated_tag() {
     let verify = |expected: &[u8; 8]| {
         let mut mac = Cmac::new(Engine::new(&RFC4493_KEY)).unwrap();
         mac.update(message).unwrap();
-        mac.verify_truncated(expected).unwrap()
+        mac.verify_truncated(expected)
     };
-    assert!(verify(&first));
+    assert_eq!(verify(&first), Ok(()));
     first[0] ^= 0x80;
-    assert!(!verify(&first));
+    assert_eq!(verify(&first), Err(CmacVerifyError::InvalidTag));
 }
 
 #[test]
@@ -84,7 +84,10 @@ fn the_first_refusal_poisons_the_computation() {
     assert_eq!(mac.finalize(), Err(REFUSAL));
     let mut mac = Cmac::new(Engine::refusing_from(&RFC4493_KEY, 1)).unwrap();
     mac.update(&[3; 5]).unwrap();
-    assert_eq!(mac.verify_truncated(&[0; 8]), Err(REFUSAL));
+    assert_eq!(
+        mac.verify_truncated(&[0; 8]),
+        Err(CmacVerifyError::Engine(REFUSAL))
+    );
 }
 
 #[test]

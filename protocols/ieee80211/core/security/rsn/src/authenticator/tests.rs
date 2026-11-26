@@ -175,7 +175,7 @@ fn a_verified_message2_builds_message3_and_message4_authorizes() {
     assert_eq!(transmit.replay_counter.get(), REPLAY + 1);
     assert!(!transmit.retransmission);
     assert_eq!(key_frame.key_receive_sequence(), &[1, 2, 3, 4, 5, 6, 0, 0]);
-    assert!(key_frame.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
+    assert!(key_frame.check_mic(&ptk, &mut SoftwareAes128).is_ok());
     let plain = crate::test_unwrap_bytes(ptk.kek(), key_frame.key_data()).unwrap();
     assert!(parse_gtk_key_data(plain.as_bytes(), &AP_RSN, &[], None).is_ok());
 
@@ -197,7 +197,7 @@ fn a_verified_message2_builds_message3_and_message4_authorizes() {
         again_frame.key_receive_sequence(),
         &[9, 2, 3, 4, 5, 6, 0, 0]
     );
-    assert!(again_frame.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
+    assert!(again_frame.check_mic(&ptk, &mut SoftwareAes128).is_ok());
     let again_plain = crate::test_unwrap_bytes(ptk.kek(), again_frame.key_data()).unwrap();
     assert_eq!(again_plain.as_bytes(), plain.as_bytes());
 

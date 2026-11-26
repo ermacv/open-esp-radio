@@ -119,16 +119,16 @@ fn derives_known_ptk_and_builds_message_2() {
     );
     assert_eq!(parsed4.message(), EapolKeyMessage::PairwiseMessage4);
     assert_eq!(parsed4.replay_counter().get(), 8);
-    assert!(parsed4.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
+    assert!(parsed4.check_mic(&ptk, &mut SoftwareAes128).is_ok());
 
     let mut changed = [0; EAPOL_KEY_PACKET_LEN];
     changed.copy_from_slice(message4.as_bytes());
     changed[17] ^= 1;
-    assert!(
-        !EapolKeyFrame::parse(&changed)
+    assert_eq!(
+        EapolKeyFrame::parse(&changed)
             .unwrap()
-            .verify_mic(&ptk, &mut SoftwareAes128)
-            .unwrap()
+            .check_mic(&ptk, &mut SoftwareAes128),
+        Err(crate::MicFailure::Mismatch)
     );
 }
 

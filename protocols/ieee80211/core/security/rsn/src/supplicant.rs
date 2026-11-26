@@ -559,12 +559,11 @@ impl RsnConnectedSupplicant {
         let key = frame.key_frame()?;
         self.completed_message3
             .validate_fields(self.key_confirmation.akm(), key)?;
-        if !key
-            .verify_mic_with_confirmation_key(&self.key_confirmation, engine)
-            .map_err(RsnConnectedSupplicantError::Engine)?
-        {
-            return Err(RsnConnectedSupplicantError::InvalidMic);
-        }
+        key.verify_mic_with_confirmation_key(&self.key_confirmation, engine)
+            .map_err(|failure| match failure {
+                MicFailure::Mismatch => RsnConnectedSupplicantError::InvalidMic,
+                MicFailure::Engine(error) => RsnConnectedSupplicantError::Engine(error),
+            })?;
         if key.replay_counter() == self.completed_message3.replay_counter {
             if key.mic() != &self.completed_message3.mic {
                 return Err(RsnConnectedSupplicantError::RetainedMessage3Mismatch);
@@ -630,12 +629,11 @@ impl RsnConnectedSupplicant {
         // A cached Group Message 2 is still an authenticated response. Verify
         // every repeated Group Message 1 before admitting the idempotent path,
         // otherwise a forged frame can elicit a valid MIC-bearing response.
-        if !key
-            .verify_mic_with_confirmation_key(&self.key_confirmation, engine)
-            .map_err(RsnConnectedSupplicantError::Engine)?
-        {
-            return Err(RsnConnectedSupplicantError::InvalidMic);
-        }
+        key.verify_mic_with_confirmation_key(&self.key_confirmation, engine)
+            .map_err(|failure| match failure {
+                MicFailure::Mismatch => RsnConnectedSupplicantError::InvalidMic,
+                MicFailure::Engine(error) => RsnConnectedSupplicantError::Engine(error),
+            })?;
         if let Some(completed) = repeated {
             if !completed.matches(key) {
                 return Err(RsnConnectedSupplicantError::RetainedGroupMessage1Mismatch);
