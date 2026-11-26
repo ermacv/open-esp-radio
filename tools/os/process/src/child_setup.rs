@@ -56,19 +56,15 @@ pub fn new_session(command: &mut Command) {
 ///
 /// # Safety
 /// Call only in the helper child: it must keep running after the owner dies.
-/// No handler is installed; these raw system calls allocate and lock nothing.
+/// No handler is installed; `signal` is async-signal-safe, and allocates and
+/// locks nothing.
 pub(crate) unsafe fn ignore_terminal_signals() {
-    use rustix::runtime::{
-        KernelSigaction, KernelSigactionFlags, Signal, kernel_sig_ign, kernel_sigaction,
-    };
-    for signal in [Signal::INT, Signal::TERM, Signal::HUP, Signal::PIPE] {
-        let action = KernelSigaction {
-            sa_handler_kernel: kernel_sig_ign(),
-            sa_flags: KernelSigactionFlags::RESTART,
-            ..KernelSigaction::default()
-        };
-        // SAFETY: this is the freshly forked helper; SIG_IGN invokes no code,
-        // and the action's empty mask and restart flag match libc::signal.
-        let _ = unsafe { kernel_sigaction(signal, Some(action)) };
+    for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP, libc::SIGPIPE] {
+        // SAFETY: this is the freshly forked helper, the one thread of its
+        // process. `signal` is a call a forked child may make; `SIG_IGN` is
+        // a disposition, not a handler, so no code of this process runs by
+        // it. Each of the four is a signal that can be ignored, which is all
+        // `signal` refuses, so its answer says nothing here.
+        unsafe { libc::signal(signal, libc::SIG_IGN) };
     }
 }

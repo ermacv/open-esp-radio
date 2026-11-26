@@ -11,7 +11,7 @@ description = "Privileged Linux fixture installer and fixed launchers for open E
 [dependencies]
 oer-tools-lab-fixture = { path = "../fixture" }
 clap = { version = "4.5", features = ["derive"] }
-rustix = { version = "1.1.4", features = ["fs", "process", "event", "time"] }
+rustix = { version = "1.1.6", features = ["fs", "process", "event", "time"] }
 oer-tools-os-process = { path = "../../os/process" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
