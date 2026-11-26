@@ -11,6 +11,7 @@ use oer_portable_time::{Duration, Instant};
 use oer_protocols_network_wire::address::Ipv4Address;
 
 use crate::block::Block;
+use crate::serial::Serial;
 
 /// Replies owed at once.
 pub const ECHOES: usize = 4;
@@ -51,7 +52,7 @@ pub enum IcmpDrop {
 /// One reply owed: the request's ICMP message, whose type it changes.
 #[derive(Debug)]
 pub(crate) struct Owed<'m, B, const SIZE: usize> {
-    pub(crate) serial: u64,
+    pub(crate) serial: Serial,
     pub(crate) block: Block<'m, B, SIZE>,
     /// The asker.
     pub(crate) to: Ipv4Address,
@@ -113,7 +114,7 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
         for (place, owed) in oldest.iter_mut().zip(self.owed.iter()) {
             *place = owed.as_ref().map(|owed| owed.serial);
         }
-        oldest.sort_unstable_by_key(|serial| serial.unwrap_or(u64::MAX));
+        oldest.sort_unstable_by_key(|serial| (serial.is_none(), *serial));
         oldest
             .into_iter()
             .flatten()
@@ -122,7 +123,7 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
 
     /// The oldest reply owed after `after`'s serial, as [`Self::iter`]
     /// orders them; with `None`, the oldest.
-    pub(crate) fn next_after(&self, after: Option<u64>) -> Option<&Owed<'m, B, SIZE>> {
+    pub(crate) fn next_after(&self, after: Option<Serial>) -> Option<&Owed<'m, B, SIZE>> {
         self.owed
             .iter()
             .flatten()
@@ -130,7 +131,7 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
             .min_by_key(|owed| owed.serial)
     }
 
-    pub(crate) fn get(&self, serial: u64) -> Option<&Owed<'m, B, SIZE>> {
+    pub(crate) fn get(&self, serial: Serial) -> Option<&Owed<'m, B, SIZE>> {
         self.owed
             .iter()
             .flatten()
@@ -143,7 +144,7 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
     }
 
     /// Take the reply of `serial`.
-    pub(crate) fn take(&mut self, serial: u64) -> Option<Owed<'m, B, SIZE>> {
+    pub(crate) fn take(&mut self, serial: Serial) -> Option<Owed<'m, B, SIZE>> {
         self.owed
             .iter_mut()
             .find(|place| place.as_ref().is_some_and(|owed| owed.serial == serial))

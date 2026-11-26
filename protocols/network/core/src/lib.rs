@@ -126,6 +126,7 @@ mod neighbor;
 mod owner;
 mod payload;
 mod places;
+mod serial;
 
 pub use block::{
     Block, BlockPlace, BlockTooShort, Claimed, CoreBrand, GROUPS, Group, GroupsFull, Pool, claim,

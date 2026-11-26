@@ -63,6 +63,11 @@ fn each_end_is_told_once_in_the_order_it_came() {
         let second = send_wide(stack, &socket, b"two");
         let third = send_wide(stack, &socket, b"three");
         assert!(told(stack, &ends).is_empty(), "running work is not told");
+        // Three commands at once take the first three places.
+        assert_eq!(
+            [first.work(), second.work(), third.work()].map(|work| work.place()),
+            [0, 1, 2]
+        );
         transmit_next(stack);
         assert_eq!(told(stack, &ends), [first.work()]);
         transmit_next(stack);

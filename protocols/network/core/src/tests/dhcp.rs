@@ -1871,12 +1871,13 @@ fn t1_and_t2_stay_in_order_at_their_bounds() {
 #[test]
 fn the_outcome_of_another_message_leaves_the_owed_one() {
     let mut client = crate::dhcp::Client::new(Eui48::new(LOCAL), 1500, 1);
-    let mut serial = 0;
-    client.link_up(at(0), 1, &mut serial);
+    let mut serials = crate::serial::Serials::new();
+    client.link_up(at(0), 1, &mut serials);
     let owed = client.owed().unwrap();
-    client.sent(at(1), owed + 1);
+    let another = serials.next();
+    client.sent(at(1), another);
     assert_eq!(client.owed(), Some(owed));
-    client.refused(at(1), owed + 1);
+    client.refused(at(1), another);
     assert_eq!(client.owed(), Some(owed));
     client.refused(at(1), owed);
     assert_eq!(client.owed(), None);
