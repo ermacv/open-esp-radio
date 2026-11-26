@@ -33,7 +33,9 @@ use crate::interface::{Addressing, Interface, Ipv4, is_unicast};
 use crate::loans::{LoansRefused, NotLent};
 use crate::neighbor::{Holds, Lookup, NeighborIndex, Neighbors};
 use crate::payload::Payload;
-use crate::places::{Declared, Place, PlaceNumber, Places, Run, Sending, Vacant};
+use crate::places::{
+    Declared, Occupied, Place, PlaceNumber, PlaceState, Places, Run, Sending, Vacant,
+};
 use crate::serial::{Serial, Serials};
 use oer_protocols_network_port::{Held, Slot};
 
@@ -914,9 +916,18 @@ impl Configuration {
     }
 }
 
+/// A socket slot's openings: none yet, or the number of its last.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Opening {
+    Never,
+    Last(Serial),
+}
+
 #[derive(Debug)]
 struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T> {
-    serial: Serial,
+    /// Its last opening, kept after a close for its ends and its retired
+    /// results.
+    serial: Opening,
     opened: Opened,
     dscp: Dscp,
     /// What its received data counts toward.
@@ -932,7 +943,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
 {
     const fn new() -> Self {
         Self {
-            serial: Serial::UNGIVEN,
+            serial: Opening::Never,
             opened: Opened::Closed,
             dscp: BEST_EFFORT,
             group: Group::shared(),
@@ -949,7 +960,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
     fn needs(&self, address: Ipv4Address) -> bool {
         self.places
             .running()
-            .any(|(_, place)| place.run().hop() == Some(address))
+            .any(|(_, place)| place.run().and_then(Run::hop) == Some(address))
     }
 }
 
@@ -1275,7 +1286,7 @@ impl<
         // The last refusal: nothing is written before it.
         admit(index)?;
         let index = index_byte;
-        socket.serial = serial;
+        socket.serial = Opening::Last(serial);
         socket.opened = Opened::Open {
             port,
             mode,
@@ -1297,7 +1308,7 @@ impl<
     ) -> Option<&mut Socket<'m, B, SIZE, CREDITS, RECEIVED, T>> {
         self.sockets
             .get_mut(index.slot())
-            .filter(|socket| socket.serial == serial)
+            .filter(|socket| socket.serial == Opening::Last(serial))
     }
 
     /// Commit `block` as a datagram to `remote`. This is the acceptance
@@ -1377,7 +1388,8 @@ impl<
             .sockets
             .get(socket.index.slot())
             .filter(|open| {
-                open.serial == socket.serial && matches!(open.opened, Opened::Open { .. })
+                open.serial == Opening::Last(socket.serial)
+                    && matches!(open.opened, Opened::Open { .. })
             })
             .ok_or(SendRefusal::Stale)?;
         let vacant = open.places.vacant().ok_or(SendRefusal::NoPlace)?;
@@ -1590,20 +1602,19 @@ impl<
         (0_u8..)
             .zip(self.sockets.iter())
             .flat_map(move |(flow, socket)| {
-                socket
-                    .places
-                    .running()
-                    .filter_map(move |(place, entry)| match entry.run() {
-                        Run::Sending(sending) => Some(Queued {
+                socket.places.running().filter_map(move |(place, entry)| {
+                    match (entry.run(), entry.serial()) {
+                        (Some(Run::Sending(sending)), Some(serial)) => Some(Queued {
                             flow,
                             group: sending.block.group(),
                             since: sending.since,
                             place,
-                            serial: entry.serial(),
+                            serial,
                             brand,
                         }),
                         _ => None,
-                    })
+                    }
+                })
             })
     }
 
@@ -1622,7 +1633,7 @@ impl<
             .filter(|places| {
                 places
                     .of(queued.place, queued.serial)
-                    .is_some_and(|place| matches!(place.run(), Run::Sending(_)))
+                    .is_some_and(|place| matches!(place.run(), Some(Run::Sending(_))))
             })
         else {
             return false;
@@ -2322,11 +2333,12 @@ impl<
         number: PlaceNumber,
         place: &Place<'m, B, SIZE, T>,
     ) -> Option<Demand<B>> {
-        let (remote, hop, length) = match place.run() {
+        let (remote, hop, length) = match place.run()? {
             Run::Sending(sending) => (sending.remote, sending.hop, sending.block.octets().len()),
             Run::Declared(declared) => (declared.remote, declared.hop, declared.length),
-            Run::Free | Run::Finished(_) | Run::Ended { .. } => return None,
+            Run::Finished(_) | Run::Ended { .. } => return None,
         };
+        let serial = place.serial()?;
         let found = match (hop, socket.opened.prepared()) {
             (None, _) => None,
             // What its socket prepared still holds: no look at the table.
@@ -2352,7 +2364,7 @@ impl<
             work: Work::Datagram {
                 socket: SocketIndex(u8::try_from(index).ok()?),
                 place: number,
-                serial: place.serial(),
+                serial,
                 found: found.map(|(holds, _)| holds),
             },
             brand: self.brand,
@@ -2557,7 +2569,7 @@ impl<
         // A socket being closed has no port: its running work sends nothing.
         open.opened.port()?;
         let entry = open.places.of(place, serial)?;
-        let (remote, hop, data, length) = match entry.run() {
+        let (remote, hop, data, length) = match entry.run()? {
             Run::Sending(sending) => (
                 sending.remote,
                 sending.hop,
@@ -2565,7 +2577,7 @@ impl<
                 sending.block.octets().len(),
             ),
             Run::Declared(declared) => (declared.remote, declared.hop, None, declared.length),
-            Run::Free | Run::Finished(_) | Run::Ended { .. } => return None,
+            Run::Finished(_) | Run::Ended { .. } => return None,
         };
         let tag = entry.tag().copied();
         let headers = match open.opened.prepared() {
@@ -2829,7 +2841,7 @@ impl<
         let mut index = 0;
         let mut results = [const { [Kept::Nothing; CREDITS] }; SOCKETS];
         let mut closes = [Kept::Nothing; SOCKETS];
-        let mut generations = [Serial::UNGIVEN; SOCKETS];
+        let mut generations = [Opening::Never; SOCKETS];
         for mut socket in sockets {
             if let Some(slot) = generations.get_mut(index) {
                 *slot = socket.serial;
@@ -2841,7 +2853,14 @@ impl<
             let (places, close) = socket.places.into_places();
             let close = Kept::of(close);
             let kept = places.map(|place| {
-                let (serial, observed, run) = place.into_parts();
+                let PlaceState::Occupied(Occupied {
+                    serial,
+                    observed,
+                    run,
+                }) = place.into_state()
+                else {
+                    return Kept::Nothing;
+                };
                 let tag = run.tag().copied();
                 let outcome = match run {
                     Run::Sending(sending) => {
@@ -2850,7 +2869,6 @@ impl<
                     }
                     Run::Declared(_) => Some(Outcome::Retired),
                     Run::Finished(outcome) | Run::Ended { outcome, .. } => Some(outcome),
-                    Run::Free => None,
                 };
                 match (outcome.filter(|_| observed), tag) {
                     (Some(outcome), Some(tag)) => Kept::Declared {
@@ -3114,8 +3132,12 @@ enum Kept<T> {
 
 impl<T> Kept<T> {
     fn of<B, const SIZE: usize>(place: Place<'_, B, SIZE, T>) -> Self {
-        match place.into_parts() {
-            (serial, true, Run::Finished(outcome)) => Self::Result { serial, outcome },
+        match place.into_state() {
+            PlaceState::Occupied(Occupied {
+                serial,
+                observed: true,
+                run: Run::Finished(outcome),
+            }) => Self::Result { serial, outcome },
             _ => Self::Nothing,
         }
     }
@@ -3128,7 +3150,7 @@ pub struct RetiredResults<B, const SOCKETS: usize, const CREDITS: usize, T = ()>
     closes: [Kept<T>; SOCKETS],
     /// Each slot's socket as the core retired it: a socket's results are
     /// its own only, not those of another socket in the same slot.
-    generations: [Serial; SOCKETS],
+    generations: [Opening; SOCKETS],
     /// Received datagrams nobody read, which went back to the pool.
     pub received_dropped: u32,
     brand: Tag<B>,
@@ -3146,7 +3168,7 @@ impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
         socket: &SocketId<B>,
     ) -> impl Iterator<Item = (WorkId, T, Outcome)> + '_ {
         let index = socket.index.slot();
-        let own = self.generations.get(index) == Some(&socket.serial);
+        let own = self.generations.get(index) == Some(&Opening::Last(socket.serial));
         self.results
             .get_mut(index)
             .filter(|_| own)
