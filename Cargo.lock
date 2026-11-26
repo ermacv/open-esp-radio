@@ -2461,6 +2461,7 @@ dependencies = [
 name = "oer-protocols-ieee80211-wire"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-time",
  "oer-portable-wire",
  "oer-protocols-ieee802-wire",
  "tempfile",

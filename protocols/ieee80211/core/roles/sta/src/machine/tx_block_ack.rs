@@ -120,7 +120,7 @@ impl StaTxBlockAck {
         TxBlockAckConfig {
             tid: WmmUserPriority::UP0,
             window: policy.window,
-            timeout_tu: 0,
+            timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
             negotiation_timeout: policy.negotiation_timeout,
             amsdu: false,
         }

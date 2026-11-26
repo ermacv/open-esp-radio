@@ -176,7 +176,7 @@ impl<const TIDS: usize> TxBlockAckOriginator<TIDS> {
             let session = TxBlockAckSession::new(TxBlockAckConfig {
                 tid,
                 window: config.window,
-                timeout_tu: 0,
+                timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
                 negotiation_timeout: config.negotiation_timeout,
                 amsdu: config.amsdu_tids.contains(&tid),
             })

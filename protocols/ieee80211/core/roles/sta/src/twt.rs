@@ -9,9 +9,9 @@
 //! agreement before any TWT Setup frame is published.
 
 use oer_portable_time::{Duration, Instant};
-use oer_protocols_ieee80211_contracts_port::tsf::{TsfDuration, TsfInstant};
 use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
 use oer_protocols_ieee80211_wire::management::DialogToken;
+use oer_protocols_ieee80211_wire::tsf::{TsfDuration, TsfInstant};
 use oer_protocols_ieee80211_wire::twt::{
     INDIVIDUAL_TWT_FLOW_CAPACITY, INDIVIDUAL_TWT_SETUP_BODY_LEN, INDIVIDUAL_TWT_TEARDOWN_BODY_LEN,
     IndividualTwtAction, IndividualTwtFlowId, IndividualTwtParameterSet, IndividualTwtSetup,

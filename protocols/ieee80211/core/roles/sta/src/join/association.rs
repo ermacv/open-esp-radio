@@ -3,7 +3,7 @@
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_ieee80211_wire::status::StatusCode;
-use oer_protocols_ieee80211_wire::tsf::MICROS_PER_TIME_UNIT;
+use oer_protocols_ieee80211_wire::tsf::ComebackTime;
 use {
     oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter,
     oer_protocols_ieee80211_wire::{
@@ -70,7 +70,7 @@ pub enum StaAssociationFailure {
     /// time the station does not wait for: longer than 5000 TUs, or a second
     /// refusal after the station already came back once.
     ComebackRefused {
-        comeback_tu: u32,
+        comeback: ComebackTime,
     },
     /// A successful response contradicted the exact security mode selected
     /// from the scan record. Treating this as association success would make
@@ -165,7 +165,7 @@ impl RequestEpoch {
 }
 
 /// The longest comeback time the vendor waits for.
-const MAXIMUM_COMEBACK_TU: u32 = 5_000;
+const MAXIMUM_COMEBACK: ComebackTime = ComebackTime::new(5_000);
 /// The vendor comes back this many TUs after the named comeback time.
 const COMEBACK_MARGIN_TU: u32 = 100;
 
@@ -258,9 +258,9 @@ impl StaAssociationRuntime {
             return StaAssociationEvent::Irrelevant(self);
         };
         if response.status_code == StatusCode::REFUSED_TEMPORARILY
-            && let Some(comeback_tu) = response.association_comeback_tu
+            && let Some(comeback) = response.association_comeback
         {
-            return self.come_back(comeback_tu, now);
+            return self.come_back(comeback, now);
         }
         if response.status_code != StatusCode::SUCCESS {
             return self.fail(StaAssociationFailure::Rejected {
@@ -281,18 +281,15 @@ impl StaAssociationRuntime {
     ///
     /// SOURCE(esp32s31): complete pinned `libnet80211.a[ieee80211_sta.o]::
     /// sta_recv_assoc` and `sta_assoc_comeback`.
-    fn come_back(mut self, comeback_tu: u32, now: Instant) -> StaAssociationEvent {
-        if !matches!(self.stage, AssociationStage::Initial(_)) || comeback_tu > MAXIMUM_COMEBACK_TU
-        {
-            return self.fail(StaAssociationFailure::ComebackRefused { comeback_tu });
+    fn come_back(mut self, comeback: ComebackTime, now: Instant) -> StaAssociationEvent {
+        if !matches!(self.stage, AssociationStage::Initial(_)) || comeback > MAXIMUM_COMEBACK {
+            return self.fail(StaAssociationFailure::ComebackRefused { comeback });
         }
         // The checked comeback is at most 5000 TUs; widening before the
         // fixed margin/product preserves its exact value.
-        let wait = Duration::from_micros(
-            u64::from(comeback_tu)
-                .saturating_add(u64::from(COMEBACK_MARGIN_TU))
-                .saturating_mul(MICROS_PER_TIME_UNIT),
-        );
+        // The station waits on its own clock, the image's monotonic time.
+        let wait = ComebackTime::new(comeback.get().saturating_add(COMEBACK_MARGIN_TU))
+            .span::<oer_portable_time::Monotonic>();
         let Some(until) = now.checked_add(wait) else {
             return self.fail(StaAssociationFailure::DeadlineOverflow);
         };

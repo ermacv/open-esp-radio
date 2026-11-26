@@ -56,7 +56,7 @@ pub fn encode_addba_request(
     dialog_token: DialogToken,
     tid: Tid,
     window: u16,
-    timeout_tu: u16,
+    timeout: crate::tsf::TimeUnits,
     amsdu: AmsduSupport,
     starting_sequence: SequenceNumber,
 ) -> Result<[u8; ADDBA_ACTION_BODY_LEN], AddbaRequestError> {
@@ -66,7 +66,7 @@ pub fn encode_addba_request(
         return Err(AddbaRequestError::InvalidWindow(window));
     }
     let [p0, p1] = parameters.to_bytes();
-    let [t0, t1] = BlockAckTimeout::of(timeout_tu).to_bytes();
+    let [t0, t1] = BlockAckTimeout::of(timeout).to_bytes();
     let [s0, s1] = starting_sequence.sequence_control().to_bytes();
     // SOURCE: IEEE Std 802.11-2020, 9.6.5.2 (ADDBA Request frame format):
     // Category, Block Ack Action, Dialog Token, Block Ack Parameter Set,
@@ -89,14 +89,14 @@ pub enum BlockAckAction {
     AddbaRequest {
         dialog_token: DialogToken,
         parameters: AddbaParameters,
-        timeout_tu: u16,
+        timeout: crate::tsf::TimeUnits,
         starting_sequence: SequenceNumber,
     },
     AddbaResponse {
         dialog_token: DialogToken,
         status: StatusCode,
         parameters: AddbaParameters,
-        timeout_tu: u16,
+        timeout: crate::tsf::TimeUnits,
     },
     Delba {
         tid: Tid,
@@ -123,7 +123,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
         BlockAckActionCode::ADDBA_REQUEST => Some(BlockAckAction::AddbaRequest {
             dialog_token: DialogToken::new(reader.u8().ok()?),
             parameters: AddbaParameters::from_bytes(reader.read().ok()?),
-            timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?).time_units(),
+            timeout: BlockAckTimeout::from_bytes(reader.read().ok()?).timeout(),
             starting_sequence: SequenceNumber::from_sequence_control(SequenceControl::from_bytes(
                 reader.read().ok()?,
             )),
@@ -134,7 +134,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
             dialog_token: DialogToken::new(reader.u8().ok()?),
             status: crate::management::StatusCodeField::from_bytes(reader.read().ok()?).code(),
             parameters: AddbaParameters::from_bytes(reader.read().ok()?),
-            timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?).time_units(),
+            timeout: BlockAckTimeout::from_bytes(reader.read().ok()?).timeout(),
         }),
         // SOURCE: IEEE Std 802.11-2020, 9.6.5.5 (DELBA frame format).
         BlockAckActionCode::DELBA => {
@@ -226,7 +226,7 @@ pub fn write_successful_addba_response(
         StatusCode::SUCCESS,
         tid,
         window,
-        0,
+        crate::tsf::TimeUnits::new(0),
         AmsduSupport::NotSupported,
     )?;
     // A successful agreement has a buffer: zero is none.
@@ -257,7 +257,7 @@ pub fn write_declined_addba_response(
         StatusCode::REQUEST_DECLINED,
         tid,
         requested_window,
-        0,
+        crate::tsf::TimeUnits::new(0),
         AmsduSupport::NotSupported,
     )?;
     Ok(())
@@ -277,12 +277,12 @@ pub fn encode_addba_response(
     status: StatusCode,
     tid: Tid,
     window: u16,
-    timeout_tu: u16,
+    timeout: crate::tsf::TimeUnits,
     amsdu: AmsduSupport,
 ) -> Result<[u8; ADDBA_ACTION_BODY_LEN], RxAddbaResponseError> {
     let [p0, p1] = AddbaParameters::immediate(amsdu, tid, window)?.to_bytes();
     let [s0, s1] = crate::management::StatusCodeField::of(status).to_bytes();
-    let [t0, t1] = BlockAckTimeout::of(timeout_tu).to_bytes();
+    let [t0, t1] = BlockAckTimeout::of(timeout).to_bytes();
     Ok([
         ActionCategory::BLOCK_ACK.value(),
         BlockAckActionCode::ADDBA_RESPONSE.value(),
@@ -446,9 +446,14 @@ oer_portable_wire::bitfield! {
 }
 
 impl BlockAckTimeout {
-    /// The field holding `time_units`.
-    pub const fn of(time_units: u16) -> Self {
-        Self::from_bytes([0; 2]).with_time_units(time_units)
+    /// The field holding `timeout`.
+    pub const fn of(timeout: crate::tsf::TimeUnits) -> Self {
+        Self::from_bytes([0; 2]).with_time_units(timeout.get())
+    }
+
+    /// The timeout the field names; zero disables it.
+    pub const fn timeout(self) -> crate::tsf::TimeUnits {
+        crate::tsf::TimeUnits::new(self.time_units())
     }
 }
 oer_portable_wire::bitfield! {

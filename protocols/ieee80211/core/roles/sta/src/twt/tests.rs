@@ -1,5 +1,5 @@
 use super::*;
-use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
+use oer_protocols_ieee80211_wire::tsf::TsfInstant;
 use oer_protocols_ieee80211_wire::twt::IndividualTwtFlowType;
 use oer_protocols_ieee80211_wire::twt::IndividualTwtImplicit;
 

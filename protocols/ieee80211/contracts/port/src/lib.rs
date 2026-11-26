@@ -54,7 +54,6 @@ pub mod regulated;
 pub mod types;
 pub use regulated::RegulatedChannel;
 pub mod rx;
-pub mod tsf;
 pub mod tx;
 
 mod management;

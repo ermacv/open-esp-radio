@@ -6,8 +6,8 @@ use oer_protocols_ieee80211_wire::{
 
 const BEACON: StaBeacon = StaBeacon {
     observation: StaBeaconObservation {
-        timestamp_tsf: oer_protocols_ieee80211_wire::tsf::TsfTimestamp::from_micros(10),
-        interval_tu: 100,
+        timestamp: oer_protocols_ieee80211_wire::tsf::TsfInstant::from_micros(10),
+        interval: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
         capability_information:
             oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([0; 2]),
         tim: None,
@@ -41,9 +41,12 @@ fn read(elements: &[u8]) -> StaBeacon {
 
 #[test]
 fn each_beacon_sets_its_own_erp_requirements() {
-    let config =
-        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200))
-            .unwrap();
+    let config = StaBeaconLossConfig::new(
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
+        3,
+        oer_portable_time::Duration::from_micros(307_200),
+    )
+    .unwrap();
     let mut monitor = StaBeaconMonitor::new(config);
     let mut last_erp = |elements: &[u8]| {
         monitor
@@ -95,9 +98,12 @@ fn each_beacon_sets_its_own_erp_requirements() {
 
 #[test]
 fn exact_deadline_is_lost_but_an_observation_refreshes_the_window() {
-    let config =
-        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200))
-            .unwrap();
+    let config = StaBeaconLossConfig::new(
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
+        3,
+        oer_portable_time::Duration::from_micros(307_200),
+    )
+    .unwrap();
     let mut monitor = StaBeaconMonitor::new(config);
     monitor
         .arm(oer_portable_time::Instant::from_micros(1_000))
@@ -123,24 +129,39 @@ fn exact_deadline_is_lost_but_an_observation_refreshes_the_window() {
 #[test]
 fn construction_rejects_unbounded_or_vacuous_policy() {
     assert_eq!(
-        StaBeaconLossConfig::new(0, 3, oer_portable_time::Duration::from_micros(1)),
+        StaBeaconLossConfig::new(
+            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
+            3,
+            oer_portable_time::Duration::from_micros(1)
+        ),
         Err(StaBeaconLossConfigError::ZeroInterval)
     );
     assert_eq!(
-        StaBeaconLossConfig::new(100, 0, oer_portable_time::Duration::from_micros(1)),
+        StaBeaconLossConfig::new(
+            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
+            0,
+            oer_portable_time::Duration::from_micros(1)
+        ),
         Err(StaBeaconLossConfigError::ZeroMissLimit)
     );
     assert_eq!(
-        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(0)),
+        StaBeaconLossConfig::new(
+            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
+            3,
+            oer_portable_time::Duration::from_micros(0)
+        ),
         Err(StaBeaconLossConfigError::ZeroTimeout)
     );
 }
 
 #[test]
 fn active_reachability_refresh_does_not_fabricate_a_beacon() {
-    let config =
-        StaBeaconLossConfig::new(100, 3, oer_portable_time::Duration::from_micros(307_200))
-            .unwrap();
+    let config = StaBeaconLossConfig::new(
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
+        3,
+        oer_portable_time::Duration::from_micros(307_200),
+    )
+    .unwrap();
     let mut monitor = StaBeaconMonitor::new(config);
     monitor
         .arm(oer_portable_time::Instant::from_micros(1_000))
@@ -158,7 +179,12 @@ fn active_reachability_refresh_does_not_fabricate_a_beacon() {
 
 fn link() -> StaLinkMonitor {
     StaLinkMonitor::new(
-        StaBeaconLossConfig::new(100, 10, Duration::from_secs(6)).unwrap(),
+        StaBeaconLossConfig::new(
+            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
+            10,
+            Duration::from_secs(6),
+        )
+        .unwrap(),
         StaLinkProbePolicy {
             interval: Duration::from_millis(500),
             attempts: 3,

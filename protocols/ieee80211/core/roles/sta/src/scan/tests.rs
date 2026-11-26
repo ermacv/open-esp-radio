@@ -215,7 +215,10 @@ fn parses_beacon_into_owned_bounded_record() {
     );
     assert_eq!(record.ds_channel, Some(11));
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
-    assert_eq!(record.beacon_interval_tu, 100);
+    assert_eq!(
+        record.beacon_interval,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100)
+    );
     assert!(record.privacy());
     assert!(record.rsn());
 }
@@ -234,7 +237,10 @@ fn a_beacon_with_ht_control_parses_its_fixed_fields_after_it() {
     let plain = parse_management(&rich_frame(8)).unwrap();
     let record = parse_management(&ht_control_beacon()).unwrap();
     assert_eq!(record.ssid_bytes(), b"test");
-    assert_eq!(record.beacon_interval_tu, 100);
+    assert_eq!(
+        record.beacon_interval,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100)
+    );
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
     assert_eq!(
         record.capability_info,

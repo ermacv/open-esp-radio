@@ -25,7 +25,7 @@ fn response(dialog_token: u8, tid: u8, status: u16, window: u16) -> BlockAckActi
     BlockAckAction::AddbaResponse {
         dialog_token: DialogToken::new(dialog_token),
         status: oer_protocols_ieee80211_wire::status::StatusCode::new(status),
-        timeout_tu: 0,
+        timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
             oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
@@ -372,7 +372,7 @@ fn the_recipient_s_delba_ends_the_agreement_and_receive_actions_pass_by() {
     );
     let request = BlockAckAction::AddbaRequest {
         dialog_token: DialogToken::new(1),
-        timeout_tu: 0,
+        timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0),
         starting_sequence: SequenceNumber::ZERO,
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
             oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,

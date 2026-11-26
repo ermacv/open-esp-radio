@@ -22,7 +22,7 @@ use oer_protocols_ieee80211_wire::channel_switch::ChannelSwitch;
 use oer_protocols_ieee80211_wire::element::ElementId;
 use oer_protocols_ieee80211_wire::frame::write_sequence_control;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-use oer_protocols_ieee80211_wire::tsf::time_units_micros;
+use oer_protocols_ieee80211_wire::tsf::{TimeUnits, TsfInstant};
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::{
@@ -130,7 +130,7 @@ impl<'storage> ApBeacon<'storage> {
         access_point: [u8; 6],
         ssid: &Ssid,
         channel: Channel,
-        beacon_interval_tu: u16,
+        beacon_interval: TimeUnits,
         dtim_period: u8,
         management_sequence: SequenceNumber,
         security: ApSecurityPolicy,
@@ -141,7 +141,7 @@ impl<'storage> ApBeacon<'storage> {
             Eui48::new(access_point),
             ssid,
             channel,
-            beacon_interval_tu,
+            beacon_interval,
             dtim_period,
             management_sequence,
             security.advertisement(),
@@ -154,7 +154,7 @@ impl<'storage> ApBeacon<'storage> {
         Ok(Self {
             storage,
             len,
-            interval: Duration::from_micros(time_units_micros(beacon_interval_tu)),
+            interval: beacon_interval.span::<oer_portable_time::Monotonic>(),
             next_publication: None,
             channel_switch: None,
         })
@@ -173,7 +173,7 @@ impl<'storage> ApBeacon<'storage> {
         access_point: [u8; 6],
         ssid: &Ssid,
         channel: Channel,
-        beacon_interval_tu: u16,
+        beacon_interval: TimeUnits,
         dtim_period: u8,
         management_sequence: SequenceNumber,
         security: ApSecurityPolicy,
@@ -184,13 +184,13 @@ impl<'storage> ApBeacon<'storage> {
             Eui48::new(access_point),
             ssid,
             channel,
-            beacon_interval_tu,
+            beacon_interval,
             dtim_period,
             management_sequence,
             security.advertisement(),
             ApBssProtection::default(),
         )?;
-        self.interval = Duration::from_micros(time_units_micros(beacon_interval_tu));
+        self.interval = beacon_interval.span::<oer_portable_time::Monotonic>();
         self.channel_switch = None;
         Ok(())
     }
@@ -252,7 +252,7 @@ impl<'storage> ApBeacon<'storage> {
     pub const fn from_initialized(
         storage: &'storage mut [u8; AP_BEACON_CAPACITY],
         len: usize,
-        beacon_interval_tu: u16,
+        beacon_interval: TimeUnits,
     ) -> Result<Self, ApBeaconLengthError> {
         if len > AP_BEACON_CAPACITY {
             return Err(ApBeaconLengthError {
@@ -263,7 +263,7 @@ impl<'storage> ApBeacon<'storage> {
         Ok(Self {
             storage,
             len,
-            interval: Duration::from_micros(time_units_micros(beacon_interval_tu)),
+            interval: beacon_interval.span::<oer_portable_time::Monotonic>(),
             next_publication: None,
             channel_switch: None,
         })
@@ -293,7 +293,9 @@ impl<'storage> ApBeacon<'storage> {
         }
         stamp(
             self.storage.get_mut(..self.len)?,
-            now.as_micros(),
+            // The access point's TSF counts its epoch's microseconds on the
+            // image's monotonic clock: the same microseconds.
+            TsfInstant::from_micros(now.as_micros()),
             if buffered_group_frames == 0 {
                 oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear
             } else {

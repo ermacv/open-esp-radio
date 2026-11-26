@@ -6646,7 +6646,10 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                         let capabilities = self.config.association;
                         let phy = join.phy.elements(capabilities);
                         let address = self.config.address;
-                        let listen_interval = self.config.listen_interval.get();
+                        let listen_interval =
+                            oer_protocols_ieee80211_wire::management::ListenInterval::new(
+                                self.config.listen_interval.get(),
+                            );
                         let access_point = &join.access_point;
                         let rsn = &join.rsn;
                         let encoded = self.encode_reserved(

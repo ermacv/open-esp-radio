@@ -7,7 +7,7 @@ fn parses_all_block_ack_action_bodies() {
         parse_block_ack_action(&[3, 0, 7, 0x87, 0x07, 0, 0, 0x30, 0x12]),
         Some(BlockAckAction::AddbaRequest {
             dialog_token: DialogToken::new(7),
-            timeout_tu: 0,
+            timeout: crate::tsf::TimeUnits::new(0),
             starting_sequence: seq(0x123),
             parameters: crate::block_ack::frame::AddbaParameters::new(
                 crate::block_ack::frame::BlockAckPolicy::Immediate,
@@ -23,7 +23,7 @@ fn parses_all_block_ack_action_bodies() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: DialogToken::new(7),
             status: crate::status::StatusCode::SUCCESS,
-            timeout_tu: 5,
+            timeout: crate::tsf::TimeUnits::new(5),
             parameters: crate::block_ack::frame::AddbaParameters::new(
                 crate::block_ack::frame::BlockAckPolicy::Immediate,
                 crate::block_ack::frame::AmsduSupport::NotSupported,
@@ -72,7 +72,7 @@ fn successful_response_narrows_the_window_and_disables_amsdu() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: DialogToken::new(137),
             status: crate::status::StatusCode::SUCCESS,
-            timeout_tu: 0,
+            timeout: crate::tsf::TimeUnits::new(0),
             parameters: crate::block_ack::frame::AddbaParameters::new(
                 crate::block_ack::frame::BlockAckPolicy::Immediate,
                 crate::block_ack::frame::AmsduSupport::NotSupported,
@@ -94,7 +94,7 @@ fn declined_response_preserves_request_identity_without_claiming_success() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: DialogToken::new(23),
             status: crate::status::StatusCode::REQUEST_DECLINED,
-            timeout_tu: 0,
+            timeout: crate::tsf::TimeUnits::new(0),
             parameters: crate::block_ack::frame::AddbaParameters::new(
                 crate::block_ack::frame::BlockAckPolicy::Immediate,
                 crate::block_ack::frame::AmsduSupport::NotSupported,
@@ -160,7 +160,7 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
         DialogToken::new(7),
         Tid::constant::<15>(),
         1023,
-        12,
+        crate::tsf::TimeUnits::new(12),
         crate::block_ack::frame::AmsduSupport::Supported,
         sequence,
     )
@@ -169,7 +169,7 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
         parse_block_ack_action(&body),
         Some(BlockAckAction::AddbaRequest {
             dialog_token: DialogToken::new(7),
-            timeout_tu: 12,
+            timeout: crate::tsf::TimeUnits::new(12),
             starting_sequence: sequence,
             parameters: crate::block_ack::frame::AddbaParameters::new(
                 crate::block_ack::frame::BlockAckPolicy::Immediate,
@@ -186,7 +186,7 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
                 DialogToken::new(7),
                 Tid::constant::<0>(),
                 window,
-                0,
+                crate::tsf::TimeUnits::new(0),
                 crate::block_ack::frame::AmsduSupport::NotSupported,
                 sequence
             ),
@@ -202,7 +202,7 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
         crate::status::StatusCode::SUCCESS,
         Tid::constant::<5>(),
         64,
-        0x1234,
+        crate::tsf::TimeUnits::new(0x1234),
         crate::block_ack::frame::AmsduSupport::Supported,
     )
     .unwrap();
@@ -211,7 +211,7 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: DialogToken::new(9),
             status: crate::status::StatusCode::SUCCESS,
-            timeout_tu: 0x1234,
+            timeout: crate::tsf::TimeUnits::new(0x1234),
             parameters: crate::block_ack::frame::AddbaParameters::new(
                 crate::block_ack::frame::BlockAckPolicy::Immediate,
                 crate::block_ack::frame::AmsduSupport::Supported,
@@ -227,7 +227,7 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
             crate::status::StatusCode::SUCCESS,
             Tid::constant::<5>(),
             1024,
-            0,
+            crate::tsf::TimeUnits::new(0),
             crate::block_ack::frame::AmsduSupport::NotSupported
         ),
         Err(RxAddbaResponseError::InvalidWindow(1024))
@@ -288,7 +288,7 @@ fn an_addba_response_holds_tid_15_and_refuses_16() {
         crate::status::StatusCode::SUCCESS,
         Tid::constant::<15>(),
         64,
-        0,
+        crate::tsf::TimeUnits::new(0),
         AmsduSupport::NotSupported,
     )
     .unwrap();
@@ -332,7 +332,7 @@ fn each_encoder_reports_the_parameter_reason() {
             DialogToken::new(1),
             tid,
             window,
-            0,
+            crate::tsf::TimeUnits::new(0),
             AmsduSupport::NotSupported,
             sequence,
         )

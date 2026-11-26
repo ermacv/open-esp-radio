@@ -57,7 +57,7 @@ fn publication_beacon(storage: &mut [u8; AP_BEACON_CAPACITY]) -> ApBeacon<'_> {
             oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
         )
         .unwrap(),
-        100,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
         2,
         SequenceNumber::ZERO,
         ApSecurityPolicy::Wpa2Personal,
@@ -161,7 +161,7 @@ fn static_storage_owns_beacon_dtim_and_next_deadline() {
             oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
         )
         .unwrap(),
-        100,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
         2,
         SequenceNumber::new(3).unwrap(),
         ApSecurityPolicy::Wpa2Personal,
@@ -226,7 +226,7 @@ fn late_publication_does_not_move_the_absolute_tbtt_schedule() {
             oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
         )
         .unwrap(),
-        100,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
         2,
         SequenceNumber::new(3).unwrap(),
         ApSecurityPolicy::Wpa2Personal,
@@ -287,7 +287,7 @@ fn the_tbtt_schedule_survives_the_u32_microsecond_boundary() {
             oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
         )
         .unwrap(),
-        100,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
         2,
         SequenceNumber::new(3).unwrap(),
         ApSecurityPolicy::Wpa2Personal,
@@ -339,7 +339,7 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
             oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
         )
         .unwrap(),
-        100,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
         2,
         SequenceNumber::new(3).unwrap(),
         ApSecurityPolicy::Wpa2Personal,
@@ -410,7 +410,7 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
                 oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above,
             )
             .unwrap(),
-            100,
+            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
             2,
             sequence,
             ApSecurityPolicy::Wpa2Personal,
@@ -436,7 +436,12 @@ fn initialized_template_refuses_lengths_outside_its_storage() {
     for length in [AP_BEACON_CAPACITY + 1, usize::MAX] {
         let mut storage = [0; AP_BEACON_CAPACITY];
         assert_eq!(
-            ApBeacon::from_initialized(&mut storage, length, 100).err(),
+            ApBeacon::from_initialized(
+                &mut storage,
+                length,
+                oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100)
+            )
+            .err(),
             Some(ApBeaconLengthError {
                 length,
                 capacity: AP_BEACON_CAPACITY
@@ -445,7 +450,12 @@ fn initialized_template_refuses_lengths_outside_its_storage() {
     }
     for length in [0, AP_BEACON_CAPACITY] {
         let mut storage = [0; AP_BEACON_CAPACITY];
-        let beacon = ApBeacon::from_initialized(&mut storage, length, u16::MAX).unwrap();
+        let beacon = ApBeacon::from_initialized(
+            &mut storage,
+            length,
+            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(u16::MAX),
+        )
+        .unwrap();
         assert_eq!(beacon.advertisement().unwrap().len(), length);
         assert_eq!(beacon.interval().as_micros(), u64::from(u16::MAX) * 1024);
     }
@@ -456,7 +466,12 @@ fn a_truncated_channel_switch_count_is_refused_without_writing_outside_the_templ
     let mut storage = [0; AP_BEACON_CAPACITY];
     storage[AP_BEACON_CAPACITY - 2] = ElementId::CHANNEL_SWITCH_ANNOUNCEMENT.value();
     storage[AP_BEACON_CAPACITY - 1] = 3;
-    let mut beacon = ApBeacon::from_initialized(&mut storage, AP_BEACON_CAPACITY, 100).unwrap();
+    let mut beacon = ApBeacon::from_initialized(
+        &mut storage,
+        AP_BEACON_CAPACITY,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
+    )
+    .unwrap();
     // Skip well-formed zero-length elements until the final truncated one.
     assert_eq!(beacon.write_channel_switch_count(2), None);
     assert_eq!(
@@ -482,7 +497,7 @@ fn a_refused_beacon_returns_its_storage() {
         [2; 6],
         &Ssid::new(b"ap").unwrap(),
         channel,
-        100,
+        oer_protocols_ieee80211_wire::tsf::TimeUnits::new(100),
         0,
         SequenceNumber::ZERO,
         ApSecurityPolicy::Wpa2Personal,

@@ -2,7 +2,7 @@ use super::*;
 use oer_portable_clock::Clock;
 type VirtualClock = oer_portable_time_virtual::VirtualClock<8>;
 
-fn request(tid: u8, timeout_tu: u16) -> RxAddbaRequest {
+fn request(tid: u8, timeout: oer_protocols_ieee80211_wire::tsf::TimeUnits) -> RxAddbaRequest {
     RxAddbaRequest::from_action(BlockAckAction::AddbaRequest {
         dialog_token: DialogToken::new(17),
         parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
@@ -12,7 +12,7 @@ fn request(tid: u8, timeout_tu: u16) -> RxAddbaRequest {
             64,
         )
         .unwrap(),
-        timeout_tu,
+        timeout,
         starting_sequence: SequenceNumber::new(4094).unwrap(),
     })
     .unwrap()
@@ -23,7 +23,10 @@ struct Bank(u8);
 
 fn session(clock: &VirtualClock, timeout: u16) -> RxBlockAckSession<Bank, 8, 8> {
     let negotiation = RxBlockAckNegotiation::request(
-        request(0, timeout),
+        request(
+            0,
+            oer_protocols_ieee80211_wire::tsf::TimeUnits::new(timeout),
+        ),
         Tid::constant::<7>(),
         AmsduInAmpdu::Delivered,
         8,
@@ -49,7 +52,7 @@ fn released<const N: usize>(release: &RxReorderRelease<N>) -> std::vec::Vec<u8> 
 fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
     let clock = VirtualClock::new();
     let negotiation = RxBlockAckNegotiation::request(
-        request(3, 0),
+        request(3, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0)),
         Tid::constant::<7>(),
         AmsduInAmpdu::Delivered,
         8,
@@ -80,11 +83,19 @@ fn acceptance_is_bounded_by_the_frame_pool_and_preserves_dialog_and_amsdu() {
 #[test]
 fn amsdus_are_granted_only_when_requested_and_the_backend_delivers_them() {
     let clock = VirtualClock::new();
-    let mut without = request(0, 0);
+    let mut without = request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0));
     without.amsdu = Amsdu::NotPermitted;
     for (request, delivers, granted) in [
-        (request(0, 0), AmsduInAmpdu::Delivered, true),
-        (request(0, 0), AmsduInAmpdu::NotDelivered, false),
+        (
+            request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0)),
+            AmsduInAmpdu::Delivered,
+            true,
+        ),
+        (
+            request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0)),
+            AmsduInAmpdu::NotDelivered,
+            false,
+        ),
         (without, AmsduInAmpdu::Delivered, false),
         (without, AmsduInAmpdu::NotDelivered, false),
     ] {
@@ -118,7 +129,7 @@ fn amsdus_are_granted_only_when_requested_and_the_backend_delivers_them() {
 #[test]
 fn a_zero_request_window_uses_the_ht_default_bounded_by_real_capacity() {
     let clock = VirtualClock::new();
-    let mut request = request(0, 0);
+    let mut request = request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0));
     request.window = 0;
     let accepted = RxBlockAckNegotiation::request(
         request,
@@ -135,13 +146,25 @@ fn a_zero_request_window_uses_the_ht_default_bounded_by_real_capacity() {
 #[test]
 fn unavailable_bank_and_unsupported_parameters_have_explicit_responses() {
     let clock = VirtualClock::new();
-    let mut delayed = request(0, 0);
+    let mut delayed = request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0));
     delayed.policy = BlockAckPolicy::Delayed;
     for (request, capacity, bank) in [
-        (request(0, 0), 8, BankRoom::Exhausted),
-        (request(15, 0), 8, BankRoom::Free),
+        (
+            request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0)),
+            8,
+            BankRoom::Exhausted,
+        ),
+        (
+            request(15, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0)),
+            8,
+            BankRoom::Free,
+        ),
         (delayed, 8, BankRoom::Free),
-        (request(0, 0), 0, BankRoom::Free),
+        (
+            request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(0)),
+            0,
+            BankRoom::Free,
+        ),
     ] {
         let response = RxBlockAckNegotiation::request(
             request,
@@ -257,7 +280,7 @@ fn inactivity_refreshes_on_rx_and_expiry_releases_the_bank_and_frames() {
 fn overflowing_deadline_refuses_negotiation_without_creating_a_session() {
     let clock = VirtualClock::starting_at(Instant::from_micros(u64::MAX));
     let response = RxBlockAckNegotiation::request(
-        request(0, 1),
+        request(0, oer_protocols_ieee80211_wire::tsf::TimeUnits::new(1)),
         Tid::constant::<7>(),
         AmsduInAmpdu::Delivered,
         8,

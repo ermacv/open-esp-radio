@@ -49,8 +49,9 @@ pub struct StaTimObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaBeaconObservation {
     /// The beacon's Timestamp field: the access point's TSF.
-    pub timestamp_tsf: crate::tsf::TsfTimestamp,
-    pub interval_tu: u16,
+    pub timestamp: crate::tsf::TsfInstant,
+    /// The Beacon Interval field (IEEE Std 802.11-2020 9.4.1.3).
+    pub interval: crate::tsf::TimeUnits,
     pub capability_information: crate::management::CapabilityInformation,
     pub tim: Option<StaTimObservation>,
     pub protection: StaBeaconProtection,
@@ -153,8 +154,8 @@ pub fn parse_sta_beacon(
     {
         return Err(StaBeaconError::ForeignBssid);
     }
-    let interval_tu = crate::management::BeaconIntervalField::from_bytes([i0, i1]).time_units();
-    if interval_tu == 0 {
+    let interval = crate::management::BeaconIntervalField::from_bytes([i0, i1]).interval();
+    if interval == crate::tsf::TimeUnits::ZERO {
         return Err(StaBeaconError::ZeroInterval);
     }
 
@@ -241,8 +242,9 @@ pub fn parse_sta_beacon(
     let channel_switch = crate::channel_switch::parse_channel_switch(elements).transpose();
     Ok(StaBeaconFrame {
         observation: StaBeaconObservation {
-            timestamp_tsf: crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]),
-            interval_tu,
+            timestamp: crate::tsf::TimestampField::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7])
+                .instant(),
+            interval,
             capability_information: crate::management::CapabilityInformation::from_bytes([c0, c1]),
             tim,
             protection,
