@@ -1,0 +1,31 @@
+error[E0080]: evaluation panicked: a same-level signal handler must have class Exempt(ExecutorLevel)
+  --> $RUST/core/src/panic.rs
+   |
+LL |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `<oer_chips_family_platform_interrupt_table::signal::FromExecutorLevel<ExecutorToken> as oer_chips_family_platform_interrupt_table::signal::Raisers>::CONTEXTS` failed here
+   |
+  ::: $PACKAGE/src/signal/binding.rs
+   |
+LL |             panic!("a same-level signal handler must have class Exempt(ExecutorLevel)")
+   |             --------------------------------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+  --> $PACKAGE/src/signal.rs
+   |
+LL |                     if let Err(why) = R::CONTEXTS.check(executor) {
+   |                                       ^^^^^^^^^^^
+
+note: erroneous constant encountered
+  --> $PACKAGE/src/signal.rs
+   |
+LL | /         const {
+LL | |             match binding::executor_context::<E, Target>() {
+LL | |                 Ok(executor) => {
+LL | |                     if let Err(why) = R::CONTEXTS.check(executor) {
+...
+LL | |         };
+   | |_________^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0080`.

@@ -1,0 +1,19 @@
+error[E0080]: evaluation panicked: an entry's line is no line a peripheral source can be routed to
+  --> $DIR/table_line_past_the_lines.rs:10:9
+   |
+LL | /         oer_chips_family_platform_interrupt_table::interrupt_table! {
+LL | |             lines: FAKE_LINES,
+LL | |             handler_attributes: [];
+LL | |             contexts { radio: 3; }
+LL | |             timer: TimerToken = TimerIrq => timer, line $line, context radio, hart 0, Hardware;
+LL | |         }
+   | |_________^ evaluation of `_` failed here
+...
+LL |   table!(48);
+   |   ---------- in this macro invocation
+   |
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `table` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0080`.

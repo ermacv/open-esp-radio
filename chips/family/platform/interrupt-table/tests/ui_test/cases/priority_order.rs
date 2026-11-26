@@ -1,0 +1,23 @@
+//@revisions: accept reject
+//@[accept] check-pass
+//@[reject] compile-flags: --cfg ui_reject
+oer_chips_family_platform_interrupt_table::__fake_parts!();
+pub fn timer(_: &mut TimerIrq) {}
+pub fn radio(_: &mut RadioIrq) {}
+
+// Use literal lines as required by the vector symbol ABI.
+macro_rules! table {
+    ($second:literal) => {
+        oer_chips_family_platform_interrupt_table::interrupt_table! {
+            lines: FAKE_LINES,
+            handler_attributes: [];
+            contexts { radio: 3; }
+            first: First = TimerIrq => timer, line 17, context radio, hart 0, Hardware;
+            second: Second = RadioIrq => radio, line $second, context radio, hart 0, Hardware;
+        }
+    };
+}
+#[cfg(ui_reject)]
+table!(16); //~[reject] E0080
+#[cfg(not(ui_reject))]
+table!(18);

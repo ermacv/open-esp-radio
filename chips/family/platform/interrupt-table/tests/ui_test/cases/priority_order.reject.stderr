@@ -1,0 +1,20 @@
+error[E0080]: evaluation panicked: declared low-to-high priority contradicts the chip's line tie-break
+  --> $DIR/priority_order.rs:11:9
+   |
+LL | /         oer_chips_family_platform_interrupt_table::interrupt_table! {
+LL | |             lines: FAKE_LINES,
+LL | |             handler_attributes: [];
+LL | |             contexts { radio: 3; }
+LL | |             first: First = TimerIrq => timer, line 17, context radio, hart 0, Hardware;
+LL | |             second: Second = RadioIrq => radio, line $second, context radio, hart 0, Hardware;
+LL | |         }
+   | |_________^ evaluation of `_` failed here
+...
+LL |   table!(16);
+   |   ---------- in this macro invocation
+   |
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `table` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0080`.

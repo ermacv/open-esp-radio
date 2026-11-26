@@ -1,0 +1,19 @@
+# Trial (tasks/h003). `trial.sh` copies this to `target/ui-test-trial/Cargo.toml`:
+# the main workspace cannot hold `ui_test` beside the layer tests' pin of
+# `cargo-platform`.
+[package]
+name = "ui-test-trial"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+members = [".", "deps"]
+
+[dev-dependencies]
+ui_test = "=0.30.7"
+
+[[test]]
+name = "ui_test"
+path = "runner.rs"
+harness = false

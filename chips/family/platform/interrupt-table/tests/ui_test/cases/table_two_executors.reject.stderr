@@ -1,0 +1,20 @@
+error[E0080]: evaluation panicked: two Executor entries share a level and hart
+  --> $DIR/table_two_executors.rs:9:9
+   |
+LL | /         oer_chips_family_platform_interrupt_table::interrupt_table! {
+LL | |             lines: FAKE_LINES,
+LL | |             handler_attributes: [];
+LL | |             contexts { first: 1; second: 2; }
+LL | |             radio: RadioToken = RadioIrq => OnExecutor, line 17, context first, hart 0, Executor;
+LL | |             timer: TimerToken = TimerIrq => OnExecutor, line 18, context $second, hart 0, Executor;
+LL | |         }
+   | |_________^ evaluation of `_` failed here
+...
+LL |   table!(first);
+   |   ------------- in this macro invocation
+   |
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `table` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0080`.
