@@ -153,10 +153,34 @@ impl<'a> StackRoot<'a> {
 
 /// One core's task stack and interrupt stack.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "CoreStacksFile")]
 pub struct CoreStacks {
     pub task_stack: Slot<TaskStack>,
     pub interrupt_stack: Slot<InterruptStack>,
+}
+
+/// A core's stacks as the policy file writes them. A [`Slot`] reads its
+/// variants untagged and so cannot say why a stack did not read: the task
+/// stack's storage is parsed here, above the slot, where its refusal is kept.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CoreStacksFile {
+    task_stack: Slot<TaskStackFile>,
+    interrupt_stack: Slot<InterruptStack>,
+}
+
+impl TryFrom<CoreStacksFile> for CoreStacks {
+    type Error = &'static str;
+
+    fn try_from(file: CoreStacksFile) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            task_stack: match file.task_stack {
+                Slot::Unused(unused) => Slot::Unused(unused),
+                Slot::Used(stack) => Slot::Used(stack.try_into()?),
+            },
+            interrupt_stack: file.interrupt_stack,
+        })
+    }
 }
 
 /// A stack the image uses, proven from its root, or `unused = true`: no byte
@@ -250,41 +274,91 @@ impl Launched for InterruptStack {
 
 /// One stack, the function that runs on it and the headroom it keeps.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "TaskStackFile")]
 pub struct TaskStack {
     /// The symbol of the function that runs on the stack from its top: the
     /// root of the call chains the gate bounds.
     pub root: String,
-    /// The symbol whose size is the stack's capacity.
-    #[serde(default)]
-    pub storage_symbol: Option<String>,
-    /// For a stack the linker script places as a range rather than an
-    /// object: the symbols of its lowest address and of its top.
-    #[serde(default)]
-    pub bottom_symbol: Option<String>,
-    #[serde(default)]
-    pub top_symbol: Option<String>,
+    /// Where the stack's capacity comes from: one of the two forms the
+    /// policy file can write, read by [`TaskStack::storage`].
+    storage: StackStorage,
     /// Bytes the deepest call chain must leave unused; the runtime's stack
     /// painting holds every exercised workload to the same reserve.
     pub minimum_free_bytes: u32,
     /// This hart's explicit PSRAM allocation; absent uses its chip default.
-    #[serde(default)]
     pub allocation_bytes: Option<u32>,
     /// The bootstrap stack only: the symbol, in the stage-two ELF, of the
     /// entry the bootstrap jumps to. A transfer to it ends the stack's path,
     /// once the checks verify in the ELFs that the jump goes there and that
     /// the entry installs its own stack pointer before any stack access.
-    #[serde(default)]
     pub handoff: Option<String>,
     /// A secondary core's launch template: it runs only in an image that
     /// declares it.
-    #[serde(default)]
     pub launch: Option<Launch>,
     /// A launch template's task allocation in an image that declares the
     /// core: what an image without a proven bound links, and a proven image
     /// links once before it sizes the stack from its bound.
-    #[serde(default)]
     pub launch_bytes: Option<u32>,
+}
+
+/// A stack as the policy file writes it: its storage is `storage_symbol`, or
+/// `bottom_symbol` and `top_symbol` together.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TaskStackFile {
+    root: String,
+    /// The symbol whose size is the stack's capacity.
+    #[serde(default)]
+    storage_symbol: Option<String>,
+    /// For a stack the linker script places as a range rather than an
+    /// object: the symbols of its lowest address and of its top.
+    #[serde(default)]
+    bottom_symbol: Option<String>,
+    #[serde(default)]
+    top_symbol: Option<String>,
+    minimum_free_bytes: u32,
+    #[serde(default)]
+    allocation_bytes: Option<u32>,
+    #[serde(default)]
+    handoff: Option<String>,
+    #[serde(default)]
+    launch: Option<Launch>,
+    #[serde(default)]
+    launch_bytes: Option<u32>,
+}
+
+impl TryFrom<TaskStackFile> for TaskStack {
+    type Error = &'static str;
+
+    fn try_from(file: TaskStackFile) -> std::result::Result<Self, Self::Error> {
+        let storage = match (file.storage_symbol, file.bottom_symbol, file.top_symbol) {
+            (Some(symbol), None, None) => StackStorage::Symbol(symbol),
+            (None, Some(bottom), Some(top)) => StackStorage::Range { bottom, top },
+            _ => {
+                return Err(
+                    "a stack needs either `storage_symbol` or both `bottom_symbol` and `top_symbol`",
+                );
+            }
+        };
+        Ok(Self {
+            root: file.root,
+            storage,
+            minimum_free_bytes: file.minimum_free_bytes,
+            allocation_bytes: file.allocation_bytes,
+            handoff: file.handoff,
+            launch: file.launch,
+            launch_bytes: file.launch_bytes,
+        })
+    }
+}
+
+/// Where a stack's capacity comes from, as its stack holds it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum StackStorage {
+    /// A sized symbol: the stack object.
+    Symbol(String),
+    /// The linker script's bottom and top symbols.
+    Range { bottom: String, top: String },
 }
 
 /// Where a stack's capacity comes from.
@@ -304,8 +378,7 @@ impl TaskStack {
     pub fn proven_allocation_bytes(&self, bound: u64) -> Result<u32> {
         let bytes = bound
             .checked_add(u64::from(self.minimum_free_bytes))
-            .and_then(|bytes| bytes.checked_add(15))
-            .map(|bytes| bytes / 16 * 16)
+            .and_then(|bytes| bytes.checked_next_multiple_of(16))
             .ok_or("task stack allocation overflows u64")?;
         u32::try_from(bytes).map_err(|_| {
             format!(
@@ -317,20 +390,18 @@ impl TaskStack {
     }
 
     pub fn storage(&self) -> Storage<'_> {
-        match (&self.storage_symbol, &self.bottom_symbol, &self.top_symbol) {
-            (Some(symbol), None, None) => Storage::Symbol(symbol),
-            (None, Some(bottom), Some(top)) => Storage::Range { bottom, top },
-            _ => unreachable!("validated: one storage form"),
+        match &self.storage {
+            StackStorage::Symbol(symbol) => Storage::Symbol(symbol),
+            StackStorage::Range { bottom, top } => Storage::Range { bottom, top },
         }
     }
 
     fn validate(&self, name: &str) -> Result<()> {
-        let form = match (&self.storage_symbol, &self.bottom_symbol, &self.top_symbol) {
-            (Some(symbol), None, None) => !symbol.is_empty(),
-            (None, Some(bottom), Some(top)) => !bottom.is_empty() && !top.is_empty(),
-            _ => false,
+        let named = match &self.storage {
+            StackStorage::Symbol(symbol) => !symbol.is_empty(),
+            StackStorage::Range { bottom, top } => !bottom.is_empty() && !top.is_empty(),
         };
-        if !form {
+        if !named {
             return Err(format!(
                 "`{name}` needs either `storage_symbol` or both `bottom_symbol` and `top_symbol`"
             )
@@ -1115,12 +1186,25 @@ mod tests {
         assert!(stack.proven_allocation_bytes(u64::from(u32::MAX)).is_err());
     }
     #[test]
+    fn a_bound_whose_alignment_overflows_is_refused() {
+        let stack = policy().task_stack(0).unwrap().clone();
+        // The bound and the reserve fit a u64; their next multiple of 16
+        // does not.
+        let bound = u64::MAX - u64::from(stack.minimum_free_bytes) - 7;
+        let error = stack
+            .proven_allocation_bytes(bound)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(error, "task stack allocation overflows u64");
+    }
+    #[test]
     fn a_handoff_belongs_to_the_bootstrap_stack_alone() {
         let bootstrap = |handoff: Option<&str>| TaskStack {
             root: "bootstrap_main".into(),
-            storage_symbol: None,
-            bottom_symbol: Some("_stack_end".into()),
-            top_symbol: Some("_stack_start".into()),
+            storage: StackStorage::Range {
+                bottom: "_stack_end".into(),
+                top: "_stack_start".into(),
+            },
             minimum_free_bytes: 4096,
             allocation_bytes: None,
             handoff: handoff.map(str::to_owned),
@@ -1192,9 +1276,7 @@ mod tests {
                     CoreStacks {
                         task_stack: Slot::Used(TaskStack {
                             root: "runtime_main".into(),
-                            storage_symbol: Some("task_stack".into()),
-                            bottom_symbol: None,
-                            top_symbol: None,
+                            storage: StackStorage::Symbol("task_stack".into()),
                             minimum_free_bytes: 4096,
                             allocation_bytes: None,
                             handoff: None,
@@ -1350,6 +1432,44 @@ mod tests {
     const CORE_0: &str = "schema = 6\nmax_move_bytes = 4096\ncoverage_policy = 'c.toml'\n\
         [core.0.task_stack]\nroot = 'runtime_main'\nstorage_symbol = 's'\n\
         minimum_free_bytes = 4096\n[core.0.interrupt_stack]\n";
+    #[test]
+    fn a_stack_names_exactly_one_storage_form() {
+        const REFUSAL: &str =
+            "a stack needs either `storage_symbol` or both `bottom_symbol` and `top_symbol`";
+        for storage in [
+            "",
+            "bottom_symbol = 'b'\n",
+            "storage_symbol = 's'\ntop_symbol = 't'\n",
+            "storage_symbol = 's'\nbottom_symbol = 'b'\ntop_symbol = 't'\n",
+        ] {
+            let stack = format!("root = 'main'\n{storage}minimum_free_bytes = 4096\n");
+            let task = format!(
+                "schema = 6\nmax_move_bytes = 4096\ncoverage_policy = 'c.toml'\n\
+                 [core.0.task_stack]\n{stack}[core.0.interrupt_stack]\n"
+            );
+            let bootstrap = format!("{CORE_0}[bootstrap_stack]\n{stack}");
+            for source in [task, bootstrap] {
+                let error = parse(&source).unwrap_err().to_string();
+                assert!(error.contains(REFUSAL), "{source}: {error}");
+            }
+        }
+        let range = format!(
+            "{CORE_0}[bootstrap_stack]\nroot = 'main'\nbottom_symbol = 'b'\n\
+             top_symbol = 't'\nminimum_free_bytes = 4096\n"
+        );
+        let policy = parse(&range).unwrap();
+        assert_eq!(
+            policy.task_stack(0).unwrap().storage(),
+            Storage::Symbol("s")
+        );
+        assert_eq!(
+            policy.bootstrap_stack.as_ref().unwrap().storage(),
+            Storage::Range {
+                bottom: "b",
+                top: "t"
+            }
+        );
+    }
     #[test]
     fn a_policy_names_every_hart_of_synthetic_geometries_used_or_unused() {
         for harts in [1, 3, 7] {

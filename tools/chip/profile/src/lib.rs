@@ -28,11 +28,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    clippy::unreachable,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 use std::{
     collections::BTreeMap,

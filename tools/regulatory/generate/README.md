@@ -11,5 +11,6 @@ The output is formatted with `rustfmt`, generated: regenerate it, never edit it.
 
 Frequencies become kHz, powers mBm (milliwatts converted, rounded). `AUTO-BW`
 and `wmmrule=` are not used by the domain and are dropped; `NO-OUTDOOR`,
-`NO-IR` and `DFS` are kept. Any other flag, an unknown country in the list or
-an unparsable line stops the run.
+`NO-IR` and `DFS` are kept. Any other flag, an unknown country in the list,
+an unparsable line, or a power or frequency the table's integers cannot hold
+stops the run and names its line.

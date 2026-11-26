@@ -1,13 +1,5 @@
 //! `cargo regdb <db.txt> <revision> <out.rs>`: writes the regulatory tables of
 //! `oer-protocols-radio-regulatory` from a wireless-regdb `db.txt`.
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
 #![forbid(unsafe_code)]
 #![cfg_attr(
     test,
@@ -17,10 +9,6 @@
         clippy::unreachable,
         clippy::arithmetic_side_effects
     )
-)]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "host tool: the ban covers the code an image reaches"
 )]
 
 mod regdb;
@@ -47,8 +35,12 @@ fn main() -> ExitCode {
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
-            let _ = error.print();
-            return ExitCode::from(2);
+            // The refused command line exits 2; one whose refusal could not
+            // be written says that instead.
+            return match error.print() {
+                Ok(()) => ExitCode::from(2),
+                Err(_) => ExitCode::FAILURE,
+            };
         }
     };
     match run(&cli.db, &cli.revision, &cli.out) {

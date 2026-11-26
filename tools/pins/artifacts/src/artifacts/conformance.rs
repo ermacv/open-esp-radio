@@ -100,11 +100,25 @@ fn run(command: &mut std::process::Command, what: &str) -> Result<()> {
     Ok(())
 }
 
+/// Remove what an interrupted fetch left in `staging`, so that the next
+/// fills an empty directory; a staging directory that stays is the refusal.
+fn clear(staging: &Path) -> Result<()> {
+    match std::fs::remove_dir_all(staging) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "the staging directory {} of an earlier fetch was not removed: {error}",
+            staging.display()
+        )
+        .into()),
+    }
+}
+
 /// Check out the pinned revision with only the test environment and the
 /// pinned suites into `destination`, through a staging directory.
 fn fetch_arch_test(arch: &ArchTest, destination: &Path) -> Result<()> {
     let staging = destination.with_extension("partial");
-    let _ = std::fs::remove_dir_all(&staging);
+    clear(&staging)?;
     std::fs::create_dir_all(&staging)?;
     run(git(&staging).arg("init").arg("--quiet"), "git init")?;
     run(
@@ -159,7 +173,7 @@ fn fetch_arch_test(arch: &ArchTest, destination: &Path) -> Result<()> {
 /// `directory`.
 fn fetch_sail(sail: &Sail, directory: &Path) -> Result<()> {
     let staging = directory.with_extension("partial");
-    let _ = std::fs::remove_dir_all(&staging);
+    clear(&staging)?;
     std::fs::create_dir_all(&staging)?;
     let archive = staging.join("sail.tar.gz");
     crate::artifacts::download(&sail.url, &archive)?;
@@ -201,6 +215,29 @@ pub fn fetch(root: &Path) -> Result<Inputs> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_staging_directory_that_cannot_be_cleared_is_refused_by_name() {
+        let directory = tempfile::tempdir().unwrap();
+        // None was left, or one with an interrupted fetch in it: cleared.
+        let staging = directory.path().join("inputs.partial");
+        clear(&staging).unwrap();
+        std::fs::create_dir_all(staging.join("riscv-test-suite")).unwrap();
+        clear(&staging).unwrap();
+        assert!(!staging.exists());
+        // Below a file there is no directory to clear, and no way to make one.
+        let file = directory.path().join("file");
+        std::fs::write(&file, b"").unwrap();
+        let staging = file.join("inputs.partial");
+        let error = clear(&staging).unwrap_err().to_string();
+        assert!(
+            error.starts_with(&format!(
+                "the staging directory {} of an earlier fetch was not removed: ",
+                staging.display()
+            )),
+            "{error}"
+        );
+    }
 
     #[test]
     fn the_tracked_pin_parses_and_locates_its_inputs_by_revision_and_hash() {

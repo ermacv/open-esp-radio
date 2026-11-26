@@ -719,7 +719,7 @@ impl Gates {
                         let stage_two = input.stage_two_elf.ok_or(
                             "the bootstrap policy names a handoff, but no stage-two ELF is given",
                         )?;
-                        let top = input
+                        let boot = input
                             .policy
                             .task_stack(
                                 input
@@ -730,12 +730,16 @@ impl Gates {
                                     .ok_or("handoff needs hart geometry")?
                                     .boot_hart,
                             )
-                            .ok_or("boot task stack is missing")?
-                            .top_symbol
-                            .as_deref()
-                            .ok_or(
-                                "the boot hart task stack names no top symbol for the handoff",
-                            )?;
+                            .ok_or("boot task stack is missing")?;
+                        let top = match boot.storage() {
+                            oer_tools_chip_profile::policy::Storage::Range { top, .. } => top,
+                            oer_tools_chip_profile::policy::Storage::Symbol(_) => {
+                                return Err(
+                                    "the boot hart task stack names no top symbol for the handoff"
+                                        .into(),
+                                );
+                            }
+                        };
                         Some(image.end_path_at_stage_two(symbol, stage_two, top)?)
                     }
                     None => None,

@@ -2,10 +2,6 @@
 //! `chips/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
 //! each fetched one) and where a pinned artifact lies in a checkout.
 //! Fetching and the host-wide store are `oer-tools-pins-artifacts`.
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
 #![forbid(unsafe_code)]
 #![cfg_attr(
     test,
@@ -15,11 +11,6 @@
         clippy::unreachable,
         clippy::arithmetic_side_effects
     )
-)]
-#![expect(
-    clippy::expect_used,
-    clippy::unreachable,
-    reason = "host tool: the ban covers the code an image reaches"
 )]
 pub mod artifacts;
 pub mod provenance;
@@ -69,55 +60,166 @@ pub fn manifest_path(root: &Path, chip: &str) -> Result<String> {
     .into())
 }
 
-/// The kind of a pinned source.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
+/// The kind of a fetched source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SourceKind {
     /// A file at `path` of a git revision.
     Git,
     /// A member `path` of a release asset tarball.
     Release,
-    /// An output at `path` below the repository root of the tracked firmware
-    /// catalog image `image`, built by `cargo fw idf build <image>`.
-    /// The recipe is the pin: the output carries no SHA-256.
-    Firmware,
 }
 
-/// One pinned source of `artifacts.toml`.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct Source {
+/// A source whose artifacts are fetched and verified against their pinned
+/// SHA-256.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FetchedSource {
     pub id: String,
     pub kind: SourceKind,
     pub repository: Option<String>,
     pub revision: Option<String>,
     pub asset: Option<String>,
     pub sha256: Option<String>,
-    /// The firmware catalog image of a firmware source.
-    pub image: Option<String>,
+}
+
+/// A source whose artifacts are outputs, at their `path` below the
+/// repository root, of the tracked firmware catalog image `image`, built by
+/// `cargo fw idf build <image>`. The recipe is the pin: an output carries no
+/// SHA-256.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FirmwareSource {
+    pub id: String,
+    pub image: String,
+}
+
+/// One pinned source of `artifacts.toml`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Source {
+    Fetched(FetchedSource),
+    Firmware(FirmwareSource),
+}
+
+impl Source {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Fetched(source) => &source.id,
+            Self::Firmware(source) => &source.id,
+        }
+    }
+}
+
+/// The source an artifact names and what pins the artifact.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Origin {
+    /// Fetched from `source` and verified against the pinned `sha256`.
+    Fetched {
+        source: FetchedSource,
+        sha256: String,
+    },
+    /// Built from the recipe of its source's image.
+    Firmware(FirmwareSource),
 }
 
 /// One pinned artifact of `artifacts.toml`.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Artifact {
     pub id: String,
-    /// The id of its source.
-    pub source: String,
     /// Its path in the source: in the git tree, the release tarball or,
     /// for a firmware build output, below the repository root.
     pub path: String,
-    /// The pinned SHA-256 of a fetched artifact; a firmware output has none.
-    pub sha256: Option<String>,
+    pub origin: Origin,
+}
+
+impl Artifact {
+    /// The id of its source.
+    pub fn source(&self) -> &str {
+        match &self.origin {
+            Origin::Fetched { source, .. } => &source.id,
+            Origin::Firmware(source) => &source.id,
+        }
+    }
 }
 
 /// A chip's `artifacts.toml`: the one reader of the pins.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Manifest {
     pub schema: u32,
     pub source: Vec<Source>,
     pub artifact: Vec<Artifact>,
+}
+
+/// `artifacts.toml` as it is written.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestFile {
+    schema: u32,
+    source: Vec<SourceFile>,
+    artifact: Vec<ArtifactFile>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum KindFile {
+    Git,
+    Release,
+    Firmware,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceFile {
+    id: String,
+    kind: KindFile,
+    repository: Option<String>,
+    revision: Option<String>,
+    asset: Option<String>,
+    sha256: Option<String>,
+    /// The firmware catalog image of a firmware source.
+    image: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ArtifactFile {
+    id: String,
+    /// The id of its source.
+    source: String,
+    path: String,
+    /// The pinned SHA-256 of a fetched artifact; a firmware output has none.
+    sha256: Option<String>,
+}
+
+impl SourceFile {
+    /// The source this row pins: a firmware source names its image and
+    /// nothing else, a fetched one no image.
+    fn source(self) -> Result<Source> {
+        let kind = match (self.kind, self.image) {
+            (KindFile::Git, None) => SourceKind::Git,
+            (KindFile::Release, None) => SourceKind::Release,
+            (KindFile::Firmware, Some(image)) => {
+                if self.repository.is_some()
+                    || self.revision.is_some()
+                    || self.asset.is_some()
+                    || self.sha256.is_some()
+                {
+                    return Err(
+                        format!("{}: a firmware source pins only its image", self.id).into(),
+                    );
+                }
+                return Ok(Source::Firmware(FirmwareSource { id: self.id, image }));
+            }
+            (KindFile::Firmware, None) | (KindFile::Git | KindFile::Release, Some(_)) => {
+                return Err(format!("{}: `image` names exactly a firmware source", self.id).into());
+            }
+        };
+        Ok(Source::Fetched(FetchedSource {
+            id: self.id,
+            kind,
+            repository: self.repository,
+            revision: self.revision,
+            asset: self.asset,
+            sha256: self.sha256,
+        }))
+    }
 }
 
 impl Manifest {
@@ -125,39 +227,45 @@ impl Manifest {
     /// source, every fetched artifact pins its SHA-256 and every firmware
     /// source names its image while its outputs pin none.
     pub fn parse(text: &str) -> Result<Self> {
-        let manifest: Self = toml::from_str(text)?;
-        if manifest.schema != 1 {
-            return Err(format!("unsupported artifact schema {}", manifest.schema).into());
+        let file: ManifestFile = toml::from_str(text)?;
+        if file.schema != 1 {
+            return Err(format!("unsupported artifact schema {}", file.schema).into());
         }
-        for source in &manifest.source {
-            let firmware = source.kind == SourceKind::Firmware;
-            if firmware != source.image.is_some() {
-                return Err(
-                    format!("{}: `image` names exactly a firmware source", source.id).into(),
-                );
-            }
-            if firmware
-                && (source.repository.is_some()
-                    || source.revision.is_some()
-                    || source.asset.is_some()
-                    || source.sha256.is_some())
-            {
-                return Err(format!("{}: a firmware source pins only its image", source.id).into());
-            }
-        }
-        for artifact in &manifest.artifact {
-            let Some(source) = manifest.source.iter().find(|s| s.id == artifact.source) else {
-                return Err(format!("{}: unknown source {}", artifact.id, artifact.source).into());
+        let source = file
+            .source
+            .into_iter()
+            .map(SourceFile::source)
+            .collect::<Result<Vec<_>>>()?;
+        let mut artifact = Vec::with_capacity(file.artifact.len());
+        for row in file.artifact {
+            let Some(named) = source.iter().find(|source| source.id() == row.source) else {
+                return Err(format!("{}: unknown source {}", row.id, row.source).into());
             };
-            if (source.kind == SourceKind::Firmware) == artifact.sha256.is_some() {
-                return Err(format!(
-                    "{}: a fetched artifact pins its SHA-256 and a firmware output none",
-                    artifact.id
-                )
-                .into());
-            }
+            let origin = match (named, row.sha256) {
+                (Source::Fetched(source), Some(sha256)) => Origin::Fetched {
+                    source: source.clone(),
+                    sha256,
+                },
+                (Source::Firmware(source), None) => Origin::Firmware(source.clone()),
+                (Source::Fetched(_), None) | (Source::Firmware(_), Some(_)) => {
+                    return Err(format!(
+                        "{}: a fetched artifact pins its SHA-256 and a firmware output none",
+                        row.id
+                    )
+                    .into());
+                }
+            };
+            artifact.push(Artifact {
+                id: row.id,
+                path: row.path,
+                origin,
+            });
         }
-        Ok(manifest)
+        Ok(Self {
+            schema: file.schema,
+            source,
+            artifact,
+        })
     }
 
     /// The tracked manifest of `chip` in the repository at `root`.
@@ -192,31 +300,22 @@ impl Manifest {
     pub fn source(&self, id: &str) -> Result<&Source> {
         self.source
             .iter()
-            .find(|source| source.id == id)
+            .find(|source| source.id() == id)
             .ok_or_else(|| format!("artifacts.toml pins no `{id}` source").into())
     }
 
     /// Where the fetched `source` lies for the checkout at `root`:
     /// `<root>/target/vendor/<source>/<revision>`.
-    pub fn source_directory(&self, root: &Path, source: &Source) -> Result<PathBuf> {
+    pub fn source_directory(&self, root: &Path, source: &FetchedSource) -> Result<PathBuf> {
         cache_directory(&root.join(CACHE), source)
-    }
-
-    /// The source `artifact` names; [`Manifest::parse`] checked it exists.
-    pub fn source_of(&self, artifact: &Artifact) -> &Source {
-        self.source
-            .iter()
-            .find(|source| source.id == artifact.source)
-            .expect("parsed manifests name declared sources")
     }
 
     /// Where `artifact` lies for the checkout at `root`: its build output
     /// for a firmware source, else `<root>/target/vendor/<source>/<revision>/<path>`.
     pub fn location(&self, root: &Path, artifact: &Artifact) -> Result<PathBuf> {
-        let source = self.source_of(artifact);
-        Ok(match source.kind {
-            SourceKind::Firmware => root.join(&artifact.path),
-            SourceKind::Git | SourceKind::Release => {
+        Ok(match &artifact.origin {
+            Origin::Firmware(_) => root.join(&artifact.path),
+            Origin::Fetched { source, .. } => {
                 self.source_directory(root, source)?.join(&artifact.path)
             }
         })
@@ -225,7 +324,7 @@ impl Manifest {
 
 /// `<base>/<source>/<revision>`, where `base` is a store or a checkout's
 /// `target/vendor`.
-pub fn cache_directory(base: &Path, source: &Source) -> Result<PathBuf> {
+pub fn cache_directory(base: &Path, source: &FetchedSource) -> Result<PathBuf> {
     let revision = source
         .revision
         .as_deref()
@@ -251,18 +350,20 @@ pub fn git_pins(root: &Path, chip: &str) -> Result<Vec<GitPin>> {
     let artifacts = artifact;
     source
         .into_iter()
-        .filter(|s| s.kind == SourceKind::Git)
+        .filter_map(|source| match source {
+            Source::Fetched(source) if source.kind == SourceKind::Git => Some(source),
+            Source::Fetched(_) | Source::Firmware(_) => None,
+        })
         .map(|source| {
             Ok(GitPin {
                 artifacts: artifacts
                     .iter()
-                    .filter(|a| a.source == source.id)
-                    .map(|a| {
-                        let sha256 = a
-                            .sha256
-                            .clone()
-                            .expect("parsed fetched artifacts pin a SHA-256");
-                        (a.path.clone(), sha256)
+                    .filter_map(|artifact| match &artifact.origin {
+                        Origin::Fetched {
+                            source: named,
+                            sha256,
+                        } if named.id == source.id => Some((artifact.path.clone(), sha256.clone())),
+                        Origin::Fetched { .. } | Origin::Firmware(_) => None,
                     })
                     .collect(),
                 repository: source
@@ -323,7 +424,7 @@ mod tests {
         let firmware = "kind = \"firmware\"\nimage = \"i\"";
         let parsed = manifest(firmware, "").unwrap();
         let artifact = parsed.artifact("a").unwrap();
-        assert_eq!(artifact.sha256, None);
+        assert!(matches!(artifact.origin, Origin::Firmware(_)));
         assert_eq!(
             parsed.location(Path::new("/repo"), artifact).unwrap(),
             Path::new("/repo/p")

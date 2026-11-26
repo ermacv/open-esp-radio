@@ -26,10 +26,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::indexing_slicing,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -232,8 +228,10 @@ fn tree_name(pins: &[GitPin], revision: &str) -> String {
         })
         .collect::<Vec<_>>();
     sources.sort();
-    let digest = Sha256::digest(sources.concat().as_bytes());
-    let digest = hex::encode(&digest[..6]);
+    // The name carries the digest's first six bytes.
+    let [b0, b1, b2, b3, b4, b5, ..] =
+        <[u8; 32]>::from(Sha256::digest(sources.concat().as_bytes()));
+    let digest = hex::encode([b0, b1, b2, b3, b4, b5]);
     format!("{revision}-{digest}")
 }
 
@@ -521,14 +519,8 @@ idf.py --preview -C "$OER_PROJECT" -B "$OER_BUILD" -DIDF_TARGET="$OER_CHIP" -DSD
         )?;
         let description: serde_json::Value =
             serde_json::from_slice(&std::fs::read(build.join("project_description.json"))?)?;
-        let field = |key: &str| -> Result<String> {
-            description[key]
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| format!("project description lacks `{key}`").into())
-        };
-        let application = build.join(field("app_bin")?);
-        let elf = build.join(field("app_elf")?);
+        let application = build.join(described(&description, "app_bin")?);
+        let elf = build.join(described(&description, "app_elf")?);
         let map = std::fs::read_to_string(elf.with_extension("map"))?;
         let unpinned = unpinned_archives(&map, &tree, &pins)?;
         if !unpinned.is_empty() {
@@ -553,9 +545,31 @@ idf.py --preview -C "$OER_PROJECT" -B "$OER_BUILD" -DIDF_TARGET="$OER_CHIP" -DSD
     Ok(builds)
 }
 
+/// The file name `key` holds in a build's `project_description.json`.
+fn described<'a>(description: &'a serde_json::Value, key: &str) -> Result<&'a str> {
+    description
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| format!("project description lacks `{key}`").into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_project_description_without_a_key_is_refused_by_its_name() {
+        let description = serde_json::json!({ "app_bin": "app.bin", "app_elf": 7 });
+        assert_eq!(described(&description, "app_bin").unwrap(), "app.bin");
+        for (description, key) in [
+            (&description, "app_elf"),
+            (&description, "app_map"),
+            (&serde_json::json!(["app_bin"]), "app_bin"),
+        ] {
+            let error = described(description, key).unwrap_err().to_string();
+            assert_eq!(error, format!("project description lacks `{key}`"));
+        }
+    }
 
     #[test]
     fn relative_submodule_urls_resolve_against_the_superproject() {

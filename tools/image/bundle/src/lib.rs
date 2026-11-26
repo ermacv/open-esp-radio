@@ -8,10 +8,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::indexing_slicing,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 //! The image bundle format: everything one image build made, in one directory, described
 //! by its `bundle.json`.
 //!
@@ -343,11 +339,16 @@ impl ImageBundle {
             &std::fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?,
         )
         .map_err(|error| format!("{}: {error}", path.display()))?;
-        if value["schema"].as_u64() != Some(u64::from(SCHEMA)) {
+        let schema = value.get("schema").ok_or_else(|| {
+            format!(
+                "{} has no `schema`; this tool reads schema {SCHEMA}: build the bundle again",
+                path.display()
+            )
+        })?;
+        if schema.as_u64() != Some(u64::from(SCHEMA)) {
             return Err(format!(
-                "{} has schema {}; this tool reads schema {SCHEMA}: build the bundle again",
-                path.display(),
-                value["schema"]
+                "{} has schema {schema}; this tool reads schema {SCHEMA}: build the bundle again",
+                path.display()
             )
             .into());
         }

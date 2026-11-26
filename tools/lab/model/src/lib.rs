@@ -32,10 +32,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 pub mod convert;
 pub mod device_id;
@@ -522,9 +518,10 @@ impl Stand {
         let stand: Self = toml::from_str(text).map_err(|error| {
             // The error's own rendering quotes the offending line, which may
             // hold a credential: report its position and message only.
+            // The line of an offset is the count of the lines up to it.
             let line = error
                 .span()
-                .map(|span| text[..span.start.min(text.len())].matches('\n').count() + 1);
+                .map(|span| text[..span.start.min(text.len())].split('\n').count());
             let message = shown_message(error.message());
             match line {
                 Some(line) => format!("line {line}: {message}"),

@@ -16,16 +16,8 @@
 //! checked-in snapshot `tests/ui/<case>.stderr` belongs to the reject twin and
 //! must report every marked error at its line.
 //!
-//! A case whose guarantee holds only in some feature sets declares it,
-//! `// ui-requires: not(test-support)`; under any other set it is skipped and
-//! named on stderr, so another CI run must check it.
-//!
 //! `ui_reject` needs no check-cfg registration: case files are no target of
 //! any ordinary build, and both generated copies have the cfg rewritten.
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
 #![forbid(unsafe_code)]
 #![expect(
     clippy::panic,
@@ -41,19 +33,13 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 use std::{
     env, fs,
-    io::Write as _,
     path::{Path, PathBuf},
 };
 
 const MARKER: &str = "// ui-error";
-const REQUIRES: &str = "// ui-requires:";
 const CFG: &str = "ui_reject";
 /// How a checked-in snapshot names the case file.
 const CASE_DIR: &str = "tests/ui/";
@@ -64,8 +50,8 @@ const LOCATIONS: [&str; 2] = ["--> ", "::: "];
 /// Runs every case of the crate at `manifest_dir`, in file-name order.
 ///
 /// `target_tmpdir` receives the generated twins; an integration test passes
-/// `env!("CARGO_TARGET_TMPDIR")`. `features` names every feature a case may
-/// require and whether this build has it, `("test-support",
+/// `env!("CARGO_TARGET_TMPDIR")`. `features` names the features whose
+/// diagnostics may differ and whether this build has each, `("test-support",
 /// cfg!(feature = "test-support"))`. With `TRYBUILD=overwrite` the produced
 /// snapshots are copied back to `tests/ui/`. A case may have a
 /// `<case>.<feature>.stderr` for a feature's different diagnostics. It is
@@ -74,8 +60,7 @@ const LOCATIONS: [&str; 2] = ["--> ", "::: "];
 ///
 /// # Panics
 ///
-/// When a case has no marker or no `ui_reject`, when a case requires a
-/// feature `features` does not name, when trybuild reports a
+/// When a case has no marker or no `ui_reject`, when trybuild reports a
 /// failure, or when a snapshot misses a marked error at its line.
 pub fn run(manifest_dir: &str, target_tmpdir: &str, features: &[(&str, bool)]) {
     let ui = Path::new(manifest_dir).join(CASE_DIR);
@@ -91,16 +76,10 @@ pub fn run(manifest_dir: &str, target_tmpdir: &str, features: &[(&str, bool)]) {
     fs::create_dir_all(&twins.pass).expect("create the pass twin directory");
     fs::create_dir_all(&twins.reject).expect("create the reject twin directory");
 
-    let mut cases = Vec::new();
-    for source in case_paths(&ui) {
-        match Case::prepare(source, &twins, features) {
-            Ok(case) => cases.push(case),
-            // Written past the test harness's capture, so a skip always shows.
-            Err(skipped) => {
-                let _ = writeln!(std::io::stderr(), "ui-cases: skipped {skipped}");
-            }
-        }
-    }
+    let cases: Vec<Case> = case_paths(&ui)
+        .into_iter()
+        .map(|source| Case::prepare(source, &twins, features))
+        .collect();
 
     // A set of compile_fail tests alone builds in one cargo invocation; a set
     // holding a pass test builds and runs each test on its own. Each set runs
@@ -211,27 +190,14 @@ fn snapshot_path(source: &Path, features: &[(&str, bool)]) -> PathBuf {
 }
 
 impl Case {
-    /// The case at `source_path`, or `Err` naming it and the requirement this
-    /// build does not meet.
-    fn prepare(
-        source_path: PathBuf,
-        twins: &Twins,
-        features: &[(&str, bool)],
-    ) -> Result<Self, String> {
+    /// The case at `source_path`, with its twins written.
+    fn prepare(source_path: PathBuf, twins: &Twins, features: &[(&str, bool)]) -> Self {
         let name = file_name(&source_path);
         let source = fs::read_to_string(&source_path)
             .unwrap_or_else(|error| panic!("{name}: read the case: {error}"));
         let expected = markers(&source).unwrap_or_else(|error| panic!("{name}: {error}"));
         if !source.contains(CFG) {
             panic!("{name}: no `{CFG}`, so the case has no reject twin");
-        }
-        for requirement in requirements(&source) {
-            let met = requirement
-                .met(features)
-                .unwrap_or_else(|error| panic!("{name}: {error}"));
-            if !met {
-                return Err(format!("{name}: requires {}", requirement.text));
-            }
         }
 
         // `cfg(any())` is always false and `cfg(all())` always true.
@@ -253,13 +219,13 @@ impl Case {
             let generated = relocate(&checked_in, CASE_DIR, &twins.reject_dir());
             write(&reject.with_extension("stderr"), &generated);
         }
-        Ok(Case {
+        Case {
             name,
             pass,
             reject,
             snapshot,
             expected,
-        })
+        }
     }
 
     /// Copies the produced snapshot back to `tests/ui/`, naming the case file
@@ -320,54 +286,6 @@ fn absolute_includes(source: &str, include: &str, directory: &str) -> String {
         resolved.push_str(part);
     }
     resolved
-}
-
-/// A `// ui-requires: <feature>` or `// ui-requires: not(<feature>)` line.
-#[derive(Debug, PartialEq, Eq)]
-struct Requirement {
-    text: String,
-    feature: String,
-    enabled: bool,
-}
-
-impl Requirement {
-    /// Whether this build meets the requirement; an error when `features`
-    /// does not name its feature.
-    fn met(&self, features: &[(&str, bool)]) -> Result<bool, String> {
-        features
-            .iter()
-            .find(|(feature, _)| *feature == self.feature)
-            .map(|(_, on)| *on == self.enabled)
-            .ok_or_else(|| {
-                format!(
-                    "`{REQUIRES} {}` names a feature the crate's tests/ui.rs does not pass",
-                    self.text
-                )
-            })
-    }
-}
-
-/// Every requirement of `source`, in source order.
-fn requirements(source: &str) -> Vec<Requirement> {
-    source
-        .lines()
-        .filter_map(|line| line.split_once(REQUIRES))
-        .map(|(_, text)| {
-            let text = text.trim();
-            let (feature, enabled) = match text
-                .strip_prefix("not(")
-                .and_then(|inner| inner.strip_suffix(')'))
-            {
-                Some(feature) => (feature, false),
-                None => (text, true),
-            };
-            Requirement {
-                text: text.to_owned(),
-                feature: feature.trim().to_owned(),
-                enabled,
-            }
-        })
-        .collect()
 }
 
 /// Moves every location in `stderr` from directory `from` to `to`.
@@ -435,11 +353,11 @@ impl Expected {
 /// in source order.
 fn markers(source: &str) -> Result<Vec<Expected>, String> {
     let mut expected = Vec::new();
-    for (index, line) in source.lines().enumerate() {
+    // A marker's line is counted from one, as rustc reports it.
+    for (number, line) in (1_usize..).zip(source.lines()) {
         let Some((_, rest)) = line.split_once(MARKER) else {
             continue;
         };
-        let number = index + 1;
         let Some((offset, error)) = rest.split_once(':') else {
             return Err(format!("line {number}: `{MARKER}` needs `:` and an error"));
         };
@@ -540,7 +458,7 @@ fn file_name(path: &Path) -> String {
 mod tests {
     use super::{
         Expected, ExpectedError, Place, absolute_includes, markers, relocate, reported_errors,
-        requirements, snapshot_path, twin,
+        snapshot_path, twin,
     };
 
     #[test]
@@ -746,16 +664,6 @@ error: aborting due to 3 previous errors
             absolute_includes(source, "include!(\"", "/x/tests/ui"),
             "include!(\"/x/tests/ui/../a.rs\");\ninclude!(\"/abs/b.rs\");\n"
         );
-    }
-
-    #[test]
-    fn requirements_name_a_feature_and_whether_it_must_be_on() {
-        let found = requirements("// ui-requires: not(test-support)\n// ui-requires: serde\n");
-        let features = [("test-support", true), ("serde", true)];
-        assert_eq!(found[0].met(&features), Ok(false));
-        assert_eq!(found[1].met(&features), Ok(true));
-        assert_eq!(found[0].met(&[("test-support", false)]), Ok(true));
-        assert!(found[1].met(&[("test-support", false)]).is_err());
     }
 }
 

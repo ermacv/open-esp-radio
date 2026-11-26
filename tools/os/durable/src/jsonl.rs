@@ -29,17 +29,13 @@ pub fn read_strict<T: for<'a> Deserialize<'a>>(path: &Path) -> crate::Result<Vec
     let Some(text) = text(path)? else {
         return Ok(Vec::new());
     };
-    text.lines()
-        .enumerate()
+    // A record is named by its line, counted from one.
+    (1_usize..)
+        .zip(text.lines())
         .filter(|(_, line)| !line.trim().is_empty())
-        .map(|(index, line)| {
+        .map(|(number, line)| {
             serde_json::from_str(line).map_err(|error| {
-                format!(
-                    "{}:{}: unreadable record: {error}",
-                    path.display(),
-                    index + 1
-                )
-                .into()
+                format!("{}:{number}: unreadable record: {error}", path.display()).into()
             })
         })
         .collect()
@@ -73,11 +69,42 @@ pub fn retain_newest<T: for<'a> Deserialize<'a> + Serialize>(
     retained: usize,
 ) -> crate::Result<()> {
     let records = read_lossy::<T>(path)?;
-    let start = records.len().saturating_sub(retained);
+    // Fewer records than `retained` are all kept: nothing is older than them.
+    let older = records.len().saturating_sub(retained);
     let mut text = Vec::new();
-    for record in &records[start..] {
+    for record in records.iter().skip(older) {
         text.extend(serde_json::to_vec(record)?);
         text.push(b'\n');
     }
     crate::atomic_write(path, &text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_damaged_record_is_named_by_its_line_counted_from_one() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("log.jsonl");
+        fs::write(&path, "1\n\n2\nthree\n").unwrap();
+        let error = read_strict::<u32>(&path).unwrap_err().to_string();
+        assert!(
+            error.starts_with(&format!("{}:4: unreadable record: ", path.display())),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn trimming_keeps_the_newest_records_and_all_of_a_shorter_log() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("log.jsonl");
+        for value in 1..=5_u32 {
+            append(&path, &value).unwrap();
+        }
+        retain_newest::<u32>(&path, 2).unwrap();
+        assert_eq!(read_strict::<u32>(&path).unwrap(), [4, 5]);
+        retain_newest::<u32>(&path, 3).unwrap();
+        assert_eq!(read_strict::<u32>(&path).unwrap(), [4, 5]);
+    }
 }

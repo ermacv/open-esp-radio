@@ -20,8 +20,9 @@ pub struct Rule {
 pub fn parse(text: &str, wanted: &[&str]) -> Result<BTreeMap<String, Vec<Rule>>, String> {
     let mut countries: BTreeMap<String, Vec<Rule>> = BTreeMap::new();
     let mut current: Option<String> = None;
-    for (number, raw) in text.lines().enumerate() {
-        let context = |message: String| format!("line {}: {message}", number + 1);
+    // A line is named by its number, counted from one.
+    for (number, raw) in (1_usize..).zip(text.lines()) {
+        let context = |message: String| format!("line {number}: {message}");
         let line = raw.split('#').next().unwrap_or("").trim();
         if line.is_empty() {
             continue;
@@ -77,11 +78,12 @@ fn parse_rule(line: &str) -> Result<Rule, String> {
         if milliwatts <= 0.0 {
             return Err(format!("bad power `{power}`"));
         }
-        (milliwatts.log10() * 1000.0).round() as i32
+        mbm(milliwatts.log10() * 1000.0)
     } else {
         let dbm: f64 = power.parse().map_err(|_| format!("bad power `{power}`"))?;
-        (dbm * 100.0).round() as i32
-    };
+        mbm(dbm * 100.0)
+    }
+    .ok_or_else(|| format!("bad power `{power}`"))?;
     let mut rule = Rule {
         low_khz: khz(low)?,
         high_khz: khz(high)?,
@@ -109,6 +111,16 @@ fn parse_rule(line: &str) -> Result<Rule, String> {
     Ok(rule)
 }
 
+/// `value` rounded to a whole number of mBm, if it is one the table's `i32`
+/// holds: not for a power that is no number, is infinite or lies beyond it.
+///
+/// The standard library converts a float to an integer only by a cast that
+/// saturates. A rounded float prints as its exact decimal digits, which the
+/// integer's parser accepts within its range and refuses outside it.
+fn mbm(value: f64) -> Option<i32> {
+    value.round().to_string().parse().ok()
+}
+
 /// MHz with up to three decimals, as kHz.
 fn khz(text: &str) -> Result<u32, String> {
     let text = text.trim();
@@ -124,7 +136,7 @@ fn khz(text: &str) -> Result<u32, String> {
         fraction.parse().map_err(|_| bad())?
     };
     for _ in fraction.len()..3 {
-        fraction_khz *= 10;
+        fraction_khz = fraction_khz.checked_mul(10).ok_or_else(bad)?;
     }
     whole
         .checked_mul(1000)
@@ -190,6 +202,48 @@ country DE: DFS-ETSI
         )
         .unwrap_err();
         assert!(error.contains("NO-HT40"), "{error}");
+    }
+
+    #[test]
+    fn a_power_the_table_cannot_hold_is_refused_with_its_line() {
+        for power in ["1e99", "-1e99", "inf", "NaN", "1e999 mW", "NaN mW"] {
+            let error = parse(
+                &format!("country XX:\n\t(2400 - 2483.5 @ 40), ({power})\n"),
+                &["XX"],
+            )
+            .unwrap_err();
+            assert_eq!(error, format!("line 2: bad power `{power}`"));
+        }
+        // The table's own limits and a power that rounds to zero are powers.
+        for (power, mbm) in [
+            ("21474836.47", i32::MAX),
+            ("-21474836.48", i32::MIN),
+            ("-0.001", 0),
+            ("1 mW", 0),
+            ("0.5 mW", -301),
+        ] {
+            let countries = parse(
+                &format!("country XX:\n\t(2400 - 2483.5 @ 40), ({power})\n"),
+                &["XX"],
+            )
+            .unwrap();
+            assert_eq!(countries["XX"][0].max_eirp_mbm, mbm, "{power}");
+        }
+    }
+
+    #[test]
+    fn a_frequency_beyond_the_table_is_refused_with_its_line() {
+        let error = parse("country XX:\n\t(2400 - 4294968 @ 40), (10)\n", &["XX"]).unwrap_err();
+        assert_eq!(error, "line 2: bad frequency `4294968`");
+        let countries = parse(
+            "country XX:\n\t(2400.5 - 4294967.295 @ 40), (10)\n",
+            &["XX"],
+        )
+        .unwrap();
+        assert_eq!(
+            (countries["XX"][0].low_khz, countries["XX"][0].high_khz),
+            (2_400_500, u32::MAX)
+        );
     }
 
     #[test]

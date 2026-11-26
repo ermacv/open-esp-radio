@@ -11270,18 +11270,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the ban covers the code an image reaches",
     ),
     (
-        "tools/chip/profile/src/lib.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/chip/profile/src/lib.rs",
-        "clippy::unreachable",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
         "tools/hil/harness/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
@@ -11338,12 +11326,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "tools/image/build/src/lib.rs",
         "clippy::unreachable",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/image/bundle/src/lib.rs",
-        "clippy::indexing_slicing",
         1,
         "host tool: the ban covers the code an image reaches",
     ),
@@ -11421,12 +11403,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "tools/image/compare/src/lib.rs",
-        "clippy::indexing_slicing",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/image/esp-idf/src/lib.rs",
         "clippy::indexing_slicing",
         1,
         "host tool: the ban covers the code an image reaches",
@@ -11648,12 +11624,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the ban covers the code an image reaches",
     ),
     (
-        "tools/lab/fixture-install/src/bin/open-radio-net-client.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
         "tools/lab/fixture/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -11680,12 +11650,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "tools/lab/fixture/src/lib.rs",
         "clippy::indexing_slicing",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/lab/model/src/lib.rs",
-        "clippy::arithmetic_side_effects",
         1,
         "host tool: the ban covers the code an image reaches",
     ),
@@ -11722,30 +11686,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "tools/lab/service/src/lib.rs",
         "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/os/command-tree/src/lib.rs",
-        "clippy::expect_used",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/os/durable/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/os/durable/src/lib.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/os/durable/src/lib.rs",
-        "clippy::indexing_slicing",
         1,
         "host tool: the ban covers the code an image reaches",
     ),
@@ -11802,36 +11742,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "dead_code",
         1,
         "the test assembles each suite for it",
-    ),
-    (
-        "tools/pins/artifacts/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/pins/artifacts/src/lib.rs",
-        "clippy::expect_used",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/pins/artifacts/src/lib.rs",
-        "clippy::unreachable",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/probe/codegen/src/lib.rs",
-        "clippy::indexing_slicing",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
-        "tools/probe/codegen/src/lib.rs",
-        "clippy::unreachable",
-        1,
-        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/registers/contracts/src/lib.rs",
@@ -11900,24 +11810,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the ban covers the code an image reaches",
     ),
     (
-        "tools/regulatory/generate/src/main.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/regulatory/generate/src/main.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/regulatory/generate/src/main.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
-    ),
-    (
         "tools/test/ui-cases/src/lib.rs",
         "clippy::expect_used",
         1,
@@ -11925,21 +11817,9 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "tools/test/ui-cases/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        "host tool: the rule covers the code an image reaches",
-    ),
-    (
-        "tools/test/ui-cases/src/lib.rs",
         "clippy::panic",
         1,
         "a test runner reports a broken case by panicking with its name",
-    ),
-    (
-        "tools/test/ui-cases/src/lib.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/vendor/cli/src/copies.rs",

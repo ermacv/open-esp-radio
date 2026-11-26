@@ -184,8 +184,16 @@ fn parse_duration(text: &str) -> std::result::Result<Duration, String> {
 fn main() -> ExitCode {
     if oer_tools_os_command_tree::requested() {
         let tree = oer_tools_os_command_tree::command_tree(&Cli::command(), &[String::from("fw")]);
-        println!("{}", oer_tools_os_command_tree::json(&tree));
-        return ExitCode::SUCCESS;
+        return match oer_tools_os_command_tree::json(&tree) {
+            Ok(json) => {
+                println!("{json}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("fw: {error}");
+                ExitCode::FAILURE
+            }
+        };
     }
     let cli = Cli::parse();
     let result = (|| -> oer_tools_image_build::Result<ExitCode> {

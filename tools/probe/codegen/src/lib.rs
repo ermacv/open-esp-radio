@@ -20,11 +20,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::indexing_slicing,
-    clippy::unreachable,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
@@ -50,6 +45,8 @@ pub struct Declaration {
     attributes: Vec<Attribute>,
     visibility: Visibility,
     signature: Signature,
+    /// The signature's parameters, each a name and its type.
+    arguments: Vec<Argument>,
     body: Block,
     adapter: String,
 }
@@ -72,9 +69,15 @@ impl Parse for Declaration {
                 "probe requires a synchronous, non-generic Rust signature; C ABI is generated",
             ));
         }
+        let mut arguments = Vec::new();
         for argument in &signature.inputs {
             match argument {
-                FnArg::Typed(argument) if matches!(argument.pat.as_ref(), Pat::Ident(_)) => {}
+                FnArg::Typed(argument) if matches!(argument.pat.as_ref(), Pat::Ident(_)) => {
+                    arguments.push(Argument {
+                        name: argument.pat.to_token_stream().to_string(),
+                        rust_type: argument.ty.to_token_stream().to_string(),
+                    });
+                }
                 _ => {
                     return Err(syn::Error::new_spanned(
                         argument,
@@ -96,6 +99,7 @@ impl Parse for Declaration {
             attributes,
             visibility,
             signature,
+            arguments,
             body,
             adapter: adapter.into(),
         })
@@ -143,26 +147,13 @@ impl Declaration {
             symbol: self.signature.ident.to_string(),
             signature: self.signature.to_token_stream().to_string(),
             adapter: self.adapter.clone(),
-            arguments: self
-                .signature
-                .inputs
-                .iter()
-                .map(|argument| {
-                    let FnArg::Typed(argument) = argument else {
-                        unreachable!()
-                    };
-                    Argument {
-                        name: argument.pat.to_token_stream().to_string(),
-                        rust_type: argument.ty.to_token_stream().to_string(),
-                    }
-                })
-                .collect(),
+            arguments: self.arguments.clone(),
         }
     }
 }
 
 /// One named parameter. Rust type spelling is descriptive, not a layout proof.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Argument {
     /// Parameter name in the declaration.
@@ -344,24 +335,22 @@ pub fn build(root: &Path, image: &str, out_dir: &Path) -> Result<()> {
 pub fn validate_elf(bytes: &[u8], image: &str) -> Result<Catalog> {
     let file = oer_tools_analysis_elf::Elf::executable(bytes)
         .map_err(|_| "probe image must be a linked little-endian RV32 ELF")?;
-    let sections: Vec<_> = file.sections().filter(|s| s.name == SECTION).collect();
-    if sections.len() != 1 {
+    let mut sections = file.sections().filter(|s| s.name == SECTION);
+    let (Some(section), None) = (sections.next(), sections.next()) else {
         return Err("expected one probe catalog section".into());
-    }
-    let catalog: Catalog = serde_json::from_slice(sections[0].data)?;
+    };
+    let catalog: Catalog = serde_json::from_slice(section.data)?;
     validate_catalog(&catalog)?;
     if catalog.image != image {
         return Err("probe catalog image mismatch".into());
     }
     for entry in &catalog.entries {
-        let symbols: Vec<_> = file
+        let mut symbols = file
             .symbols()
-            .filter(|s| s.name == entry.symbol.as_str() && s.defined)
-            .collect();
-        if symbols.len() != 1 {
+            .filter(|s| s.name == entry.symbol.as_str() && s.defined);
+        let (Some(symbol), None) = (symbols.next(), symbols.next()) else {
             return Err(format!("missing or ambiguous entry {}", entry.symbol).into());
-        }
-        let symbol = &symbols[0];
+        };
         let section = file.section(symbol.section.ok_or("entry has no section")?)?;
         let executable_mapping = file.segments().any(|segment| {
             segment.executable
