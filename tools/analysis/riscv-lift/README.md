@@ -11,8 +11,7 @@ table of [`oer-tools-analysis-elf`](../elf/README.md) (`rv32::kind`), never a lo
 it decodes each instruction and replaces every address the code forms
 (branch and jump targets, `lui`/`auipc` pairs and what completes them through
 registers, address words in code) by the location the caller's `Placement`
-names. `cargo fw compare` compares these listings instead of
-disassembler text.
+names.
 
 Decoding belongs to [`oer-tools-analysis-riscv-decode`](../riscv-decode/README.md),
 selected with every extension it decodes: ESP-IDF builds the ESP32-S31 for
