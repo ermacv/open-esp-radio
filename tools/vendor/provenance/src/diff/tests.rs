@@ -207,6 +207,27 @@ fn a_removed_function_names_its_closest_candidate_or_none() {
 }
 
 #[test]
+fn two_removed_functions_of_one_name_and_member_each_name_their_own_closest_candidate() {
+    // Two static functions of one name that a partial link put in one member.
+    let old = [
+        member("a.o", "init", "c0", &[1, 2, 3, 4, 5, 6]),
+        member("a.o", "init", "c1", &[11, 12, 13, 14, 15, 16]),
+    ];
+    let new = [
+        member("a.o", "near_first", "c2", &[1, 2, 3, 4, 5, 9]),
+        member("a.o", "near_second", "c3", &[11, 12, 13, 14, 15, 19]),
+    ];
+    let closest: Vec<_> = compare(&old, &new)
+        .into_iter()
+        .filter_map(|entry| match entry.status {
+            Status::Removed { closest } => closest.map(|(name, _)| name),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(closest, ["near_first", "near_second"]);
+}
+
+#[test]
 fn a_renamed_function_is_one_whose_code_stands_under_a_name_the_old_revision_lacks() {
     let old = [
         member("a.o", "one", "same", &[1, 2]),

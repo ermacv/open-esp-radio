@@ -58,19 +58,27 @@ impl Function {
         }
         let (mut code_hash, mut named_hash) = (Sha256::new(), Sha256::new());
         let mut tokens = vec![];
-        let mut at = 0;
-        while at < bytes.len() {
-            let width = if bytes[at] & 3 == 3 { 4 } else { 2 }.min(bytes.len() - at);
-            let here: Vec<&Site> = by_offset
-                .range(at..at + width)
-                .flat_map(|(_, list)| list.iter().copied())
+        // The offsets of the bytes not yet cut into an instruction.
+        let mut offsets = 0..bytes.len();
+        let mut rest = bytes.as_slice();
+        while let Some(first) = rest.first() {
+            let width = if first & 3 == 3 { 4 } else { 2 };
+            // A body that ends inside an instruction leaves what it holds of
+            // it, which is the last token.
+            let (instruction, after) = rest.split_at_checked(width).unwrap_or((rest, &[]));
+            // The relocations at this instruction's bytes; most bytes have none.
+            let here: Vec<&Site> = offsets
+                .by_ref()
+                .take(instruction.len())
+                .filter_map(|at| by_offset.get(&at))
+                .flatten()
+                .copied()
                 .collect();
-            let instruction = &bytes[at..at + width];
             let anonymous = token(instruction, &here, false);
             code_hash.update(anonymous.to_le_bytes());
             named_hash.update(token(instruction, &here, true).to_le_bytes());
             tokens.push(anonymous);
-            at += width;
+            rest = after;
         }
         let calls = code
             .sites
@@ -127,7 +135,9 @@ fn token(bytes: &[u8], sites: &[&Site], named: bool) -> u64 {
             }
         }
     }
-    u64::from_le_bytes(hasher.finalize()[..8].try_into().expect("eight bytes"))
+    let digest: [u8; 32] = hasher.finalize().into();
+    let [b0, b1, b2, b3, b4, b5, b6, b7, ..] = digest;
+    u64::from_le_bytes([b0, b1, b2, b3, b4, b5, b6, b7])
 }
 
 /// Every defined function of an archive's ELF members, or of one ELF.
@@ -166,24 +176,40 @@ pub fn functions_and_symbols(
 /// both lengths (`2 * common / (left + right)`); one million when both are
 /// empty.
 pub fn similarity_ppm(left: &[u64], right: &[u64]) -> u32 {
-    if left.is_empty() && right.is_empty() {
-        return 1_000_000;
-    }
-    let mut previous = vec![0_u32; right.len() + 1];
-    let mut current = vec![0_u32; right.len() + 1];
+    // One row of the table of common lengths, for the tokens of `left` read
+    // so far against every prefix of `right`. A row never falls and rises by
+    // one at a time, so it is kept as the columns where it rises: `rises[n]`
+    // is the first column of `right` up to which `n` and one more tokens are
+    // common. The row's last cell, the common length, is the number of
+    // rises.
+    let mut rises: Vec<usize> = Vec::new();
     for token in left {
-        for (column, other) in right.iter().enumerate() {
-            current[column + 1] = if token == other {
-                previous[column] + 1
-            } else {
-                previous[column + 1].max(current[column])
-            };
+        // The columns that hold this token, the last first: each moves the
+        // rise it reaches to itself, and so extends a subsequence of the row
+        // above, never one this token has already extended.
+        let columns = right.iter().enumerate().rev();
+        for (column, _) in columns.filter(|(_, other)| *other == token) {
+            let reached = rises.partition_point(|rise| *rise < column);
+            match rises.get_mut(reached) {
+                Some(rise) => *rise = column,
+                // Past every rise: the common length grows by this token.
+                None => rises.push(column),
+            }
         }
-        std::mem::swap(&mut previous, &mut current);
     }
-    let common = u64::from(previous[right.len()]);
-    let total = (left.len() + right.len()) as u64;
-    u32::try_from(2 * common * 1_000_000 / total).unwrap_or(1_000_000)
+    // In a width that holds the product. Two empty sequences have no
+    // quotient: nothing differs, and they are alike.
+    let wide = |count: usize| u128::try_from(count).ok();
+    wide(rises.len())
+        .and_then(|common| common.checked_mul(2_000_000))
+        .zip(
+            wide(left.len())
+                .zip(wide(right.len()))
+                .and_then(|(left, right)| left.checked_add(right)),
+        )
+        .and_then(|(common, total)| common.checked_div(total))
+        .and_then(|ppm| u32::try_from(ppm).ok())
+        .unwrap_or(1_000_000)
 }
 
 #[cfg(test)]

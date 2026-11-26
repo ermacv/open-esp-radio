@@ -61,19 +61,24 @@ const MINIMUM_NAME: usize = 4;
 /// `.c` or `.h` is a file name, such as the archive member `phy_init.o` or
 /// the source `phy_init.c:399`, not a function.
 fn identifiers(text: &str, out: &mut BTreeSet<String>) {
+    let named = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let mut word = String::new();
     let characters: Vec<char> = text.chars().chain([' ']).collect();
-    for (index, &c) in characters.iter().enumerate() {
-        if c.is_ascii_alphanumeric() || c == '_' {
+    let mut rest = characters.as_slice();
+    while let Some((&c, after)) = rest.split_first() {
+        rest = after;
+        if named(c) {
             word.push(c);
         } else {
+            // A point, an extension and no more of a name after it.
             let member = c == '.'
-                && characters
-                    .get(index + 1)
-                    .is_some_and(|c| FILE_EXTENSIONS.contains(c))
-                && !characters
-                    .get(index + 2)
-                    .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_');
+                && match after {
+                    [extension, following @ ..] => {
+                        FILE_EXTENSIONS.contains(extension)
+                            && !following.first().is_some_and(|c| named(*c))
+                    }
+                    [] => false,
+                };
             if word.len() >= MINIMUM_NAME
                 && !member
                 && !word.starts_with(|c: char| c.is_ascii_digit())
@@ -90,42 +95,42 @@ fn identifiers(text: &str, out: &mut BTreeSet<String>) {
 /// them. Only a form whose `artifact` is a pinned artifact id is a
 /// qualified citation; the survey cites any other's symbol bare.
 fn qualified_citations(text: &str) -> (String, Vec<(String, String, String)>) {
+    const MARK: &str = "]::";
     let identifier = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let artifact_name = |c: char| identifier(c) || c == '-' || c == '.';
     let mut bare = String::with_capacity(text.len());
     let mut copies = vec![];
     let mut rest = text;
-    while let Some(at) = rest.find("]::") {
-        let before = &rest[..at];
-        let parsed = before.rfind('[').and_then(|open| {
-            let member = &before[open + 1..];
-            let artifact_start = before[..open]
-                .rfind(|c: char| !(identifier(c) || c == '-' || c == '.'))
-                .map_or(0, |i| i + 1);
-            let artifact = &before[artifact_start..open];
-            let after = &rest[at + 3..];
-            let symbol_len = after.find(|c: char| !identifier(c)).unwrap_or(after.len());
-            let symbol = &after[..symbol_len];
+    while let Some((before, after)) = rest.split_once(MARK) {
+        // The artifact is what names one directly before the member's
+        // bracket, and the symbol what names one directly after the mark.
+        let form = before.rsplit_once('[').and_then(|(head, member)| {
+            let artifact = head
+                .rsplit_once(|c: char| !artifact_name(c))
+                .map_or(head, |(_, artifact)| artifact);
+            let symbol = after
+                .split_once(|c: char| !identifier(c))
+                .map_or(after, |(symbol, _)| symbol);
             (!artifact.is_empty() && !symbol.is_empty() && !member.contains(char::is_whitespace))
                 .then(|| {
                     (
-                        artifact_start,
-                        artifact,
-                        member,
-                        symbol,
-                        at + 3 + symbol_len,
+                        head.trim_end_matches(artifact_name),
+                        (artifact.to_owned(), member.to_owned(), symbol.to_owned()),
+                        after.trim_start_matches(identifier),
                     )
                 })
         });
-        match parsed {
-            Some((start, artifact, member, symbol, end)) => {
-                bare.push_str(&rest[..start]);
+        match form {
+            Some((kept, copy, following)) => {
+                bare.push_str(kept);
                 bare.push(' ');
-                copies.push((artifact.to_owned(), member.to_owned(), symbol.to_owned()));
-                rest = &rest[end..];
+                copies.push(copy);
+                rest = following;
             }
             None => {
-                bare.push_str(&rest[..at + 3]);
-                rest = &rest[at + 3..];
+                bare.push_str(before);
+                bare.push_str(MARK);
+                rest = after;
             }
         }
     }

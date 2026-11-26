@@ -332,6 +332,20 @@ fn the_text_without_its_qualified_citations_is_held() {
 }
 
 #[test]
+fn a_qualified_citation_stands_directly_after_a_character_of_any_width() {
+    let (bare, copies) =
+        qualified_citations("the copy\u{2014}rom[]::f\u{2014}and \u{e9}lib[m.o]::g");
+    assert_eq!(bare, "the copy\u{2014} \u{2014}and \u{e9} ");
+    assert_eq!(
+        copies,
+        [
+            ("rom".into(), String::new(), "f".into()),
+            ("lib".into(), "m.o".into(), "g".into())
+        ]
+    );
+}
+
+#[test]
 fn a_word_before_a_one_letter_extension_is_a_file_only_where_the_name_ends_there() {
     let words = |text: &str| {
         let mut words = BTreeSet::new();

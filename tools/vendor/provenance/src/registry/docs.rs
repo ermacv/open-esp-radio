@@ -52,15 +52,14 @@ pub(super) fn undefined_symbols(
     artifacts: &str,
 ) -> Vec<String> {
     let mut problems = vec![];
-    for (index, line) in text.lines().enumerate() {
+    for (number, line) in (1_usize..).zip(text.lines()) {
         if line.contains(HISTORICAL) {
             continue;
         }
         for symbol in obfuscated_symbols(line) {
             if !defined.contains(symbol) {
                 problems.push(format!(
-                    "{path}:{}: {symbol} is not defined by the pinned {artifacts}",
-                    index + 1
+                    "{path}:{number}: {symbol} is not defined by the pinned {artifacts}"
                 ));
             }
         }

@@ -723,6 +723,42 @@ fn a_dominant_pair_exceeds_its_runner_up_by_the_policy_s_ratio() {
 }
 
 #[test]
+fn a_runner_up_at_exactly_the_ratio_s_share_is_dominated() {
+    let old: Vec<u64> = (0..20).collect();
+    let edit = |changed: usize| {
+        let mut tokens = old.clone();
+        for token in tokens.iter_mut().take(changed) {
+            *token += 100;
+        }
+        tokens
+    };
+    let pairs = |dominance_ratio: u32| {
+        let left = revision("left", vec![body("r_old", &old, &[])]);
+        let right = revision(
+            "right",
+            vec![body("new", &edit(4), &[]), body("other", &edit(12), &[])],
+        );
+        let policy = Policy {
+            dominance_ratio,
+            ..Policy::default()
+        };
+        correlate(&left, &right, policy)
+            .iter()
+            .map(|pair| pair.evidence)
+            .collect::<Vec<_>>()
+    };
+    // Eight tenths are twice four tenths, and not three times.
+    assert_eq!(
+        pairs(2),
+        [Evidence::Dominant {
+            ppm: 800_000,
+            runner_up_ppm: 400_000,
+        }]
+    );
+    assert_eq!(pairs(3), []);
+}
+
+#[test]
 fn the_neighbourhood_counts_every_relation_that_expects_a_candidate() {
     // Two getters of one body, each called by one caller and calling one
     // callee of its own; the callers' and the callees' names stay.
