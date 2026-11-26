@@ -43,7 +43,6 @@ pub(crate) struct Declared<T> {
 
 #[derive(Debug)]
 pub(crate) enum Run<'m, B, const SIZE: usize, T> {
-    Free,
     Sending(Sending<'m, B, SIZE>),
     Declared(Declared<T>),
     /// A command's result.
@@ -60,7 +59,7 @@ impl<B, const SIZE: usize, T> Run<'_, B, SIZE, T> {
     pub(crate) const fn hop(&self) -> Option<Ipv4Address> {
         match self {
             Self::Sending(Sending { hop, .. }) | Self::Declared(Declared { hop, .. }) => *hop,
-            Self::Free | Self::Finished(_) | Self::Ended { .. } => None,
+            Self::Finished(_) | Self::Ended { .. } => None,
         }
     }
 
@@ -68,7 +67,7 @@ impl<B, const SIZE: usize, T> Run<'_, B, SIZE, T> {
     pub(crate) const fn outcome(&self) -> Option<Outcome> {
         match self {
             Self::Finished(outcome) | Self::Ended { outcome, .. } => Some(*outcome),
-            Self::Free | Self::Sending(_) | Self::Declared(_) => None,
+            Self::Sending(_) | Self::Declared(_) => None,
         }
     }
 
@@ -76,7 +75,7 @@ impl<B, const SIZE: usize, T> Run<'_, B, SIZE, T> {
     pub(crate) const fn tag(&self) -> Option<&T> {
         match self {
             Self::Declared(Declared { tag, .. }) | Self::Ended { tag, .. } => Some(tag),
-            Self::Free | Self::Sending(_) | Self::Finished(_) => None,
+            Self::Sending(_) | Self::Finished(_) => None,
         }
     }
 
@@ -173,29 +172,62 @@ enum Link {
     },
 }
 
+/// What a place holds: nothing, or one command with its number, whether
+/// someone holds the right to its result, and its work or result.
+#[derive(Debug)]
+pub(crate) enum PlaceState<'m, B, const SIZE: usize, T> {
+    Free,
+    Occupied(Occupied<'m, B, SIZE, T>),
+}
+
+/// One command in its place.
+#[derive(Debug)]
+pub(crate) struct Occupied<'m, B, const SIZE: usize, T> {
+    pub(crate) serial: Serial,
+    /// Someone holds the right to the result.
+    pub(crate) observed: bool,
+    pub(crate) run: Run<'m, B, SIZE, T>,
+}
+
 /// One command's place: what it runs and, after, its result.
 #[derive(Debug)]
 pub(crate) struct Place<'m, B, const SIZE: usize, T> {
-    /// The running command's, or 0.
-    serial: Serial,
-    /// Someone holds the right to the result.
-    observed: bool,
-    run: Run<'m, B, SIZE, T>,
+    state: PlaceState<'m, B, SIZE, T>,
     link: Link,
 }
 
 impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
     const fn new() -> Self {
         Self {
-            serial: Serial::UNGIVEN,
-            observed: false,
-            run: Run::Free,
+            state: PlaceState::Free,
             link: Link::Off,
         }
     }
 
-    pub(crate) const fn serial(&self) -> Serial {
-        self.serial
+    /// The command it holds.
+    const fn occupied(&self) -> Option<&Occupied<'m, B, SIZE, T>> {
+        match &self.state {
+            PlaceState::Free => None,
+            PlaceState::Occupied(occupied) => Some(occupied),
+        }
+    }
+
+    /// Its command's number, while it holds one.
+    pub(crate) const fn serial(&self) -> Option<Serial> {
+        match self.occupied() {
+            Some(occupied) => Some(occupied.serial),
+            None => None,
+        }
+    }
+
+    /// Whether it holds `serial`'s command.
+    fn holds(&self, serial: Serial) -> bool {
+        self.serial() == Some(serial)
+    }
+
+    /// Whether someone holds the right to its command's result.
+    fn observed(&self) -> bool {
+        self.occupied().is_some_and(|occupied| occupied.observed)
     }
 
     /// The chain it is on.
@@ -214,19 +246,32 @@ impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
         }
     }
 
-    pub(crate) const fn run(&self) -> &Run<'m, B, SIZE, T> {
-        &self.run
+    /// Its command's work or result, while it holds one.
+    pub(crate) const fn run(&self) -> Option<&Run<'m, B, SIZE, T>> {
+        match self.occupied() {
+            Some(occupied) => Some(&occupied.run),
+            None => None,
+        }
+    }
+
+    /// Whether its command runs.
+    fn running(&self) -> bool {
+        self.run().is_some_and(Run::running)
+    }
+
+    /// The neighbor its running command goes through.
+    fn hop(&self) -> Option<Ipv4Address> {
+        self.run().and_then(Run::hop)
     }
 
     /// A declared work's producer tag.
-    pub(crate) const fn tag(&self) -> Option<&T> {
-        self.run.tag()
+    pub(crate) fn tag(&self) -> Option<&T> {
+        self.run().and_then(Run::tag)
     }
 
-    /// Its generation, its state and whether its result is observed, as it
-    /// leaves its core.
-    pub(crate) fn into_parts(self) -> (Serial, bool, Run<'m, B, SIZE, T>) {
-        (self.serial, self.observed, self.run)
+    /// What it holds, as it leaves its core.
+    pub(crate) fn into_state(self) -> PlaceState<'m, B, SIZE, T> {
+        self.state
     }
 }
 
@@ -278,7 +323,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// A place by its number, while it runs `serial`'s command.
     pub(crate) fn of(&self, number: PlaceNumber, serial: Serial) -> Option<&Place<'m, B, SIZE, T>> {
-        self.get(number).filter(|place| place.serial == serial)
+        self.get(number).filter(|place| place.holds(serial))
     }
 
     fn get_mut(&mut self, number: PlaceNumber) -> Option<&mut Place<'m, B, SIZE, T>> {
@@ -354,11 +399,11 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     fn set(
         &mut self,
         number: PlaceNumber,
-        run: Run<'m, B, SIZE, T>,
-    ) -> Option<Run<'m, B, SIZE, T>> {
-        let to = self.chain_for(number, &run)?;
+        state: PlaceState<'m, B, SIZE, T>,
+    ) -> Option<PlaceState<'m, B, SIZE, T>> {
+        let to = self.chain_for(number, &state)?;
         let place = self.get_mut(number)?;
-        let old = core::mem::replace(&mut place.run, run);
+        let old = core::mem::replace(&mut place.state, state);
         self.relink(number, to);
         Some(old)
     }
@@ -367,37 +412,40 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// free, declared or a result): the new state is written in place and
     /// nothing of the old is moved out. A sending command's end, whose block
     /// goes back to the pool, takes [`Self::set`].
-    fn put(&mut self, number: PlaceNumber, run: Run<'m, B, SIZE, T>) {
-        let Some(to) = self.chain_for(number, &run) else {
+    fn put(&mut self, number: PlaceNumber, state: PlaceState<'m, B, SIZE, T>) {
+        let Some(to) = self.chain_for(number, &state) else {
             return;
         };
         if let Some(place) = self.get_mut(number) {
-            place.run = run;
+            place.state = state;
         }
         self.relink(number, to);
     }
 
     /// Free `number`, whose state holds no block, as [`Self::free`] does.
     fn free_unsent(&mut self, number: PlaceNumber) {
-        self.put(number, Run::Free);
-        if let Some(place) = self.get_mut(number) {
-            place.serial = Serial::UNGIVEN;
-        }
+        self.put(number, PlaceState::Free);
     }
 
     /// The chain `number` goes on with `run`, as the place stands now:
     /// `None` names no such place; `Some(None)` no chain.
-    fn chain_for(&self, number: PlaceNumber, run: &Run<'m, B, SIZE, T>) -> Option<Option<Chain>> {
+    fn chain_for(
+        &self,
+        number: PlaceNumber,
+        state: &PlaceState<'m, B, SIZE, T>,
+    ) -> Option<Option<Chain>> {
         let close = number.index() == CREDITS;
         let place = self.get(number)?;
-        let was_running = place.run.running();
-        Some(match run {
-            Run::Free if close => None,
-            Run::Free => Some(Chain::Free),
-            Run::Sending(_) | Run::Declared(_) => Some(Chain::Running),
-            Run::Finished(_) | Run::Ended { .. } if was_running || close => Some(Chain::Ended),
-            // Told already, or never told: its chain stays.
-            Run::Finished(_) | Run::Ended { .. } => place.chain(),
+        let was_running = place.running();
+        Some(match state {
+            PlaceState::Free if close => None,
+            PlaceState::Free => Some(Chain::Free),
+            PlaceState::Occupied(occupied) => match occupied.run {
+                Run::Sending(_) | Run::Declared(_) => Some(Chain::Running),
+                Run::Finished(_) | Run::Ended { .. } if was_running || close => Some(Chain::Ended),
+                // Told already, or never told: its chain stays.
+                Run::Finished(_) | Run::Ended { .. } => place.chain(),
+            },
         })
     }
 
@@ -436,12 +484,15 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         if self.free.head().is_none() {
             self.fresh = self.fresh.saturating_add(1);
         }
-        if let Some(place) = self.get_mut(number) {
-            place.observed = true;
-            place.serial = serial;
-        }
         // The place was free: nothing of it is moved out.
-        self.put(number, run);
+        self.put(
+            number,
+            PlaceState::Occupied(Occupied {
+                serial,
+                observed: true,
+                run,
+            }),
+        );
     }
 
     /// End the command in `number` as `outcome`, if it runs, its block to
@@ -452,9 +503,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> bool {
-        let protected = self
-            .get(number)
-            .is_some_and(|place| place.run.hop().is_some());
+        let protected = self.get(number).is_some_and(|place| place.hop().is_some());
         self.end_running(number, outcome, pool);
         protected
     }
@@ -466,8 +515,11 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         outcome: Outcome,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) {
-        if self.get(number).is_some_and(|place| place.run.running())
-            && let Some(Run::Sending(sending)) = self.finish(number, outcome)
+        if self.get(number).is_some_and(Place::running)
+            && let Some(PlaceState::Occupied(Occupied {
+                run: Run::Sending(sending),
+                ..
+            })) = self.finish(number, outcome)
         {
             pool.give(sending.block);
         }
@@ -476,7 +528,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// End declared work in `number` as `outcome`: it holds no block.
     /// Whether it held a neighbor's protection.
     pub(crate) fn end_declared(&mut self, number: PlaceNumber, outcome: Outcome) -> bool {
-        let Some(Run::Declared(declared)) = self.get(number).map(Place::run) else {
+        let Some(Run::Declared(declared)) = self.get(number).and_then(Place::run) else {
             return false;
         };
         let protected = declared.hop.is_some();
@@ -497,17 +549,15 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     ) -> (bool, Option<T>) {
         let given = self
             .get(number)
-            .filter(|place| place.observed)
-            .and_then(|place| match &place.run {
-                Run::Declared(declared) => Some(declared.tag),
+            .filter(|place| place.observed())
+            .and_then(|place| match place.run() {
+                Some(Run::Declared(declared)) => Some(declared.tag),
                 _ => None,
             });
         let Some(tag) = given else {
             return (self.end(number, outcome, pool), None);
         };
-        let protected = self
-            .get(number)
-            .is_some_and(|place| place.run.hop().is_some());
+        let protected = self.get(number).is_some_and(|place| place.hop().is_some());
         self.free_unsent(number);
         (protected, Some(tag))
     }
@@ -525,8 +575,8 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
                 break;
             };
             at = place.next();
-            let stale = match &place.run {
-                Run::Declared(declared) => !keep(&declared.tag),
+            let stale = match place.run() {
+                Some(Run::Declared(declared)) => !keep(&declared.tag),
                 _ => false,
             };
             if stale {
@@ -539,49 +589,56 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// End the command. A place nobody observes frees here; otherwise the
     /// result waits in it, and its end goes on the ended chain.
-    fn finish(&mut self, number: PlaceNumber, outcome: Outcome) -> Option<Run<'m, B, SIZE, T>> {
-        let place = self.get(number)?;
-        if place.observed {
-            // A declared work's result keeps its tag, for its producer.
-            let result = match &place.run {
-                Run::Declared(declared) => Run::Ended {
-                    outcome,
-                    tag: declared.tag,
-                },
-                _ => Run::Finished(outcome),
-            };
-            self.set(number, result)
-        } else {
-            self.free(number)
+    fn finish(
+        &mut self,
+        number: PlaceNumber,
+        outcome: Outcome,
+    ) -> Option<PlaceState<'m, B, SIZE, T>> {
+        match self.result(number, outcome)? {
+            Some(result) => self.set(number, result),
+            None => self.free(number),
         }
     }
 
-    /// [`Self::finish`] of a command whose state holds no block: a declared
-    /// work's result keeps its tag, and nothing is moved out.
-    fn finish_unsent(&mut self, number: PlaceNumber, outcome: Outcome) {
-        let Some(place) = self.get(number) else {
-            return;
-        };
-        if !place.observed {
-            self.free_unsent(number);
-            return;
+    /// What `number`'s command leaves when it ends `outcome`: its result,
+    /// for whoever observes it, or nothing to keep (`Some(None)`). `None`
+    /// names no command.
+    fn result(
+        &self,
+        number: PlaceNumber,
+        outcome: Outcome,
+    ) -> Option<Option<PlaceState<'m, B, SIZE, T>>> {
+        let occupied = self.get(number)?.occupied()?;
+        if !occupied.observed {
+            return Some(None);
         }
-        let result = match &place.run {
+        // A declared work's result keeps its tag, for its producer.
+        let run = match &occupied.run {
             Run::Declared(declared) => Run::Ended {
                 outcome,
                 tag: declared.tag,
             },
             _ => Run::Finished(outcome),
         };
-        self.put(number, result);
+        Some(Some(PlaceState::Occupied(Occupied {
+            serial: occupied.serial,
+            observed: true,
+            run,
+        })))
     }
 
-    fn free(&mut self, number: PlaceNumber) -> Option<Run<'m, B, SIZE, T>> {
-        let old = self.set(number, Run::Free);
-        if let Some(place) = self.get_mut(number) {
-            place.serial = Serial::UNGIVEN;
+    /// [`Self::finish`] of a command whose state holds no block: a declared
+    /// work's result keeps its tag, and nothing is moved out.
+    fn finish_unsent(&mut self, number: PlaceNumber, outcome: Outcome) {
+        match self.result(number, outcome) {
+            Some(Some(result)) => self.put(number, result),
+            Some(None) => self.free_unsent(number),
+            None => {}
         }
-        old
+    }
+
+    fn free(&mut self, number: PlaceNumber) -> Option<PlaceState<'m, B, SIZE, T>> {
+        self.set(number, PlaceState::Free)
     }
 
     /// Every running command whose neighbor is `address` ends `outcome`.
@@ -600,7 +657,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
                 break;
             };
             at = place.next();
-            if address.is_none_or(|address| place.run.hop() == Some(address)) {
+            if address.is_none_or(|address| place.hop() == Some(address)) {
                 self.end_running(number, outcome, pool);
             }
         }
@@ -608,7 +665,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// Whether a running command protects a neighbor.
     pub(crate) fn protects(&self) -> bool {
-        self.running().any(|(_, place)| place.run.hop().is_some())
+        self.running().any(|(_, place)| place.hop().is_some())
     }
 
     /// Every running command ends `outcome`.
@@ -624,16 +681,21 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// a command's.
     pub(crate) fn close(&mut self, serial: Serial) {
         let number = PlaceNumber(u8::try_from(CREDITS).unwrap_or(u8::MAX));
-        self.close.observed = true;
-        self.close.serial = serial;
-        self.put(number, Run::Finished(Outcome::SocketClosed));
+        self.put(
+            number,
+            PlaceState::Occupied(Occupied {
+                serial,
+                observed: true,
+                run: Run::Finished(Outcome::SocketClosed),
+            }),
+        );
     }
 
     /// The result of `serial`'s command in `number`, once it ended: the
     /// place frees. `None` names no such command; `Some(None)` one that runs.
     pub(crate) fn take(&mut self, number: PlaceNumber, serial: Serial) -> Option<Option<Outcome>> {
         let place = self.of(number, serial)?;
-        let Some(outcome) = place.run.outcome() else {
+        let Some(outcome) = place.run().and_then(Run::outcome) else {
             return Some(None);
         };
         self.free_unsent(number);
@@ -643,11 +705,15 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// Nobody will read `serial`'s result: a finished command's place frees
     /// now, a running one at its end.
     pub(crate) fn unobserve(&mut self, number: PlaceNumber, serial: Serial) {
-        let Some(place) = self.get_mut(number).filter(|place| place.serial == serial) else {
+        let Some(PlaceState::Occupied(occupied)) = self
+            .get_mut(number)
+            .filter(|place| place.holds(serial))
+            .map(|place| &mut place.state)
+        else {
             return;
         };
-        place.observed = false;
-        if place.run.outcome().is_some() {
+        occupied.observed = false;
+        if occupied.run.outcome().is_some() {
             self.free_unsent(number);
         }
     }
@@ -656,7 +722,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// generation: each end is told once, and its result stays in its place.
     pub(crate) fn tell(&mut self) -> Option<(PlaceNumber, Serial)> {
         let number = self.ended.head()?;
-        let serial = self.get(number)?.serial;
+        let serial = self.get(number)?.serial()?;
         self.unlink(number);
         Some((number, serial))
     }
@@ -671,7 +737,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
             let Some(place) = self.get(number) else {
                 continue;
             };
-            if let Run::Ended { outcome, tag } = place.run {
+            if let Some(&Run::Ended { outcome, tag }) = place.run() {
                 self.free_unsent(number);
                 return Some((number, serial, outcome, tag));
             }
@@ -716,15 +782,122 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
 
     /// Whether every place is free and nothing waits to be read.
     pub(crate) fn idle(&self) -> bool {
-        matches!(self.close.run, Run::Free)
+        matches!(self.close.state, PlaceState::Free)
             && self
                 .places
                 .iter()
-                .all(|place| matches!(place.run, Run::Free))
+                .all(|place| matches!(place.state, PlaceState::Free))
     }
 
     /// The places, as their core leaves them.
     pub(crate) fn into_places(self) -> ([Place<'m, B, SIZE, T>; CREDITS], Place<'m, B, SIZE, T>) {
         (self.places, self.close)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::serial::Serials;
+
+    type TestPlaces = Places<'static, (), 64, 2, u8>;
+
+    fn declared<'m, B>(tag: u8) -> Run<'m, B, 64, u8> {
+        Run::Declared(Declared {
+            remote: Remote {
+                address: Ipv4Address::new([192, 0, 2, 1]),
+                port: 9,
+            },
+            length: 1,
+            hop: None,
+            tag,
+        })
+    }
+
+    /// A free place holds no number; a started one its command's; an ended
+    /// and observed one keeps it with its result until the result is taken,
+    /// and the place is free again.
+    #[test]
+    fn a_place_holds_a_number_only_while_it_holds_a_command() {
+        let mut places = TestPlaces::new();
+        let mut serials = Serials::new();
+        let vacant = places.vacant().unwrap();
+        let number = vacant.number();
+        assert_eq!(places.get(number).and_then(Place::serial), None);
+        let serial = serials.next();
+        places.start(vacant, serial, declared(7));
+        assert_eq!(places.get(number).and_then(Place::serial), Some(serial));
+        assert!(places.get(number).is_some_and(Place::running));
+        assert!(!places.end_declared(number, Outcome::Accepted));
+        // The result waits with its number; its end is told once.
+        assert_eq!(places.tell(), Some((number, serial)));
+        assert_eq!(places.tell(), None);
+        assert_eq!(places.get(number).and_then(Place::serial), Some(serial));
+        // Another number names no command here.
+        assert_eq!(places.take(number, serials.next()), None);
+        assert_eq!(places.take(number, serial), Some(Some(Outcome::Accepted)));
+        assert_eq!(places.get(number).and_then(Place::serial), None);
+        assert!(places.idle());
+    }
+
+    /// A command nobody observes frees its place at its end, with no result
+    /// and no number left; one unobserved after its end frees at once.
+    #[test]
+    fn an_unobserved_command_leaves_no_number() {
+        let mut places = TestPlaces::new();
+        let mut serials = Serials::new();
+        let vacant = places.vacant().unwrap();
+        let number = vacant.number();
+        let serial = serials.next();
+        places.start(vacant, serial, declared(1));
+        places.unobserve(number, serial);
+        assert_eq!(places.get(number).and_then(Place::serial), Some(serial));
+        places.end_declared(number, Outcome::Accepted);
+        assert_eq!(places.get(number).and_then(Place::serial), None);
+        assert_eq!(places.tell(), None);
+
+        let vacant = places.vacant().unwrap();
+        let number = vacant.number();
+        let serial = serials.next();
+        places.start(vacant, serial, declared(2));
+        places.end_declared(number, Outcome::Accepted);
+        places.unobserve(number, serial);
+        assert_eq!(places.get(number).and_then(Place::serial), None);
+        assert!(places.idle());
+    }
+
+    /// The close holds its command's number with its result until taken.
+    #[test]
+    fn the_close_holds_its_number_until_its_result_is_taken() {
+        let mut places = TestPlaces::new();
+        let serial = Serials::new().next();
+        places.close(serial);
+        let close = TestPlaces::close_number().unwrap();
+        assert_eq!(places.get(close).and_then(Place::serial), Some(serial));
+        assert!(!places.idle());
+        assert_eq!(
+            places.take(close, serial),
+            Some(Some(Outcome::SocketClosed))
+        );
+        assert_eq!(places.get(close).and_then(Place::serial), None);
+        assert!(places.idle());
+    }
+
+    /// A command that ended keeps its outcome: ending it again moves
+    /// nothing, as only a running command ends.
+    #[test]
+    fn an_ended_command_keeps_its_outcome_when_ended_again() {
+        crate::with_local_network(|right| {
+            let mut storage = [const { crate::BlockPlace::<64>::new() }; 2];
+            let (mut pool, _brand) = crate::claim(right, &mut storage);
+            let mut places = Places::<'_, _, 64, 2, u8>::new();
+            let serial = Serials::new().next();
+            let vacant = places.vacant().unwrap();
+            let number = vacant.number();
+            places.start(vacant, serial, declared(3));
+            places.end_declared(number, Outcome::Accepted);
+            assert!(!places.end(number, Outcome::Unreachable, &mut pool));
+            assert_eq!(places.take(number, serial), Some(Some(Outcome::Accepted)));
+        });
     }
 }
