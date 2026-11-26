@@ -11,6 +11,7 @@ readme = "README.md"
 [dependencies]
 oer-protocols-ieee802-wire = { path = "../../ieee802/wire" }
 oer-portable-wire = { path = "../../../portable/wire" }
+oer-portable-time = { path = "../../../portable/time" }
 
 [lints]
 workspace = true

@@ -204,7 +204,7 @@ pub(crate) enum Destination {
 pub(crate) struct Outgoing {
     kind: MessageType,
     xid: u32,
-    secs: u16,
+    secs: oer_protocols_network_wire::dhcp::ElapsedSeconds,
     ciaddr: Ipv4Address,
     requested: Option<Ipv4Address>,
     server: Option<Ipv4Address>,
@@ -610,8 +610,10 @@ impl Client {
             }
             Phase::Init | Phase::Bound(_) => return None,
         };
-        let secs = u16::try_from(now.saturating_duration_since(self.began).as_micros() / 1_000_000)
-            .unwrap_or(u16::MAX);
+        let secs = oer_protocols_network_wire::dhcp::ElapsedSeconds::new(
+            u16::try_from(now.saturating_duration_since(self.began).as_micros() / 1_000_000)
+                .unwrap_or(u16::MAX),
+        );
         let destination = match self.destination() {
             Destination::Broadcast => Ipv4Address::BROADCAST,
             Destination::Server(server) => server,

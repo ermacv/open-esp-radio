@@ -382,7 +382,7 @@ impl Wired {
             hlen: 6,
             hops: 0,
             xid: request.xid,
-            secs: 0,
+            secs: oer_protocols_network_wire::dhcp::ElapsedSeconds::ZERO,
             flags: Flags::from_bytes([0; 2]),
             ciaddr: request.ciaddr,
             yiaddr: if kind == MessageType::Nak {
