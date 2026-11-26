@@ -110,7 +110,8 @@ impl<'id> StaTypes for Types<'id> {
     type RxMeta = RxMeta;
 }
 
-const SNONCE: [u8; 32] = [3; 32];
+const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+    oer_protocols_ieee80211_wire::eapol::Nonce::new([3; 32]);
 
 struct Callbacks {
     nonce_calls: usize,
@@ -120,7 +121,7 @@ impl StaCallbacks for Callbacks {
     type AesEngine = CountingBlocks;
     fn nonce(&mut self) -> [u8; 32] {
         self.nonce_calls += 1;
-        SNONCE
+        *SNONCE.octets()
     }
     fn aes_engine(&mut self) -> &mut CountingBlocks {
         &mut self.blocks
@@ -2393,7 +2394,8 @@ const RSN: [u8; 22] = [
     0x30, 20, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 2, 0, 0,
 ];
 const PMK: [u8; 32] = [7; 32];
-const ANONCE: [u8; 32] = [4; 32];
+const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+    oer_protocols_ieee80211_wire::eapol::Nonce::new([4; 32]);
 
 /// A beacon of the WPA2 network on channel 6.
 fn wpa2_beacon() -> [u8; 77] {
@@ -2477,8 +2479,13 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
             world.take();
 
             // Message 1: the station answers with Message 2 in a data frame.
-            let message1 =
-                RsnTxFrame::<512>::message1(Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+            let message1 = RsnTxFrame::<512>::message1(
+                Akm::Psk,
+                Eui48::new(LOCAL),
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+                ANONCE,
+            )
+            .unwrap();
             world.receive(at(32), &eapol_frame(message1.as_bytes()));
             assert_eq!(
                 world.take(),
@@ -2509,7 +2516,7 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
             let message3 = RsnTxFrame::<512>::message3(
                 Akm::Psk,
                 Eui48::new(LOCAL),
-                2,
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
                 ANONCE,
                 [0; 8],
                 wrapped.as_bytes(),
@@ -2599,7 +2606,13 @@ fn wpa2_associated_by<'id, const G: usize>(
     world.advance();
     world.answer_authentication(at(30), 0);
     world.receive(at(31), &association_response(0));
-    let message1 = RsnTxFrame::<512>::message1(Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+    let message1 = RsnTxFrame::<512>::message1(
+        Akm::Psk,
+        Eui48::new(LOCAL),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+        ANONCE,
+    )
+    .unwrap();
     world.receive(at(32), &eapol_frame(message1.as_bytes()));
     world.take();
     let ptk = Pmk::from_bytes(PMK).derive_ptk(
@@ -2645,7 +2658,7 @@ fn wpa2_connected_by<'id, const G: usize>(
     let message3 = RsnTxFrame::<512>::message3(
         Akm::Psk,
         Eui48::new(LOCAL),
-        2,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
         ANONCE,
         [0; 8],
         wrapped.as_bytes(),
@@ -2689,7 +2702,13 @@ fn a_bss_closing_every_access_category_ends_the_handshake_with_its_own_reason() 
         }
         world.receive(at(31), &with_element(&association_response(0), &wmm));
         world.take();
-        let message1 = RsnTxFrame::<512>::message1(Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+        let message1 = RsnTxFrame::<512>::message1(
+            Akm::Psk,
+            Eui48::new(LOCAL),
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+            ANONCE,
+        )
+        .unwrap();
         world.receive(at(32), &eapol_frame(message1.as_bytes()));
         let seen = world.take();
         assert!(!world.station.is_connected());
@@ -2718,7 +2737,7 @@ fn m4_refused_before_admission_never_completes_the_handshake() {
         let message3 = RsnTxFrame::<512>::message3(
             Akm::Psk,
             Eui48::new(LOCAL),
-            2,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
             ANONCE,
             [0; 8],
             wrapped.as_bytes(),
@@ -2768,7 +2787,7 @@ fn a_wpa2_gtk_kde_with_id_zero_uses_a_group_slot() {
         let message3 = RsnTxFrame::<512>::message3(
             Akm::Psk,
             Eui48::new(LOCAL),
-            2,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
             ANONCE,
             [9, 0, 0, 0, 0, 0, 0, 0],
             wrapped.as_bytes(),
@@ -2804,7 +2823,7 @@ fn group_message1(
     let message = RsnTxFrame::<512>::group_message1(
         Akm::Psk,
         Eui48::new(LOCAL),
-        replay,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(replay),
         [0; 8],
         wrapped.as_bytes(),
     )
@@ -3121,7 +3140,7 @@ fn a_message_3_whose_key_data_does_not_unwrap_deauthenticates() {
         let message3 = RsnTxFrame::<512>::message3(
             Akm::Psk,
             Eui48::new(LOCAL),
-            2,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
             ANONCE,
             [0; 8],
             &[0x55; 24],
@@ -3320,7 +3339,7 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
             let message3 = RsnTxFrame::<512>::message3(
                 Akm::Psk,
                 Eui48::new(LOCAL),
-                2,
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
                 ANONCE,
                 [0; 8],
                 wrapped.as_bytes(),
@@ -3848,8 +3867,13 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
             world.advance();
             world.answer_authentication(at(30), 0);
             world.receive(at(31), &association_response(0));
-            let message1 =
-                RsnTxFrame::<512>::message1(Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+            let message1 = RsnTxFrame::<512>::message1(
+                Akm::Psk,
+                Eui48::new(LOCAL),
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+                ANONCE,
+            )
+            .unwrap();
             let _ = world.deliver(at(32), &eapol_frame(message1.as_bytes()), meta());
             // A frame handed out stays out until the world ends it.
             if point >= 1 {
@@ -3879,7 +3903,7 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                 let message3 = RsnTxFrame::<512>::message3(
                     Akm::Psk,
                     Eui48::new(LOCAL),
-                    2,
+                    oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
                     ANONCE,
                     [0; 8],
                     wrapped.as_bytes(),
@@ -4258,7 +4282,7 @@ fn retry_message3(
     let message = RsnTxFrame::<512>::message3(
         Akm::Psk,
         Eui48::new(LOCAL),
-        counter,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
         ANONCE,
         [0; 8],
         wrapped.as_bytes(),
@@ -4307,7 +4331,7 @@ fn connected_duplicate_m3_answers_without_reinstalling_or_resetting_replay() {
             panic!()
         };
         let rsn = connected.rsn.as_mut().unwrap();
-        assert_eq!(rsn.supplicant.replay_counter(), 2);
+        assert_eq!(rsn.supplicant.replay_counter().get(), 2);
         assert!(
             world
                 .link
@@ -4986,8 +5010,13 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
             world.advance();
             world.answer_authentication(at(30), 0);
             world.receive(at(31), &association_response(0));
-            let message1 =
-                RsnTxFrame::<512>::message1(Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+            let message1 = RsnTxFrame::<512>::message1(
+                Akm::Psk,
+                Eui48::new(LOCAL),
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+                ANONCE,
+            )
+            .unwrap();
             world.receive(at(32), &eapol_frame(message1.as_bytes()));
             let ptk = Pmk::from_bytes(PMK).derive_ptk(
                 Akm::Psk,
@@ -5158,7 +5187,7 @@ fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
         let m3 = RsnTxFrame::<512>::message3(
             Akm::Psk,
             Eui48::new(LOCAL),
-            2,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
             ANONCE,
             [0; 8],
             wrapped.as_bytes(),
@@ -5219,7 +5248,7 @@ fn the_pairwise_installation_names_the_associations_spp() {
             let message3 = RsnTxFrame::<512>::message3(
                 Akm::Psk,
                 Eui48::new(LOCAL),
-                2,
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
                 ANONCE,
                 [0; 8],
                 wrapped.as_bytes(),
@@ -5286,7 +5315,13 @@ fn plaintext_amsdu_eapol_in_a_protected_bss_requires_own_or_pae_destination() {
         installed(|mint| {
             let (mut world, _) = wpa2_associated::<2>(mint);
             let before = world.eapol.len();
-            let m1 = RsnTxFrame::<512>::message1(Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+            let m1 = RsnTxFrame::<512>::message1(
+                Akm::Psk,
+                Eui48::new(LOCAL),
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+                ANONCE,
+            )
+            .unwrap();
             world.receive(
                 at(32),
                 &downlink_amsdu(&[(destination, 0x888e, m1.as_bytes())]),
@@ -5303,7 +5338,13 @@ fn an_amsdu_with_a_malformed_tail_cannot_start_the_handshake() {
     installed(|mint| {
         let (mut world, _) = wpa2_associated::<2>(mint);
         let before = world.eapol.len();
-        let m1 = RsnTxFrame::<512>::message1(Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+        let m1 = RsnTxFrame::<512>::message1(
+            Akm::Psk,
+            Eui48::new(LOCAL),
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+            ANONCE,
+        )
+        .unwrap();
         let mut frame = downlink_amsdu(&[(LOCAL, 0x888e, m1.as_bytes()), (LOCAL, 0x0800, b"data")]);
         frame.pop();
         world.receive(at(32), &frame);
@@ -5397,7 +5438,13 @@ fn a_key_exchange_message_among_data_is_an_input() {
     use oer_protocols_ieee80211_wire::security::rsn::Akm;
     installed(|mint| {
         let (mut world, _) = wpa2_associated::<2>(mint);
-        let m1 = RsnTxFrame::<512>::message1(Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+        let m1 = RsnTxFrame::<512>::message1(
+            Akm::Psk,
+            Eui48::new(LOCAL),
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+            ANONCE,
+        )
+        .unwrap();
         let frame = downlink_amsdu(&[(LOCAL, 0x888e, m1.as_bytes())]);
         assert_eq!(
             world.deliver(at(32), &frame, meta()),

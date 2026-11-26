@@ -63,8 +63,12 @@ fn derives_known_ptk_and_builds_message_2() {
     let context = PtkContext {
         authenticator_address: Eui48::new([0x00, 0x11, 0x22, 0x33, 0x44, 0x55]),
         supplicant_address: Eui48::new([0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb]),
-        authenticator_nonce: core::array::from_fn(|index| index as u8 + 32),
-        supplicant_nonce: core::array::from_fn(|index| index as u8 + 64),
+        authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce::new(core::array::from_fn(
+            |index| index as u8 + 32,
+        )),
+        supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce::new(core::array::from_fn(
+            |index| index as u8 + 64,
+        )),
     };
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context);
     assert_eq!(
@@ -83,7 +87,7 @@ fn derives_known_ptk_and_builds_message_2() {
     let message = frames::RsnTxFrame::<512>::message2_with_security_ies(
         crate::Akm::Psk,
         context.authenticator_address,
-        7,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(7),
         context.supplicant_nonce,
         &security_ies,
     )
@@ -91,22 +95,25 @@ fn derives_known_ptk_and_builds_message_2() {
     .unwrap();
     let parsed = EapolKeyFrame::parse(message.as_bytes()).unwrap();
     assert_eq!(parsed.message(), EapolKeyMessage::PairwiseMessage2);
-    assert_eq!(parsed.replay_counter(), 7);
-    assert_eq!(parsed.nonce(), &context.supplicant_nonce);
+    assert_eq!(parsed.replay_counter().get(), 7);
+    assert_eq!(parsed.nonce(), context.supplicant_nonce);
     assert_ne!(parsed.mic(), &[0; 16]);
     assert_eq!(parsed.key_data(), &rsn);
 
-    let message4 =
-        frames::RsnTxFrame::<512>::message4(crate::Akm::Psk, context.authenticator_address, 8)
-            .authenticate(&ptk, &mut SoftwareAes128)
-            .unwrap();
+    let message4 = frames::RsnTxFrame::<512>::message4(
+        crate::Akm::Psk,
+        context.authenticator_address,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(8),
+    )
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let parsed4 = EapolKeyFrame::parse(message4.as_bytes()).unwrap();
     assert_eq!(
         parsed4.protocol_version(),
         oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion::V2001
     );
     assert_eq!(parsed4.message(), EapolKeyMessage::PairwiseMessage4);
-    assert_eq!(parsed4.replay_counter(), 8);
+    assert_eq!(parsed4.replay_counter().get(), 8);
     assert!(parsed4.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
 
     let mut changed = [0; EAPOL_KEY_PACKET_LEN];

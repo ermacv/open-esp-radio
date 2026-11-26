@@ -98,11 +98,11 @@ impl<'a> EapolKeyFrame<'a> {
         self.0.key_length()
     }
 
-    pub const fn replay_counter(self) -> u64 {
+    pub const fn replay_counter(self) -> oer_protocols_ieee80211_wire::eapol::ReplayCounter {
         self.0.replay_counter()
     }
 
-    pub const fn nonce(self) -> &'a [u8; 32] {
+    pub const fn nonce(self) -> oer_protocols_ieee80211_wire::eapol::Nonce {
         self.0.nonce()
     }
 

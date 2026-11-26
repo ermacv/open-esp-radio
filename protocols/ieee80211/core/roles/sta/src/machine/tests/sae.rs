@@ -168,7 +168,13 @@ fn handshake_message3(
     now: u32,
 ) -> (Ptk, RsnTxFrame<512>) {
     world.receive(at(now), &association_response(0));
-    let message1 = RsnTxFrame::<512>::message1(akm, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+    let message1 = RsnTxFrame::<512>::message1(
+        akm,
+        Eui48::new(LOCAL),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+        ANONCE,
+    )
+    .unwrap();
     world.receive(at(now + 1), &eapol_frame(message1.as_bytes()));
     let ptk = pmk.derive_ptk(
         akm,
@@ -210,7 +216,7 @@ fn handshake_message3(
     let message3 = RsnTxFrame::<512>::message3(
         akm,
         Eui48::new(LOCAL),
-        2,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
         ANONCE,
         [0; 8],
         wrapped.as_bytes(),

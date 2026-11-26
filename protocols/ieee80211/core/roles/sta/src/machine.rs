@@ -2141,7 +2141,8 @@ impl ConnectedRsn {
                     frame
                         .key_frame()
                         .map_err(RsnConnectedSupplicantError::from)?
-                        .replay_counter(),
+                        .replay_counter()
+                        .get(),
                 ) {
                     Err(RsnConnectedSupplicantError::StaleReplayCounter)
                 } else {
@@ -2157,7 +2158,8 @@ impl ConnectedRsn {
                     frame
                         .key_frame()
                         .map_err(RsnConnectedSupplicantError::from)?
-                        .replay_counter(),
+                        .replay_counter()
+                        .get(),
                 ) {
                     Err(RsnConnectedSupplicantError::StaleReplayCounter)
                 } else {
@@ -2232,7 +2234,7 @@ impl ConnectedRsn {
                 DeferredEapol::Both {
                     message3,
                     group: PendingGroupM1 { request },
-                } if request.replay_counter() < message3.replay_counter() => (
+                } if request.replay_counter().get() < message3.replay_counter() => (
                     request,
                     EapolProtection::Pairwise,
                     DeferredEapol::Message3(message3),
@@ -6803,7 +6805,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         let supplicant = RsnStaHandshake::new(
             self.config.address.get(),
             bssid.get(),
-            self.config.callbacks.nonce(),
+            oer_protocols_ieee80211_wire::eapol::Nonce::new(self.config.callbacks.nonce()),
             join.rsn.as_bytes(),
             join.access_point.rsn_ie_bytes(),
             join.access_point.rsnxe_bytes(),

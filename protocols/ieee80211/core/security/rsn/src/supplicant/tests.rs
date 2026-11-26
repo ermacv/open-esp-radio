@@ -11,8 +11,10 @@ use oer_protocols_ieee80211_core_security_cipher::aes::{RSN_KEY_DATA_CAPACITY, S
 
 const LOCAL: [u8; 6] = [1; 6];
 const AP: [u8; 6] = [2; 6];
-const SNONCE: [u8; 32] = [3; 32];
-const ANONCE: [u8; 32] = [4; 32];
+const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+    oer_protocols_ieee80211_wire::eapol::Nonce::new([3; 32]);
+const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+    oer_protocols_ieee80211_wire::eapol::Nonce::new([4; 32]);
 const RSN: [u8; 22] = [
     0x30, 20, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 2, 0, 0,
 ];
@@ -84,7 +86,7 @@ fn encrypted_message3(
     let frame = RsnTxFrame::<512>::message3(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        2,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
         ANONCE,
         key_rsc,
         wrapped.as_bytes(),
@@ -126,7 +128,7 @@ fn connected(ptk: Ptk) -> RsnConnectedSupplicant {
     let message3 = RsnTxFrame::<512>::message3(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        2,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
         ANONCE,
         [0; 8],
         &[0x55; 24],
@@ -199,14 +201,19 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     let expected_ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let mut handshake = handshake();
 
-    let message1 =
-        RsnTxFrame::<512>::message1(crate::Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+    let message1 = RsnTxFrame::<512>::message1(
+        crate::Akm::Psk,
+        Eui48::new(LOCAL),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+        ANONCE,
+    )
+    .unwrap();
     let RsnStaEapol::Transmit(message2) = process(&mut handshake, owned(&message1), &pmk).unwrap()
     else {
         panic!("Message 1 must produce Message 2")
     };
     let key = message2.key_frame().unwrap();
-    assert_eq!(key.replay_counter(), 1);
+    assert_eq!(key.replay_counter().get(), 1);
     assert_eq!(key.key_data(), &RSN);
     assert!(!message2.retransmission());
     assert!(key.verify_mic(&expected_ptk, &mut SoftwareAes128).unwrap());
@@ -217,7 +224,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     let RsnStaEapol::Install(request) = process(&mut handshake, message3, &pmk).unwrap() else {
         panic!("Message 3 must produce one key transaction")
     };
-    assert_eq!(request.replay_counter(), 2);
+    assert_eq!(request.replay_counter().get(), 2);
     assert_eq!(request.plain_key_data_len(), plain.as_bytes().len());
     assert_eq!(request.pairwise().peer(), Eui48::new(*&AP));
     assert_eq!(
@@ -242,7 +249,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
         message4.key_frame().unwrap().message(),
         crate::EapolKeyMessage::PairwiseMessage4
     );
-    assert_eq!(message4.key_frame().unwrap().replay_counter(), 2);
+    assert_eq!(message4.key_frame().unwrap().replay_counter().get(), 2);
     assert!(
         message4
             .key_frame()
@@ -250,7 +257,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
             .verify_mic(&expected_ptk, &mut SoftwareAes128)
             .unwrap()
     );
-    assert_eq!(connected.supplicant.replay_counter(), 2);
+    assert_eq!(connected.supplicant.replay_counter().get(), 2);
 }
 
 #[test]
@@ -275,7 +282,7 @@ fn invalid_message3_mic_is_refused_and_valid_retry_can_install() {
     let RsnStaEapol::Install(request) = process(&mut handshake, valid_retry, &pmk).unwrap() else {
         panic!("valid M3 retry must retain the original join")
     };
-    assert_eq!(request.replay_counter(), 2);
+    assert_eq!(request.replay_counter().get(), 2);
 }
 
 #[test]
@@ -293,7 +300,7 @@ fn connected_exact_duplicate_message3_retransmits_authenticated_m4() {
         message4.key_frame().unwrap().message(),
         crate::EapolKeyMessage::PairwiseMessage4
     );
-    assert_eq!(message4.key_frame().unwrap().replay_counter(), 2);
+    assert_eq!(message4.key_frame().unwrap().replay_counter().get(), 2);
     assert!(message4.retransmission());
     assert!(
         message4
@@ -417,7 +424,7 @@ fn a_newer_completed_group_request_cannot_be_rolled_back_by_an_older_owner() {
         RsnTxFrame::<512>::group_message1(
             crate::Akm::Psk,
             Eui48::new(LOCAL),
-            counter,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
             [9; 8],
             group_key_data(&ptk).as_bytes(),
         )
@@ -434,12 +441,12 @@ fn a_newer_completed_group_request_cannot_be_rolled_back_by_an_older_owner() {
         panic!()
     };
     let response = connected.complete_group_key_install(newer).unwrap();
-    assert_eq!(response.key_frame().unwrap().replay_counter(), 4);
+    assert_eq!(response.key_frame().unwrap().replay_counter().get(), 4);
     assert!(matches!(
         connected.complete_group_key_install(older),
         Err(RsnConnectedSupplicantError::StaleCompletion)
     ));
-    assert_eq!(connected.replay_counter(), 4);
+    assert_eq!(connected.replay_counter().get(), 4);
 }
 
 #[test]
@@ -456,7 +463,7 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
     let frame = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -467,7 +474,7 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
     let GroupStep::Install(request) = group_message1(&mut connected, owned(&frame)).unwrap() else {
         panic!("new Group Message 1 must request one GTK replacement")
     };
-    assert_eq!(request.replay_counter(), 3);
+    assert_eq!(request.replay_counter().get(), 3);
     assert_eq!(
         request.group().kind(),
         RsnKeyKind::Group {
@@ -488,7 +495,7 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
             .verify_mic(&ptk, &mut SoftwareAes128)
             .unwrap()
     );
-    assert_eq!(connected.replay_counter(), 3);
+    assert_eq!(connected.replay_counter().get(), 3);
 
     let GroupStep::Retransmit(repeated) = group_message1(&mut connected, owned(&frame)).unwrap()
     else {
@@ -517,7 +524,7 @@ fn connected_group_rekey_authenticates_duplicate_before_cached_response() {
     let frame = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -562,7 +569,7 @@ fn connected_group_rekey_rejects_authenticated_changed_same_replay() {
     let frame = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -612,7 +619,7 @@ fn failed_group_rekey_does_not_retain_message1_commitment() {
     let frame = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -650,7 +657,7 @@ fn connected_group_rekey_rejects_bad_mic_and_stale_replay() {
     let valid = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [0; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -677,7 +684,7 @@ fn connected_group_rekey_rejects_bad_mic_and_stale_replay() {
     let stale = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        1,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
         [0; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -734,8 +741,13 @@ fn awaiting_encrypted_message3() -> (RsnStaHandshake, crate::OwnedEapolFrame<512
     let pmk = test_pmk();
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let mut handshake = handshake();
-    let message1 =
-        RsnTxFrame::<512>::message1(crate::Akm::Psk, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+    let message1 = RsnTxFrame::<512>::message1(
+        crate::Akm::Psk,
+        Eui48::new(LOCAL),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+        ANONCE,
+    )
+    .unwrap();
     assert!(matches!(
         process(&mut handshake, owned(&message1), &pmk).unwrap(),
         RsnStaEapol::Transmit(_)
@@ -751,7 +763,7 @@ fn message3_key_data_unwraps_in_the_step_into_install() {
     else {
         panic!("initial key installation")
     };
-    assert_eq!(install.replay_counter(), 2);
+    assert_eq!(install.replay_counter().get(), 2);
     assert_eq!(install.group().key().as_bytes(), &[0x5a; 16]);
     // While its keys are installed, a repeat of the same Message 3 does
     // nothing, an older one is stale and a newer one unexpected.
@@ -777,8 +789,13 @@ fn message3_key_data_unwraps_in_the_step_into_install() {
     // unexpected: the PTK being installed is not replaced.
     let message1 = |counter| {
         owned(
-            &RsnTxFrame::<512>::message1(crate::Akm::Psk, Eui48::new(LOCAL), counter, [9; 32])
-                .unwrap(),
+            &RsnTxFrame::<512>::message1(
+                crate::Akm::Psk,
+                Eui48::new(LOCAL),
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
+                oer_protocols_ieee80211_wire::eapol::Nonce::new([9; 32]),
+            )
+            .unwrap(),
         )
     };
     assert!(matches!(
@@ -792,7 +809,15 @@ fn message3_key_data_unwraps_in_the_step_into_install() {
     let connected = handshake
         .complete::<512, _>(installed(install), &mut SoftwareAes128)
         .unwrap();
-    assert_eq!(connected.message4.key_frame().unwrap().replay_counter(), 2);
+    assert_eq!(
+        connected
+            .message4
+            .key_frame()
+            .unwrap()
+            .replay_counter()
+            .get(),
+        2
+    );
 }
 
 #[test]
@@ -810,11 +835,17 @@ fn failed_message3_key_data_unwrap_ends_the_handshake_with_the_engine_error() {
 fn message3_key_data_beyond_the_bound_ends_the_handshake() {
     let (mut handshake, _, pmk, ptk) = awaiting_encrypted_message3();
     let long = [0x11; RSN_KEY_DATA_CAPACITY + 8];
-    let message3 =
-        RsnTxFrame::<1024>::message3(crate::Akm::Psk, Eui48::new(LOCAL), 2, ANONCE, [0; 8], &long)
-            .unwrap()
-            .authenticate(&ptk, &mut SoftwareAes128)
-            .unwrap();
+    let message3 = RsnTxFrame::<1024>::message3(
+        crate::Akm::Psk,
+        Eui48::new(LOCAL),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
+        ANONCE,
+        [0; 8],
+        &long,
+    )
+    .unwrap()
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
     let message3 = crate::OwnedEapolFrame::<1024>::try_copy(
         RsnInterface::Station,
         Eui48::new(AP),
@@ -851,7 +882,7 @@ fn an_authenticated_group_frame_waits_without_blocking_new_authentication() {
     let frame = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -865,11 +896,11 @@ fn an_authenticated_group_frame_waits_without_blocking_new_authentication() {
     else {
         panic!("new Group Message 1 must wait for its key-data unwrap")
     };
-    assert_eq!(waiting.replay_counter(), 3);
+    assert_eq!(waiting.replay_counter().get(), 3);
     let newer = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        4,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(4),
         [9; 8],
         &[0x66; 24],
     )
@@ -882,15 +913,15 @@ fn an_authenticated_group_frame_waits_without_blocking_new_authentication() {
     else {
         panic!("a newer frame must authenticate while the old one waits")
     };
-    assert_eq!(newer_waiting.replay_counter(), 4);
+    assert_eq!(newer_waiting.replay_counter().get(), 4);
 
     let install = connected
         .prepare_group_key_install(waiting, &mut SoftwareAes128)
         .unwrap();
-    assert_eq!(install.replay_counter(), 3);
+    assert_eq!(install.replay_counter().get(), 3);
     assert_eq!(install.group().key().as_bytes(), &[0x6a; 16]);
     connected.complete_group_key_install(install).unwrap();
-    assert_eq!(connected.replay_counter(), 3);
+    assert_eq!(connected.replay_counter().get(), 3);
 }
 
 #[test]
@@ -908,7 +939,7 @@ fn a_waiting_group_frame_behind_the_frontier_is_stale() {
         RsnTxFrame::<512>::group_message1(
             crate::Akm::Psk,
             Eui48::new(LOCAL),
-            counter,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
             [9; 8],
             group_key_data(&ptk).as_bytes(),
         )
@@ -950,7 +981,7 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
     let frame = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -969,13 +1000,13 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
         connected.prepare_group_key_install(waiting, &mut Refusing),
         Err(RsnConnectedProcessError::KeyUnwrap(REFUSED))
     ));
-    assert_eq!(connected.replay_counter(), 2);
+    assert_eq!(connected.replay_counter().get(), 2);
 
     // Key data that fails its integrity check retains nothing.
     let forged = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
         &[0x55; 24],
     )
@@ -999,7 +1030,7 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
     let undecodable = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        3,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(3),
         [9; 8],
         software_wrap(ptk.kek(), &[0; 24]).unwrap().as_bytes(),
     )
@@ -1121,8 +1152,13 @@ fn a_repeated_message1_rebuilds_message2_and_a_newer_one_restarts() {
     let mut handshake = handshake();
     let message1 = |counter, nonce| {
         owned(
-            &RsnTxFrame::<512>::message1(crate::Akm::Psk, Eui48::new(LOCAL), counter, nonce)
-                .unwrap(),
+            &RsnTxFrame::<512>::message1(
+                crate::Akm::Psk,
+                Eui48::new(LOCAL),
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
+                nonce,
+            )
+            .unwrap(),
         )
     };
     let RsnStaEapol::Transmit(first) = process(&mut handshake, message1(5, ANONCE), &pmk).unwrap()
@@ -1139,7 +1175,7 @@ fn a_repeated_message1_rebuilds_message2_and_a_newer_one_restarts() {
         process(&mut handshake, message1(4, ANONCE), &pmk),
         Err(RsnStaError::Rejected(RsnStateError::StaleReplayCounter))
     ));
-    let newer_nonce = [0x44; 32];
+    let newer_nonce = oer_protocols_ieee80211_wire::eapol::Nonce::new([0x44; 32]);
     let RsnStaEapol::Transmit(restart) =
         process(&mut handshake, message1(6, newer_nonce), &pmk).unwrap()
     else {
@@ -1178,7 +1214,15 @@ fn a_repeated_message1_rebuilds_message2_and_a_newer_one_restarts() {
 #[test]
 fn new_refuses_a_zero_nonce_and_invalid_elements() {
     assert_eq!(
-        RsnStaHandshake::new(Eui48::new(LOCAL), Eui48::new(AP), [0; 32], &RSN, &RSN, &[]).err(),
+        RsnStaHandshake::new(
+            Eui48::new(LOCAL),
+            Eui48::new(AP),
+            oer_protocols_ieee80211_wire::eapol::Nonce::new([0; 32]),
+            &RSN,
+            &RSN,
+            &[]
+        )
+        .err(),
         Some(RsnStaNewError::ZeroNonce)
     );
     assert!(matches!(
@@ -1244,8 +1288,13 @@ fn a_refused_message4_mic_ends_the_handshake() {
     let ptk = pmk.derive_ptk(crate::Akm::PskSha256, context());
     let mut handshake =
         RsnStaHandshake::new(Eui48::new(LOCAL), Eui48::new(AP), SNONCE, &rsn, &rsn, &[]).unwrap();
-    let message1 =
-        RsnTxFrame::<512>::message1(crate::Akm::PskSha256, Eui48::new(LOCAL), 1, ANONCE).unwrap();
+    let message1 = RsnTxFrame::<512>::message1(
+        crate::Akm::PskSha256,
+        Eui48::new(LOCAL),
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(1),
+        ANONCE,
+    )
+    .unwrap();
     assert!(matches!(
         process(&mut handshake, owned(&message1), &pmk),
         Ok(RsnStaEapol::Transmit(_))
@@ -1261,7 +1310,7 @@ fn a_refused_message4_mic_ends_the_handshake() {
     let message3 = RsnTxFrame::<512>::message3(
         crate::Akm::PskSha256,
         Eui48::new(LOCAL),
-        2,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
         ANONCE,
         [0; 8],
         wrapped.as_bytes(),
@@ -1289,7 +1338,7 @@ fn a_newer_group_message1_after_an_installed_one_installs() {
         RsnTxFrame::<512>::group_message1(
             crate::Akm::Psk,
             Eui48::new(LOCAL),
-            counter,
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(counter),
             [9; 8],
             software_wrap(ptk.kek(), &group_kde(1, key))
                 .unwrap()
@@ -1310,10 +1359,10 @@ fn a_newer_group_message1_after_an_installed_one_installs() {
     else {
         panic!("a newer Group Message 1 installs")
     };
-    assert_eq!(second.replay_counter(), 4);
+    assert_eq!(second.replay_counter().get(), 4);
     assert_eq!(second.group().key().as_bytes(), &[0x6b; 16]);
     connected.complete_group_key_install(second).unwrap();
-    assert_eq!(connected.replay_counter(), 4);
+    assert_eq!(connected.replay_counter().get(), 4);
 }
 
 /// A Message 1 under the accepted counter with another ANonce restarts:
@@ -1323,15 +1372,26 @@ fn a_message1_with_another_anonce_under_the_same_counter_restarts() {
     let pmk = test_pmk();
     let mut handshake = handshake();
     let message1 = |nonce| {
-        owned(&RsnTxFrame::<512>::message1(crate::Akm::Psk, Eui48::new(LOCAL), 5, nonce).unwrap())
+        owned(
+            &RsnTxFrame::<512>::message1(
+                crate::Akm::Psk,
+                Eui48::new(LOCAL),
+                oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(5),
+                nonce,
+            )
+            .unwrap(),
+        )
     };
     assert!(matches!(
         process(&mut handshake, message1(ANONCE), &pmk),
         Ok(RsnStaEapol::Transmit(_))
     ));
-    let RsnStaEapol::Transmit(restart) =
-        process(&mut handshake, message1([0x44; 32]), &pmk).unwrap()
-    else {
+    let RsnStaEapol::Transmit(restart) = process(
+        &mut handshake,
+        message1(oer_protocols_ieee80211_wire::eapol::Nonce::new([0x44; 32])),
+        &pmk,
+    )
+    .unwrap() else {
         panic!("another ANonce restarts")
     };
     assert!(!restart.retransmission());
@@ -1344,11 +1404,11 @@ fn a_group_message1_at_the_message3_frontier_is_stale() {
     let pmk = test_pmk();
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
     let mut connected = connected(pmk.derive_ptk(crate::Akm::Psk, context()));
-    assert_eq!(connected.replay_counter(), 2);
+    assert_eq!(connected.replay_counter().get(), 2);
     let frame = RsnTxFrame::<512>::group_message1(
         crate::Akm::Psk,
         Eui48::new(LOCAL),
-        2,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(2),
         [9; 8],
         group_key_data(&ptk).as_bytes(),
     )
@@ -1373,5 +1433,27 @@ fn a_group_message1_at_the_message3_frontier_is_stale() {
             .err(),
         Some(RsnConnectedSupplicantError::StaleReplayCounter)
     );
-    assert_eq!(connected.replay_counter(), 2);
+    assert_eq!(connected.replay_counter().get(), 2);
+}
+
+/// A completed Message 3 erases what it erased before: its Key MIC. The
+/// Replay Counter and the ANonce, sent in clear in every EAPOL-Key frame
+/// (IEEE Std 802.11-2020, 12.7.2), are kept as the public codes beside them.
+#[test]
+fn a_completed_message3_erases_its_mic_and_keeps_the_fields_sent_in_clear() {
+    use zeroize::Zeroize;
+    let mut completed = RsnCompletedMessage3 {
+        protocol_version: oer_protocols_ieee80211_wire::eapol::EapolProtocolVersion::V2004,
+        key_info: crate::state::pairwise_message3_key_info(crate::Akm::Psk),
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(7),
+        authenticator_nonce: ANONCE,
+        mic: [0xa5; 16],
+    };
+    completed.zeroize();
+    assert_eq!(completed.mic, [0; 16]);
+    assert_eq!(
+        completed.replay_counter,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(7)
+    );
+    assert_eq!(completed.authenticator_nonce, ANONCE);
 }

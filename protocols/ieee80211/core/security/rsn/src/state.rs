@@ -26,8 +26,8 @@ pub(crate) fn pairwise_message3_key_info(akm: Akm) -> KeyInformation {
 pub struct PtkContext {
     pub authenticator_address: Eui48,
     pub supplicant_address: Eui48,
-    pub authenticator_nonce: [u8; RSN_NONCE_LEN],
-    pub supplicant_nonce: [u8; RSN_NONCE_LEN],
+    pub authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
+    pub supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -41,7 +41,7 @@ pub enum RsnTxMessage {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RsnTransmit {
     pub message: RsnTxMessage,
-    pub replay_counter: u64,
+    pub replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
     pub retransmission: bool,
 }
 

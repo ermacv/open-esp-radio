@@ -29,8 +29,8 @@ impl<const N: usize> RsnTxFrame<N> {
     pub fn message1(
         akm: Akm,
         peer: Eui48,
-        replay_counter: u64,
-        authenticator_nonce: [u8; 32],
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+        authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
     ) -> Result<Self, RsnFrameError> {
         Self::build(
             RsnInterface::AccessPoint,
@@ -54,8 +54,8 @@ impl<const N: usize> RsnTxFrame<N> {
     pub(crate) fn authenticator_message1(
         akm: Akm,
         peer: Eui48,
-        replay_counter: u64,
-        authenticator_nonce: [u8; 32],
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+        authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
     ) -> Self {
         Self {
             interface: RsnInterface::AccessPoint,
@@ -78,8 +78,8 @@ impl<const N: usize> RsnTxFrame<N> {
     pub fn message2<const R: usize>(
         akm: Akm,
         peer: Eui48,
-        replay_counter: u64,
-        supplicant_nonce: [u8; 32],
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+        supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
         rsn_ie: &OwnedRsnIe<R>,
     ) -> Result<Self, RsnFrameError> {
         let security_ies = OwnedAssociationSecurityIes::<R>::try_copy(rsn_ie, &[])?;
@@ -98,8 +98,8 @@ impl<const N: usize> RsnTxFrame<N> {
     pub fn message2_with_security_ies<const R: usize>(
         akm: Akm,
         peer: Eui48,
-        replay_counter: u64,
-        supplicant_nonce: [u8; 32],
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+        supplicant_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
         security_ies: &OwnedAssociationSecurityIes<R>,
     ) -> Self {
         let (bytes, length) = security_ies.bounded();
@@ -126,8 +126,8 @@ impl<const N: usize> RsnTxFrame<N> {
     pub fn message3(
         akm: Akm,
         peer: Eui48,
-        replay_counter: u64,
-        authenticator_nonce: [u8; 32],
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+        authenticator_nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
         key_rsc: [u8; 8],
         encrypted_key_data: &[u8],
     ) -> Result<Self, RsnFrameError> {
@@ -155,7 +155,11 @@ impl<const N: usize> RsnTxFrame<N> {
     }
 
     /// Message 4. It cannot refuse: it carries no Key Data.
-    pub fn message4(akm: Akm, peer: Eui48, replay_counter: u64) -> Self {
+    pub fn message4(
+        akm: Akm,
+        peer: Eui48,
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+    ) -> Self {
         Self::station(
             EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
                 protocol_version: EapolProtocolVersion::V2001,
@@ -166,7 +170,7 @@ impl<const N: usize> RsnTxFrame<N> {
                     .with_secure(true),
                 key_length: 0,
                 replay_counter,
-                nonce: [0; 32],
+                nonce: oer_protocols_ieee80211_wire::eapol::Nonce::ZERO,
                 key_rsc: [0; 8],
             }),
             peer,
@@ -175,7 +179,11 @@ impl<const N: usize> RsnTxFrame<N> {
 
     /// The station's response to one connected-state Group Message 1. It
     /// cannot refuse: it carries no Key Data.
-    pub fn group_message2(akm: Akm, peer: Eui48, replay_counter: u64) -> Self {
+    pub fn group_message2(
+        akm: Akm,
+        peer: Eui48,
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+    ) -> Self {
         Self::station(
             EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
                 protocol_version: EapolProtocolVersion::V2001,
@@ -185,7 +193,7 @@ impl<const N: usize> RsnTxFrame<N> {
                     .with_secure(true),
                 key_length: 0,
                 replay_counter,
-                nonce: [0; 32],
+                nonce: oer_protocols_ieee80211_wire::eapol::Nonce::ZERO,
                 key_rsc: [0; 8],
             }),
             peer,
@@ -207,7 +215,7 @@ impl<const N: usize> RsnTxFrame<N> {
     pub fn group_message1(
         akm: Akm,
         peer: Eui48,
-        replay_counter: u64,
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
         key_rsc: [u8; 8],
         encrypted_key_data: &[u8],
     ) -> Result<Self, RsnFrameError> {
@@ -226,7 +234,7 @@ impl<const N: usize> RsnTxFrame<N> {
                 .with_encrypted_key_data(true),
             GTK_KEY_LENGTH,
             replay_counter,
-            [0; 32],
+            oer_protocols_ieee80211_wire::eapol::Nonce::ZERO,
             key_rsc,
             encrypted_key_data,
         )
@@ -239,12 +247,12 @@ impl<const N: usize> RsnTxFrame<N> {
         protocol_version: EapolProtocolVersion,
         key_info: KeyInformation,
         key_length: u16,
-        replay_counter: u64,
-        nonce: [u8; 32],
+        replay_counter: oer_protocols_ieee80211_wire::eapol::ReplayCounter,
+        nonce: oer_protocols_ieee80211_wire::eapol::Nonce,
         key_rsc: [u8; 8],
         key_data: &[u8],
     ) -> Result<Self, RsnFrameError> {
-        if key_info.pairwise() && key_info.ack() && nonce.iter().all(|byte| *byte == 0) {
+        if key_info.pairwise() && key_info.ack() && nonce.is_zero() {
             return Err(RsnFrameError::ZeroNonce);
         }
         let packet = EapolKeyBuffer::encode(&EapolKeyFields {

@@ -48,7 +48,7 @@ pub struct PendingGroupM1 {
 impl PendingM3 {
     /// The replay counter authenticated with this frame's MIC.
     pub fn replay_counter(&self) -> u64 {
-        self.request.replay_counter()
+        self.request.replay_counter().get()
     }
 
     /// Return the original verified EAPOL frame with no installation effect.
@@ -60,7 +60,7 @@ impl PendingM3 {
 impl PendingGroupM1 {
     /// The replay counter authenticated with this frame's MIC.
     pub fn replay_counter(&self) -> u64 {
-        self.request.replay_counter()
+        self.request.replay_counter().get()
     }
 
     /// Return the original verified EAPOL frame with no installation effect.

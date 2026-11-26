@@ -8,8 +8,10 @@ use oer_protocols_ieee80211_core_security_rsn::Ptk;
 use oer_protocols_ieee80211_wire::ccmp::{CcmpHeader, CcmpKeyId, CcmpPacketNumber};
 use oer_protocols_ieee80211_wire::security::Spp;
 
-const ANONCE: [u8; 32] = [7; 32];
-const SNONCE: [u8; 32] = [8; 32];
+const ANONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+    oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]);
+const SNONCE: oer_protocols_ieee80211_wire::eapol::Nonce =
+    oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]);
 
 fn at(micros: u64) -> oer_portable_time::Instant {
     oer_portable_time::Instant::from_micros(micros)
@@ -59,12 +61,12 @@ impl ReplayCheckingStation {
         assert_eq!(key.message(), EapolKeyMessage::PairwiseMessage3);
         if self
             .rx_replay_counter
-            .is_some_and(|last| key.replay_counter() <= last)
+            .is_some_and(|last| key.replay_counter().get() <= last)
         {
             return None;
         }
         assert!(key.verify_mic(&self.ptk, &mut SoftwareAes128).unwrap());
-        self.rx_replay_counter = Some(key.replay_counter());
+        self.rx_replay_counter = Some(key.replay_counter().get());
         let plaintext = software_key_unwrap(self.ptk.kek(), key.key_data()).unwrap();
         parse_gtk_key_data(
             plaintext.as_bytes(),
@@ -78,7 +80,7 @@ impl ReplayCheckingStation {
         let message4 = RsnTxFrame::<512>::message4(
             oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
             Eui48::new(AP),
-            key.replay_counter(),
+            oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(key.replay_counter().get()),
         )
         .authenticate(&self.ptk, &mut SoftwareAes128)
         .unwrap();
@@ -104,7 +106,7 @@ fn begin(
             PEER,
             association_security(&WPA2_RSN),
             ht_capabilities(),
-            ANONCE,
+            *ANONCE.octets(),
             9,
             at(1),
         )
@@ -215,7 +217,9 @@ fn a_lost_message4_is_recovered_by_a_message3_under_a_larger_counter() {
     let unsent = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        message4.key_frame().unwrap().replay_counter() + 1,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(
+            message4.key_frame().unwrap().replay_counter().get() + 1,
+        ),
     )
     .authenticate(&station.ptk, &mut SoftwareAes128)
     .unwrap();
@@ -409,7 +413,7 @@ fn station_message4(replay: u64) -> OwnedEapolFrame<512> {
     let frame = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        replay,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(replay),
     )
     .authenticate(&station_ptk(), &mut SoftwareAes128)
     .unwrap();
@@ -430,7 +434,8 @@ fn a_message3_retry_that_failed_to_build_is_not_awaited() {
     let first = first_message3(&mut service, &gtk)
         .key_frame()
         .unwrap()
-        .replay_counter();
+        .replay_counter()
+        .get();
     let deadline = service.next_wpa2_retry_deadline().unwrap();
     // 128 octets hold Message 1 but not Message 3.
     assert_eq!(
@@ -447,7 +452,7 @@ fn a_message3_retry_that_failed_to_build_is_not_awaited() {
     assert!(!service.wpa2_authorized(PEER).unwrap());
     // The next retry is built under a newer counter, and awaited.
     let retry = retried_message3(&mut service, &gtk);
-    assert_eq!(retry.key_frame().unwrap().replay_counter(), first + 2);
+    assert_eq!(retry.key_frame().unwrap().replay_counter().get(), first + 2);
     assert!(matches!(
         service
             .on_eapol(PEER, station_message4(first + 1), &gtk)

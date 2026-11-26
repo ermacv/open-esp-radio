@@ -30,7 +30,12 @@ fn message2_before_message1_terminal_cannot_arm_message3() {
         let mut storage = AccessPointPeerStorage::new();
         let mut service = service(&mut storage);
         let (_message1, message1_context) = begin(&mut service, [7; 32], 9).into_parts();
-        let message2 = signed_message2(&WPA2_RSN, &[], [7; 32], [8; 32]);
+        let message2 = signed_message2(
+            &WPA2_RSN,
+            &[],
+            oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]),
+            oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]),
+        );
         let ApWpa2Progress::Transmit(message3) =
             service.on_eapol(PEER, message2, &gtk_numbers()).unwrap()
         else {
@@ -74,7 +79,12 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
             oer_portable_time::Instant::from_micros(2),
         )
         .unwrap();
-    let message2 = signed_message2(&WPA2_RSN, &[], [7; 32], [8; 32]);
+    let message2 = signed_message2(
+        &WPA2_RSN,
+        &[],
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([7; 32]),
+        oer_protocols_ieee80211_wire::eapol::Nonce::new([8; 32]),
+    );
     let ApWpa2Progress::Transmit(message3) =
         service.on_eapol(PEER, message2, &gtk_numbers()).unwrap()
     else {
@@ -83,7 +93,7 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
     let message4 = RsnTxFrame::<512>::message4(
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         Eui48::new(AP),
-        10,
+        oer_protocols_ieee80211_wire::eapol::ReplayCounter::new(10),
     )
     .authenticate(service.pending_ptk(PEER).unwrap(), &mut SoftwareAes128)
     .unwrap();
