@@ -9,10 +9,6 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::indexing_slicing,
-    reason = "host tool: the ban covers the code an image reaches"
-)]
 mod fact;
 mod identity;
 pub use fact::{

@@ -11,14 +11,6 @@
 //! dependency.
 //!
 //! Encodings: the unprivileged ISA, <https://docs.riscv.org/reference/isa/unpriv/>.
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
-#![expect(
-    clippy::cast_possible_wrap,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
 #![cfg_attr(
     test,
     expect(
@@ -38,9 +30,7 @@
     )
 )]
 #![expect(
-    clippy::arithmetic_side_effects,
     clippy::indexing_slicing,
-    clippy::unreachable,
     reason = "host tool: the ban covers the code an image reaches"
 )]
 
@@ -49,8 +39,8 @@ use core::fmt;
 mod extensions;
 mod float;
 
-pub use extensions::{A0, A1, CsrOp, Extension, RA, list_registers, register_name};
-pub use float::{Float, Register};
+pub use extensions::{A0, A1, CsrOp, Extension, RA, RegisterList, list_registers, register_name};
+pub use float::{Float, Register, Rounding};
 pub use rv_asm::{AmoOp, AmoOrdering, Fence, FenceSet, Imm, Inst, Reg};
 
 /// A set of instruction-set extensions beside the RV32I base.
@@ -96,10 +86,40 @@ impl Extensions {
     }
 }
 
+/// The `WIDTH` bits of `word` from bit `AT` up, one to eight of them, as a
+/// byte: every field of an instruction is taken through here.
+pub(crate) const fn field<const AT: u32, const WIDTH: u32>(word: u32) -> u8 {
+    let (shift, mask) = const {
+        match (AT.checked_add(WIDTH), 8_u32.checked_sub(WIDTH)) {
+            (Some(end), Some(spare)) if WIDTH != 0 && end <= u32::BITS => (AT, u8::MAX >> spare),
+            _ => panic!("an instruction field is one to eight bits inside its word"),
+        }
+    };
+    let [low, ..] = (word >> shift).to_le_bytes();
+    low & mask
+}
+
+/// The register a compressed form's three-bit field at bit `AT` names:
+/// `x8`..`x15`, in either file.
+pub(crate) const fn prime<const AT: u32>(word: u32) -> u8 {
+    match field::<AT, 3>(word) {
+        0 => 8,
+        1 => 9,
+        2 => 10,
+        3 => 11,
+        4 => 12,
+        5 => 13,
+        6 => 14,
+        _ => 15,
+    }
+}
+
 /// An operation of an extension integer form.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ExtensionOp {
-    And,
+    /// `zext.b` and `zext.h`: the left operand's low byte or half.
+    ZeroExtendByte,
+    ZeroExtendHalf,
     Xor,
     Mul,
     /// Zba `shNadd`: the left operand shifted by N, plus the right.
@@ -168,10 +188,9 @@ impl Instruction {
             Instruction::Extension(extension) => {
                 use ExtensionOp::*;
                 match extension {
-                    Extension::Integer { op, right, .. } if compressed => match (op, right) {
-                        (Mul, _) => Extensions::ZCB.union(Extensions::M),
-                        (SignExtendByte | SignExtendHalf, _)
-                        | (And, Operand::Immediate(0xffff)) => {
+                    Extension::Integer { op, .. } if compressed => match op {
+                        Mul => Extensions::ZCB.union(Extensions::M),
+                        SignExtendByte | SignExtendHalf | ZeroExtendHalf => {
                             Extensions::ZCB.union(Extensions::ZBB)
                         }
                         _ => Extensions::ZCB,
@@ -239,38 +258,32 @@ fn decode_any(bytes: &[u8]) -> Option<(Instruction, usize)> {
         extensions::Classified::Reserved => return None,
         extensions::Classified::Base => {}
     }
-    if bytes.len() < 2 {
-        return None;
-    }
-    let half = u16::from_le_bytes([bytes[0], bytes[1]]);
+    let &[low, high] = bytes.first_chunk()?;
+    let half = u16::from_le_bytes([low, high]);
     let float = if half & 3 != 3 {
         float::compressed(half).map(|float| (float, 2))
     } else {
         bytes
-            .get(..4)
-            .and_then(|word| float::word(u32::from_le_bytes(word.try_into().ok()?)))
+            .first_chunk()
+            .and_then(|word| float::word(u32::from_le_bytes(*word)))
             .map(|float| (float, 4))
     };
     if let Some((float, width)) = float {
         return Some((Instruction::Float(float), width));
     }
-    let width = if half & 3 != 3 {
-        2
+    // The instruction's bytes as a word: a 16-bit encoding is its low half.
+    let (code, width) = if half & 3 != 3 {
+        ([low, high, 0, 0], 2)
     } else if half & 0x1f != 0x1f {
-        4
+        (*bytes.first_chunk()?, 4)
     } else {
         return None;
     };
-    if bytes.len() < width {
-        return None;
-    }
     // C.ADDI16SP with a zero immediate is reserved; rv-asm 0.2.1 decodes it
     // as `addi sp, sp, 0`.
     if half == 0x6101 {
         return None;
     }
-    let mut code = [0; 4];
-    code[..width].copy_from_slice(&bytes[..width]);
     let (inst, compressed) = Inst::decode(u32::from_le_bytes(code), rv_asm::Xlen::Rv32).ok()?;
     if (compressed == rv_asm::IsCompressed::Yes) != (width == 2) {
         return None;
@@ -279,7 +292,7 @@ fn decode_any(bytes: &[u8]) -> Option<(Instruction, usize)> {
     // every consumer sees the ISA's signed immediate (C extension, integer ALU).
     let inst = match (width, inst) {
         (2, Inst::Andi { imm, dest, src1 }) => Inst::Andi {
-            imm: Imm::new_i32(((imm.as_u32() << 26) as i32) >> 26),
+            imm: Imm::new_i32((imm.as_u32() << 26).cast_signed() >> 26),
             dest,
             src1,
         },

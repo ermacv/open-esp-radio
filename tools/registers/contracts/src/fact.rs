@@ -492,7 +492,7 @@ fn normalize_ids(field: &str, values: &mut Vec<String>) -> Result<(), FactValida
 
 fn normalize_unique<T: Ord>(field: &str, values: &mut [T]) -> Result<(), FactValidationError> {
     values.sort();
-    if values.windows(2).any(|pair| pair[0] == pair[1]) {
+    if values.array_windows().any(|[left, right]| left == right) {
         return Err(FactValidationError::new(format!(
             "{field} contains duplicate values"
         )));
@@ -614,6 +614,31 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn a_value_named_twice_is_refused_by_its_field() {
+        let twice = |chips: &[&str]| {
+            Applicability::new(
+                Vec::new(),
+                chips.iter().map(|chip| (*chip).to_owned()).collect(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+        };
+        // The pair may stand anywhere once the values are sorted.
+        for chips in [
+            &["chip-alpha", "chip-alpha"][..],
+            &["chip-beta", "chip-alpha", "chip-beta"],
+            &["chip-gamma", "chip-alpha", "chip-beta", "chip-gamma"],
+        ] {
+            assert_eq!(
+                twice(chips).unwrap_err().to_string(),
+                "chips contains duplicate values"
+            );
+        }
+        assert!(twice(&["chip-beta", "chip-alpha", "chip-gamma"]).is_ok());
     }
 
     #[test]

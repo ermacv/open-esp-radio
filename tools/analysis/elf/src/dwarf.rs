@@ -65,10 +65,13 @@ impl<'data> DebugSections<'data> {
     /// The sections a [`gimli::Dwarf`] reads, each once.
     fn ids() -> Vec<gimli::SectionId> {
         let mut ids = Vec::new();
-        let _ = gimli::Dwarf::load(|id| -> std::result::Result<SliceReader<'_>, Error> {
-            ids.push(id);
-            Ok(gimli::EndianSlice::new(&[], gimli::RunTimeEndian::Little))
-        });
+        // The loader only notes what it is asked for: it cannot fail.
+        let Ok(_) = gimli::Dwarf::load(
+            |id| -> std::result::Result<SliceReader<'_>, core::convert::Infallible> {
+                ids.push(id);
+                Ok(gimli::EndianSlice::new(&[], gimli::RunTimeEndian::Little))
+            },
+        );
         ids
     }
 
@@ -147,9 +150,17 @@ impl Symbolizer {
             let Some((offset, size)) = section.file_range() else {
                 return Ok(gimli::EndianRcSlice::new(Rc::from(&[][..]), endian));
             };
+            let host = |value: u64, what: &str| {
+                usize::try_from(value).map_err(|_| {
+                    Error::new(format!(
+                        "debug section {}: its file {what} {value:#x} is beyond this host's memory",
+                        id.name()
+                    ))
+                })
+            };
             let mut reader = whole.clone();
-            reader.skip(offset as usize)?;
-            reader.truncate(size as usize)?;
+            reader.skip(host(offset, "offset")?)?;
+            reader.truncate(host(size, "size")?)?;
             Ok(reader)
         })?;
         let context = addr2line::Context::from_dwarf(dwarf)

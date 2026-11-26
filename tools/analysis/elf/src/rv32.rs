@@ -217,13 +217,16 @@ pub fn mask(bytes: &mut [u8], offset: usize, r_type: u32) {
         let Some(start) = offset.checked_add(at) else {
             continue;
         };
-        let Some(location) = bytes.get_mut(start..start + width) else {
+        let Some(location) = bytes
+            .get_mut(start..)
+            .and_then(|rest| rest.get_mut(..width))
+        else {
             continue;
         };
-        let mut word = [0u8; 4];
-        word[..width].copy_from_slice(location);
-        let value = u32::from_le_bytes(word) & !mask;
-        location.copy_from_slice(&value.to_le_bytes()[..width]);
+        // The part is little-endian: its bytes take the mask's in order.
+        for (byte, mask) in location.iter_mut().zip(mask.to_le_bytes()) {
+            *byte &= !mask;
+        }
     }
 }
 

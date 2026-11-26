@@ -431,7 +431,7 @@ impl RevisionOccurrenceId {
         validate_locator(locator)?;
         let mut artifacts = artifacts.to_vec();
         artifacts.sort();
-        if artifacts.windows(2).any(|pair| pair[0] == pair[1]) {
+        if artifacts.array_windows().any(|[left, right]| left == right) {
             return Err(IdentityError::new(
                 "revision occurrence artifact identities must be unique",
             ));
@@ -604,33 +604,33 @@ fn validate_locator(value: &str) -> Result<(), IdentityError> {
 
 fn parse_register(value: &str) -> Result<SemanticEntityId, IdentityError> {
     let parts = value.split('/').collect::<Vec<_>>();
-    if parts.len() != 4 {
+    let &[chip, address_space, address, width] = parts.as_slice() else {
         return Err(IdentityError::new(
             "register identity requires chip/address-space/address/width",
         ));
-    }
+    };
     SemanticEntityId::register(
-        parts[0],
-        parts[1],
-        parse_hex("register address", parts[2])?,
-        parse_u32("register width", parts[3])?,
+        chip,
+        address_space,
+        parse_hex("register address", address)?,
+        parse_u32("register width", width)?,
     )
 }
 
 fn parse_register_field(value: &str) -> Result<SemanticEntityId, IdentityError> {
     let parts = value.split('/').collect::<Vec<_>>();
-    if parts.len() != 6 {
+    let &[chip, address_space, address, width, bit_offset, bit_width] = parts.as_slice() else {
         return Err(IdentityError::new(
             "register field identity requires chip/address-space/address/register-width/bit-offset/bit-width",
         ));
-    }
+    };
     SemanticEntityId::register_field(
-        parts[0],
-        parts[1],
-        parse_hex("register address", parts[2])?,
-        parse_u32("register width", parts[3])?,
-        parse_u32("field bit offset", parts[4])?,
-        parse_u32("field bit width", parts[5])?,
+        chip,
+        address_space,
+        parse_hex("register address", address)?,
+        parse_u32("register width", width)?,
+        parse_u32("field bit offset", bit_offset)?,
+        parse_u32("field bit width", bit_width)?,
     )
 }
 
@@ -897,6 +897,56 @@ mod tests {
                 .parse::<RevisionOccurrenceId>()
                 .is_err()
         );
+    }
+
+    #[test]
+    fn an_artifact_named_twice_is_refused_wherever_the_pair_stands() {
+        let (a, b, c) = (
+            artifact("sdk/lib/a.a", 'a'),
+            artifact("sdk/lib/b.a", 'b'),
+            artifact("sdk/lib/c.a", 'c'),
+        );
+        for artifacts in [
+            vec![a.clone(), a.clone()],
+            vec![b.clone(), a.clone(), b.clone()],
+            vec![c.clone(), a.clone(), b.clone(), c.clone()],
+        ] {
+            assert_eq!(
+                RevisionOccurrenceId::derive(EntityDomain::Function, &artifacts, "text+0x18")
+                    .unwrap_err()
+                    .to_string(),
+                "revision occurrence artifact identities must be unique"
+            );
+        }
+        assert!(
+            RevisionOccurrenceId::derive(EntityDomain::Function, &[c, a, b], "text+0x18").is_ok()
+        );
+    }
+
+    #[test]
+    fn a_register_identity_with_another_count_of_parts_is_refused_by_its_shape() {
+        for text in [
+            "register:",
+            "register:chip-alpha/radio/0x600a0034",
+            "register:chip-alpha/radio/0x600a0034/32/8",
+        ] {
+            assert_eq!(
+                text.parse::<SemanticEntityId>().unwrap_err().to_string(),
+                "register identity requires chip/address-space/address/width",
+                "{text}"
+            );
+        }
+        for text in [
+            "register-field:chip-alpha/radio/0x600a0034/32",
+            "register-field:chip-alpha/radio/0x600a0034/32/8",
+            "register-field:chip-alpha/radio/0x600a0034/32/8/3/1",
+        ] {
+            assert_eq!(
+                text.parse::<SemanticEntityId>().unwrap_err().to_string(),
+                "register field identity requires chip/address-space/address/register-width/bit-offset/bit-width",
+                "{text}"
+            );
+        }
     }
 }
 

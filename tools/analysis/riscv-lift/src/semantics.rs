@@ -405,15 +405,19 @@ fn lift_extension(extension: Extension) -> SemanticOp {
             dest,
             left,
             right,
-        } => SemanticOp::Integer {
-            op: integer_op(op),
-            dest,
-            left: Operand::Register(left),
-            right: match right {
+        } => {
+            let right = match right {
                 oer_tools_analysis_riscv_decode::Operand::Register(r) => Operand::Register(r),
                 oer_tools_analysis_riscv_decode::Operand::Immediate(v) => Operand::Immediate(v),
-            },
-        },
+            };
+            let (op, right) = integer_op(op, right);
+            SemanticOp::Integer {
+                op,
+                dest,
+                left: Operand::Register(left),
+                right,
+            }
+        }
         Extension::Memory {
             load,
             register,
@@ -445,11 +449,16 @@ fn lift_extension(extension: Extension) -> SemanticOp {
     }
 }
 
-/// The domain operation of a decoded extension operation.
-fn integer_op(op: oer_tools_analysis_riscv_decode::ExtensionOp) -> IntegerOp {
+/// The domain operation of a decoded extension operation and its right
+/// operand: a zero extension is an `and` with the mask of the bits it keeps.
+fn integer_op(
+    op: oer_tools_analysis_riscv_decode::ExtensionOp,
+    right: Operand,
+) -> (IntegerOp, Operand) {
     use oer_tools_analysis_riscv_decode::ExtensionOp as E;
-    match op {
-        E::And => IntegerOp::And,
+    let op = match op {
+        E::ZeroExtendByte => return (IntegerOp::And, Operand::Immediate(0xff)),
+        E::ZeroExtendHalf => return (IntegerOp::And, Operand::Immediate(0xffff)),
         E::Xor => IntegerOp::Xor,
         E::Mul => IntegerOp::Mul,
         E::ShiftAdd1 => IntegerOp::ShiftAdd1,
@@ -475,7 +484,8 @@ fn integer_op(op: oer_tools_analysis_riscv_decode::ExtensionOp) -> IntegerOp {
         E::BitClear => IntegerOp::BitClear,
         E::BitInvert => IntegerOp::BitInvert,
         E::BitExtract => IntegerOp::BitExtract,
-    }
+    };
+    (op, right)
 }
 
 /// FP loads and stores address memory through an integer base; an

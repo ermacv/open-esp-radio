@@ -7,18 +7,6 @@
 //! parsing `llvm-nm` or `llvm-objdump` output or walking `object` itself.
 //! It depends on no other repository package, so Blobray's standalone
 //! extraction takes it by path.
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
-#![expect(
-    clippy::cast_possible_wrap,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "host tool: the rule covers the code an image reaches"
-)]
 #![forbid(unsafe_code)]
 #![cfg_attr(
     test,
@@ -28,11 +16,6 @@
         clippy::unreachable,
         clippy::arithmetic_side_effects
     )
-)]
-#![expect(
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    reason = "host tool: the ban covers the code an image reaches"
 )]
 
 use object::read::archive::ArchiveFile;
@@ -315,14 +298,16 @@ pub enum ProgramHeaderKind {
 impl Section<'_> {
     /// Whether `address` lies in the section's address range.
     pub fn contains(&self, address: u64) -> bool {
-        self.address <= address && address - self.address < self.size
+        address
+            .checked_sub(self.address)
+            .is_some_and(|offset| offset < self.size)
     }
 
     /// The little-endian word at `address`, when the file holds it.
     pub fn word(&self, address: u64) -> Option<u32> {
         let at = usize::try_from(address.checked_sub(self.address)?).ok()?;
-        let bytes = self.data.get(at..at.checked_add(4)?)?;
-        Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        let bytes = self.data.get(at..)?.first_chunk::<4>()?;
+        Some(u32::from_le_bytes(*bytes))
     }
 }
 
@@ -715,11 +700,19 @@ impl<'data> Elf<'data> {
                 .and_then(|index| sections.get(&index))
                 .is_some_and(|section| section.executable)
         };
-        let sized: Vec<(u64, u64)> = self
+        let sized = self
             .symbols()
             .filter(|s| s.kind == SymbolKind::Text && s.size > 0)
-            .map(|s| (s.address, s.address + s.size))
-            .collect();
+            .map(|s| {
+                let end = s.address.checked_add(s.size).ok_or_else(|| {
+                    Error::new(format!(
+                        "function symbol {}: its address {:#x} and size {:#x} pass the address space",
+                        s.name, s.address, s.size
+                    ))
+                })?;
+                Ok((s.address, end))
+            })
+            .collect::<Result<Vec<(u64, u64)>>>()?;
         let mut by_address: BTreeMap<u32, (u32, Vec<String>, usize)> = BTreeMap::new();
         for s in self.symbols() {
             let untyped_entry = s.kind == SymbolKind::Unknown
@@ -743,9 +736,9 @@ impl<'data> Elf<'data> {
             entry.0 = entry.0.max(size);
             entry.1.push(s.name.to_owned());
         }
-        let starts: Vec<u32> = by_address.keys().copied().collect();
         let mut functions = Vec::with_capacity(by_address.len());
-        for (index, (address, (size, mut names, section))) in by_address.into_iter().enumerate() {
+        let mut by_address = by_address.into_iter().peekable();
+        while let Some((address, (size, mut names, section))) = by_address.next() {
             names.sort();
             names.dedup();
             let size = if size != 0 {
@@ -754,10 +747,15 @@ impl<'data> Elf<'data> {
                 let header = sections
                     .get(&section)
                     .ok_or_else(|| Error::new("symbol in a missing section"))?;
-                let end = header.address + header.size;
-                let next = starts
-                    .get(index + 1)
-                    .map_or(end, |&next| u64::from(next).min(end));
+                let end = header.address.checked_add(header.size).ok_or_else(|| {
+                    Error::new(format!(
+                        "section {}: its address {:#x} and size {:#x} pass the address space",
+                        header.name, header.address, header.size
+                    ))
+                })?;
+                let next = by_address
+                    .peek()
+                    .map_or(end, |&(next, _)| u64::from(next).min(end));
                 u32::try_from(next.saturating_sub(u64::from(address)))
                     .map_err(|_| Error::new("function extent beyond RV32"))?
             };
@@ -790,8 +788,18 @@ impl<'data> Elf<'data> {
             }
             let Some(index) = s.section else { continue };
             let header = self.section(index)?;
-            let start = usize::try_from(s.address - header.address)
-                .map_err(|_| Error::new("function offset overflow"))?;
+            let start = s
+                .address
+                .checked_sub(header.address)
+                .ok_or_else(|| {
+                    Error::new(format!(
+                        "{member}: {} at {:#x} lies below its section {} at {:#x}",
+                        s.name, s.address, header.name, header.address
+                    ))
+                })
+                .and_then(|offset| {
+                    usize::try_from(offset).map_err(|_| Error::new("function offset overflow"))
+                })?;
             let end = start
                 .checked_add(usize::try_from(s.size).map_err(|_| Error::new("size overflow"))?)
                 .ok_or_else(|| Error::new("function extent overflow"))?;
@@ -801,41 +809,52 @@ impl<'data> Elf<'data> {
                     s.name
                 )));
             };
+            // A position `in_section` of the function's section, with the
+            // relocation's addend, as an offset from the function's start:
+            // the file's numbers, whose sum need not fit.
+            let local = |r: &Relocation, in_section: Option<i64>| {
+                in_section
+                    .and_then(|offset| offset.checked_add(r.addend))
+                    .zip(i64::try_from(start).ok())
+                    .and_then(|(offset, start)| offset.checked_sub(start))
+                    .map(Reference::Local)
+                    .ok_or_else(|| {
+                        Error::new(format!(
+                            "{member}: {}: the relocation at {:#x} names a position outside the address space",
+                            s.name, r.at
+                        ))
+                    })
+            };
             let mut sites = Vec::new();
             for r in relocations.get(&index).into_iter().flatten() {
+                // The relocation's place in the function, if it is inside it.
                 let Some(offset) =
                     r.at.checked_sub(header.address)
                         .and_then(|o| usize::try_from(o).ok())
+                        .filter(|offset| *offset < end)
+                        .and_then(|offset| offset.checked_sub(start))
                 else {
                     continue;
                 };
-                if offset < start || offset >= end {
-                    continue;
-                }
                 let reference = match r.target {
                     Target::Symbol(target) => {
                         let target = self.symbol_at(target)?;
                         if target.section == Some(index)
                             && (target.kind == SymbolKind::Section || !target.global)
                         {
-                            Reference::Local(
-                                target.address as i64 - header.address as i64 + r.addend
-                                    - start as i64,
-                            )
+                            local(r, signed_difference(target.address, header.address))?
                         } else if target.name.is_empty() || target.kind == SymbolKind::Section {
                             Reference::Anonymous
                         } else {
                             Reference::Symbol(target.name.to_owned())
                         }
                     }
-                    Target::Section(target) if target == index => {
-                        Reference::Local(r.addend - start as i64)
-                    }
+                    Target::Section(target) if target == index => local(r, Some(0))?,
                     Target::Section(_) => Reference::Anonymous,
                     Target::Absolute | Target::Other => Reference::Other,
                 };
                 sites.push(Site {
-                    offset: offset - start,
+                    offset,
                     r_type: r.r_type,
                     reference,
                 });
@@ -938,6 +957,16 @@ fn elf_section_header(file: &object::File<'_>, index: usize) -> (u32, u32) {
                 (header.sh_type(elf.endian()), header.sh_info(elf.endian()))
             }),
         _ => (0, 0),
+    }
+}
+
+/// `minuend - subtrahend` of two of a file's addresses, if an `i64` holds it.
+fn signed_difference(minuend: u64, subtrahend: u64) -> Option<i64> {
+    match minuend.checked_sub(subtrahend) {
+        Some(ahead) => i64::try_from(ahead).ok(),
+        None => subtrahend
+            .checked_sub(minuend)
+            .and_then(|behind| 0_i64.checked_sub_unsigned(behind)),
     }
 }
 
