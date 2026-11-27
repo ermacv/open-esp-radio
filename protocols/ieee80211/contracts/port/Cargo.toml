@@ -27,8 +27,6 @@ oer-portable-time = { path = "../../../../portable/time" }
 [dev-dependencies]
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 oer-protocols-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
-# The crate's own tests exercise the generic radio-port conformance rules.
-oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 
 [lints]

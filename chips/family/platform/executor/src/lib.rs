@@ -109,8 +109,6 @@ mod fault;
 pub use fault::{Failure, Fault};
 #[cfg(feature = "chip")]
 mod hart_binding;
-#[cfg(feature = "installations")]
-pub mod installations;
 #[cfg(any(feature = "chip", test))]
 pub mod peer;
 #[cfg(any(feature = "chip", test))]

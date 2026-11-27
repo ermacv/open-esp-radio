@@ -3,12 +3,12 @@
 use crate::{LocalId, SlotIdentity};
 use core::marker::PhantomData;
 
-use super::{Brand, Child, Line, Permit, PoolPath, Root, Seat, Slot, index_of};
+use super::{Brand, Child, PoolPath, Root, Slot, index_of};
 
 /// The complete pool layout of one backend installation.
 ///
 /// A backend declares this as its port's `Pools` associated type. Tuples
-/// compose slot and permit sets; a block can implement this trait to wrap
+/// compose slot sets; a block can implement this trait to wrap
 /// the resulting tokens in its own resource types. The builder is consumed
 /// once, so a factory cannot issue another copy of a declared pool.
 pub trait PoolSet {
@@ -93,9 +93,9 @@ pub async fn branded<P: PoolSet, R>(install: impl for<'id> AsyncFnOnce(Mint<'id,
     prepare_brand(install).await
 }
 
-// Construct the callback future before returning it, so run_port's first
+// Construct the callback future before returning it, so the caller's first
 // poll does not construct another installation-sized async state machine.
-pub(crate) fn prepare_brand<P: PoolSet, R>(
+fn prepare_brand<P: PoolSet, R>(
     install: impl for<'id> AsyncFnOnce(Mint<'id, P>) -> R,
 ) -> impl core::future::Future<Output = R> {
     install(Mint::new())
@@ -129,8 +129,7 @@ impl<'id, Path: PoolPath> PoolBuilder<'id, Path> {
 }
 
 /// A layout of `N` synchronously owned slots of kind `Kind`. Its slots
-/// name the layout as their kind (`Slot<'id, Slots<Kind, N>, Path>`), so
-/// each slot's [`place`](Slot::place) is below `N` by its type.
+/// name the layout as their kind (`Slot<'id, Slots<Kind, N>, Path>`).
 ///
 /// Slot indices fit in one byte; larger layouts fail at instantiation:
 ///
@@ -157,93 +156,6 @@ impl<Kind, const N: usize> PoolSet for Slots<Kind, N> {
             brand: builder.brand,
             kind: PhantomData,
         })
-    }
-}
-
-mod layout {
-    pub trait Sealed {}
-}
-
-/// A slot pool's layout, implemented only by [`Slots`]: a generic contract
-/// names a pool whose size its implementer chooses as an associated type
-/// bounded by this trait, and its slots as `Slot<'id, L, Path>`.
-pub trait SlotLayout: layout::Sealed {
-    /// The slots' semantic kind.
-    type Kind;
-    /// The pool's size.
-    const LEN: usize;
-}
-
-impl<Kind, const N: usize> layout::Sealed for Slots<Kind, N> {}
-impl<Kind, const N: usize> SlotLayout for Slots<Kind, N> {
-    type Kind = Kind;
-    const LEN: usize = N;
-}
-
-/// A layout of `N` awaited permits and the `S` seats of their line.
-pub struct Permits<Kind, const N: usize, const S: usize>(PhantomData<fn() -> Kind>);
-
-/// The indivisible initial capacity of one permit pool.
-///
-/// FIFO constructors consume this whole authority. Extracting its permits
-/// for another backend consumes it and cannot create a second initial supply.
-pub struct PermitSupply<'id, Kind, const N: usize, Path: PoolPath = Root<crate::LocalId<'id>>> {
-    permits: [Permit<'id, Kind, Path>; N],
-}
-
-impl<'id, K, const N: usize, Path: PoolPath> PermitSupply<'id, K, N, Path> {
-    /// Move the complete initial capacity to its single backend owner.
-    pub fn into_permits(self) -> [Permit<'id, K, Path>; N] {
-        self.permits
-    }
-}
-
-/// One permit pool's initial owners, line and caller seats.
-pub struct PermitTokens<
-    'id,
-    Kind,
-    const N: usize,
-    const S: usize,
-    Path: PoolPath = Root<crate::LocalId<'id>>,
-> {
-    /// All permits, to be retained by the backend's permit pool.
-    pub supply: PermitSupply<'id, Kind, N, Path>,
-    /// One queue place for every issued seat.
-    pub line: Line<'id, Kind, S, Path>,
-    /// One seat for each allowed waiting caller.
-    pub seats: [Seat<'id, Kind, Path>; S],
-}
-
-impl<Kind, const N: usize, const S: usize> PoolSet for Permits<Kind, N, S> {
-    type Pools<'id, Path: PoolPath> = PermitTokens<'id, Kind, N, S, Path>;
-
-    fn build<'id, Path: PoolPath>(builder: PoolBuilder<'id, Path>) -> Self::Pools<'id, Path> {
-        const {
-            if N > 256 {
-                panic!("a pool holds at most 256 tokens");
-            }
-            if S > 256 {
-                panic!("a line holds at most 256 seats");
-            }
-        };
-        PermitTokens {
-            supply: PermitSupply {
-                permits: core::array::from_fn(|index| Permit {
-                    index: index_of(index),
-                    brand: builder.brand,
-                    kind: PhantomData,
-                }),
-            },
-            line: Line {
-                brand: builder.brand,
-                kind: PhantomData,
-            },
-            seats: core::array::from_fn(|index| Seat {
-                index: index_of(index),
-                brand: builder.brand,
-                kind: PhantomData,
-            }),
-        }
     }
 }
 

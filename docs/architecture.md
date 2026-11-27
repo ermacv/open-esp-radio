@@ -1296,14 +1296,6 @@ A port is the contract between a protocol's logic and a chip backend
 protocol ports are not frozen; they grow with the protocols, each change with
 its model and conformance case.
 
-- Queue splitting and initial body lending return typed construction errors.
-  The hardware backend's P2 registration guard wraps admitted state and failed
-  construction before publishing a frontend. Mandatory cancellation cleanup
-  runs in that owner guard, even before its first poll. Portable lifecycle and
-  slot code return typed failure observations and never invoke hardware cleanup.
-  Failed construction retains its registered owner and source cause; it
-  publishes no frontend or ordinary join. No missing resource is replaced with
-  an empty or newly minted owner.
 - Reference models are backends and use the port's conformance cases.
   Wi-Fi's model lives in its protocol's `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists.

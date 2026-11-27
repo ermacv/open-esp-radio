@@ -9,9 +9,6 @@ description = "Scheduler-free static task executor and time driver for Espressif
 
 [features]
 default = []
-# Nominal static installation identities. Images without a radio port retain
-# their dependency graph and linked bytes.
-installations = ["dep:oer-protocols-radio-port"]
 # The executor and time driver over a chip binding (`bind!`), which the
 # chip's composition crate selects together with the HAL's chip.
 chip = [
@@ -33,7 +30,6 @@ oer-portable-time = { path = "../../../../portable/time" }
 bytemuck = { version = "1.25.2", default-features = false }
 oer-portable-memory = { path = "../../../../portable/memory" }
 oer-chips-family-platform-port = { path = "../port" }
-oer-protocols-radio-port = { path = "../../../../protocols/radio/port", optional = true }
 embassy-time-driver = { version = "0.2", features = ["tick-hz-1_000_000"], optional = true }
 portable-atomic = { version = "1.11", default-features = false, optional = true }
 oer-chips-family-platform-interrupt-table = { path = "../interrupt-table", optional = true }
@@ -47,17 +43,12 @@ oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 
 [dev-dependencies]
 oer-portable-riscv = { path = "../../../../portable/riscv" }
-oer-protocols-radio-port = { path = "../../../../protocols/radio/port", features = ["test-support"] }
 oer-chips-family-platform-runtime = { path = "../runtime" }
 oer-chips-family-platform-interrupt-table = { path = "../interrupt-table", features = ["host-signal"] }
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
 
 [lints]
 workspace = true
-
-[[test]]
-name = "installations"
-required-features = ["installations"]
 
 [package.metadata.docs.rs]
 # Chip APIs exist only for the chip target; document them there alone.

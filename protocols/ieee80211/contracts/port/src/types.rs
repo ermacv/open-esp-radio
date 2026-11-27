@@ -150,62 +150,6 @@ impl<'id, Path: PoolPath> GateIssuer<'id, Path> {
     }
 }
 
-impl<Path: PoolPath> GateOpen<'static, Path> {
-    /// Move the same gate state across its backend's private body boundary.
-    pub fn lend<'p, S>(
-        self,
-        loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
-    ) -> GateOpen<'p, Path> {
-        GateOpen {
-            place: GatePlace {
-                slot: loan.lend_slot(self.place.slot),
-            },
-        }
-    }
-}
-
-impl<'p, Path: PoolPath> GateOpen<'p, Path> {
-    /// Move the same gate state across its backend's private body boundary.
-    pub fn into_owned<S>(
-        self,
-        loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
-    ) -> GateOpen<'static, Path> {
-        GateOpen {
-            place: GatePlace {
-                slot: loan.reclaim_slot(self.place.slot),
-            },
-        }
-    }
-}
-
-impl<Path: PoolPath> GateClosed<'static, Path> {
-    /// Move the same gate state across its backend's private body boundary.
-    pub fn lend<'p, S>(
-        self,
-        loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
-    ) -> GateClosed<'p, Path> {
-        GateClosed {
-            place: GatePlace {
-                slot: loan.lend_slot(self.place.slot),
-            },
-        }
-    }
-}
-
-impl<'p, Path: PoolPath> GateClosed<'p, Path> {
-    /// Move the same gate state across its backend's private body boundary.
-    pub fn into_owned<S>(
-        self,
-        loan: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
-    ) -> GateClosed<'static, Path> {
-        GateClosed {
-            place: GatePlace {
-                slot: loan.reclaim_slot(self.place.slot),
-            },
-        }
-    }
-}
-
 /// One gate and its arbiter's unique construction authority.
 ///
 /// The installation's mint builds this component once. Returning a gate
@@ -238,16 +182,4 @@ impl oer_protocols_radio_port::PoolSet for ArbiterPool {
 #[must_use = "construct the arbiter exactly once with its initial gate"]
 pub struct ArbiterAuthority<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
     brand: core::marker::PhantomData<fn(&'id (), Path) -> (&'id (), Path)>,
-}
-
-impl<Path: PoolPath> ArbiterAuthority<'static, Path> {
-    /// Lend the one construction authority without copying or reissuing it.
-    pub fn lend<'p, S>(
-        self,
-        _: &oer_protocols_radio_port::BodyLoan<'p, Path::Identity, S>,
-    ) -> ArbiterAuthority<'p, Path> {
-        ArbiterAuthority {
-            brand: core::marker::PhantomData,
-        }
-    }
 }

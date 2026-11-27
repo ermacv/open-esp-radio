@@ -794,18 +794,6 @@ fixture installer, which links `oer-tools-os-process`, does not link `serialport
 
 ## Firmware and platform code below the boundary
 
-`oer-chips-family-platform-executor::installations` binds a nominal port identity to
-the minting authority of its successive installations.
-`declare_installations!` irreversibly claims its private `StaticCell` before
-constructing `SlotClaim<StaticId<Declaration>>` at one unsafe site, and turns
-the claim at once into the identity's `Installations`. The claim has only
-invariant `PhantomData`; its private safe constructor remains inside the
-portable contract. The declaration must never issue a second authority for
-the same type, including after software reset or quarantine, because owned
-queue permissions and installation tokens rely on that identity being
-unique. No reference lifetime or owner is cast. Local scope claims have no
-static latch and use no unsafe code.
-
 The platform crates (the boards and `chips/family/staged-*`), the bootstrap images
 (`chips/esp32s31/platform/bootstrap`) and the probe images (`hil/probes/*`) own the
 target ABI and placement, so they hold unsafe code that no crate above them
