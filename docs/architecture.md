@@ -1282,11 +1282,10 @@ successor; this section describes what the build holds.
   one coexistence owner maps (client, kind) to a priority through the chip
   family's table (`oer-chips-family-radio-coex`). Each MAC's PTI registers belong to
   its driver. Windows shorter than a grant are enforced by PTI alone and
-  reported as blackouts. The runtime that combines the policy and the
-  schedule does not exist yet. `RadioDomain::coex_ports` lends disjoint
-  policy-timer and clock owners through exclusive borrows. The policy port
-  cannot select reserved timer 5; each clock sample performs fresh reads.
-  The family coexistence traits remain independent of these HAL owners.
+  reported as blackouts. No coexistence runtime exists: the radio domain
+  answers each event's priority from the vendor table, which no code
+  changes, and programs coexistence timer 5 alone, for the PHY's grant
+  protect.
 - **Low-power clock** is a type (`LpClock<RcSlow | Xtal32k>`).
 
 ## Radio ports

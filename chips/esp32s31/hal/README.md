@@ -67,14 +67,12 @@ caller or substituted with a fake port’s address. PHY calibration
 configuration/restore machines and other cross-block calibration operations
 remain here; the no-wait scan does not classify them as atoms.
 
-`coex::CoexDomainPorts` binds the family coexistence policy
-([`oer-chips-family-radio-coex`](../../family/radio/coex/README.md)) to one radio domain:
-it lends the timer bank, the event priorities and the clock to `CoexCore` as
-its `CoexTimerHardware` and `CoexClockHardware` ports. The domain lends only
-timers 0 through 4; timer 5 carries the PHY grant-protect request. The clock
-port decodes the coexistence low-power clock observation with the 40 MHz
-crystal of every supported board profile. The binding does not implement RF
-grant notification.
+The radio domain answers each coexistence event's priority from the family's
+vendor table ([`oer-chips-family-radio-coex`](../../family/radio/coex/README.md)),
+which no code changes; Wi-Fi's cold initialisation publishes those
+priorities to its MAC. Coexistence timer 5 carries the PHY grant-protect
+request (`coex::PhyGrantProtect`), with the priority of event 48; no other
+coexistence timer is programmed.
 
 `Root::into_bootstrap` returns unstarted owners without installing the console,
 opening the timer clock or checking its latch. The family cold-start runner

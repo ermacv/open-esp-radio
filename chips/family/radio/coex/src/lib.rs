@@ -1,19 +1,3 @@
-#![expect(
-    clippy::fn_params_excessive_bools,
-    clippy::struct_excessive_bools,
-    reason = "the port in the radio's task; receive"
-)]
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "the port in the radio's task; receive"
-)]
-#![cfg_attr(
-    test,
-    expect(
-        clippy::let_underscore_must_use,
-        reason = "test code: a cast or a dropped result in a test loses no product's value"
-    )
-)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(
@@ -26,51 +10,14 @@
     )
 )]
 
-//! Executor-neutral coexistence policy of the Espressif chips, recovered from
-//! esp-coex-lib.
-//!
-//! Register ownership deliberately lives outside this crate. Each chip's
-//! radio arbiter owns its COEX timer bank, its [`CoexPtiTable`] and its
-//! shared modem clock fields; this crate is the policy that drives them
-//! through its ports ([`CoexTimerHardware`], [`CoexClockHardware`]).
-//! [`CoexCore`] programs event requests on the timer bank; [`CoexSchedule`]
-//! is the recovered time-slice schedule that selects a scheme from the
-//! radios' status and steps its phases; [`CoexScheduleExecutor`] adds its
-//! phase timer. A chip crate binds the ports to its HAL.
-//!
-//! The portable client vocabulary is `oer-protocols-radio-coex`: [`CoexClient`] and
-//! [`CoexStatusType`] convert from it into the vendor's request kinds and
-//! status words. Each protocol's owner maps its operation to a table row, on
-//! the events of [`wifi_events`] and
-//! [`ieee802154_events`]; the Bluetooth LE controller's lanes stay with its
-//! driver.
+//! The coexistence event priority table every supported Espressif chip
+//! shares, recovered from esp-coex-lib: the events ([`CoexEventId`]), the
+//! priority domain ([`CoexPti`]) and the vendor's table ([`CoexPtiTable`]).
+//! It owns no register and keeps no state.
 
 #[cfg(test)]
 extern crate std;
 
-mod clock;
-mod core;
-mod executor;
-mod model;
 mod pti;
-mod schedule;
-mod timer;
 
-pub use clock::{CoexClockHardware, CoexClockSelector, CoexTimerClock};
-pub use core::{CoexCore, CoexStatus};
-pub use executor::{CoexExpiry, CoexPhaseChange, CoexPhaseTimer, CoexScheduleExecutor};
-pub use model::{
-    COEX_TIMER_COUNT, CoexClient, CoexClientRequest, CoexError, CoexEventDurations, CoexTimerIndex,
-    NoRequestKind, timer_index,
-};
-pub use pti::{
-    COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable, ieee802154_events, wifi_events,
-};
-pub use schedule::{
-    CoexPhase, CoexPhaseStep, CoexSchedule, CoexScheduleIdle, CoexScheme, CoexSchemeId,
-    CoexStatusType, CoexStatusWords, EXTERNAL_COEX_STATUS, IEEE802154_COEX_STATUS, wifi_status,
-};
-pub use timer::{CoexTimerHardware, program_timer};
-
-#[cfg(test)]
-mod tests;
+pub use pti::{COEX_EVENT_COUNT, CoexEventId, CoexPti, CoexPtiTable};

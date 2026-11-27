@@ -1,5 +1,6 @@
 //! Owned PHY transactions and their affine return to the exact radio domain.
 use super::*;
+use crate::radio::coex::{PHY_GRANT_PROTECT_EVENT, PhyGrantProtect};
 use core::{
     mem::ManuallyDrop,
     sync::atomic::{AtomicBool, Ordering},
@@ -246,7 +247,6 @@ struct Payload {
     hardware: PhyHardware,
     coexistence: oer_chips_esp32s31_pac::ownership::CoexistencePeripherals,
     shared_radio: crate::radio::modem::ownership::SharedBasebandParts,
-    pti: CoexPtiTable,
     grant_protected: bool,
 }
 
@@ -303,12 +303,11 @@ impl PhyTransaction {
     }
     pub fn hardware_and_grant(&mut self) -> (&mut PhyHardware, PhyGrantProtect<'_>) {
         let p = &mut *self.payload;
-        let pti = p.pti.pti(PHY_GRANT_PROTECT_EVENT);
+        let pti = CoexPtiTable::VENDOR.pti(PHY_GRANT_PROTECT_EVENT);
         (
             &mut p.hardware,
             PhyGrantProtect::new(
-                crate::radio::modem::CoexTimerBankRegisters::new(
-                    &mut p.coexistence.coex_policy_timers,
+                crate::radio::modem::CoexGrantTimerRegisters::new(
                     &mut p.coexistence.phy_grant_protect_timer,
                 ),
                 pti,
@@ -322,7 +321,6 @@ struct ReturnPayload<B: PlatformClockBackend> {
     power: CommonRadioPower<B>,
     clocks: ModemClocks,
     modem_platform_clocks: ModemPlatformClocks<B>,
-    external_coex: Option<crate::radio::coex::ExternalCoexConfig>,
     identity: PhyIdentity,
 }
 
@@ -399,7 +397,6 @@ fn combine<B: PlatformClockBackend>(
         power,
         clocks,
         modem_platform_clocks,
-        external_coex,
         identity,
     } = ManuallyDrop::into_inner(payload);
     let Payload {
@@ -410,7 +407,6 @@ fn combine<B: PlatformClockBackend>(
             },
         coexistence,
         shared_radio,
-        pti: coex_pti,
         grant_protected: phy_grant_protected,
     } = ManuallyDrop::into_inner(phy_payload);
     RadioDomain::from_state(SharedRadioState {
@@ -423,9 +419,7 @@ fn combine<B: PlatformClockBackend>(
         power,
         clocks,
         modem_platform_clocks,
-        coex_pti,
         phy_grant_protected,
-        external_coex,
         identity,
     })
 }
@@ -453,9 +447,7 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
             power,
             clocks,
             modem_platform_clocks,
-            coex_pti,
             phy_grant_protected,
-            external_coex,
             identity,
         } = self.state;
         let registration = phy.registration_epoch();
@@ -468,7 +460,6 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
                     power,
                     clocks,
                     modem_platform_clocks,
-                    external_coex,
                     identity,
                 }),
             },
@@ -481,7 +472,6 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
                     },
                     coexistence,
                     shared_radio,
-                    pti: coex_pti,
                     grant_protected: phy_grant_protected,
                 }),
             },

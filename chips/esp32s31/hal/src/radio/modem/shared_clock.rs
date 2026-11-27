@@ -16,22 +16,6 @@ pub struct SharedModemClockObservation {
     pub power_state_map_configured: bool,
 }
 
-/// Reviewed selector decoded inside the PAC from `COEX_LP_CLK_CONF`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CoexistenceLowPowerClockSource {
-    Selector1,
-    Selector2,
-    Selector4,
-    Selector8,
-}
-
-/// Semantic result of the vendor-required two-read coexistence sample.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CoexistenceLowPowerClockObservation {
-    pub source: CoexistenceLowPowerClockSource,
-    pub divider_minus_one: u16,
-}
-
 impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// The RTC slow-clock source, as `clk_ll_rtc_slow_get_src` reads it.
     #[doc(hidden)]
@@ -139,50 +123,6 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
                 && low_power_apb_map_bit_one
                 && low_power_apb_map_bit_two,
         }
-    }
-
-    /// Select the coexistence timer clock and its divider, as complete
-    /// `coex_hw_timer_freq_set` does: the one-hot source first, then the
-    /// divider, each through its own fresh-read RMW.
-    #[doc(hidden)]
-    pub fn configure_coexistence_timer_clock(
-        &mut self,
-        source: super::values::CoexTimerClockSource,
-        divider_minus_one: super::values::CoexTimerClockDividerMinusOne,
-    ) {
-        let registers = &mut self.peripherals.coex_lp_clock;
-        super::ops::select_coex_timer_clock_source(registers, source);
-        super::ops::set_coex_timer_clock_divider(registers, divider_minus_one);
-    }
-
-    #[doc(hidden)]
-    pub fn sample_coexistence_low_power_clock(
-        &self,
-    ) -> Option<CoexistenceLowPowerClockObservation> {
-        // Two reads of the word, as the vendor samples the source and then
-        // the divider. SOURCE: complete pinned
-        // libcoexist.a[coexist_hw.o]::coex_hw_timer_freq_set and tick_get read
-        // COEX_LP_CLK_CONF back: the vendor's own read.
-        let registers = &self.peripherals.coex_lp_clock;
-        let selected = registers.read_coex_lp_clk_conf();
-        let source = match (
-            selected.clk_coex_lp_sel_osc_slow(),
-            selected.clk_coex_lp_sel_osc_fast(),
-            selected.clk_coex_lp_sel_xtal(),
-            selected.clk_coex_lp_sel_xtal32k(),
-        ) {
-            (true, false, false, false) => CoexistenceLowPowerClockSource::Selector1,
-            (false, true, false, false) => CoexistenceLowPowerClockSource::Selector2,
-            (false, false, true, false) => CoexistenceLowPowerClockSource::Selector4,
-            (false, false, false, true) => CoexistenceLowPowerClockSource::Selector8,
-            _ => return None,
-        };
-        Some(CoexistenceLowPowerClockObservation {
-            source,
-            divider_minus_one: super::field_halfword(
-                registers.read_coex_lp_clk_conf().clk_coex_lp_div_num(),
-            ),
-        })
     }
 }
 

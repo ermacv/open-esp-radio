@@ -4735,7 +4735,7 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/phy/restore.rs", 371, PHY_DRIVER),
     ("radio/phy/temperature.rs", 171, PHY_DRIVER),
     ("radio/phy/temperature/", 79, PHY_DRIVER),
-    ("radio/domain/transaction.rs", 500, PHY_DRIVER),
+    ("radio/domain/transaction.rs", 490, PHY_DRIVER),
     ("radio/domain/transaction/", 321, PHY_DRIVER),
 ];
 
@@ -6179,7 +6179,7 @@ const CLAIMS: &[(&str, usize, &str)] = &[("chips/esp32s31/app/src/lib.rs", 1, BY
 const ERROR_STATES: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/app/src/lib.rs", 1, BY_PUMP),
     ("chips/esp32s31/hal/src/power/radio.rs", 1, BY_PHY_OWNER),
-    ("chips/esp32s31/hal/src/radio/coex.rs", 2, BY_RECEIVE),
+    ("chips/esp32s31/hal/src/radio/coex.rs", 1, BY_RECEIVE),
     ("chips/esp32s31/hal/src/radio/domain.rs", 1, BY_PHY_OWNER),
     ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 2, BY_PHY_OWNER),
     (
@@ -9690,24 +9690,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "dead_code",
         3,
         "the hart's code alone guards / the hart's code alone paints / the hart's vectors alone take the shift",
-    ),
-    (
-        "chips/family/radio/coex/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_RECEIVE,
-    ),
-    (
-        "chips/family/radio/coex/src/lib.rs",
-        "clippy::fn_params_excessive_bools",
-        1,
-        BY_RECEIVE,
-    ),
-    (
-        "chips/family/radio/coex/src/lib.rs",
-        "clippy::struct_excessive_bools",
-        1,
-        BY_RECEIVE,
     ),
     (
         "chips/family/radio/modem-clock/src/execution.rs",

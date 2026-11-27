@@ -153,26 +153,6 @@ fn the_phy_domain_cannot_disable_a_clock_module_it_never_enabled() {
 }
 
 #[test]
-fn the_domain_keeps_one_coexistence_priority_table() {
-    use crate::radio::coex::{CoexEventId, CoexPti, CoexPtiTable};
-
-    let mut radio = radio_domain();
-    let rx_ack = CoexEventId::new(3).unwrap_or_else(|| panic!("event 3 exists"));
-    {
-        let domain = &mut radio;
-        assert_eq!(domain.coex_pti_table(), CoexPtiTable::VENDOR);
-        domain.set_coex_pti(
-            rx_ack,
-            CoexPti::new(9).unwrap_or_else(|| panic!("9 is a priority")),
-        );
-    }
-    let domain = &mut radio;
-    assert_eq!(domain.coex_pti(rx_ack).value(), 9);
-    drop(domain);
-    assert!(radio.into_parts().is_ok());
-}
-
-#[test]
 fn the_phy_grant_protect_request_cannot_be_withdrawn_before_it_is_programmed() {
     let mut radio = radio_domain();
     let domain = &mut radio;
@@ -206,23 +186,6 @@ fn a_held_host_test_grant_protect_is_owned_by_the_domain() {
     );
 }
 
-#[test]
-fn split_coex_ports_borrow_the_actual_domain_priority_table() {
-    let mut radio = radio_domain();
-    let event = CoexEventId::new(5).unwrap();
-    let priority = CoexPti::new(9).unwrap();
-    radio.set_coex_pti(event, priority);
-    {
-        let (timers, _clock) = radio.coex_ports();
-        assert_eq!(timers.pti(event), priority);
-    }
-    radio.set_coex_pti(event, CoexPti::new(3).unwrap());
-    let (timers, _clock) = radio.coex_ports();
-    assert_eq!(timers.pti(event).value(), 3);
-}
-
-/// The block's reset writes the reset bit set, then cleared, then the
-/// foreign words: none of the write-back precedes the pulse that clears it.
 #[test]
 fn the_mac_block_reset_pulses_before_it_writes_back() {
     #[derive(Debug, PartialEq)]
