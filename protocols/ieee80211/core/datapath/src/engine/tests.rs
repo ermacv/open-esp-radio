@@ -1664,6 +1664,44 @@ fn an_access_points_queue_carries_one_single_and_the_next_waits_for_its_end() {
     });
 }
 
+/// An access point with a budget of two and three MSDUs waiting, each on
+/// a free queue of its own, sends two in one turn and asks another round;
+/// the round sends the third.
+#[test]
+fn an_access_point_sends_its_budget_in_a_turn_and_asks_a_round_for_the_rest() {
+    running::<AccessPointModel<2>, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(2, POLICY);
+        let mut around = access_point(run, &mut engine);
+        for (id, category) in [
+            WmmAccessCategory::Voice,
+            WmmAccessCategory::Video,
+            BEST_EFFORT,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            around.port.set_air(category, Air::Hold);
+            let up = match category {
+                WmmAccessCategory::Voice => WmmUserPriority::UP6,
+                WmmAccessCategory::Video => WmmUserPriority::UP4,
+                _ => WmmUserPriority::UP0,
+            };
+            around
+                .net
+                .offer(u32::try_from(id).unwrap() + 1, up, CLIENT_B);
+        }
+        assert_eq!(
+            engine.offered(&mut around.turn()),
+            Rest::Round,
+            "one waits on a free queue"
+        );
+        assert_eq!(engine.queued(), 1, "two went, its budget");
+        let _ = engine.round(&mut around.turn());
+        assert_eq!(engine.queued(), 0, "the round sent the third");
+        assert!(around.port.front(3).is_some(), "on its own queue");
+    });
+}
+
 #[test]
 fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
     running::<AccessPointModel<2>, _>(|run| {

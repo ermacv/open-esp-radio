@@ -115,7 +115,12 @@ the installation's two idle long chains and the queues and builds their
 places (`LongPlace`, `QueuePlaces`); beside each book its chain's place is
 idle, open or on the air, of its marker's type. A chain goes on its TID's
 queue, whose place it leaves carried; while that queue carries a chain, the
-chain waits. A settlement frees the queue's place. The rate selection
+chain waits. A settlement frees the queue's place. The places are the plane's own
+state, as its books are: no transition takes them out. The data's stop asks
+`DataPlane::givable`, which answers `Ok` with both long chains idle and
+otherwise names where each is (`Holding`), and then takes the plane apart
+with `DataPlane::into_rights`, which gives the two long chains and the four
+queues back, or the plane whole. The rate selection
 answers the kind the plane asks in its own type (`PlanRates::single`, a
 retry plan; `PlanRates::aggregate`, an aggregate's rates), so no answer is
 of a kind the plane did not ask.

@@ -3263,7 +3263,7 @@ where
         else {
             return None;
         };
-        if !plane.is_idle() {
+        if plane.givable().is_err() {
             return None;
         }
         let slots = agreement_slots(&mut self.data)?;
@@ -3282,21 +3282,21 @@ where
             }
         };
         let Running {
-            form: StationRunning { mut plane },
+            form: StationRunning { plane },
             interface,
             groups,
             mut agreements,
             receive,
             rule,
         } = running;
-        match (interface, plane.idle_rights()) {
+        match (interface, plane.into_rights()) {
             (
                 Interface::Idle {
                     gate: Gate::Shut,
                     place: command,
                     key: StationKey::Empty(pairwise),
                 },
-                Some((chains, queues)),
+                Ok((chains, queues)),
             ) => Some((
                 RadioRights {
                     chains,
@@ -3310,10 +3310,10 @@ where
                     receive: rule,
                 },
             )),
-            (interface, None) => {
+            (interface, Err(plane)) => {
                 agreements.slots_back(slots);
-                // Checked idle above: this does not happen. Should it, the
-                // data stays stopping with every part.
+                // Checked givable above: this does not happen. Should it,
+                // the data stays stopping with every part.
                 self.data = Data::Stopping(Running {
                     form: StationRunning { plane },
                     interface,
@@ -3324,9 +3324,9 @@ where
                 });
                 None
             }
-            (interface, Some((chains, queues))) => {
+            (interface, Ok((chains, queues))) => {
                 agreements.slots_back(slots);
-                // Checked shut, idle and keyless above: this does not
+                // Checked shut, givable and keyless above: this does not
                 // happen. Should it, the data stays stopping with every
                 // right; its plane holds no link, so a new one with the
                 // chains and the queues' rights is all it was.
