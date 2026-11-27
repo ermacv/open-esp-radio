@@ -4,7 +4,7 @@ A radio port is the contract between the protocol logic of one radio
 protocol and the backend that executes it: a chip, a family driver or a host
 model. Everything above a port is written once for every backend; everything
 below it is the backend's. The ports are not frozen; this page states the
-principles the port crates follow. The shared lifecycle and vocabulary are in
+principles the port crates follow. The shared vocabulary is in
 [`oer-protocols-radio-port`](../protocols/radio/port/README.md), the Wi-Fi port in
 [`oer-protocols-ieee80211-contracts-port`](../protocols/ieee80211/contracts/port/README.md).
 
@@ -32,10 +32,8 @@ in the CCMP header, which retries retain.
 | Lifecycle | Enable, disable and cancellation of submitted work, each with a terminal event; disable ends the work in flight first |
 | Clock | The backend's radio time with its resolution and its relation to monotonic time (`ClockInfo`), see [time](time.md) |
 
-- **Correlation identities.** Each port has its own 32-bit identity type, so a
-  completion of one port cannot be taken for another's work. The top 256 raw
-  values (`BACKEND_RESERVED`) are for work the backend submits itself; a
-  caller's allocator wraps before them.
+- **Correlation identities.** Each port has its own identity type, so a
+  completion of one port cannot be taken for another's work.
 - **One consumer.** Users that share a port share it through a router that
   owns the stream and dispatches by identity. Taking an event only dequeues
   it. Timed work the backend does in software runs in its driver, which owns

@@ -1,8 +1,0 @@
-error: lifetime may not live long enough
-  --> tests/ui/output_brand.rs:21:13
-   |
-14 |     async fn run<'p, 'id>(
-   |                      --- lifetime `'id` defined here
-...
-21 |             Ended::uninstall(owner, (), slot) // ui-error: lifetime may not live long enough
-   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ returning this value requires that `'id` must outlive `'static`

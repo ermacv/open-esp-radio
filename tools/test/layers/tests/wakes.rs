@@ -81,7 +81,6 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
         ("protocols/network/runtime/src/socket.rs", 5),
         ("protocols/network/runtime/src/socket/lent.rs", 3),
         ("protocols/network/runtime/src/watch.rs", 3),
-        ("protocols/radio/port/src/slot.rs", 3),
     ]
     .into_iter()
     .map(|(path, count)| (String::from(path), count))
@@ -94,16 +93,10 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
 
 #[test]
 fn upward_notification_fields_use_the_shared_primitive() {
-    for (source, fields) in [
-        (
-            include_str!("../../../../chips/esp32s31/radio/ieee80211/backend/src/rx/control.rs"),
-            &["runner: PriorityWaker,"][..],
-        ),
-        (
-            include_str!("../../../../protocols/radio/port/src/slot.rs"),
-            &["p2: PriorityWaker,"][..],
-        ),
-    ] {
+    for (source, fields) in [(
+        include_str!("../../../../chips/esp32s31/radio/ieee80211/backend/src/rx/control.rs"),
+        &["runner: PriorityWaker,"][..],
+    )] {
         for field in fields {
             assert!(
                 source.contains(field),

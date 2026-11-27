@@ -5078,10 +5078,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ),
     ("CacheSyncRegisters::done", SAMPLED_BIT),
     ("ClockUpdate::update_pending", SAMPLED_BIT),
-    (
-        "Correlation::is_backend_reserved",
-        "predicate: the correlation is the backend's",
-    ),
     ("Count::on", "predicate: the switchable diagnostics are on"),
     ("CounterLatch::valid", SAMPLED_BIT),
     (
@@ -6494,7 +6490,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         1,
         BY_CONTROLLER,
     ),
-    ("protocols/radio/port/src/slot.rs", 1, BY_PHY_OWNER),
 ];
 /// S5: results dropped or replaced (a statement `.ok();`, an
 /// `unwrap_or_default()`, an `unwrap_or_else(|_| …)`), by file with their
@@ -6957,14 +6952,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         1,
         BY_PHY_OWNER,
     ),
-    (
-        "protocols/radio/port/src/conformance/registration.rs",
-        1,
-        BY_PHY_OWNER,
-    ),
-    ("protocols/radio/port/src/lib.rs", 3, BY_PHY_OWNER),
-    ("protocols/radio/port/src/lifecycle.rs", 24, BY_PHY_OWNER),
-    ("protocols/radio/port/src/slot.rs", 21, BY_PHY_OWNER),
+    ("protocols/radio/port/src/lib.rs", 2, BY_PHY_OWNER),
 ];
 /// S7: compatibility layers (`#[serde(default)]`, `#[serde(alias)]`,
 /// `#[deprecated]`, a renamed re-export `pub use … as …`), by file with
@@ -6998,11 +6986,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
         "chips/esp32s31/radio/phy/src/tracking/rfpll/search.rs",
         1,
         BY_PHY_PROGRAMS,
-    ),
-    (
-        "chips/family/platform/executor/src/installations.rs",
-        1,
-        BY_PUMP,
     ),
     ("chips/family/platform/executor/src/lib.rs", 1, BY_PUMP),
     (
@@ -8769,18 +8752,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         "protocols/network/runtime/src/socket.rs::Socket.inbound",
         BY_PUMP,
     ),
-    (
-        "protocols/radio/port/src/pool/fifo.rs::Place.ticket",
-        BY_PHY_OWNER,
-    ),
-    (
-        "protocols/radio/port/src/slot.rs::SlotRegistration.invocation",
-        BY_PHY_OWNER,
-    ),
-    (
-        "protocols/radio/port/src/slot.rs::SlotRegistration.owner",
-        BY_PHY_OWNER,
-    ),
 ];
 
 // ---- S8d: an attribute that silences a lint is listed --------------------
@@ -9521,18 +9492,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unsafe_code",
         6,
         "board linker owns this exported executor core-state section / the executor's signal context contract / zero wake flags are zero bytes",
-    ),
-    (
-        "chips/family/platform/executor/src/installations.rs",
-        "clippy::disallowed_methods",
-        1,
-        "the unique static claim constructs only invariant PhantomData in a zero-sized SlotClaim",
-    ),
-    (
-        "chips/family/platform/executor/src/installations.rs",
-        "unsafe_code",
-        1,
-        "the declaration establishes a unique static identity",
     ),
     (
         "chips/family/platform/executor/src/lib.rs",
@@ -10519,70 +10478,10 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "the service's end hands on each owner it held",
     ),
     (
-        "protocols/radio/port/src/conformance.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "unknown, to read",
-    ),
-    (
-        "protocols/radio/port/src/conformance.rs",
-        "clippy::disallowed_macros",
-        1,
-        "unknown, to read",
-    ),
-    (
-        "protocols/radio/port/src/conformance.rs",
-        "clippy::disallowed_methods",
-        1,
-        "unknown, to read",
-    ),
-    (
-        "protocols/radio/port/src/conformance.rs",
-        "clippy::expect_used",
-        1,
-        "unknown, to read",
-    ),
-    (
-        "protocols/radio/port/src/conformance.rs",
-        "clippy::panic",
-        1,
-        "unknown, to read",
-    ),
-    (
-        "protocols/radio/port/src/conformance.rs",
-        "clippy::unreachable",
-        1,
-        "unknown, to read",
-    ),
-    (
-        "protocols/radio/port/src/conformance.rs",
-        "clippy::unwrap_used",
-        1,
-        "unknown, to read",
-    ),
-    (
-        "protocols/radio/port/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_PHY_OWNER,
-    ),
-    (
-        "protocols/radio/port/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        BY_PHY_OWNER,
-    ),
-    (
         "protocols/radio/port/src/pool.rs",
         "clippy::cast_possible_truncation",
         1,
         "a pool holds at most 256 tokens",
-    ),
-    (
-        "protocols/radio/port/src/work.rs",
-        "clippy::should_implement_trait",
-        1,
-        "the allocator never ends and yields any identity type",
     ),
     (
         "protocols/radio/regulatory/src/lib.rs",

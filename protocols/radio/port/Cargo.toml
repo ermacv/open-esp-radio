@@ -5,19 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The base trait and vocabulary every radio port shares: refusals and poisoning, event loss, lifecycle, cancellation, correlation identities and clock relation"
+description = "The vocabulary every radio port shares: capacity as values, refusals and poisoning, event loss and the radio clock"
 readme = "README.md"
 
-[features]
-# The shared conformance suite (`conformance`), which each backend's tests
-# run over a harness of the backend.
-test-support = []
-
 [dependencies]
-oer-portable-sync = { path = "../../../portable/sync" }
-oer-portable-waker = { path = "../../../portable/waker" }
-scopeguard = { version = "1.2.0", default-features = false }
-pin-project-lite = "0.2.17"
 oer-portable-time = { path = "../../../portable/time" }
 
 [dev-dependencies]
@@ -28,7 +19,3 @@ oer-tools-test-ui-cases = { path = "../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true
-
-[[example]]
-name = "lifecycle_cost"
-required-features = ["test-support"]

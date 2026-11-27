@@ -1,11 +1,3 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "the PHY under one owner: its state, its operations, clocks and power"
-)]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "the PHY under one owner: its state, its operations, clocks and power"
-)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -19,93 +11,24 @@
     )
 )]
 
-//! Shared radio capacity, lifecycle and operation contracts.
-//!
-//! [`PortSlot`] retains the P2 owner and queues outside the body's future.
-//! [`run_port`] consumes its frontend; [`Owner`] borrows body views and consumes each typestate
-//! transition. Fail-stop publishes an affine request; the lifecycle supervisor
-//! waits for the actual stop outcome before returning [`PortEnd`].
-//! [`LocalExecution`] keeps registration and body in the same context without
-//! requiring `Send`; registration precedes construction or polling of the body.
-//! [`Mint::into_pools`] issues each installation's complete capacity once.
-//! [`Installations`] mints successive installations of one claimed slot
-//! identity under the `'static` brand, for a port whose tasks share it.
-//! Queues contain complete owned Id payloads, with a separate invariant body
-//! loan on every public resource and protected context.
-//! See [`lifecycle`] for retirement, poisoning and cancellation.
-
-#[cfg(any(test, all(feature = "test-support", not(target_os = "none"))))]
-extern crate std;
+//! The vocabulary radio ports share: capacity as values ([`Mint`], [`Slot`],
+//! [`PoolSet`]), the result of a port call ([`PortResult`], [`Poisoned`]),
+//! the marker of lost events ([`EventsLost`]) and the radio clock
+//! ([`ClockInfo`], [`RadioStamp`], [`ClockSample`], [`ClockError`]).
 
 mod clock;
-#[cfg(any(test, feature = "test-support"))]
-pub mod conformance;
-mod context;
-mod execution;
 mod identity;
-mod installations;
-pub mod lifecycle;
 pub mod pool;
-pub mod slot;
 mod work;
 
-pub use context::{ContextChoice, ContextLoan, ContextProjection, LoanedContext, PortContext};
-pub use execution::LocalExecution;
-pub use identity::{LocalId, SlotIdentity, StaticId};
-pub use installations::{Installation, Installations, Minted, RemintRefused};
-pub use lifecycle::*;
-pub use slot::{
-    DriverFuture, Joined, LifecycleError, ModelSlotOwner, PortSlot, SlotBody, SlotBodyOwner,
-    SlotClaim, SlotCompletion, SlotFrontend, SlotInitError, SlotJoin, SlotObservation, SlotOwner,
-    SlotQuarantined, SlotRegisterError, SlotRegistration, SlotRetire, SlotRetireRefused,
-    SlotStopped, SlotStorageState, SlotWakes, VacantPortSlot, with_local_slot,
-};
-pub use work::*;
-
 pub use clock::{ClockInfo, ClockSample, RadioStamp};
-pub use pool::{
-    BodyLoan, Child, FifoPermitPool, Line, Mint, Permit, PermitPool, PermitSupply, PermitTokens,
-    Permits, Place, Places, PoolBuilder, PoolPath, PoolSet, Pools, Root, Seat, Slot, SlotBank,
-    SlotLayout, Slots, branded,
-};
+pub use identity::{LocalId, SlotIdentity};
+pub use pool::{Child, Mint, PoolBuilder, PoolPath, PoolSet, Pools, Root, Slot, Slots, branded};
+pub use work::ClockError;
 
 /// The result of a port call: `Ok(Ok(_))` served, `Ok(Err(refusal))`
 /// refused with nothing changed, `Err(Poisoned)` a poisoned backend.
 pub type PortResult<T, R, C> = Result<Result<T, R>, Poisoned<C>>;
-
-/// The final end of an installation's event stream.
-///
-/// This is data, carrying only the backend's cause. It grants no hardware
-/// authority and carries no owners or affine proofs. Undelivered owners stay
-/// in the slot's permanent quarantine. Every later
-/// [`PortPhase::next_event`] returns the same variant and cause.
-///
-/// | Backend outcome | Event-stream end |
-/// | --- | --- |
-/// | [`Abandon::Stopped`] or an ordinary fault | `Drained`, after draining all terminals |
-/// | [`Abandon::Unconfirmed`] | `Quarantined`, without waiting or acquiring the ISR's mutex |
-/// | Terminal accounting violation | `Quarantined`, with the admitted owners retained |
-///
-/// Accounting quarantine does not imply [`Abandon::Unconfirmed`]. The
-/// subsequent abandonment can still prove [`Abandon::Stopped`]; delivery
-/// accounting and hardware quiescence are independent outcomes.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum EventEnd<C> {
-    /// Every terminal of admitted work has been delivered through
-    /// [`PortPhase::next_event`]. A missing terminal violates the backend
-    /// contract; a body can detect it from its outstanding work.
-    Drained {
-        /// Why the event stream ended.
-        cause: C,
-    },
-    /// Undelivered terminals and their owners remain in the slot's quarantine.
-    /// The body must fail-stop without attempting further
-    /// draining or ordinary teardown.
-    Quarantined {
-        /// Why the event stream ended.
-        cause: C,
-    },
-}
 
 /// The backend dropped events it could not hold.
 ///
@@ -125,8 +48,7 @@ pub struct EventsLost;
 /// A poisoned backend: its state is unknown and only a reset restores it.
 ///
 /// It is the outer error of commands and clock calls, returned at once.
-/// The event consumer instead reports [`EventEnd`] to distinguish drained
-/// work from quarantined owners. `cause` is the backend's own
+/// `cause` is the backend's own
 /// account of the fault, which portable code passes on without
 /// interpreting it.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

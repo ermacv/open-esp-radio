@@ -1567,7 +1567,6 @@ dependencies = [
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-portable-trace",
- "oer-protocols-radio-port",
  "oer-tools-test-ui-cases",
  "portable-atomic",
  "static_cell",
@@ -2489,13 +2488,9 @@ version = "0.1.0"
 dependencies = [
  "oer-portable-clock",
  "oer-portable-memory",
- "oer-portable-sync",
  "oer-portable-time",
  "oer-portable-time-virtual",
- "oer-portable-waker",
  "oer-tools-test-ui-cases",
- "pin-project-lite",
- "scopeguard",
 ]
 
 [[package]]

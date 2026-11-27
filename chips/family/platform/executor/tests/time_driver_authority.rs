@@ -1,23 +1,6 @@
 #![cfg(not(target_os = "none"))]
 
 #[test]
-fn static_installation_authorities_are_affine() {
-    oer_tools_test_ui_cases::run(env!("CARGO_MANIFEST_DIR"), env!("CARGO_TARGET_TMPDIR"), &[]);
-}
-
-#[test]
-fn static_installation_authorities_are_affine_on_rv32() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
-    oer_tools_test_ui_cases::run_chip(
-        &root,
-        &std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("static-installations"),
-        "riscv32imafc-unknown-none-elf",
-        &[("oer-chips-family-platform-executor", "installations")],
-        &["chips/family/platform/executor/tests/ui/installations_duplicated.rs"],
-    );
-}
-
-#[test]
 fn alarm_startup_requires_the_initialized_time_driver_authority_and_grants_move_alone() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
     let scratch = tempfile::Builder::new()
