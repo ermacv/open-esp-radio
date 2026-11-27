@@ -34,6 +34,21 @@
 //! `HW_RX_STALL_UNDER_LOAD_EXIT_20261119`). The caller never names a
 //! descriptor.
 //!
+//! The walker writes the tail too, the descriptor whose link is zero, with
+//! frames nobody acknowledges (`HW_RX_UNACKNOWLEDGED_TAIL_WRITTEN_20261127`;
+//! an addressed frame is not written there,
+//! `HW_RX_ADDRESSED_TAIL_REFUSED_20261127`). It then stands at LAST, the
+//! tail, with NEXT zero: LAST's link is its one way on, and re-arming LAST
+//! as the new tail would erase it (`HW_RX_WHOLE_SERVICE_STANDS_20261127`).
+//! LAST's unit is given only after a cursor read of this service showed NEXT
+//! off zero. A service that reads NEXT zero gives the units before LAST's
+//! first; reaching LAST's unit, with LAST still the tail (nothing linked
+//! behind it) the unit waits, and otherwise the view rings the doorbell,
+//! reads the cursor inside its settle and gives the unit once NEXT has left
+//! zero (`HW_RX_WITHHELD_LAST_LEAVES_ZERO_20261127`). A unit not given stays
+//! for the next service, with no anomaly: the ring's `start` names it, and
+//! nothing else is kept between services.
+//!
 //! A unit's slots and descriptors are looked up once, where the view finds
 //! it, and carried by reference: nothing after that looks anything up. A
 //! length the walker must not write (a single unit's outside the floor and
@@ -516,9 +531,11 @@ where
 
     /// Serve the completed units: `f` gets the view, in the ring's order up
     /// to `LAST` as read at the start; after it, the doorbell is rung if
-    /// anything was re-armed, and once more when the walker settled with
-    /// NEXT zero and LAST short of the tail, each wait bounded by
-    /// [`RELOAD_SETTLE`] on `counter`.
+    /// anything was re-armed since the view last rang it, and once more when
+    /// the walker settled with NEXT zero and LAST short of the tail, each
+    /// wait bounded by [`RELOAD_SETTLE`] on `counter`. LAST's unit is given
+    /// only after a cursor read of this service showed NEXT off zero (the
+    /// module's documentation); the caller sees one view.
     ///
     /// # Errors
     ///
@@ -528,20 +545,29 @@ where
     pub fn serve<K: SettleCounter + ?Sized, R>(
         &mut self,
         counter: &K,
-        f: impl FnOnce(&mut Completed<'_, B, BYTES, N, W>) -> R,
+        f: impl FnOnce(&mut Completed<'_, B, BYTES, N, W, K>) -> R,
     ) -> Result<R, (RingAnomaly, R)> {
         let (last, next) = self.walker.cursor();
-        let remaining = self.completed(cursor_ring_index(last, self.table.base, N), next == 0);
+        let last = cursor_ring_index(last, self.table.base, N);
+        let remaining = self.completed(last, next == 0);
+        let at_last = if next == 0 {
+            AtLast::Withheld
+        } else {
+            AtLast::Given
+        };
         let mut view = Completed {
             ring: self,
+            counter,
             remaining,
             yielded: 0,
             rearmed: 0,
+            rung: 0,
+            last: at_last,
             anomaly: None,
         };
         let result = f(&mut view);
-        let (rearmed, anomaly) = (view.rearmed, view.anomaly);
-        let rung = if rearmed == 0 {
+        let (rearmed, rung, anomaly) = (view.rearmed, view.rung, view.anomaly);
+        let rung = if rearmed == rung {
             Ok(())
         } else {
             self.ring_doorbell(Settle::new(RELOAD_SETTLE, counter))
@@ -598,19 +624,35 @@ where
 
 /// The completed units of one service ([`RxRing::serve`]), in the ring's
 /// order up to the `LAST` read at its start.
-pub struct Completed<'r, B, const BYTES: usize, const N: usize, W>
+pub struct Completed<'r, B, const BYTES: usize, const N: usize, W, K: ?Sized>
 where
     B: Brand<Window = DmaWindow>,
 {
     ring: &'r mut RxRing<B, BYTES, N, W>,
+    /// The doorbell's settle counter.
+    counter: &'r K,
     /// Completed descriptors from the ring's `start` not yet yielded.
     remaining: usize,
     /// Descriptors yielded since the service began.
     yielded: usize,
     /// Descriptors re-armed since the service began.
     rearmed: usize,
+    /// Descriptors re-armed when the view last rang the doorbell itself.
+    rung: usize,
+    /// Whether the unit at `LAST` waits for the walker to leave it.
+    last: AtLast,
     /// The anomaly the view stopped at.
     anomaly: Option<RingAnomaly>,
+}
+
+/// The unit at the `LAST` read at a service's start.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AtLast {
+    /// Given as any other: this service read NEXT off zero.
+    Given,
+    /// This service read NEXT zero: the unit is given only after a cursor
+    /// read of this service showed NEXT off zero.
+    Withheld,
 }
 
 /// One completed unit: one descriptor, or a chain of several, which is only
@@ -672,10 +714,11 @@ impl<B: Brand> Clone for LastBytes<B> {
 
 impl<B: Brand> Copy for LastBytes<B> {}
 
-impl<'r, B, const BYTES: usize, const N: usize, W> Completed<'r, B, BYTES, N, W>
+impl<'r, B, const BYTES: usize, const N: usize, W, K> Completed<'r, B, BYTES, N, W, K>
 where
     B: Brand<Window = DmaWindow>,
     W: Walker,
+    K: SettleCounter + ?Sized,
 {
     /// The next completed unit, or `None`: none is left up to `LAST`, the
     /// next one is not complete at `LAST`, a unit before it was dropped and
@@ -684,9 +727,12 @@ where
     pub fn next_unit(&mut self) -> Option<Unit<'_, B, BYTES, N, W>> {
         let Completed {
             ring,
+            counter,
             remaining,
             yielded,
             rearmed,
+            rung,
+            last: at_last,
             anomaly,
         } = self;
         if anomaly.is_some() || *yielded != *rearmed {
@@ -725,6 +771,35 @@ where
         let (slots_b, slots_a) = slots.split_at_mut_checked(head.get())?;
         let (slots_a, _) = slots_a.split_at_mut_checked(a)?;
         let (slots_b, _) = slots_b.split_at_mut_checked(count - a)?;
+        if *at_last == AtLast::Withheld && count == *remaining {
+            // The unit at LAST, NEXT read zero: LAST's link is the walker's
+            // one way on, and re-arming LAST as the tail would erase it.
+            // LAST's unit is given only after a cursor read of this service
+            // showed NEXT off zero (`HW_RX_REBIND_AT_LAST_20261118`: an armed
+            // descriptor ahead of the walker). With LAST still the tail
+            // nothing is linked behind it, and the unit waits; otherwise the
+            // doorbell sends the walker on at LAST's link, and the cursor is
+            // read within its settle.
+            if tail.index == head.advance(count - 1) {
+                return None;
+            }
+            walker.fence();
+            walker.ring();
+            walker.fence();
+            *rung = *rearmed;
+            let left = settle(Settle::new(RELOAD_SETTLE, *counter), || {
+                (walker.reload() == Reload::Accepted && walker.cursor().1 != 0).then_some(())
+            });
+            match left {
+                Ok(()) => *at_last = AtLast::Given,
+                Err(Unsettled) => {
+                    if walker.reload() == Reload::Pending {
+                        *anomaly = Some(RingAnomaly::DoorbellPending);
+                    }
+                    return None;
+                }
+            }
+        }
         let last_descriptor = run_b.last().or(run_a.last())?;
         let head_link = *links_a.first()?;
         let last = head.advance(count - 1);
@@ -854,9 +929,13 @@ where
         // reported at this service's start (`serve`), so the walker completed
         // it and moved on, and its descriptor now holds the spare: the walker
         // does not write this buffer again (`HW_RX_REBIND_BEFORE_LAST_20261118`,
-        // `HW_RX_REBIND_AT_LAST_20261118`). The span begins at the floor: the
-        // header's late bytes 48 to 52 lie under no span
-        // (`HW_RX_HEADER_LATE_WRITE_20261118`).
+        // `HW_RX_REBIND_AT_LAST_20261118`). The latter's condition holds: a
+        // rebind at LAST has an armed descriptor ahead of the walker, because
+        // LAST's unit is given only after a cursor read of this service
+        // showed NEXT off zero (`Completed::next_unit`,
+        // `HW_RX_WITHHELD_LAST_LEAVES_ZERO_20261127`).
+        // The span begins at the floor: the header's late bytes 48 to 52 lie
+        // under no span (`HW_RX_HEADER_LATE_WRITE_20261118`).
         let released = unsafe { Released::assume(unit, span) };
         arena.reclaim(released)
     }

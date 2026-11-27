@@ -4726,7 +4726,7 @@ const PHY_DRIVER: &str = "the PHY under one owner: to the PHY driver, with the P
 const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/descriptor.rs", 382, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
-    ("radio/ieee80211/dma/receive.rs", 1024, RX_RING_ATOMS),
+    ("radio/ieee80211/dma/receive.rs", 1103, RX_RING_ATOMS),
     ("radio/ieee80211/dma/space.rs", 97, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),

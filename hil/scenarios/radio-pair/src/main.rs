@@ -44,7 +44,7 @@ const ROLES: &[Role] = &[
 
 const SCENARIO: Scenario = Scenario::with_roles("radio-pair", ROLES).using_air_exclusively();
 
-const CASES: [Case; 7] = [
+const CASES: [Case; 8] = [
     Case {
         name: "cold-snapshots",
         run: cold_snapshots,
@@ -70,10 +70,14 @@ const CASES: [Case; 7] = [
         name: "stop",
         run: stop,
     },
-    // Last: it boots both boards afresh.
+    // Last: they boot both boards afresh.
     Case {
         name: "first-frame",
         run: first_frame::first_frame,
+    },
+    Case {
+        name: "ring-full",
+        run: ring_full::ring_full,
     },
 ];
 
@@ -89,6 +93,8 @@ const ROUNDS_TIMEOUT: Duration = Duration::from_secs(300);
 /// The receiver's windows (`tasks/277`, `281`).
 const WINDOW_MS: u32 = 2_000;
 const STALL_MS: u32 = 100;
+/// R0's window before the rounds.
+const DRAIN_MS: u32 = 100;
 const EXIT_MS: u32 = 1_000;
 const TURNS: u32 = 50;
 const TURN_MS: u32 = 200;
@@ -113,6 +119,7 @@ struct Addresses {
 static ADDRESSES: Mutex<Option<Addresses>> = Mutex::new(None);
 
 mod first_frame;
+mod ring_full;
 
 fn main() -> ExitCode {
     oer_tools_hil_harness::main(&SCENARIO, &CASES)
@@ -357,6 +364,16 @@ fn turns(
 /// Case C's rounds on the sender while the receiver serves R1 to R5; each
 /// R's verdict is recorded, and the case fails naming every R that did.
 fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    // R0: the ring served once before the rounds, so that R1 begins with it
+    // empty: what the air left in it since the bring-up is given here.
+    let drained = cx.device(RECEIVER)?.call(
+        Window {
+            millis: DRAIN_MS,
+            record: Record::Counts,
+        },
+        within(DRAIN_MS),
+    )?;
+    keep(cx, RECEIVER, "r0-drain", &drained);
     let rounds = cx.device(SENDER)?.post(Round { rounds: ROUNDS })?;
     let mut timeline = Timeline::new();
     let mut failed = Vec::new();
