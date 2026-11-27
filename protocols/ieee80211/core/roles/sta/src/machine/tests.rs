@@ -2939,80 +2939,78 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             oer_protocols_ieee80211_wire::security::LinkProtection::Open,
         )
         .unwrap();
-        let model = core::pin::pin!(branded(
-            async |mint: Mint<'_, PortPools<StationModel<8>>>| {
-                let install = mint.into_pools();
-                let (radio, _station) = install.data;
-                let mut port = ModelPort::<'_, StationModel<8>>::new(
-                    install.key,
-                    install.issuer,
-                    channel::<ModelCaps>(1),
-                );
-                let mut plane =
-                    DataPlane::<'_, ModelCaps, MODEL_CHAIN_SLOTS>::new(radio.chains, radio.queues);
-                plane.link(DataLink {
-                    header,
-                    admission: AcAdmission::default(),
-                    retry: None,
-                    ht: None,
-                    windows: [None; 8],
-                    protection: Default::default(),
-                });
-                let mut tag = 0;
-                let mut send = |world: &mut World<'_>, priority: u8| -> (u8, u16) {
-                    // The link's holder numbers the data from the link's
-                    // spaces, as it numbers the station's own frames.
-                    let link = world.link.as_mut().expect("the link is up");
-                    let mut front = [0xab; HEADROOM];
-                    let ethernet = &mut front[HEADROOM - 14..];
-                    ethernet[..6].copy_from_slice(&BSSID);
-                    ethernet[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
-                    tag += 1;
-                    let msdu = OutboundMsdu {
-                        memory: ModelMemory {
-                            id: tag,
-                            len: 20,
-                            front,
-                        },
-                        length: 14 + 20,
-                        priority: WmmUserPriority::new(priority).unwrap(),
-                    };
-                    let (numbers, key) = link.numbers_and_key();
-                    let taken = plane.intake(
-                        &mut port,
-                        &ModelLink { protected: false },
-                        msdu,
-                        numbers,
-                        key,
-                        Instant::from_micros(0),
-                    );
-                    assert!(matches!(taken, Intake::Taken(_)));
-                    // The MPDU's front went into the headroom; withdrawn, its
-                    // memory names it.
-                    let mut written = None;
-                    plane.withdraw_unpublished(
-                        &mut port,
-                        |memory: ModelMemory| written = Some(memory.id),
-                        &mut (),
-                    );
-                    let id = written.expect("the arena held the MPDU");
-                    tid_and_sequence(port.front(id).expect("its front was written"))
+        let model = core::pin::pin!(branded(async |mint: Mint<'_, PortPools<StationModel>>| {
+            let install = mint.into_pools();
+            let (radio, _station) = install.data;
+            let mut port = ModelPort::<'_, StationModel>::new(
+                install.key,
+                install.issuer,
+                channel::<ModelCaps>(1),
+            );
+            let mut plane =
+                DataPlane::<'_, ModelCaps, MODEL_CHAIN_SLOTS>::new(radio.chains, radio.queues);
+            plane.link(DataLink {
+                header,
+                admission: AcAdmission::default(),
+                retry: None,
+                ht: None,
+                windows: [None; 8],
+                protection: Default::default(),
+            });
+            let mut tag = 0;
+            let mut send = |world: &mut World<'_>, priority: u8| -> (u8, u16) {
+                // The link's holder numbers the data from the link's
+                // spaces, as it numbers the station's own frames.
+                let link = world.link.as_mut().expect("the link is up");
+                let mut front = [0xab; HEADROOM];
+                let ethernet = &mut front[HEADROOM - 14..];
+                ethernet[..6].copy_from_slice(&BSSID);
+                ethernet[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+                tag += 1;
+                let msdu = OutboundMsdu {
+                    memory: ModelMemory {
+                        id: tag,
+                        len: 20,
+                        front,
+                    },
+                    length: 14 + 20,
+                    priority: WmmUserPriority::new(priority).unwrap(),
                 };
-                assert_eq!(send(&mut world, 7), (7, 0));
-                assert_eq!(send(&mut world, 0), (0, 0));
-                // A rekey: Group Message 2 is QoS Data on TID 7, numbered in its space.
-                let before = world.frames.len();
-                world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
-                let group_message2 = world.frames[before..]
-                    .iter()
-                    .find(|frame| frame[0] & 0xfc == 0x88)
-                    .expect("Group Message 2 went as QoS Data");
-                assert_eq!(tid_and_sequence(group_message2), (7, 1));
-                // TID 7 goes on after the EAPOL's number; TID 0 never lost one.
-                assert_eq!(send(&mut world, 7), (7, 2));
-                assert_eq!(send(&mut world, 0), (0, 1));
-            }
-        ));
+                let (numbers, key) = link.numbers_and_key();
+                let taken = plane.intake(
+                    &mut port,
+                    &ModelLink { protected: false },
+                    msdu,
+                    numbers,
+                    key,
+                    Instant::from_micros(0),
+                );
+                assert!(matches!(taken, Intake::Taken(_)));
+                // The MPDU's front went into the headroom; withdrawn, its
+                // memory names it.
+                let mut written = None;
+                plane.withdraw_unpublished(
+                    &mut port,
+                    |memory: ModelMemory| written = Some(memory.id),
+                    &mut (),
+                );
+                let id = written.expect("the arena held the MPDU");
+                tid_and_sequence(port.front(id).expect("its front was written"))
+            };
+            assert_eq!(send(&mut world, 7), (7, 0));
+            assert_eq!(send(&mut world, 0), (0, 0));
+            // A rekey: Group Message 2 is QoS Data on TID 7, numbered in its space.
+            let before = world.frames.len();
+            world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
+            let group_message2 = world.frames[before..]
+                .iter()
+                .find(|frame| frame[0] & 0xfc == 0x88)
+                .expect("Group Message 2 went as QoS Data");
+            assert_eq!(tid_and_sequence(group_message2), (7, 1));
+            // TID 7 goes on after the EAPOL's number; TID 0 never lost one.
+            assert_eq!(send(&mut world, 7), (7, 2));
+            assert_eq!(send(&mut world, 0), (0, 1));
+        }));
         let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
         assert!(core::future::Future::poll(model, &mut cx).is_ready());
     });

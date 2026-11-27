@@ -1,0 +1,15 @@
+error[E0277]: the trait bound `Second: LongIn<(First,)>` is not satisfied
+  --> tests/ui/a_chain_reaches_its_own_buffer.rs:17:51
+   |
+17 |     let _other = *ChainOf::<'id, OneLong>::buffer(second, buffers); // ui-error: E0277
+   |                   ------------------------------- ^^^^^^ the trait `LongIn<(First,)>` is not implemented for `Second`
+   |                   |
+   |                   required by a bound introduced by this call
+   |
+help: the trait `LongIn<(First,)>` is not implemented for `Second`
+      but trait `LongIn<(First, Second)>` is implemented for it
+  --> src/data/layout.rs
+   |
+   | impl LongIn<(First, Second)> for Second {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: required for `LongChain<'id, Second, 16>` to implement `ChainOf<'id, RadioLayout<(First,), 16, (InterfaceLayout<oer_protocols_ieee80211_contracts_port::Station, 1, 0, 0>,)>>`

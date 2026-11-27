@@ -1330,33 +1330,38 @@ its model and conformance case.
   contract; its S31 backend, `chips/esp32s31/radio/ieee80211/backend`, is a
   source outside the build, awaiting deletion at its successor): the
   radio's life (`RadioPort`: start, retune, stop, retire, release) and the
-  data path (`DataPort`: arenas, singles, commands, the gate; `ReceivePort`:
+  data path (`DataPort`: chains, commands, the gate; `ReceivePort`:
   receive as a round). It is the owner of its hardware in the sense of
   RAII: what an operation sets up, its opposite takes down, and a stop
   returns the port to its state before the start. No call returns an
   error.
 - Every right of an installation (the radio's position, the stop's right,
-  an arena, a single's place, a queue, the command place, a key or
+  a chain, a queue with its chain of one, the command place, a key or
   agreement slot, the gate) is a value branded by the installation and
   made only by the contract from the port's `PortKey`, which only the
   installation's mint hands out; a transition consumes the right it takes
   and returns the next, so a call with a stale or a foreign right cannot be
   written. The installation's rights are two kinds of bundle: the radio's,
-  once (the chains, the queues, the command's place), and one an interface
-  of its layout (its singles, its data places, its keys' and agreements'
-  places), each right of an interface typed by its interface, so that it
+  once (the long chains, the queues, the command's place), and one an
+  interface of its layout (its keys' and agreements' places, its receive
+  rule), each right of an interface typed by its interface, so that it
   reaches only that interface's calls; the machine holds every bundle
   while the data is stopped, the engine while it flows
   ([the contract's interfaces](../protocols/ieee80211/contracts/port/README.md#interfaces)). The radio's life is called only by `drive`, from the steps of
   the installation machine, which alone holds the radio's rights and the
   stop's right; the gate is closed at each start and opened only on a
   running radio.
-- A chain is a place filled and published once: its publication takes its
-  queue's right, which the chain on the air holds until its settlement
-  gives it back, so a queue carries one chain; it sends a prefix, the
-  longest its rate admits, one frame at least, and the frames that did not
-  go stay in their places with no attempt spent. A single's
-  place is its purpose's, so a role's frame always has one. Receive is a
+- A chain is filled and published once, through its place: a queue's place
+  (free, its chain of one on the air, or carried by a long chain) and a long
+  chain's (idle, open, on the air) are the contract's sums, lent by `&mut`;
+  a place answers the proof of its state and a transition is the proof's,
+  which writes the next state, so no holder takes a right out of a place. A
+  publication takes its queue's proof that it is free, so a queue carries one
+  chain; a chain of one goes as one MPDU and ends as one; a long chain
+  sends a prefix, the longest its rate admits, one frame at least, and
+  the frames that did not go stay in their places with no attempt spent.
+  Every frame goes by its memory's handle, a role's as the network's, and
+  comes home at its settlement: the port holds descriptors alone. Receive is a
   round that services the ring once and returns, at its close, every unit
   not taken.
 - A caller that drops an admitted request detaches only its waker; the port

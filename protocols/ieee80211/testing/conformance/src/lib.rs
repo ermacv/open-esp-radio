@@ -37,15 +37,16 @@ use core::num::NonZeroU8;
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AmpduRate, ArenaOutcome, CloseGate, CommandPlace, CommandPoll, DataPort, FrameSet,
-    GateClosed, GateOpen, GroupCommand, GroupEnd, HEADROOM, HeaderLen, IdleChain, InCommand,
-    InterfaceLayout, InterfaceRights, InterfaceRole, Layout, LayoutRights, MpduLength,
-    PairwiseCommand, PairwiseEnd, PhyRate, PortRate, PortSink, Ppdu, QueueRight, RadioLayout,
-    RadioPort, RadioRights, ReceiveCommand, ReceiveEnd, ReceivePort, Round, Settled, SingleOutcome,
-    StartPoll, Station, StationReceive, StopFrom, StopPoll, StopRight, Stopped, TbttEvent, TxFacts,
-    TxOutcome, ValueCommand, ValueEnd,
+    GateClosed, GateOpen, GroupCommand, GroupEnd, HEADROOM, HeaderLen, InCommand, InterfaceLayout,
+    InterfaceRights, InterfaceRole, Layout, LayoutRights, MpduLength, PairwiseCommand, PairwiseEnd,
+    PhyRate, PortRate, PortSink, Queue, RadioLayout, RadioPort, RadioRights, ReceiveCommand,
+    ReceiveEnd, ReceivePort, Round, StartPoll, Station, StationReceive, StopFrom, StopPoll,
+    StopRight, Stopped, TbttEvent, TxFacts, TxOutcome, ValueCommand, ValueEnd,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AckHeader, HeaderSpec, Protection, RetryPlan, RetryStage, SizedFrame, TxFrame,
+    AggregatePpdu, First, HeaderSpec, LongChain, LongIn, LongNow, LongPlace, LongPpdu, LongSettled,
+    NoAckHeader, OneFrame, OnePpdu, OpenLong, Protection, QUEUES, QueueIs, QueueNow, QueuePlace,
+    QueuePlaces, RetryPlan, RetryStage, Second, SizedFrame,
 };
 use oer_protocols_ieee80211_wire::frame::MacHeader;
 use oer_protocols_ieee80211_wire::phy::{
@@ -86,6 +87,8 @@ pub trait Harness<'id, L: Layout> {
     fn hold_air(&mut self);
     /// Let the air end what it holds.
     fn release_air(&mut self);
+    /// Let no response answer the next frames: no ACK and no BlockAck.
+    fn answer_nothing(&mut self);
     /// The chains the hardware queue of `category` carries now.
     fn chains_on(&self, category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory) -> usize;
     /// What the hardware was asked to program since the last start.
@@ -108,35 +111,28 @@ pub enum PortOctets {
     Overwritten,
 }
 
-/// The layout the suite runs: the radio's `CHAINS` chains of `SLOTS`, and
-/// a station alone, with `SINGLES` single places, one pairwise key place, `GROUPS` group key slots and
-/// `AGREEMENTS` agreements' slots.
-pub type StationLayout<
-    const CHAINS: usize,
-    const SLOTS: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> = RadioLayout<CHAINS, SLOTS, (InterfaceLayout<Station, SINGLES, 1, GROUPS, AGREEMENTS>,)>;
+/// The layout the suite runs: the radio's two long chains of `SLOTS`, and
+/// a station alone, with one pairwise key place, `GROUPS` group key slots
+/// and `AGREEMENTS` agreements' slots.
+pub type StationLayout<const SLOTS: usize, const GROUPS: usize, const AGREEMENTS: usize> =
+    RadioLayout<(First, Second), SLOTS, (InterfaceLayout<Station, 1, GROUPS, AGREEMENTS>,)>;
 
 /// The station's rights of the suite's layout.
-pub type StationRights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
-    InterfaceRights<'id, Station, SINGLES, 1, GROUPS, AGREEMENTS>;
+pub type StationRights<'id, const GROUPS: usize, const AGREEMENTS: usize> =
+    InterfaceRights<'id, Station, 1, GROUPS, AGREEMENTS>;
 
-/// The layout of the suite's access point alone: `SINGLES` single places,
-/// `PAIRWISE` pairwise key places, a client each, `GROUPS` group key slots
-/// and `AGREEMENTS` agreements' slots.
+/// The layout of the suite's access point alone: two long chains of
+/// `SLOTS`, `PAIRWISE` pairwise key places, a client each, `GROUPS` group
+/// key slots and `AGREEMENTS` agreements' slots.
 pub type AccessPointLayout<
-    const CHAINS: usize,
     const SLOTS: usize,
-    const SINGLES: usize,
     const PAIRWISE: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
 > = RadioLayout<
-    CHAINS,
+    (First, Second),
     SLOTS,
-    (InterfaceLayout<AccessPoint, SINGLES, PAIRWISE, GROUPS, AGREEMENTS>,),
+    (InterfaceLayout<AccessPoint, PAIRWISE, GROUPS, AGREEMENTS>,),
 >;
 
 /// The rights the suite runs an installation of the layout `L` with.
@@ -151,29 +147,10 @@ pub struct Rights<'id, L: Layout> {
     pub gate: Option<GateClosed<'id>>,
 }
 
-/// A sink that keeps the singles' ends, each as its interface's.
-struct Ends<'id, L: Layout> {
-    singles: Vec<(SingleOutcome<(), ()>, L::Single<'id>, QueueRight<'id>)>,
-}
+/// A sink of the TBTT, which the suite does not read.
+struct Ends;
 
-impl<'id, L: Layout> Ends<'id, L> {
-    const fn new() -> Self {
-        Self {
-            singles: Vec::new(),
-        }
-    }
-}
-
-impl<'id, L: Layout> PortSink<'id, L, (), ()> for Ends<'id, L> {
-    fn single_ended(
-        &mut self,
-        outcome: SingleOutcome<(), ()>,
-        place: L::Single<'id>,
-        queue: QueueRight<'id>,
-    ) {
-        self.singles.push((outcome, place, queue));
-    }
-
+impl PortSink for Ends {
     fn tbtt(&mut self, _event: TbttEvent) {}
 }
 
@@ -244,14 +221,14 @@ fn run_command<'id, H, C, K, E, L: Layout>(
     place: CommandPlace<'id>,
     command: C,
     begin: impl Fn(&mut H::Port, CommandPlace<'id>, C) -> InCommand<'id, K>,
-    poll: impl Fn(&mut H::Port, InCommand<'id, K>, &mut Ends<'id, L>) -> CommandPoll<'id, K, E>,
+    poll: impl Fn(&mut H::Port, InCommand<'id, K>, &mut Ends) -> CommandPoll<'id, K, E>,
 ) -> (CommandPlace<'id>, E)
 where
     H: Harness<'id, L>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let mut flight = begin(harness.port(), place, command);
-    let mut ends = Ends::new();
+    let mut ends = Ends;
     for _ in 0..16 {
         match poll(harness.port(), flight, &mut ends) {
             CommandPoll::Ended(place, end) => return (place, end),
@@ -365,19 +342,11 @@ where
 /// The data path's settings over the port, taken down by the data's stop
 /// with their own commands: a pairwise key and a group key installed,
 /// then removed, the gate opened, then closed.
-fn data_run<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+fn data_run<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    rights: &mut Rights<'id, StationLayout<C, N, S, G, A>>,
+    rights: &mut Rights<'id, StationLayout<N, G, A>>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let gate = rights.gate.take().expect("the gate is closed");
@@ -385,13 +354,10 @@ fn data_run<
     let (
         RadioRights {
             chains,
-            ones,
             queues,
             command: place,
         },
         StationRights {
-            singles,
-            data,
             pairwise: [pairwise],
             groups,
             agreements,
@@ -450,13 +416,10 @@ fn data_run<
     rights.data = Some((
         RadioRights {
             chains,
-            ones,
             queues,
             command,
         },
         StationRights {
-            singles,
-            data,
             pairwise: [pairwise],
             groups,
             agreements,
@@ -468,19 +431,11 @@ fn data_run<
 /// **1. Every right is in exactly one place**: a run, its data path and its
 /// stop hand every right back to the suite's places, and a retirement takes
 /// them whole.
-pub fn every_right_is_in_exactly_one_place<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+pub fn every_right_is_in_exactly_one_place<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let running = run(harness, &mut rights);
@@ -527,22 +482,14 @@ where
 /// off; a setting that expires gives it back off and leaves the hardware as
 /// before it, and a change that expires gives it back off with the rule
 /// cleared. `rule` and `other` are two rules the port admits.
-pub fn the_receive_rule_is_a_right<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+pub fn the_receive_rule_is_a_right<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
     address: oer_protocols_ieee802_wire::IndividualAddress,
     rule: StationReceive<<H::Port as RadioPort<'id>>::Caps>,
     other: StationReceive<<H::Port as RadioPort<'id>>::Caps>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let running = run(harness, &mut rights);
@@ -641,17 +588,15 @@ pub fn the_receive_rule_is_a_right<
 pub fn a_clients_key_goes_alone<
     'id,
     H,
-    const C: usize,
     const N: usize,
-    const S: usize,
     const P: usize,
     const G: usize,
     const A: usize,
 >(
     harness: &mut H,
-    mut rights: Rights<'id, AccessPointLayout<C, N, S, P, G, A>>,
+    mut rights: Rights<'id, AccessPointLayout<N, P, G, A>>,
 ) where
-    H: Harness<'id, AccessPointLayout<C, N, S, P, G, A>>,
+    H: Harness<'id, AccessPointLayout<N, P, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     const {
@@ -745,19 +690,11 @@ pub fn a_clients_key_goes_alone<
 /// after a stop equals what it programmed in the first, and its state after
 /// each stop equals its state before the first start; also after a run in
 /// which each anomaly was raised, and after a stop whose last resort ran.
-pub fn a_second_run_is_as_the_first<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+pub fn a_second_run_is_as_the_first<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     // The gate is closed at each start and opened only on a running radio;
@@ -807,120 +744,385 @@ pub fn a_second_run_is_as_the_first<
     }
 }
 
-/// An individual Probe Request of 24 octets at 6 Mb/s, for a single.
-fn single_frame<'id, P: DataPort<'id>>(port: &P) -> (TxFrame<'id, P::Caps>, MpduLength<P::Caps>) {
-    // A Probe Request: management, subtype 4, to an individual receiver.
-    const PROBE_REQUEST: [u8; 24] = [
-        0x40, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 2, 0, 0,
-    ];
-    let header = MacHeader::decode(&PROBE_REQUEST)
-        .and_then(|header| HeaderSpec::from_mac_header(header, IndividualAddress::new))
-        .and_then(AckHeader::new)
-        .expect("a Probe Request's header");
-    let length = MpduLength::new(24).expect("an MPDU's length");
+/// **4. A stop ends** in `Stopped` with everything that was on the air
+/// ended: a role's frame on a queue's chain of one ends withdrawn, its
+/// memory comes home at its settlement and its queue is free again.
+pub fn a_stop_ends_everything_on_the_air<'id, H, const N: usize, const G: usize, const A: usize>(
+    harness: &mut H,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
+) where
+    H: Harness<'id, StationLayout<N, G, A>>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    use oer_protocols_ieee80211_wire::qos::WmmAccessCategory as Ac;
+    let running = run(harness, &mut rights);
+    let gate = rights.gate.take().expect("the gate is closed");
+    let open = harness.port().open_gate(gate);
+    let (radio, station) = rights.data.take().expect("the data's rights are home");
+    let mut queues = QueuePlaces::<'id>::new(radio.queues);
+    harness.hold_air();
+    let how = OnePpdu::Acked(alone(harness.port()));
+    let one = send(harness, &mut queues, Ac::Voice, &PROBE_REQUEST, how, &open);
+    stop(harness, &mut rights, running);
+    let mut went_home = 0;
+    {
+        let QueueNow::One(one) = queues.at_mut(Ac::Voice).state() else {
+            panic!("the frame is on the air");
+        };
+        let ended = one
+            .ended(harness.port(), TxFacts::DUE, NOW)
+            .expect("the frame on the air ended at the stop");
+        assert!(
+            matches!(ended.outcome, TxOutcome::Withdrawn(_)),
+            "a stop's end of a frame is a withdrawal: {:?}",
+            answer(&ended.outcome)
+        );
+        let _ = one.settle(harness.port(), &mut |_memory| went_home += 1);
+    }
+    let _ = one;
+    assert_eq!(went_home, 1, "the frame's memory came home");
+    harness.release_air();
+    let (command, closed) = close_gate(harness, radio.command, open);
+    rights.gate = Some(closed);
+    rights.data = Some((
+        RadioRights {
+            queues: back(queues),
+            command,
+            ..radio
+        },
+        station,
+    ));
+    retire_whole(harness, rights);
+}
+
+/// A Probe Request's header: management, subtype 4, to an individual
+/// receiver, 24 octets.
+const PROBE_REQUEST: [u8; 24] = [
+    0x40, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 2, 0, 0,
+];
+
+/// A Probe Request's header to every station: a group receiver.
+const BROADCAST_PROBE: [u8; 24] = [
+    0x40, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 2, 0, 0, 0, 0, 1, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0, 0,
+];
+
+/// A BlockAckReq's first 16 octets: control, subtype 8, to an individual
+/// receiver; its control and its starting sequence follow in the body.
+const BLOCK_ACK_REQUEST: [u8; 16] = [0x84, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 1];
+
+/// The front `bytes` writes flush against the body.
+fn front(bytes: &'static [u8]) -> impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen {
+    move |headroom| {
+        headroom[HEADROOM - bytes.len()..].copy_from_slice(bytes);
+        HeaderLen::new(bytes.len()).unwrap()
+    }
+}
+
+/// Send a role-written frame of the header `bytes` and a body of 4 octets,
+/// by its memory's handle, in the free queue of `category`'s chain of one,
+/// for the station's link, as `how`: the category it went on.
+fn send<'id, H, L: Layout>(
+    harness: &mut H,
+    queues: &mut QueuePlaces<'id>,
+    category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
+    bytes: &'static [u8],
+    how: OnePpdu<'id, <H::Port as RadioPort<'id>>::Caps>,
+    open: &GateOpen<'id>,
+) -> oer_protocols_ieee80211_wire::qos::WmmAccessCategory
+where
+    H: Harness<'id, L>,
+    H::Port: DataPort<'id>,
+{
+    let link = harness.link::<Station>();
+    let tid = oer_protocols_ieee80211_wire::qos::Tid::constant::<0>();
+    let memory = harness.memory(4);
+    let QueueNow::Free(free) = queues.at_mut(category).state() else {
+        panic!("the queue is free");
+    };
+    free.send(
+        harness.port(),
+        OneFrame {
+            link: &link,
+            tid,
+            body: memory,
+            header: front(bytes),
+        },
+        how,
+        open,
+        NOW,
+        (),
+    )
+    .category()
+}
+
+/// The queues back from their places, every place free.
+fn back<'id>(queues: QueuePlaces<'id>) -> [Queue<'id>; 4] {
+    let Ok(queues) = queues.into_queues() else {
+        panic!("every queue's place is free");
+    };
+    queues
+}
+
+/// The four kinds of a chain of one, in [`QUEUES`]' order: an acknowledged
+/// frame on voice, a frame without acknowledgement on video, a group frame
+/// on best effort, a BlockAckReq on background.
+fn four_kinds<'id, P: DataPort<'id>>(port: &P) -> [OnePpdu<'id, P::Caps>; 4] {
     let rate = port
         .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
         .expect("the port sends 6 Mb/s");
-    let plan = RetryPlan::new(RetryStage {
-        rate,
-        transmissions: NonZeroU8::MIN,
-        protection: Protection::None,
-    });
-    (
-        TxFrame::Individual {
-            frame: SizedFrame::new(header, length).expect("a sized frame"),
-            plan,
+    let individual = MacHeader::decode(&QOS_DATA)
+        .and_then(|header| HeaderSpec::from_mac_header(header, IndividualAddress::new))
+        .and_then(NoAckHeader::new)
+        .expect("a QoS Data header");
+    let group = MacHeader::decode(&BROADCAST_PROBE)
+        .and_then(|header| {
+            HeaderSpec::from_mac_header(header, oer_protocols_ieee802_wire::GroupAddress::new)
+        })
+        .expect("a group header");
+    let length = |octets: usize| MpduLength::new(octets).expect("an MPDU's length");
+    let legacy = rate.legacy().ok().expect("6 Mb/s is non-HT");
+    [
+        OnePpdu::Acked(alone(port)),
+        OnePpdu::NoAck {
+            frame: SizedFrame::new(individual, length(QOS_DATA.len() + 4)).expect("a sized frame"),
+            rate: rate
+                .no_ack()
+                .ok()
+                .expect("6 Mb/s carries a frame without an ACK"),
         },
-        length,
-    )
+        OnePpdu::Group {
+            frame: SizedFrame::new(group, length(BROADCAST_PROBE.len() + 4))
+                .expect("a sized frame"),
+            rate,
+        },
+        OnePpdu::BlockAckRequest {
+            receiver: IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 2])).unwrap(),
+            transmitter: Eui48::new([2, 0, 0, 0, 0, 1]),
+            tid: oer_protocols_ieee80211_wire::qos::Tid::constant::<0>(),
+            starting_sequence: oer_protocols_ieee80211_wire::sequence::SequenceNumber::ZERO,
+            plan: RetryPlan::new(RetryStage {
+                rate: legacy,
+                transmissions: NonZeroU8::MIN,
+                protection: Protection::None,
+            }),
+        },
+    ]
 }
 
-/// **4. A stop ends** in `Stopped` with everything that was on the air
-/// ended through the sink, and every single's place and queue back.
-pub fn a_stop_ends_everything_on_the_air<
+/// The headers of the four kinds' frames, in [`four_kinds`]' order.
+const FOUR_FRONTS: [&[u8]; 4] = [
+    &PROBE_REQUEST,
+    &QOS_DATA,
+    &BROADCAST_PROBE,
+    &BLOCK_ACK_REQUEST,
+];
+
+/// The response each kind's end names, in [`four_kinds`]' order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Answer {
+    /// An ACK.
+    Ack,
+    /// None was solicited.
+    Unsolicited,
+    /// A BlockAck.
+    BlockAck,
+    /// The solicited response did not come.
+    Timeout,
+}
+
+/// What a single's outcome says of its response.
+fn answer<A, D>(
+    outcome: &oer_protocols_ieee80211_contracts_port::SingleOutcome<A, D>,
+) -> Option<Answer> {
+    use oer_protocols_ieee80211_contracts_port::{SingleEnd, SingleResponse};
+    match outcome {
+        TxOutcome::Ended(SingleEnd::Delivered { response, .. }) => Some(match response {
+            SingleResponse::Ack(_) => Answer::Ack,
+            SingleResponse::Unsolicited => Answer::Unsolicited,
+            SingleResponse::BlockAck { .. } => Answer::BlockAck,
+        }),
+        TxOutcome::Ended(SingleEnd::AckTimeout(_)) => Some(Answer::Timeout),
+        _ => None,
+    }
+}
+
+/// The four kinds on the air together, one a queue's chain of one, each
+/// ended and settled: each end's response and how many frames' memory came
+/// home; every queue's place is free again.
+fn four_ends<'id, H, L: Layout>(
+    harness: &mut H,
+    queues: &mut QueuePlaces<'id>,
+    open: &GateOpen<'id>,
+) -> ([Option<Answer>; 4], usize)
+where
+    H: Harness<'id, L>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let kinds = four_kinds(harness.port());
+    for ((category, how), bytes) in QUEUES.into_iter().zip(kinds).zip(FOUR_FRONTS) {
+        let _ = send(harness, queues, category, bytes, how, open);
+    }
+    let mut answers = Vec::new();
+    let mut went_home = 0;
+    for category in QUEUES {
+        let QueueNow::One(one) = queues.at_mut(category).state() else {
+            panic!("each kind is on the air");
+        };
+        let ended = one
+            .ended(harness.port(), TxFacts::DUE, NOW)
+            .expect("the chain of one ended");
+        answers.push(answer(&ended.outcome));
+        let _ = one.settle(harness.port(), &mut |_memory| went_home += 1);
+        assert_eq!(
+            queues.at(category).now(),
+            QueueIs::Free,
+            "a settled chain of one's queue is free"
+        );
+    }
+    (home(answers, "four answers"), went_home)
+}
+
+/// **Each kind ends with its own response**: the four kinds of a chain of
+/// one on the queues, together; an acknowledged frame ends with its ACK, a
+/// frame without acknowledgement and a group frame with none solicited, a
+/// BlockAckReq with its BlockAck; when nothing answers, the two that
+/// solicited a response time out and the two that solicited none are
+/// delivered. Each frame's memory comes home at its settlement.
+pub fn each_kind_ends_with_its_own_response<
     'id,
     H,
-    const C: usize,
     const N: usize,
-    const S: usize,
     const G: usize,
     const A: usize,
 >(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let running = run(harness, &mut rights);
     let gate = rights.gate.take().expect("the gate is closed");
     let open = harness.port().open_gate(gate);
-    let (radio, station) = rights.data.take().expect("the data's rights are home");
-    let mut singles: Vec<_> = station.singles.into_iter().collect();
-    let mut queues: Vec<_> = radio.queues.into_iter().collect();
-    let mut place = singles.remove(0);
-    let queue = queues.remove(0);
-    let (frame, length) = single_frame(harness.port());
-    harness.port().write_single(&mut place, |out| {
-        out[..length.get()].fill(0);
-        length
-    });
-    harness.hold_air();
-    harness
-        .port()
-        .publish_single(place, queue, &open, &frame, NOW);
-    stop(harness, &mut rights, running);
-    let mut ends = Ends::new();
-    harness.port().serve(
-        TxFacts::DUE,
-        oer_protocols_ieee80211_contracts_port::Signal::Quiet,
-        NOW,
-        &mut ends,
-    );
+    let (radio, station) = rights.data.take().expect("the rights are home");
+    let mut queues = QueuePlaces::<'id>::new(radio.queues);
+    let (answers, went_home) = four_ends(harness, &mut queues, &open);
     assert_eq!(
-        ends.singles.len(),
-        1,
-        "the single on the air ends through the sink"
+        answers,
+        [
+            Some(Answer::Ack),
+            Some(Answer::Unsolicited),
+            Some(Answer::Unsolicited),
+            Some(Answer::BlockAck)
+        ],
+        "each kind ends with the response it solicits"
     );
-    let (outcome, place, queue) = ends.singles.pop().unwrap();
-    assert!(
-        matches!(outcome, TxOutcome::Withdrawn(_)),
-        "a stop's end of a single is a withdrawal: {outcome:?}"
+    assert_eq!(went_home, 4, "every frame's memory came home");
+    harness.answer_nothing();
+    let (answers, went_home) = four_ends(harness, &mut queues, &open);
+    assert_eq!(
+        answers,
+        [
+            Some(Answer::Timeout),
+            Some(Answer::Unsolicited),
+            Some(Answer::Unsolicited),
+            Some(Answer::Timeout)
+        ],
+        "with nothing answering, a frame that solicited nothing is still delivered"
     );
-    harness.release_air();
-    singles.insert(0, place);
-    queues.insert(0, queue);
+    assert_eq!(went_home, 4, "every frame's memory came home");
     let (command, closed) = close_gate(harness, radio.command, open);
     rights.gate = Some(closed);
     rights.data = Some((
         RadioRights {
-            queues: home(queues, "every queue's right is back"),
+            queues: back(queues),
             command,
             ..radio
         },
-        StationRights {
-            singles: home(singles, "every place is back"),
-            ..station
+        station,
+    ));
+    stop(harness, &mut rights, running);
+    retire_whole(harness, rights);
+}
+
+/// **A role-written frame comes home**: a frame of the role's, by its
+/// memory's handle in a queue's chain of one, comes home at its end's
+/// settlement; another, on the air at a stop, ends withdrawn and comes home
+/// at its settlement, and its queue is free for the retirement.
+pub fn a_role_frame_comes_home_at_its_end_and_at_a_stop<
+    'id,
+    H,
+    const N: usize,
+    const G: usize,
+    const A: usize,
+>(
+    harness: &mut H,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
+) where
+    H: Harness<'id, StationLayout<N, G, A>>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    use oer_protocols_ieee80211_wire::qos::WmmAccessCategory as Ac;
+    let running = run(harness, &mut rights);
+    let gate = rights.gate.take().expect("the gate is closed");
+    let open = harness.port().open_gate(gate);
+    let (radio, station) = rights.data.take().expect("the rights are home");
+    let mut queues = QueuePlaces::<'id>::new(radio.queues);
+    let [_, no_ack, ..] = four_kinds(harness.port());
+    let mut went_home = 0;
+    // At its end.
+    let _ = send(harness, &mut queues, Ac::Video, &QOS_DATA, no_ack, &open);
+    {
+        let QueueNow::One(one) = queues.at_mut(Ac::Video).state() else {
+            panic!("the frame is on the air");
+        };
+        assert!(
+            one.ended(harness.port(), TxFacts::DUE, NOW).is_some(),
+            "the frame ended"
+        );
+        let _ = one.settle(harness.port(), &mut |_memory| went_home += 1);
+    }
+    assert_eq!(went_home, 1, "the role's frame came home at its end");
+    // At a stop.
+    harness.hold_air();
+    let _ = send(harness, &mut queues, Ac::Video, &QOS_DATA, no_ack, &open);
+    stop(harness, &mut rights, running);
+    {
+        let QueueNow::One(one) = queues.at_mut(Ac::Video).state() else {
+            panic!("the frame is on the air");
+        };
+        let ended = one
+            .ended(harness.port(), TxFacts::DUE, NOW)
+            .expect("a stop ends the chain on the air");
+        assert!(
+            matches!(ended.outcome, TxOutcome::Withdrawn(_)),
+            "a stop's end is a withdrawal"
+        );
+        let _ = one.settle(harness.port(), &mut |_memory| went_home += 1);
+    }
+    assert_eq!(went_home, 2, "the role's frame came home at the stop");
+    harness.release_air();
+    let (command, closed) = close_gate(harness, radio.command, open);
+    rights.gate = Some(closed);
+    rights.data = Some((
+        RadioRights {
+            queues: back(queues),
+            command,
+            ..radio
         },
+        station,
     ));
     retire_whole(harness, rights);
 }
 
 /// **5. The indication**: an anomaly raises "the port needs a stop" in the
 /// port's facts, with no payload, until the stop that follows.
-pub fn the_indication_holds_until_the_stop<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+pub fn the_indication_holds_until_the_stop<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     for anomaly in 0..harness.anomalies() {
@@ -940,19 +1142,11 @@ pub fn the_indication_holds_until_the_stop<
 /// **6. A unit is in one of** the ring, a staging place (staged, taken or
 /// lent), gone: a round hands what the ring held, a unit not taken goes
 /// back, a lent one comes home when the network drops it.
-pub fn a_unit_is_in_one_place<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+pub fn a_unit_is_in_one_place<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let running = run(harness, &mut rights);
@@ -986,63 +1180,57 @@ pub fn a_unit_is_in_one_place<
 
 /// **7. An aggregate's prefix**: a publication at a rate that admits less
 /// than the arena holds sends the longest prefix, one frame at least, and
-/// What one publication of an arena of `frames` frames did: the frames
+/// What one publication of a long chain of `frames` frames did: the frames
 /// that went and whether the outcome says one MPDU went.
 struct Publication {
     sent: FrameSet,
     single: bool,
 }
 
-/// Fill an arena with `frames` frames of `body` octets, publish it as
-/// `how` makes it, end it and settle it keeping nothing; the frames that
-/// did not go stay in place with no attempt spent.
-fn publication<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+/// Fill the first long chain with `frames` frames of `body` octets, publish
+/// it on best effort as `how` makes it, end it and settle it keeping
+/// nothing; the frames that did not go stay in place with no attempt spent.
+fn publication<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
     length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
     body: u16,
     frames: u8,
-    how: impl FnOnce(&H::Port) -> Ppdu<'id, <H::Port as RadioPort<'id>>::Caps>,
+    how: impl FnOnce(&H::Port) -> LongPpdu<'id, <H::Port as RadioPort<'id>>::Caps>,
 ) -> Publication
 where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
+    use oer_protocols_ieee80211_wire::qos::WmmAccessCategory as Ac;
     let running = run(harness, &mut rights);
     let gate = rights.gate.take().expect("the gate is closed");
     let open = harness.port().open_gate(gate);
     let (data, station) = rights.data.take().expect("the data's rights are home");
-    let mut chains: Vec<_> = data.chains.into_iter().collect();
-    let mut queues: Vec<_> = data.queues.into_iter().collect();
-    let idle = chains.remove(0);
-    // QUEUES' order: voice, video, best effort, background.
-    let best_effort = queues.remove(2);
-    let link = harness.link::<Station>();
-    let tid = oer_protocols_ieee80211_wire::qos::Tid::constant::<0>();
-    let mut arena = harness.port().open(idle, &link, tid);
+    let (first, second) = data.chains;
+    let mut queues = QueuePlaces::<'id>::new(data.queues);
+    let mut place = LongPlace::new(first);
+    let mut chain = opened(harness, &mut place);
     for _ in 0..frames {
         let memory = harness.memory(body);
-        let place = harness
-            .port()
-            .place(&mut arena, length)
-            .expect("the arena has slots");
-        place.write(memory, header);
+        let port = harness.port();
+        chain
+            .place(port, length)
+            .expect("the chain has descriptors")
+            .write(memory, header);
     }
+    assert_eq!(chain.frames(), frames);
     assert_eq!(
         harness.port_octets(),
         PortOctets::Whole,
         "the writes leave the port's octets in front of the headroom and behind the body whole"
     );
     let how = how(harness.port());
-    let on_air = harness.port().publish(arena, best_effort, how, &open, NOW);
+    let QueueNow::Free(free) = queues.at_mut(Ac::BestEffort).state() else {
+        panic!("best effort is free");
+    };
+    let on_air = chain.publish(free, harness.port(), how, &open, NOW);
+    assert_eq!(queues.at(Ac::BestEffort).now(), QueueIs::Carried);
     assert_eq!(
         harness.port_octets(),
         PortOctets::Whole,
@@ -1051,49 +1239,52 @@ where
     let sent = on_air.sent();
     assert!(!sent.is_empty(), "one frame goes at least");
     assert_eq!(
+        u32::from(on_air.went()),
+        sent.len(),
+        "how many went is the prefix's length"
+    );
+    assert_eq!(
         sent,
         FrameSet::prefix(sent.len() as u8),
         "the sent frames are a prefix"
     );
-    let ended = harness
-        .port()
-        .ended(TxFacts::DUE, &on_air, NOW)
-        .expect("the arena ended");
+    let ended = on_air
+        .ended(harness.port(), TxFacts::DUE, NOW)
+        .expect("the chain ended");
     assert_eq!(ended.sent, sent);
     let single = matches!(ended.outcome, ArenaOutcome::Single(_));
     let mut went_home = 0;
-    let (settled, best_effort) = harness
-        .port()
-        .settle(on_air, FrameSet::EMPTY, &mut |_memory| went_home += 1);
-    assert_eq!(
-        best_effort.category(),
-        oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort,
-        "the settlement gives back the right of the chain's queue"
+    let settled = on_air.settle(
+        harness.port(),
+        FrameSet::EMPTY,
+        &mut |_memory| went_home += 1,
+        &mut queues,
     );
-    queues.insert(2, best_effort);
     assert_eq!(went_home, sent.len(), "the sent frames go home");
-    let idle = match settled {
-        Settled::Kept(arena) => {
+    match settled {
+        LongSettled::Kept(kept) => {
             assert_eq!(
-                u32::from(arena.frames()),
+                u32::from(kept.frames()),
                 u32::from(frames) - sent.len(),
                 "no attempt of the rest was spent"
             );
-            harness.port().withdraw(arena, &mut |_memory| {})
+            let _ = kept.withdraw(harness.port(), &mut |_memory| {});
         }
-        Settled::Idle(idle) => {
+        LongSettled::Idle(_) => {
             assert_eq!(sent.len(), u32::from(frames), "every frame went");
-            idle
         }
-    };
-    chains.insert(0, idle);
+    }
+    assert_eq!(
+        queues.at(Ac::BestEffort).now(),
+        QueueIs::Free,
+        "the settlement frees the chain's queue"
+    );
     let (command, closed) = close_gate(harness, data.command, open);
     rights.gate = Some(closed);
     rights.data = Some((
         RadioRights {
-            chains: home(chains, "every chain is back"),
-            ones: data.ones,
-            queues: home(queues, "every queue's right is back"),
+            chains: (idle(place), second),
+            queues: back(queues),
             command,
         },
         station,
@@ -1103,62 +1294,69 @@ where
     Publication { sent, single }
 }
 
-/// A chain of `frames` frames of `body` octets, opened from `idle` and
-/// filled.
-fn filled<'id, H, L: Layout, const S: usize>(
+/// The long chain of `place`, idle, opened for the station's link.
+fn opened<'p, 'id, H, L: Layout, M, const S: usize>(
     harness: &mut H,
-    idle: IdleChain<'id, S>,
-    frames: u8,
-    body: u16,
-) -> oer_protocols_ieee80211_contracts_port::Chain<'id, S>
+    place: &'p mut LongPlace<'id, M, S>,
+) -> OpenLong<'p, 'id, M, S>
 where
     H: Harness<'id, L>,
+    H::Port: DataPort<'id>,
+    M: LongIn<<<H::Port as RadioPort<'id>>::Layout as Layout>::Longs>,
 {
     let link = harness.link::<Station>();
     let tid = oer_protocols_ieee80211_wire::qos::Tid::constant::<0>();
-    let mut chain = harness.port().open(idle, &link, tid);
-    let length = MpduLength::new(usize::from(body) + QOS_DATA.len()).expect("an MPDU's length");
-    for _ in 0..frames {
-        let memory = harness.memory(body);
-        let place = harness
-            .port()
-            .place(&mut chain, length)
-            .expect("the chain has descriptors");
-        place.write(memory, header);
-    }
+    let LongNow::Idle(idle) = place.state() else {
+        panic!("the long chain is idle");
+    };
+    idle.open(harness.port(), &link, tid)
+}
+
+/// The long chain back from its place, idle.
+fn idle<'id, M, const S: usize>(place: LongPlace<'id, M, S>) -> LongChain<'id, M, S> {
+    let Ok(chain) = place.into_idle() else {
+        panic!("the long chain's place is idle");
+    };
     chain
 }
 
-/// The best effort chain and the voice chain of one, published together,
-/// then ended through `end` (the air released, or a stop), and settled:
-/// each chain's frames home and its queue's right back, every chain and
-/// every right in its place again.
-fn two_queues<'id, H, L: Layout, const C: usize, const N: usize>(
+/// The first long chain on best effort and voice's chain of one, published
+/// together, then ended through `end` (the air released, or a stop), and
+/// settled: each chain's frames home and each queue free again, every right
+/// in its place.
+fn two_queues<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    radio: RadioRights<'id, C, N>,
+    radio: RadioRights<'id, (First, Second), N>,
     open: &GateOpen<'id>,
     end: impl FnOnce(&mut H),
-) -> RadioRights<'id, C, N>
+) -> RadioRights<'id, (First, Second), N>
 where
-    H: Harness<'id, L>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     use oer_protocols_ieee80211_wire::qos::WmmAccessCategory as Ac;
-    let mut chains: Vec<_> = radio.chains.into_iter().collect();
-    let mut ones: Vec<_> = radio.ones.into_iter().collect();
-    let mut queues: Vec<_> = radio.queues.into_iter().collect();
-    // QUEUES' order: voice, video, best effort, background.
-    let best_effort = queues.remove(2);
-    let voice = queues.remove(0);
+    let (first, second) = radio.chains;
+    let mut queues = QueuePlaces::<'id>::new(radio.queues);
+    let mut place = LongPlace::new(first);
     // Two frames, one of which stays, where the long chains hold two.
     let long_frames = u8::try_from(N.min(2)).expect("two frames are a byte");
-    let long = filled(harness, chains.remove(0), long_frames, 100);
-    let one = filled(harness, ones.remove(0), 1, 40);
+    let length = MpduLength::new(100 + QOS_DATA.len()).expect("an MPDU's length");
+    let mut chain = opened(harness, &mut place);
+    for _ in 0..long_frames {
+        let memory = harness.memory(100);
+        chain
+            .place(harness.port(), length)
+            .expect("the chain has descriptors")
+            .write(memory, header);
+    }
     harness.hold_air();
-    let how = Ppdu::Single(alone(harness.port()));
-    let long = harness.port().publish(long, best_effort, how, open, NOW);
-    let how = Ppdu::Single(alone(harness.port()));
-    let one = harness.port().publish(one, voice, how, open, NOW);
+    let how = LongPpdu::Single(alone(harness.port()));
+    let QueueNow::Free(free) = queues.at_mut(Ac::BestEffort).state() else {
+        panic!("best effort is free");
+    };
+    let long = chain.publish(free, harness.port(), how, open, NOW);
+    let acked = OnePpdu::Acked(alone(harness.port()));
+    let _ = send(harness, &mut queues, Ac::Voice, &QOS_DATA, acked, open);
     assert_eq!(
         [Ac::Voice, Ac::Video, Ac::BestEffort, Ac::Background].map(|ac| harness.chains_on(ac)),
         [1, 0, 1, 0],
@@ -1166,47 +1364,42 @@ where
     );
     end(harness);
     assert!(
-        harness.port().ended(TxFacts::DUE, &long, NOW).is_some(),
+        long.ended(harness.port(), TxFacts::DUE, NOW).is_some(),
         "the long chain ended"
     );
-    assert!(
-        harness.port().ended(TxFacts::DUE, &one, NOW).is_some(),
-        "the chain of one ended"
-    );
     let mut went_home = 0;
-    let (long, long_queue) = harness
-        .port()
-        .settle(long, FrameSet::EMPTY, &mut |_memory| went_home += 1);
-    let (one, one_queue) = harness
-        .port()
-        .settle(one, FrameSet::EMPTY, &mut |_memory| went_home += 1);
-    assert_eq!(
-        (long_queue.category(), one_queue.category()),
-        (Ac::BestEffort, Ac::Voice),
-        "each settlement gives back its own queue's right"
+    {
+        let QueueNow::One(one) = queues.at_mut(Ac::Voice).state() else {
+            panic!("voice's chain of one is on the air");
+        };
+        assert!(
+            one.ended(harness.port(), TxFacts::DUE, NOW).is_some(),
+            "the chain of one ended"
+        );
+        let _ = one.settle(harness.port(), &mut |_memory| went_home += 1);
+    }
+    let settled = long.settle(
+        harness.port(),
+        FrameSet::EMPTY,
+        &mut |_memory| went_home += 1,
+        &mut queues,
     );
     assert_eq!(went_home, 2, "each settlement sent its sent frame home");
     // A long chain's second frame did not go: it stays, with no attempt
     // spent, until a withdrawal sends it home.
-    let long = match long {
-        Settled::Kept(chain) => {
+    match settled {
+        LongSettled::Kept(kept) => {
             assert_eq!(
-                chain.frames(),
+                kept.frames(),
                 long_frames - 1,
                 "the frame that did not go stays"
             );
-            harness
-                .port()
-                .withdraw(chain, &mut |_memory| went_home += 1)
+            let _ = kept.withdraw(harness.port(), &mut |_memory| went_home += 1);
         }
-        Settled::Idle(idle) => {
+        LongSettled::Idle(_) => {
             assert_eq!(long_frames, 1, "a chain whose frames all went is idle");
-            idle
         }
-    };
-    let Settled::Idle(one) = one else {
-        panic!("the chain of one is idle");
-    };
+    }
     assert_eq!(
         went_home,
         1 + usize::from(long_frames),
@@ -1217,35 +1410,28 @@ where
         [0; 4],
         "no queue carries a chain after the settlements"
     );
-    chains.insert(0, long);
-    ones.insert(0, one);
-    queues.insert(0, one_queue);
-    queues.insert(2, long_queue);
     RadioRights {
-        chains: home(chains, "every chain is back"),
-        ones: home(ones, "every chain of one is back"),
-        queues: home(queues, "every queue's right is back"),
+        chains: (idle(place), second),
+        queues: back(queues),
         command: radio.command,
     }
 }
 
-/// **A chain takes its queue's right**: a chain on best effort and a chain
-/// of one on voice are on the air together, each on the queue it was
-/// published on; each ends and its settlement returns its own queue's
-/// right, its frames' memory home.
+/// **A chain takes its queue**: a long chain on best effort and voice's
+/// chain of one are on the air together, each on the queue it was
+/// published on; each ends, and its settlement frees its own queue and
+/// sends its frames' memory home.
 pub fn chains_on_two_queues_end_each_with_its_queue<
     'id,
     H,
-    const C: usize,
     const N: usize,
-    const S: usize,
     const G: usize,
     const A: usize,
 >(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let running = run(harness, &mut rights);
@@ -1260,23 +1446,21 @@ pub fn chains_on_two_queues_end_each_with_its_queue<
     retire_whole(harness, rights);
 }
 
-/// **A stop returns every right and every handle**: with a chain on best
-/// effort and a chain of one on voice on the air, the stop ends both
-/// withdrawn; their settlements return each queue's right and every
-/// frame's memory, and a retirement takes every right.
+/// **A stop returns every right and every handle**: with a long chain on
+/// best effort and voice's chain of one on the air, the stop ends both
+/// withdrawn; their settlements free each queue and send every frame's
+/// memory home, and a retirement takes every right.
 pub fn a_stop_returns_every_chain_and_queue<
     'id,
     H,
-    const C: usize,
     const N: usize,
-    const S: usize,
     const G: usize,
     const A: usize,
 >(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let running = run(harness, &mut rights);
@@ -1315,13 +1499,13 @@ fn alone<'id, P: DataPort<'id>>(port: &P) -> RetryPlan<PortRate<'id, P::Caps>> {
 }
 
 /// An aggregate at HT `mcs`, a frame alone at 6 Mb/s.
-fn aggregate<'id, P: DataPort<'id>>(port: &P, mcs: u8) -> Ppdu<'id, P::Caps> {
-    Ppdu::Aggregate {
+fn aggregate<'id, P: DataPort<'id>>(port: &P, mcs: u8) -> LongPpdu<'id, P::Caps> {
+    LongPpdu::Aggregate(AggregatePpdu {
         rate: ht_rate(port, mcs),
         spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
         protection: Protection::None,
         alone: alone(port),
-    }
+    })
 }
 
 /// **7. A publication sends what its rate admits**: an aggregate at a
@@ -1332,19 +1516,17 @@ fn aggregate<'id, P: DataPort<'id>>(port: &P, mcs: u8) -> Ppdu<'id, P::Caps> {
 pub fn a_publication_sends_the_prefix_its_rate_admits<
     'id,
     H,
-    const C: usize,
     const N: usize,
-    const S: usize,
     const G: usize,
     const A: usize,
 >(
     harness: &mut H,
-    rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    rights: Rights<'id, StationLayout<N, G, A>>,
     length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
     body: u16,
     frames: u8,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let went = publication(harness, rights, length, body, frames, |port| {
@@ -1363,25 +1545,17 @@ pub fn a_publication_sends_the_prefix_its_rate_admits<
 /// room. Three frames of `body` octets, the longest the port's slots hold,
 /// are written and published; the port finds its own octets whole after
 /// the writes and at the publication.
-pub fn the_ports_octets_stay_the_ports<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+pub fn the_ports_octets_stay_the_ports<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    rights: Rights<'id, StationLayout<N, G, A>>,
     length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
     body: u16,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let went = publication(harness, rights, length, body, 3, |port| {
-        Ppdu::Single(alone(port))
+        LongPpdu::Single(alone(port))
     });
     assert_eq!(went.sent, FrameSet::prefix(1), "the first frame goes");
     assert_eq!(harness.port_octets(), PortOctets::Whole);
@@ -1392,22 +1566,20 @@ pub fn the_ports_octets_stay_the_ports<
 pub fn a_single_publication_sends_the_first_frame<
     'id,
     H,
-    const C: usize,
     const N: usize,
-    const S: usize,
     const G: usize,
     const A: usize,
 >(
     harness: &mut H,
-    rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    rights: Rights<'id, StationLayout<N, G, A>>,
     length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
     body: u16,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let went = publication(harness, rights, length, body, 3, |port| {
-        Ppdu::Single(alone(port))
+        LongPpdu::Single(alone(port))
     });
     assert_eq!(went.sent, FrameSet::prefix(1), "the first frame goes");
     assert!(went.single, "its outcome is a single's");
@@ -1420,19 +1592,17 @@ pub fn a_single_publication_sends_the_first_frame<
 pub fn an_aggregate_of_one_frame_ends_single<
     'id,
     H,
-    const C: usize,
     const N: usize,
-    const S: usize,
     const G: usize,
     const A: usize,
 >(
     harness: &mut H,
-    rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    rights: Rights<'id, StationLayout<N, G, A>>,
     length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
     body: u16,
     mcs: u8,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let went = publication(harness, rights, length, body, 2, |port| {
@@ -1459,21 +1629,13 @@ fn ht_rate<'id, P: DataPort<'id>>(port: &P, mcs: u8) -> AmpduRate<'id, P::Caps> 
 
 /// **8. A round's port calls are bounded**: with a full ring, a round
 /// hands as many units as one service staged, and services the ring once.
-pub fn a_round_services_the_ring_once<
-    'id,
-    H,
-    const C: usize,
-    const N: usize,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+pub fn a_round_services_the_ring_once<'id, H, const N: usize, const G: usize, const A: usize>(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
     places: usize,
     services: impl Fn(&H) -> u32,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let running = run(harness, &mut rights);
@@ -1502,17 +1664,15 @@ pub fn a_round_services_the_ring_once<
 pub fn an_unclassifiable_frame_goes_back_at_its_staging<
     'id,
     H,
-    const C: usize,
     const N: usize,
-    const S: usize,
     const G: usize,
     const A: usize,
 >(
     harness: &mut H,
-    mut rights: Rights<'id, StationLayout<C, N, S, G, A>>,
+    mut rights: Rights<'id, StationLayout<N, G, A>>,
     dropped: impl Fn(&H) -> u32,
 ) where
-    H: Harness<'id, StationLayout<C, N, S, G, A>>,
+    H: Harness<'id, StationLayout<N, G, A>>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
     let running = run(harness, &mut rights);
@@ -1535,10 +1695,5 @@ pub fn an_unclassifiable_frame_goes_back_at_its_staging<
 /// the trait declares them, answer outcomes; this function compiles only
 /// while they do.
 pub fn no_call_returns_an_error<'id, P: DataPort<'id>>() {
-    let _: fn(
-        &mut P,
-        IdleChain<'id, 1>,
-        &P::Link<Station>,
-        oer_protocols_ieee80211_wire::qos::Tid,
-    ) -> oer_protocols_ieee80211_contracts_port::Chain<'id, 1> = P::open::<Station, 1>;
+    let _: fn(&mut QueuePlace<'id>) -> QueueIs = |place| place.now();
 }

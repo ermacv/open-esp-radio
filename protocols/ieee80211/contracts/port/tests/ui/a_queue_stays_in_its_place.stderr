@@ -1,0 +1,10 @@
+error[E0616]: field `state` of struct `QueuePlace` is private
+ --> tests/ui/a_queue_stays_in_its_place.rs:7:36
+  |
+7 |     let _queue: Queue<'id> = place.state; // ui-error: E0616
+  |                                    ^^^^^ private field
+  |
+help: a method `state` also exists, call it with parentheses
+  |
+7 |     let _queue: Queue<'id> = place.state(); // ui-error: E0616
+  |                                         ++

@@ -9,7 +9,7 @@ pub fn poll<'a, P: DataPort<'a>>(
     port: &mut P,
     command: InCommand<'a, PairwiseHeld<'a, Station>>,
     now: Instant,
-    sink: &mut impl PortSink<'a, P::Layout, P::Ack, P::Denial>,
+    sink: &mut impl PortSink,
 ) {
     match port.poll_pairwise(command, now, sink) {
         CommandPoll::Ended(_, PairwiseEnd::Installed(_) | PairwiseEnd::Empty(_)) => {}

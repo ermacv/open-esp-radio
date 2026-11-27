@@ -1,10 +1,10 @@
 error: lifetime may not live long enough
   --> tests/ui/foreign_ampdu_rate.rs:22:16
    |
- 9 | pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
-   |                --  -- lifetime `'b` defined here
-   |                |
-   |                lifetime `'a` defined here
+ 9 | pub fn publish<'p, 'a, 'b, P: DataPort<'a>, M: LongIn<<P::Layout as Layout>::Longs>, const S: usize>(
+   |                    --  -- lifetime `'b` defined here
+   |                    |
+   |                    lifetime `'a` defined here
 ...
 22 |     let rate = foreign; // ui-error: lifetime may not live long enough
    |                ^^^^^^^ assignment requires that `'a` must outlive `'b`
@@ -15,15 +15,15 @@ error: lifetime may not live long enough
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
 error: lifetime may not live long enough
-  --> tests/ui/foreign_ampdu_rate.rs:25:78
+  --> tests/ui/foreign_ampdu_rate.rs:25:96
    |
- 9 | pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
-   |                --  -- lifetime `'b` defined here
-   |                |
-   |                lifetime `'a` defined here
+ 9 | pub fn publish<'p, 'a, 'b, P: DataPort<'a>, M: LongIn<<P::Layout as Layout>::Longs>, const S: usize>(
+   |                    --  -- lifetime `'b` defined here
+   |                    |
+   |                    lifetime `'a` defined here
 ...
-25 |     let how = Ppdu::Aggregate { rate, spacing, protection: Protection::None, alone }; // ui-error: lifetime may not live long enough
-   |                                                                              ^^^^^ this usage requires that `'b` must outlive `'a`
+25 |     let how = LongPpdu::Aggregate(AggregatePpdu { rate, spacing, protection: Protection::None, alone }); // ui-error: lifetime may n...
+   |                                                                                                ^^^^^ this usage requires that `'b` must outlive `'a`
    |
    = help: consider adding the following bound: `'b: 'a`
    = note: requirement occurs because of the type `PortRate<'_, <P as RadioPort<'_>>::Caps>`, which makes the generic argument `'_` invariant

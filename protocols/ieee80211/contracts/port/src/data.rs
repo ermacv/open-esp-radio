@@ -1,6 +1,6 @@
 //! The data path (`design/port-contract-2026-11-16.md`, section 4):
-//! aggregates as places filled and published once, singles a place a
-//! purpose, commands, and the facts that wake their caller.
+//! chains of frames filled and published once on a queue, commands, and
+//! the facts that wake their caller.
 //!
 //! No call returns an error. A call that needs a state takes its right,
 //! each a value of at most two words branded with the installation, built
@@ -12,7 +12,6 @@ use core::task::Context;
 use oer_protocols_ieee802_wire::IndividualAddress;
 
 use oer_portable_bounded::Index;
-
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
@@ -24,7 +23,7 @@ use crate::life::{PortKey, RadioPort};
 use crate::{
     AggregateOutcome, AmpduRate, GateClosed, GateOpen, Ieee80211Instant, InterfaceRole, MpduLength,
     PortRate, Protection, RetryPlan, SingleOutcome, StationHe, SupportedBlockAck, SupportedEdca,
-    TbttEvent, TxFrame,
+    TbttEvent,
 };
 
 /// The brand of one installation, invariant in `'id`.
@@ -199,49 +198,96 @@ macro_rules! interface_right {
     };
 }
 
-/// A right of one of the radio's chains of `S` descriptors.
-macro_rules! chain_right {
-    ($(#[$doc:meta])* $name:ident { $($field:ident: $ty:ty),* }) => {
-        $(#[$doc])*
-        #[must_use = "a right is the only way to the call that takes it"]
-        #[derive(Debug)]
-        pub struct $name<'id, const S: usize> {
-            $($field: $ty,)*
-            brand: Brand<'id>,
-        }
-    };
+right!(
+    /// A transmit queue, free, with its chain of one descriptor, idle: the
+    /// radio's, one a queue. A chain of one is opened from it and goes on
+    /// it; a long chain's publication takes it whole, its chain of one with
+    /// it, idle, until the settlement gives it back. Every interface
+    /// publishes on the four queues.
+    Queue { category: WmmAccessCategory }
+);
+
+/// A long chain of `SLOTS` descriptors that holds nothing, of the marker
+/// `M` of its layout's set ([`LongChains`]): what an installation gives
+/// and a settlement or a withdrawal returns. The radio's: a chain's
+/// interface is its link's.
+#[must_use = "a right is the only way to the call that takes it"]
+pub struct LongChain<'id, M, const SLOTS: usize> {
+    pub(crate) brand: Brand<'id>,
+    pub(crate) marker: PhantomData<fn() -> M>,
 }
 
-chain_right!(
-    /// A chain of `S` descriptors that holds nothing: what an installation
-    /// gives and a settlement or a withdrawal returns. The radio's: a
-    /// chain's interface is its link's. Its index is its place among the
-    /// installation's chains of `S`.
-    IdleChain { index: u8 }
-);
-chain_right!(
-    /// A chain opened for a link and a TID, being filled.
-    Chain { index: u8, frames: u8 }
-);
-chain_right!(
-    /// A chain on the air: the frames of its prefix that went, and the
-    /// right of the queue it is on, which its settlement gives back.
-    OnAir {
-        index: u8,
-        sent: u8,
-        queue: QueueRight<'id>
+impl<M, const SLOTS: usize> core::fmt::Debug for LongChain<'_, M, SLOTS> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("LongChain")
+            .field("marker", &core::any::type_name::<M>())
+            .field("slots", &SLOTS)
+            .finish()
     }
-);
-interface_right!(
-    /// A single's place of the interface `I`: one of a purpose of its
-    /// role, a const count of its layout. Its index is the interface's own.
-    SinglePlace { index: u8 }
-);
-right!(
-    /// The right to publish on a transmit queue: it says the queue is free.
-    /// The radio's: every interface publishes on the four queues.
-    QueueRight { category: WmmAccessCategory }
-);
+}
+
+/// A chain of either kind: a queue's chain of one or a long chain, with how
+/// it may go and what its end may be. Only this crate implements it.
+pub trait ChainKind<'id>: crate::life::sealed::Sealed + Sized {
+    /// How it goes: a chain of one as one MPDU of a kind; a long chain as
+    /// one MPDU or an aggregate.
+    type How<K>;
+    /// What its end may be: a single's outcome; or a single's or an
+    /// aggregate's.
+    type End<A, B, D>;
+    /// Its descriptors: the frames it takes.
+    const DESCRIPTORS: usize;
+}
+
+/// A chain of an installation of the layout `L`: it reaches its own `T` of
+/// the port's storage ([`Buffers`]) by its type, a long chain by its
+/// marker and a chain of one by its queue, with no index. Only this crate
+/// implements it.
+pub trait ChainOf<'id, L: Layout>: ChainKind<'id> {
+    /// Its `T`.
+    fn buffer<'s, T>(&self, buffers: &'s mut Buffers<T, L::Longs>) -> &'s mut T;
+    /// The same, to read.
+    fn buffer_ref<'s, T>(&self, buffers: &'s Buffers<T, L::Longs>) -> &'s T;
+}
+
+impl crate::life::sealed::Sealed for Queue<'_> {}
+impl<M, const SLOTS: usize> crate::life::sealed::Sealed for LongChain<'_, M, SLOTS> {}
+
+impl<'id> ChainKind<'id> for Queue<'id> {
+    type How<K> = OnePpdu<'id, K>;
+    type End<A, B, D> = SingleOutcome<A, D>;
+    const DESCRIPTORS: usize = 1;
+}
+
+impl<'id, M, const SLOTS: usize> ChainKind<'id> for LongChain<'id, M, SLOTS> {
+    type How<K> = LongPpdu<'id, K>;
+    type End<A, B, D> = ArenaOutcome<A, B, D>;
+    const DESCRIPTORS: usize = SLOTS;
+}
+
+impl<'id, L: Layout> ChainOf<'id, L> for Queue<'id> {
+    fn buffer<'s, T>(&self, buffers: &'s mut Buffers<T, L::Longs>) -> &'s mut T {
+        buffers.one_mut(self.category)
+    }
+    fn buffer_ref<'s, T>(&self, buffers: &'s Buffers<T, L::Longs>) -> &'s T {
+        buffers.one_ref(self.category)
+    }
+}
+
+/// A long chain of a marker of the layout's set: the brand `'id` is one
+/// installation's, whose mint gave its chains of the layout's `SLOTS`.
+impl<'id, L: Layout, M: LongIn<L::Longs>, const SLOTS: usize> ChainOf<'id, L>
+    for LongChain<'id, M, SLOTS>
+{
+    fn buffer<'s, T>(&self, buffers: &'s mut Buffers<T, L::Longs>) -> &'s mut T {
+        buffers.long_mut::<M>()
+    }
+    fn buffer_ref<'s, T>(&self, buffers: &'s Buffers<T, L::Longs>) -> &'s T {
+        buffers.long_ref::<M>()
+    }
+}
+
 right!(
     /// The one place of a command: the radio's.
     CommandPlace {}
@@ -281,49 +327,7 @@ interface_right!(
     Receiving {}
 );
 
-impl<const S: usize> IdleChain<'_, S> {
-    /// The chain's place among the installation's chains of `S`.
-    pub const fn index(&self) -> u8 {
-        self.index
-    }
-}
-
-impl<const S: usize> Chain<'_, S> {
-    /// The chain's place among the installation's chains of `S`.
-    pub const fn index(&self) -> u8 {
-        self.index
-    }
-
-    /// The frames it holds.
-    pub const fn frames(&self) -> u8 {
-        self.frames
-    }
-}
-
-impl<const S: usize> OnAir<'_, S> {
-    /// The chain's place among the installation's chains of `S`.
-    pub const fn index(&self) -> u8 {
-        self.index
-    }
-
-    /// The queue it is on.
-    pub const fn category(&self) -> WmmAccessCategory {
-        self.queue.category()
-    }
-
-    /// The frames of the prefix that went; the others stay in their
-    /// places with no attempt spent.
-    pub const fn sent(&self) -> FrameSet {
-        FrameSet::prefix(self.sent)
-    }
-
-    /// How many went: what went is always a prefix, so the set is derived.
-    pub const fn went(&self) -> u8 {
-        self.sent
-    }
-}
-
-impl QueueRight<'_> {
+impl Queue<'_> {
     /// The queue.
     pub const fn category(&self) -> WmmAccessCategory {
         self.category
@@ -333,8 +337,7 @@ impl QueueRight<'_> {
 macro_rules! indexed {
     ($($name:ident),*) => {$(
         impl<I> $name<'_, I> {
-            /// The place's index among its interface's of its kind: for a
-            /// single's place, the purpose it is of.
+            /// The place's index among its interface's of its kind.
             pub const fn index(&self) -> u8 {
                 self.index
             }
@@ -342,7 +345,6 @@ macro_rules! indexed {
     )*};
 }
 indexed!(
-    SinglePlace,
     PairwiseSlot,
     InstalledPairwise,
     GroupSlot,
@@ -362,19 +364,14 @@ pub const QUEUES: [WmmAccessCategory; 4] = [
 
 mod layout;
 pub use layout::{
-    AccessPointData, InterfaceLayout, InterfaceRights, Interfaces, Layout, LayoutRights, Member,
-    PublishedSingle, RadioLayout, RadioRights, SingleOfTwo,
+    Buffers, First, InterfaceLayout, InterfaceRights, Interfaces, Layout, LayoutRights, LongChains,
+    LongIn, LongMarker, Member, RadioLayout, RadioRights, Second,
 };
-pub(crate) use layout::{access_point_data, station_data};
-
-/// What a settlement leaves of the chain.
-#[derive(Debug)]
-pub enum Settled<'id, const S: usize> {
-    /// The kept frames stay in their places for the retry.
-    Kept(Chain<'id, S>),
-    /// The chain holds nothing.
-    Idle(IdleChain<'id, S>),
-}
+mod places;
+pub use places::{
+    FramePlace, FreeQueue, IdleLong, LongIs, LongNow, LongOnAir, LongPlace, LongPpdu, LongSettled,
+    OneFrame, OneOnAir, OnePpdu, OpenLong, QueueIs, QueueNow, QueuePlace, QueuePlaces,
+};
 
 /// The chain takes no more frames: its descriptors are full. The one answer of
 /// the path that is not an outcome; what comes next is `publish`.
@@ -592,69 +589,30 @@ impl<'id, P: DataPort<'id>, const BODY: usize, const LEN: usize> TxSlotOf<'id, P
     };
 }
 
-/// How a chain goes on the air: the one description of a publication.
-/// Each kind names the response its frame solicits, and a kind whose
-/// response follows from its header carries the checked header
-/// ([`SizedFrame`](crate::SizedFrame)), as a buffer request's did: a frame
-/// and its response never disagree.
-pub enum Ppdu<'id, K> {
-    /// The chain's first frame as one MPDU, acknowledged, by this plan.
-    Single(RetryPlan<PortRate<'id, K>>),
-    /// The chain's first frame, individually addressed, as one MPDU that
-    /// solicits no ACK and says so, at a rate that carries one without it.
-    NoAck {
-        /// Its checked unacknowledged header and its MPDU's length.
-        frame: crate::SizedFrame<crate::NoAckHeader, K>,
-        /// The rate.
-        rate: crate::SupportedNoAck<'id, K>,
-    },
-    /// The chain's first frame, group-addressed, as one MPDU that solicits
-    /// no response.
-    Group {
-        /// Its checked group receiver, header and MPDU length.
-        frame: crate::SizedFrame<crate::HeaderSpec<oer_protocols_ieee802_wire::GroupAddress>, K>,
-        /// The rate.
-        rate: PortRate<'id, K>,
-    },
-    /// The chain's first frame, a BlockAckReq, which solicits a BlockAck,
-    /// at a non-HT rate.
-    BlockAckRequest {
-        /// The peer asked to return its Block Ack state.
-        receiver: IndividualAddress,
-        /// The address of the requesting transmitter.
-        transmitter: oer_protocols_ieee802_wire::Eui48,
-        /// The traffic identifier of the agreement.
-        tid: Tid,
-        /// The first sequence number requested in the window.
-        starting_sequence: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
-        /// The non-HT rates and retry budget of the request.
-        plan: RetryPlan<crate::LegacyPortRate<'id, K>>,
-    },
-    /// The longest prefix the rate admits as an A-MPDU; if that prefix is
-    /// one frame, that frame as one MPDU by `alone`.
-    Aggregate {
-        /// The aggregate's rate.
-        rate: AmpduRate<'id, K>,
-        /// The recipient's Minimum MPDU Start Spacing, the peer's for the
-        /// link's life.
-        spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing,
-        /// The control exchange that protects the aggregate, as the upper
-        /// MAC's policy decided it this publication.
-        protection: Protection,
-        /// The plan of a prefix of one frame.
-        alone: RetryPlan<PortRate<'id, K>>,
-    },
+/// An aggregate's publication.
+pub struct AggregatePpdu<'id, K> {
+    /// The aggregate's rate.
+    pub rate: AmpduRate<'id, K>,
+    /// The recipient's Minimum MPDU Start Spacing, the peer's for the
+    /// link's life.
+    pub spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing,
+    /// The control exchange that protects the aggregate, as the upper MAC's
+    /// policy decided it this publication.
+    pub protection: Protection,
+    /// The plan of a prefix of one frame.
+    pub alone: RetryPlan<PortRate<'id, K>>,
 }
 
-impl<K> Clone for Ppdu<'_, K> {
+impl<K> Clone for AggregatePpdu<'_, K> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<K> Copy for Ppdu<'_, K> {}
+impl<K> Copy for AggregatePpdu<'_, K> {}
 
-/// How an arena's publication ended: as what went, not as what was asked.
-/// An [`Ppdu::Aggregate`] whose prefix was one frame ends `Single`.
+/// How a long chain's publication ended: as what went, not as what was
+/// asked. An aggregate ([`LongPpdu::Aggregate`]) whose prefix was one frame
+/// ends `Single`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArenaOutcome<A, B, D> {
     /// One MPDU went.
@@ -663,13 +621,14 @@ pub enum ArenaOutcome<A, B, D> {
     Aggregate(AggregateOutcome<B, D>),
 }
 
-/// An arena's end, kept by the port and read in place through the
+/// A chain's end, kept by the port and read in place through the
 /// reference [`DataPort::ended`] returns: what the prefix's frames
 /// did on the air.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Ended<A, B, D> {
-    /// What went, and how it ended.
-    pub outcome: ArenaOutcome<A, B, D>,
+pub struct Ended<E> {
+    /// What went, and how it ended: a chain of one's single outcome, a
+    /// long chain's [`ArenaOutcome`].
+    pub outcome: E,
     /// The frames of the prefix that went.
     pub sent: FrameSet,
     /// The frames the response acknowledged.
@@ -900,25 +859,17 @@ pub enum ValueEnd {
     Expired,
 }
 
-/// What receives the ends a port's service makes, for an installation of
-/// the layout `L`.
-pub trait PortSink<'id, L: Layout, A, D> {
-    /// A single's end, with its place, of the interface it was published
-    /// as ([`Layout::Single`]), and its queue's right.
-    fn single_ended(
-        &mut self,
-        outcome: SingleOutcome<A, D>,
-        place: L::Single<'id>,
-        queue: QueueRight<'id>,
-    );
+/// What receives what a port's service tells: the TBTT. Every chain's end
+/// is pulled, from its place ([`OneOnAir::ended`], [`LongOnAir::ended`]).
+pub trait PortSink {
     /// A TBTT of the station's schedule.
     fn tbtt(&mut self, event: TbttEvent);
 }
 
 /// The data path, as a port gives it (section 4).
 pub trait DataPort<'id>: RadioPort<'id> {
-    /// The link of the interface `I` an arena is opened for: it carries
-    /// its key, and names the interface the arena's frames go as.
+    /// The link of the interface `I` a chain is opened for: it carries
+    /// its key, and names the interface the chain's frames go as.
     type Link<I: InterfaceRole>;
     /// The MSDU's memory, by its handle.
     type Memory;
@@ -975,106 +926,117 @@ pub trait DataPort<'id>: RadioPort<'id> {
     /// The clock cannot be read now.
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError>;
 
-    /// Open an idle chain for `link`, of the interface `I` its frames go
-    /// as, and `tid`.
-    fn open<I: InterfaceRole, const S: usize>(
-        &mut self,
-        idle: IdleChain<'id, S>,
-        link: &Self::Link<I>,
-        tid: Tid,
-    ) -> Chain<'id, S>;
-
-    /// The next frame's place of `length` in the chain, or [`Complete`]
-    /// when its `S` descriptors are full.
-    fn place<'a, const S: usize>(
-        &'a mut self,
-        chain: &'a mut Chain<'id, S>,
-        length: MpduLength<Self::Caps>,
-    ) -> Result<Place<'a, 'id, Self, S>, Complete>
-    where
-        Self: Sized;
-
-    /// Write a frame into its place: the body by its handle, in place, and
-    /// the header once into the headroom the port lends. The port's
-    /// primitive, reached through [`Place::write`].
-    fn write_frame<const S: usize>(
+    /// The chain primitives follow, each sealed ([`Sealed`]): a core
+    /// reaches them only through the places' transitions
+    /// ([`QueuePlace`], [`LongPlace`]). Open `chain` for `link` of the
+    /// interface `I` and `tid`.
+    fn open_chain<I: InterfaceRole, C: ChainOf<'id, Self::Layout>>(
         &mut self,
         token: Sealed,
-        chain: &mut Chain<'id, S>,
+        chain: &C,
+        link: &Self::Link<I>,
+        tid: Tid,
+    );
+
+    /// Whether the open long chain `chain` of `frames` has a place for a
+    /// frame of `length`: [`Complete`] when its descriptors are full.
+    ///
+    /// # Errors
+    ///
+    /// The chain's descriptors are full.
+    fn place_frame<C: ChainOf<'id, Self::Layout>>(
+        &mut self,
+        token: Sealed,
+        chain: &C,
+        frames: u8,
+        length: MpduLength<Self::Caps>,
+    ) -> Result<(), Complete>;
+
+    /// Write a frame into its place in `chain`: the body by its handle, in
+    /// place, and the header once into the headroom the port lends.
+    fn write_frame<C: ChainOf<'id, Self::Layout>>(
+        &mut self,
+        token: Sealed,
+        chain: &C,
         body: Self::Memory,
         header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen,
     );
 
-    /// Publish the chain on the free queue `queue` as `how` says: a single
-    /// its first frame; an aggregate the longest prefix of its frames the
-    /// rate admits, one frame at least, which goes alone by its plan. The
-    /// others stay in their places with no attempt spent. The queue's right
-    /// is the chain's on the air until its settlement gives it back: no
-    /// other chain is published on the queue meanwhile.
-    fn publish<const S: usize>(
+    /// Publish the chain of one of `queue`, its one frame, as `how` says.
+    fn publish_one(
         &mut self,
-        chain: Chain<'id, S>,
-        queue: QueueRight<'id>,
-        how: Ppdu<'id, Self::Caps>,
+        token: Sealed,
+        queue: &Queue<'id>,
+        how: OnePpdu<'id, Self::Caps>,
         gate: &GateOpen<'id>,
         now: Instant,
-    ) -> OnAir<'id, S>;
+    );
 
-    /// Withdraw a chain's frames: each body goes home.
-    fn withdraw<const S: usize>(
+    /// Publish the long chain `chain` on `queue` as `how` says: a single
+    /// its first frame; an aggregate the longest prefix of its frames the
+    /// rate admits, one frame at least. How many went.
+    fn publish_long<M: LongIn<<Self::Layout as Layout>::Longs>, const SLOTS: usize>(
         &mut self,
-        chain: Chain<'id, S>,
-        home: &mut impl FnMut(Self::Memory),
-    ) -> IdleChain<'id, S>;
-
-    /// The end of the chain on the air, read in place, once it ended: the
-    /// one end of every chain, pulled.
-    fn ended<const S: usize>(
-        &mut self,
-        facts: TxFacts,
-        on_air: &OnAir<'id, S>,
+        token: Sealed,
+        chain: &LongChain<'id, M, SLOTS>,
+        queue: &Queue<'id>,
+        how: LongPpdu<'id, Self::Caps>,
+        gate: &GateOpen<'id>,
         now: Instant,
-    ) -> Option<&Ended<Self::Ack, Self::BlockAck, Self::Denial>>;
+    ) -> u8;
 
-    /// Settle an ended chain: the frames of `keep` stay in their places for
-    /// a retry, every other body goes home, and the queue's right comes
-    /// back.
-    fn settle<const S: usize>(
+    /// The end of the chain of one of `queue`, read in place, once it
+    /// ended: a single's outcome.
+    fn ended_one(
         &mut self,
-        on_air: OnAir<'id, S>,
+        token: Sealed,
+        queue: &Queue<'id>,
+        facts: TxFacts,
+        now: Instant,
+    ) -> Option<&Ended<SingleOutcome<Self::Ack, Self::Denial>>>;
+
+    /// The end of the long chain `chain`, whose first `sent` frames went,
+    /// read in place, once it ended.
+    fn ended_long<M: LongIn<<Self::Layout as Layout>::Longs>, const SLOTS: usize>(
+        &mut self,
+        token: Sealed,
+        chain: &LongChain<'id, M, SLOTS>,
+        sent: u8,
+        facts: TxFacts,
+        now: Instant,
+    ) -> Option<&Ended<ArenaOutcome<Self::Ack, Self::BlockAck, Self::Denial>>>;
+
+    /// Settle the ended `chain`, whose first `sent` frames went: the frames
+    /// of `keep` and those that did not go stay in their places, every other
+    /// body goes home. How many stay.
+    fn settle_chain<C: ChainOf<'id, Self::Layout>>(
+        &mut self,
+        token: Sealed,
+        chain: &C,
+        sent: u8,
         keep: FrameSet,
         home: &mut impl FnMut(Self::Memory),
-    ) -> (Settled<'id, S>, QueueRight<'id>);
+    ) -> u8;
 
-    /// Serve the transmit facts: singles' ends, the queues' next, the TBTT.
-    fn serve(
+    /// Settle the ended chain of one of `queue`: its one frame went, and
+    /// its body goes home.
+    fn settle_one(
         &mut self,
-        facts: TxFacts,
-        tbtt: Signal,
-        now: Instant,
-        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+        token: Sealed,
+        queue: &Queue<'id>,
+        home: &mut impl FnMut(Self::Memory),
     );
 
-    /// Write a single into its place.
-    fn write_single<I: InterfaceRole>(
+    /// Withdraw the frames of the open `chain`: each body goes home.
+    fn withdraw_chain<C: ChainOf<'id, Self::Layout>>(
         &mut self,
-        place: &mut SinglePlace<'id, I>,
-        fill: impl FnOnce(&mut [u8]) -> MpduLength<Self::Caps>,
+        token: Sealed,
+        chain: &C,
+        home: &mut impl FnMut(Self::Memory),
     );
 
-    /// Publish a single written in its place on its free queue, as the
-    /// place's interface `I`: the place's type names it. From its
-    /// publication to its end the place and the queue's right are the
-    /// port's; its end gives them back through the sink, the place as
-    /// `I`'s ([`PortSink::single_ended`]).
-    fn publish_single<I: InterfaceRole>(
-        &mut self,
-        place: SinglePlace<'id, I>,
-        queue: QueueRight<'id>,
-        gate: &GateOpen<'id>,
-        frame: &TxFrame<'id, Self::Caps>,
-        now: Instant,
-    );
+    /// Serve the transmit facts: the queues' next, the TBTT.
+    fn serve(&mut self, facts: TxFacts, tbtt: Signal, now: Instant, sink: &mut impl PortSink);
 
     /// Begin closing the gate.
     fn begin_close(
@@ -1089,7 +1051,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         &mut self,
         command: InCommand<'id, GateOpen<'id>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink,
     ) -> CommandPoll<'id, GateOpen<'id>, GateClosed<'id>>;
 
     /// Begin a pairwise key command.
@@ -1105,7 +1067,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         &mut self,
         command: InCommand<'id, PairwiseHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink,
     ) -> CommandPoll<'id, PairwiseHeld<'id, I>, PairwiseEnd<'id, I>>;
 
     /// Begin a group key command.
@@ -1121,7 +1083,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         &mut self,
         command: InCommand<'id, GroupHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink,
     ) -> CommandPoll<'id, GroupHeld<'id, I>, GroupEnd<'id, I>>;
 
     /// Begin an agreement command.
@@ -1137,7 +1099,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         &mut self,
         command: InCommand<'id, AgreementHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink,
     ) -> CommandPoll<'id, AgreementHeld<'id, I>, AgreementEnd<'id, I>>;
 
     /// Begin a command on an interface's receive rule.
@@ -1153,7 +1115,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         &mut self,
         command: InCommand<'id, ReceiveHeld<'id, I>>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink,
     ) -> CommandPoll<'id, ReceiveHeld<'id, I>, ReceiveEnd<'id, I>>;
 
     /// Begin a command of values.
@@ -1169,7 +1131,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         &mut self,
         command: InCommand<'id, ValueKind>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Layout, Self::Ack, Self::Denial>,
+        sink: &mut impl PortSink,
     ) -> CommandPoll<'id, ValueKind, ValueEnd>;
 
     /// Open the closed gate.
@@ -1187,130 +1149,7 @@ impl Sealed {
     }
 }
 
-/// A frame's place in a chain, borrowed for one write.
-#[must_use = "a place is written once"]
-pub struct Place<'a, 'id, P: DataPort<'id>, const S: usize> {
-    port: &'a mut P,
-    chain: &'a mut Chain<'id, S>,
-}
-
-/// The port's word that it found a free place in an arena, made by its
-/// key: what a [`Place`] is made from.
-#[must_use = "a place is made from it"]
-#[derive(Debug)]
-pub struct Placing<'id> {
-    brand: Brand<'id>,
-}
-
-impl<'a, 'id, P: DataPort<'id>, const S: usize> Place<'a, 'id, P, S> {
-    /// The port's place in `chain`, which it found free.
-    pub fn new(placing: Placing<'id>, port: &'a mut P, chain: &'a mut Chain<'id, S>) -> Self {
-        let Placing { brand: _ } = placing;
-        Self { port, chain }
-    }
-
-    /// Write the frame: the body by its handle, in place, the header once
-    /// into the headroom the port lends.
-    pub fn write(self, body: P::Memory, header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen) {
-        let Self { port, chain } = self;
-        port.write_frame(Sealed::new(), chain, body, header);
-        chain.frames = chain.frames.saturating_add(1);
-    }
-}
-
 impl<'id> PortKey<'id> {
-    /// A chain opened.
-    pub const fn open<const S: usize>(&self, idle: IdleChain<'id, S>) -> Chain<'id, S> {
-        let IdleChain { index, brand } = idle;
-        Chain {
-            index,
-            frames: 0,
-            brand,
-        }
-    }
-
-    /// A chain published on `queue`: its first `sent` frames went.
-    pub const fn publish<const S: usize>(
-        &self,
-        chain: Chain<'id, S>,
-        queue: QueueRight<'id>,
-        sent: u8,
-    ) -> OnAir<'id, S> {
-        let Chain { index, brand, .. } = chain;
-        OnAir {
-            index,
-            sent,
-            queue,
-            brand,
-        }
-    }
-
-    /// A chain withdrawn.
-    pub const fn withdraw<const S: usize>(&self, chain: Chain<'id, S>) -> IdleChain<'id, S> {
-        let Chain { index, brand, .. } = chain;
-        IdleChain { index, brand }
-    }
-
-    /// A chain settled with `kept` frames left in their places, and its
-    /// queue's right back.
-    pub fn settle<const S: usize>(
-        &self,
-        on_air: OnAir<'id, S>,
-        kept: u8,
-    ) -> (Settled<'id, S>, QueueRight<'id>) {
-        let OnAir {
-            index,
-            brand,
-            queue,
-            ..
-        } = on_air;
-        let settled = if kept == 0 {
-            Settled::Idle(IdleChain { index, brand })
-        } else {
-            Settled::Kept(Chain {
-                index,
-                frames: kept,
-                brand,
-            })
-        };
-        (settled, queue)
-    }
-
-    /// The port found a free place in an arena.
-    pub const fn placing(&self) -> Placing<'id> {
-        Placing { brand: PhantomData }
-    }
-
-    /// A single published as the interface `I`: its place and its queue's
-    /// right are the port's until its end, which [`Self::single_end`]
-    /// gives back from the value this answers, which the port keeps.
-    pub const fn single_published<I: InterfaceRole>(
-        &self,
-        place: SinglePlace<'id, I>,
-        queue: QueueRight<'id>,
-    ) -> PublishedSingle {
-        let SinglePlace { index, .. } = place;
-        let QueueRight { category, .. } = queue;
-        PublishedSingle::new(I::ROLE, index, category)
-    }
-
-    /// A single ended: the place, as its interface's, and the queue's
-    /// right of the single the port published as `published`, which it
-    /// held since its publication.
-    pub fn single_end<L: Layout>(
-        &self,
-        published: PublishedSingle,
-    ) -> (L::Single<'id>, QueueRight<'id>) {
-        // The published single ends here: it is taken by value.
-        (
-            L::single(crate::life::MintSeal(()), &published),
-            QueueRight {
-                category: published.category(),
-                brand: PhantomData,
-            },
-        )
-    }
-
     /// A command began: the place and what it holds are the port's.
     pub fn began<H>(&self, place: CommandPlace<'id>, held: H) -> InCommand<'id, H> {
         let CommandPlace { brand } = place;
@@ -1454,102 +1293,130 @@ mod tests {
     use super::*;
     extern crate std;
 
-    type StationOf = InterfaceLayout<crate::Station, 2, 1, 2, 2>;
-    type AccessPointOf = InterfaceLayout<crate::AccessPoint, 3, 2, 2, 0>;
-    type Both = RadioLayout<3, 16, (StationOf, AccessPointOf)>;
-    type Reversed = RadioLayout<2, 16, (AccessPointOf, StationOf)>;
+    type StationOf = InterfaceLayout<crate::Station, 1, 2, 2>;
+    type AccessPointOf = InterfaceLayout<crate::AccessPoint, 2, 2, 0>;
+    type Both = RadioLayout<(First, Second), 16, (StationOf, AccessPointOf)>;
+    type One = RadioLayout<(First,), 16, (StationOf,)>;
 
-    /// A layout's mint gives the radio's rights once and each interface's
-    /// bundle, each index the interface's own: the access point's data
-    /// places follow its own single places.
+    /// A layout's mint gives the radio's rights once, a long chain a marker
+    /// and four queues, and each interface's bundle.
     #[test]
     fn a_layout_gives_the_radios_rights_and_each_interfaces() {
         let (radio, (station, access_point)) =
             <Both as Layout>::mint::<'static>(crate::MintSeal(()));
-        // The radio's chains are numbered once: the layout's chains of 16,
-        // then a chain of one a queue.
-        assert_eq!(radio.chains.map(|chain| chain.index()), [0, 1, 2]);
-        assert_eq!(radio.ones.map(|chain| chain.index()), [3, 4, 5, 6]);
+        let (_first, _second): (
+            LongChain<'static, First, 16>,
+            LongChain<'static, Second, 16>,
+        ) = radio.chains;
         assert_eq!(radio.queues.map(|queue| queue.category()), QUEUES);
-        assert_eq!(station.singles.map(|place| place.index()), [0, 1]);
         assert_eq!(station.pairwise.map(|slot| slot.index()), [0]);
-        assert_eq!(access_point.singles.map(|place| place.index()), [0, 1, 2]);
-        assert_eq!(access_point.data.map(|place| place.index()), [3, 4, 5, 6]);
         assert_eq!(access_point.pairwise.map(|slot| slot.index()), [0, 1]);
         assert_eq!(access_point.groups.map(|slot| slot.index()), [0, 1]);
     }
 
-    /// A chain keeps its index from its opening to its settlement; a
-    /// settlement that keeps frames leaves it open with them, one that keeps
-    /// none leaves it idle, and each gives back the queue's right the
-    /// chain took.
+    /// A storage reaches each chain's own buffer by the chain's type: each
+    /// long chain its marker's, each chain of one its queue's.
     #[test]
-    fn a_chain_keeps_its_index_and_gives_its_queue_back() {
-        let key = PortKey::<'static>::new_for_tests();
+    fn each_chain_reaches_its_own_buffer() {
         let (radio, _) = <Both as Layout>::mint::<'static>(crate::MintSeal(()));
-        let [_, second, _] = radio.chains;
-        let [voice, video, ..] = radio.queues;
-        let chain = key.open(second);
-        assert_eq!((chain.index(), chain.frames()), (1, 0));
-        let on_air = key.publish(chain, video, 3);
-        assert_eq!(on_air.index(), 1);
-        assert_eq!(on_air.category(), WmmAccessCategory::Video);
-        let (Settled::Kept(kept), queue) = key.settle(on_air, 2) else {
-            panic!("a settlement that keeps frames leaves the chain open");
-        };
-        assert_eq!((kept.index(), kept.frames()), (1, 2));
-        assert_eq!(queue.category(), WmmAccessCategory::Video);
-        let on_air = key.publish(kept, voice, 2);
-        let (Settled::Idle(idle), queue) = key.settle(on_air, 0) else {
-            panic!("a settlement that keeps none leaves the chain idle");
-        };
-        assert_eq!(idle.index(), 1);
-        assert_eq!(queue.category(), WmmAccessCategory::Voice);
-        let chain = key.open(idle);
-        assert_eq!(key.withdraw(chain).index(), 1);
+        let mut count = 0_u8;
+        let mut buffers = Buffers::<u8, (First, Second)>::new(|| {
+            count += 1;
+            count
+        });
+        let (first, second) = radio.chains;
+        let [voice, video, best_effort, background] = radio.queues;
+        let reached = [
+            *ChainOf::<Both>::buffer(&first, &mut buffers),
+            *ChainOf::<Both>::buffer(&second, &mut buffers),
+            *ChainOf::<Both>::buffer(&voice, &mut buffers),
+            *ChainOf::<Both>::buffer(&video, &mut buffers),
+            *ChainOf::<Both>::buffer(&best_effort, &mut buffers),
+            *ChainOf::<Both>::buffer(&background, &mut buffers),
+        ];
+        let mut sorted = reached;
+        sorted.sort_unstable();
+        assert_eq!(sorted, [1, 2, 3, 4, 5, 6], "six chains, six buffers");
+        assert_eq!(
+            [
+                *ChainOf::<Both>::buffer_ref(&first, &buffers),
+                *ChainOf::<Both>::buffer_ref(&second, &buffers)
+            ],
+            [1, 2],
+            "the long chains' buffers in their markers' order"
+        );
+        assert_eq!(
+            buffers.longs().copied().collect::<std::vec::Vec<_>>(),
+            [1, 2]
+        );
+        assert_eq!(buffers.each().count(), 6);
+        for buffer in buffers.each_mut() {
+            *buffer = 0;
+        }
+        assert_eq!(*ChainOf::<Both>::buffer_ref(&voice, &buffers), 0);
+        // A set of one long chain has one buffer for it.
+        let mut one = Buffers::<u8, (First,)>::new(|| 7);
+        let (radio, _) = <One as Layout>::mint::<'static>(crate::MintSeal(()));
+        let (first,) = radio.chains;
+        *ChainOf::<One>::buffer(&first, &mut one) = 9;
+        assert_eq!(one.longs().copied().collect::<std::vec::Vec<_>>(), [9]);
+        assert_eq!(one.each().count(), 5);
+        assert_eq!(Buffers::<u8, ()>::new(|| 0).each().count(), 4);
     }
 
-    /// A single ends as the interface it was published as, whichever is
-    /// first in the layout, with its index and its queue.
+    /// The radio's rights and places print what they are: a long chain
+    /// its marker and descriptors, a place its state.
     #[test]
-    fn a_single_ends_as_the_interface_it_was_published_as() {
-        let key = PortKey::<'static>::new_for_tests();
-        let (radio, (station, access_point)) =
-            <Both as Layout>::mint::<'static>(crate::MintSeal(()));
-        let [voice, video, ..] = radio.queues;
-        let [_, station_place] = station.singles;
-        let [_, _, access_point_place] = access_point.singles;
-        let published = key.single_published(access_point_place, video);
-        assert_eq!(published.role(), crate::VifRole::AccessPoint);
-        assert_eq!(
-            (published.index(), published.category()),
-            (2, WmmAccessCategory::Video)
-        );
-        let (SingleOfTwo::Second(place), queue) = key.single_end::<Both>(published) else {
-            panic!("an access point's single ends as the access point's");
+    fn the_radios_rights_print_what_they_are() {
+        let (radio, _) = <One as Layout>::mint::<'static>(crate::MintSeal(()));
+        let printed = std::format!("{radio:?}");
+        assert!(printed.contains("RadioRights") && printed.contains("First"));
+        assert!(printed.contains("slots: 16") && printed.contains("BestEffort"));
+        let RadioRights {
+            chains: (first,),
+            queues,
+            ..
+        } = radio;
+        let place = LongPlace::new(first);
+        let printed = std::format!("{place:?}");
+        assert!(printed.contains("LongPlace") && printed.contains("First"));
+        assert!(printed.contains("Idle"));
+        let places = QueuePlaces::<'static, ()>::new(queues);
+        assert!(std::format!("{places:?}").contains("Voice"));
+    }
+
+    /// The places of a new installation are free and idle, each of its
+    /// category, and give back the queues in their order and the long
+    /// chain.
+    #[test]
+    fn new_places_are_free_and_give_their_rights_back() {
+        let (radio, _) = <Both as Layout>::mint::<'static>(crate::MintSeal(()));
+        let RadioRights {
+            chains: (first, _second),
+            queues,
+            ..
+        } = radio;
+        let mut places = QueuePlaces::<'static, u8>::new(queues);
+        for category in QUEUES {
+            assert_eq!(places.at(category).category(), category);
+            assert_eq!(places.at(category).now(), QueueIs::Free);
+            assert_eq!(places.at(category).one(), None);
+            assert!(matches!(
+                places.at_mut(category).state(),
+                QueueNow::Free(free) if free.category() == category
+            ));
+        }
+        assert_eq!(places.each().count(), 4);
+        let Ok(queues) = places.into_queues() else {
+            panic!("free places give their queues back");
         };
-        assert_eq!(
-            (place.index(), queue.category()),
-            (2, WmmAccessCategory::Video)
-        );
-        let published = key.single_published(station_place, voice);
-        let (SingleOfTwo::First(place), queue) = key.single_end::<Both>(published) else {
-            panic!("a station's single ends as the station's");
+        assert_eq!(queues.map(|queue| queue.category()), QUEUES);
+        let mut place = LongPlace::new(first);
+        assert_eq!(place.now(), LongIs::Idle);
+        assert!(matches!(place.state(), LongNow::Idle(_)));
+        let Ok(_first): Result<LongChain<'static, First, 16>, _> = place.into_idle() else {
+            panic!("an idle place gives its chain back");
         };
-        assert_eq!(
-            (place.index(), queue.category()),
-            (1, WmmAccessCategory::Voice)
-        );
-        // The other order of the members: the role, not the position, names it.
-        let (radio, (access_point, _station)) =
-            <Reversed as Layout>::mint::<'static>(crate::MintSeal(()));
-        let [voice, ..] = radio.queues;
-        let [first, ..] = access_point.singles;
-        let published = key.single_published(first, voice);
-        let (SingleOfTwo::First(place), _) = key.single_end::<Reversed>(published) else {
-            panic!("an access point's single ends as the access point's");
-        };
-        assert_eq!(place.index(), 0);
     }
 
     #[test]

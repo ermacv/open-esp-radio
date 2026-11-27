@@ -1,11 +1,10 @@
-error[E0382]: use of moved value: `queue`
-  --> tests/ui/publish_on_a_busy_queue.rs:18:40
+error[E0499]: cannot borrow `*place` as mutable more than once at a time
+  --> tests/ui/publish_on_a_busy_queue.rs:24:17
    |
-11 |     queue: QueueRight<'id>,
-   |     ----- move occurs because `queue` has type `QueueRight<'_>`, which does not implement the `Copy` trait
+20 |     let (LongNow::Open(first), QueueNow::Free(free)) = (first.state(), place.state()) else {
+   |                                                                        ----- first mutable borrow occurs here
 ...
-16 |     let on_air = port.publish(first, queue, how, gate, now);
-   |                                      ----- value moved here
-17 |     #[cfg(all())]
-18 |     let _second = port.publish(second, queue, how, gate, now); // ui-error: E0382
-   |                                        ^^^^^ value used here after move
+24 |     let again = place.state(); // ui-error: E0499
+   |                 ^^^^^ second mutable borrow occurs here
+25 |     let _air = first.publish(free, port, how, gate, now);
+   |                              ---- first borrow later used here

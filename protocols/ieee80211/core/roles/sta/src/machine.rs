@@ -741,48 +741,6 @@ impl StaRatePlan {
     }
 }
 
-impl<K: Ieee80211Capabilities> StaFrame<K> {
-    /// The frame on the port's channel at the rates of `plan`, as `rates`
-    /// select them; `carried` turns a rate into the port's. `None` when no
-    /// stage of the selection is carried: the frame does not go. A
-    /// BlockAckReq keeps only the plan's non-HT stages.
-    pub fn rated<'p, M: RxMetadata, A, BA>(
-        self,
-        plan: StaRatePlan,
-        rates: &impl RateSelection<M, A, BA>,
-        carried: impl Fn(
-            oer_protocols_ieee80211_contracts_port::PhyRate,
-        ) -> Option<oer_protocols_ieee80211_contracts_port::PortRate<'p, K>>,
-    ) -> Option<oer_protocols_ieee80211_contracts_port::TxFrame<'p, K>> {
-        match self {
-            Self::Individual(frame) => plan.individual(rates, carried).map(|plan| {
-                oer_protocols_ieee80211_contracts_port::TxFrame::Individual { frame, plan }
-            }),
-            Self::Group(frame) => StaRatePlan::group(rates, carried)
-                .map(|rate| oer_protocols_ieee80211_contracts_port::TxFrame::Group { frame, rate }),
-            Self::BlockAckRequest {
-                receiver,
-                transmitter,
-                tid,
-                starting_sequence,
-            } => {
-                let plan = plan
-                    .individual(rates, carried)?
-                    .filter_map(|rate| rate.legacy().ok())?;
-                Some(
-                    oer_protocols_ieee80211_contracts_port::TxFrame::BlockAckRequest {
-                        receiver,
-                        transmitter,
-                        tid,
-                        starting_sequence,
-                        plan,
-                    },
-                )
-            }
-        }
-    }
-}
-
 impl<K: Ieee80211Capabilities> StaTransmit<'_, K> {
     /// Station management frames contend in the Voice queue; admission
     /// control governs QoS data only.

@@ -1,12 +1,12 @@
 error: lifetime may not live long enough
-  --> tests/ui/foreign_rate.rs:19:16
+  --> tests/ui/foreign_rate.rs:20:16
    |
- 8 | pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
-   |                --  -- lifetime `'b` defined here
-   |                |
-   |                lifetime `'a` defined here
+ 9 | pub fn publish<'p, 'a, 'b, P: DataPort<'a>, M: LongIn<<P::Layout as Layout>::Longs>, const S: usize>(
+   |                    --  -- lifetime `'b` defined here
+   |                    |
+   |                    lifetime `'a` defined here
 ...
-19 |     let rate = foreign; // ui-error: lifetime may not live long enough
+20 |     let rate = foreign; // ui-error: lifetime may not live long enough
    |                ^^^^^^^ assignment requires that `'a` must outlive `'b`
    |
    = help: consider adding the following bound: `'a: 'b`
@@ -15,19 +15,19 @@ error: lifetime may not live long enough
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
 error: lifetime may not live long enough
-  --> tests/ui/foreign_rate.rs:27:5
+  --> tests/ui/foreign_rate.rs:28:5
    |
- 8 | pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
-   |                --  -- lifetime `'b` defined here
-   |                |
-   |                lifetime `'a` defined here
+ 9 | pub fn publish<'p, 'a, 'b, P: DataPort<'a>, M: LongIn<<P::Layout as Layout>::Longs>, const S: usize>(
+   |                    --  -- lifetime `'b` defined here
+   |                    |
+   |                    lifetime `'a` defined here
 ...
-27 |     port.publish(arena, queue, Ppdu::Single(plan), gate, now) // ui-error: lifetime may not live long enough
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'b` must outlive `'a`
+28 |     open.publish(queue, port, LongPpdu::Single(plan), gate, now) // ui-error: lifetime may not live long enough
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ argument requires that `'b` must outlive `'a`
    |
    = help: consider adding the following bound: `'b: 'a`
-   = note: requirement occurs because of the type `Ppdu<'_, <P as RadioPort<'_>>::Caps>`, which makes the generic argument `'_` invariant
-   = note: the enum `Ppdu<'id, K>` is invariant over the parameter `'id`
+   = note: requirement occurs because of the type `LongPpdu<'_, <P as RadioPort<'_>>::Caps>`, which makes the generic argument `'_` invariant
+   = note: the enum `LongPpdu<'id, K>` is invariant over the parameter `'id`
    = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
 
 help: `'a` and `'b` must be the same: replace one with the other
