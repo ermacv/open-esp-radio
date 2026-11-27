@@ -100,13 +100,6 @@ pub struct MacInterfaceCapabilities {
 }
 
 impl MacInterfaceCapabilities {
-    pub const fn supports_role(self, role: crate::VifRole) -> bool {
-        match role {
-            crate::VifRole::Station => self.station_interfaces != 0,
-            crate::VifRole::AccessPoint => self.access_point_interfaces != 0,
-        }
-    }
-
     pub const fn supports_monitor_tap(self, point: crate::MonitorTapPoint) -> bool {
         match point {
             crate::MonitorTapPoint::Raw => self.raw_monitor_tap.is_supported(),

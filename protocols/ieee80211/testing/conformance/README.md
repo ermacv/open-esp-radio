@@ -12,7 +12,8 @@ A backend's test implements `Harness<L>` for each layout it serves (its
 port, a channel, network memory and an interface's link, frames landed on
 the receive ring, the anomalies it can raise, a MAC held busy, the next
 command made to expire, the chains a queue carries, the air held and released, what the hardware was asked to
-program and its state, whether its own octets of its transmit slots are
+program and its state, both also by interface (`interface_record`,
+`interface_state`), whether its own octets of its transmit slots are
 whole) and calls each property with an installation's
 rights (`Rights`). The suite keeps the rights in its own places and checks
 the port's answers against them; it reads no bookkeeping of the port's.
@@ -37,6 +38,16 @@ the port's answers against them; it reads no bookkeeping of the port's.
 | `a_stop_returns_every_chain_and_queue` | With chains on two queues on the air, a stop ends both; their settlements return each queue's right and every frame's memory, and a retirement takes every right |
 | `a_clients_key_goes_alone` | On an access point of two clients: each client's key is installed in its own place; the first's removal leaves the hardware with the second client's key alone |
 | `the_receive_rule_is_a_right` | The station's rule is set with its address, changed and ended, each end giving the right back; a setting that expires gives it back off and leaves the hardware as before it; a change that expires gives it back off with the rule cleared |
+| `one_stops_while_the_other_runs` | On a station and an access point together, the access point set up with a client's key, an agreement and a rule, the station with its pairwise key, a group key, an agreement and a rule: the station is taken down to its whole bundle while the access point's frame goes in a chain of one for its link and ends acknowledged, its memory home; the station then holds nothing and the access point what it held, its agreement included; set up again, the station asks the hardware for what its first setting up asked; every bundle is retired whole |
+
+The reference model's tests also switch faults of the modelled hardware on
+(`Fault`) and show a case fails on each: a chain on the wrong queue, a stop
+that leaves the chains, one response for every kind, a role's frame kept,
+a key's removal that takes the other keys (`one_stops_while_the_other_runs`,
+`a_clients_key_goes_alone`), a rule's end that leaves it set
+(`one_stops_while_the_other_runs`, `the_receive_rule_is_a_right`), and an
+agreement's end that clears the other interface's agreements
+(`one_stops_while_the_other_runs`).
 
 The suite adds no executor: its polls use a no-op waker, and a port whose
 answer is pending is a failure of the property that met it.

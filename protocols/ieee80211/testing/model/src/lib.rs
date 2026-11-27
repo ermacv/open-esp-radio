@@ -73,7 +73,7 @@ use oer_protocols_ieee80211_contracts_port::{
     Retired, RetunePoll, Retuning, Running, RxHead, RxMeta, Second, Signal, SingleEnd,
     SingleOutcome, SingleResponse, Staged, StagedPlaces, StartFailure, StartPoll, Starting,
     Station, StopFrom, StopPoll, StopRight, Stopped, Stopping, SupportedChannel, TxFacts,
-    TxOutcome, TxSlot, TxSlotOf, UnitsHome, ValueCommand, ValueEnd, ValueKind, WidthSet,
+    TxOutcome, TxSlot, TxSlotOf, UnitsHome, ValueCommand, ValueEnd, ValueKind, VifRole, WidthSet,
     WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, PhyRate};
@@ -131,7 +131,6 @@ pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
         .union(HardwareServices::IMMEDIATE_ACK)
         .union(HardwareServices::CIPHER_TRANSFORM)
         .union(HardwareServices::RX_BLOCK_ACK_MATCHING),
-    vifs: 2,
     tx_queues: 4,
     max_mpdu_length: MODEL_MAX_MPDU as u16,
     tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),
@@ -200,6 +199,17 @@ pub type AccessPointModel<const PAIRWISE: usize> = RadioLayout<
     (InterfaceLayout<AccessPoint, PAIRWISE, MODEL_GROUPS, MODEL_AGREEMENTS>,),
 >;
 
+/// The layout of a station and an access point, the access point with
+/// `PAIRWISE` pairwise key places, one a client.
+pub type StationAccessPointModel<const PAIRWISE: usize> = RadioLayout<
+    ModelLongs,
+    MODEL_CHAIN_SLOTS,
+    (
+        InterfaceLayout<Station, 1, MODEL_GROUPS, MODEL_AGREEMENTS>,
+        InterfaceLayout<AccessPoint, PAIRWISE, MODEL_GROUPS, MODEL_AGREEMENTS>,
+    ),
+>;
+
 /// The model's rights of the layout `L`.
 pub type ModelRights<'id, L> = LayoutRights<'id, L>;
 
@@ -211,19 +221,30 @@ mod served {
 /// A layout the model serves: a port serves the layouts its `RadioPort` is
 /// implemented for, and the model is implemented for these.
 pub trait Served: served::Sealed + Layout {
-    /// The pairwise key places of the layout's interface.
-    const PAIRWISE: usize;
+    /// The pairwise key places of the layout's station, none without one.
+    const STATION_PAIRWISE: usize;
+    /// The pairwise key places of the layout's access point, none without
+    /// one.
+    const ACCESS_POINT_PAIRWISE: usize;
 }
 
 impl<const SLOTS: usize> served::Sealed for StationModelOf<SLOTS> {}
 impl<const PAIRWISE: usize> served::Sealed for AccessPointModel<PAIRWISE> {}
+impl<const PAIRWISE: usize> served::Sealed for StationAccessPointModel<PAIRWISE> {}
 
 impl<const SLOTS: usize> Served for StationModelOf<SLOTS> {
-    const PAIRWISE: usize = 1;
+    const STATION_PAIRWISE: usize = 1;
+    const ACCESS_POINT_PAIRWISE: usize = 0;
 }
 
 impl<const PAIRWISE: usize> Served for AccessPointModel<PAIRWISE> {
-    const PAIRWISE: usize = PAIRWISE;
+    const STATION_PAIRWISE: usize = 0;
+    const ACCESS_POINT_PAIRWISE: usize = PAIRWISE;
+}
+
+impl<const PAIRWISE: usize> Served for StationAccessPointModel<PAIRWISE> {
+    const STATION_PAIRWISE: usize = 1;
+    const ACCESS_POINT_PAIRWISE: usize = PAIRWISE;
 }
 
 /// The network's memory of one MSDU, by its handle.
@@ -306,15 +327,15 @@ pub enum Programmed {
     MacRuntime(bool),
     /// The gate opened or closed.
     Gate(bool),
-    /// A pairwise key place installed or cleared.
-    Pairwise(u8, bool),
-    /// A group key slot installed or cleared.
-    Group(u8, bool),
-    /// A receive agreement begun or ended.
-    Agreement(u8, bool),
+    /// An interface's pairwise key place installed or cleared.
+    Pairwise(VifRole, u8, bool),
+    /// An interface's group key slot installed or cleared.
+    Group(VifRole, u8, bool),
+    /// An interface's receive agreement begun or ended.
+    Agreement(VifRole, u8, bool),
     /// An interface's receive rule set with its address, changed (the same
     /// address) or ended (none).
-    Receive(Option<IndividualAddress>),
+    Receive(VifRole, Option<IndividualAddress>),
     /// The EDCA parameters set.
     Edca,
     /// The BSS color set.
@@ -325,6 +346,29 @@ pub enum Programmed {
     BlockReset,
     /// The owner's taking of the block, programmed again after its reset.
     OwnerTaking,
+}
+
+impl Programmed {
+    /// The interface a step programmed, when it is one interface's.
+    const fn interface(self) -> Option<VifRole> {
+        match self {
+            Self::Pairwise(role, ..)
+            | Self::Group(role, ..)
+            | Self::Agreement(role, ..)
+            | Self::Receive(role, _) => Some(role),
+            Self::Channel(_)
+            | Self::Interrupts(_)
+            | Self::Queues(_)
+            | Self::Walker(_)
+            | Self::MacRuntime(_)
+            | Self::Gate(_)
+            | Self::Edca
+            | Self::Color
+            | Self::He
+            | Self::BlockReset
+            | Self::OwnerTaking => None,
+        }
+    }
 }
 
 /// The model's counts.
@@ -428,19 +472,48 @@ fn places_of(bits: u64) -> Vec<u8> {
 pub struct HardwareState {
     /// The parts of the hardware that are on.
     pub parts: Parts,
+    /// What the hardware holds of the station.
+    pub station: InterfaceState,
+    /// What the hardware holds of the access point.
+    pub access_point: InterfaceState,
+    /// A frame is on the air.
+    pub on_air: bool,
+    /// Units the network holds.
+    pub lent: usize,
+}
+
+/// What the hardware holds of one interface: what its take-down clears.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InterfaceState {
     /// The pairwise key places, by their index: the peer of the key each
     /// holds, or none.
     pub pairwise: Vec<Option<IndividualAddress>>,
-    /// The address the interface's receive rule is set with, or none.
+    /// The address the receive rule is set with, or none.
     pub receive: Option<IndividualAddress>,
     /// The group key slots installed.
     pub groups: [bool; MODEL_GROUPS],
     /// The agreements running.
     pub agreements: [bool; MODEL_AGREEMENTS],
-    /// A frame is on the air.
-    pub on_air: bool,
-    /// Units the network holds.
-    pub lent: usize,
+}
+
+impl InterfaceState {
+    /// The state of an interface of `pairwise` places that holds nothing.
+    fn empty(pairwise: usize) -> Self {
+        Self {
+            pairwise: std::vec![None; pairwise],
+            receive: None,
+            groups: [false; MODEL_GROUPS],
+            agreements: [false; MODEL_AGREEMENTS],
+        }
+    }
+
+    /// Clear what it holds, as a block reset does.
+    fn clear(&mut self) {
+        self.pairwise.iter_mut().for_each(|place| *place = None);
+        self.receive = None;
+        self.groups = [false; MODEL_GROUPS];
+        self.agreements = [false; MODEL_AGREEMENTS];
+    }
 }
 
 /// The radio's phase, as the MAC is in it.
@@ -537,6 +610,15 @@ pub enum Fault {
     /// without acknowledgement, to a group or as a BlockAckReq does not
     /// come home.
     RoleFramesStay,
+    /// A pairwise key's removal clears every other pairwise key place, of
+    /// each interface: one interface's take-down takes another's keys.
+    RemovalClearsOtherKeys,
+    /// A receive rule's end, or an expired change, leaves the rule and its
+    /// address set: a taken-down interface still receives.
+    EndLeavesReceive,
+    /// An agreement's end clears every agreement of the other interface:
+    /// the table they share loses another interface's entries.
+    EndClearsOtherAgreements,
 }
 
 /// What an arena's publication put on the air.
@@ -604,13 +686,10 @@ pub struct ModelPort<
     channel: SupportedChannel<ModelCaps>,
     start_failure: Option<StartFailure>,
     parts: Parts,
-    /// The pairwise key places, by their index: the peer of the key each
-    /// holds.
-    pairwise: Vec<Option<IndividualAddress>>,
-    /// The address the receive rule is set with.
-    receive: Option<IndividualAddress>,
-    groups: [bool; MODEL_GROUPS],
-    agreements: [bool; MODEL_AGREEMENTS],
+    /// What the hardware holds of the station.
+    station: InterfaceState,
+    /// What the hardware holds of the access point.
+    access_point: InterfaceState,
     anomaly: Option<Anomaly>,
     /// Each chain's buffer, reached by the chain's type.
     arenas: Buffers<ArenaBuffer, L::Longs>,
@@ -699,10 +778,8 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
             channel,
             start_failure: None,
             parts: Parts(0),
-            pairwise: std::vec![None; L::PAIRWISE],
-            receive: None,
-            groups: [false; MODEL_GROUPS],
-            agreements: [false; MODEL_AGREEMENTS],
+            station: InterfaceState::empty(L::STATION_PAIRWISE),
+            access_point: InterfaceState::empty(L::ACCESS_POINT_PAIRWISE),
             anomaly: None,
             arenas: Buffers::new(ArenaBuffer::default),
             fault: None,
@@ -838,14 +915,30 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
         self.counts
     }
 
+    /// What the model was asked to program for the interface `I` since
+    /// the last start, in order.
+    pub fn interface_record<I: InterfaceRole>(&self) -> Vec<Programmed> {
+        self.record
+            .iter()
+            .filter(|programmed| programmed.interface() == Some(I::ROLE))
+            .copied()
+            .collect()
+    }
+
+    /// What the modelled hardware holds of the interface `I`.
+    pub fn interface_state<I: InterfaceRole>(&self) -> InterfaceState {
+        match I::ROLE {
+            VifRole::Station => self.station.clone(),
+            VifRole::AccessPoint => self.access_point.clone(),
+        }
+    }
+
     /// What the modelled hardware holds.
     pub fn state(&self) -> HardwareState {
         HardwareState {
             parts: self.parts.held(),
-            pairwise: self.pairwise.clone(),
-            receive: self.receive,
-            groups: self.groups,
-            agreements: self.agreements,
+            station: self.station.clone(),
+            access_point: self.access_point.clone(),
             on_air: self.arenas.each().any(|arena| arena.air.is_some()),
             lent: self
                 .places
@@ -866,8 +959,8 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
             self.receive_key(),
             self.phase,
             self.parts,
-            (&self.pairwise, self.receive, self.groups),
-            self.agreements,
+            &self.station,
+            &self.access_point,
             self.anomaly,
             self.arenas.each().collect::<Vec<_>>(),
             self.airs,
@@ -986,9 +1079,15 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
     const fn on(&self, category: WmmAccessCategory) -> WmmAccessCategory {
         match self.fault {
             Some(Fault::ChainsOnBestEffort) => WmmAccessCategory::BestEffort,
-            None | Some(Fault::StopLeavesChains | Fault::OneResponse | Fault::RoleFramesStay) => {
-                category
-            }
+            None
+            | Some(
+                Fault::StopLeavesChains
+                | Fault::OneResponse
+                | Fault::RoleFramesStay
+                | Fault::RemovalClearsOtherKeys
+                | Fault::EndLeavesReceive
+                | Fault::EndClearsOtherAgreements,
+            ) => category,
         }
     }
 
@@ -1249,9 +1348,14 @@ const fn answered_kind(buffer: &ArenaBuffer, fault: Option<Fault>) -> Kind {
     match fault {
         Some(Fault::OneResponse) => Kind::Data,
         None
-        | Some(Fault::ChainsOnBestEffort | Fault::StopLeavesChains | Fault::RoleFramesStay) => {
-            buffer.kind
-        }
+        | Some(
+            Fault::ChainsOnBestEffort
+            | Fault::StopLeavesChains
+            | Fault::RoleFramesStay
+            | Fault::RemovalClearsOtherKeys
+            | Fault::EndLeavesReceive
+            | Fault::EndClearsOtherAgreements,
+        ) => buffer.kind,
     }
 }
 
@@ -1446,10 +1550,8 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> RadioPort<'id>
             // reset clears what the owner programmed when it took it, the
             // key table included, and the stop runs that programming again.
             self.program(Programmed::BlockReset);
-            self.pairwise.iter_mut().for_each(|place| *place = None);
-            self.receive = None;
-            self.groups = [false; MODEL_GROUPS];
-            self.agreements = [false; MODEL_AGREEMENTS];
+            self.station.clear();
+            self.access_point.clear();
             self.program(Programmed::OwnerTaking);
         }
         self.parts.off(Part::NeedsStop);
@@ -1855,15 +1957,15 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
             PairwiseHeld::Installing(slot) => {
                 let index = slot.index();
                 if expire {
-                    self.set_pairwise(index, None);
+                    self.set_pairwise::<I>(index, None);
                     PairwiseEnd::Empty(slot)
                 } else {
-                    self.set_pairwise(index, peer);
+                    self.set_pairwise::<I>(index, peer);
                     PairwiseEnd::Installed(self.key.pairwise_installed(slot))
                 }
             }
             PairwiseHeld::Removing(key) => {
-                self.set_pairwise(key.index(), None);
+                self.set_pairwise::<I>(key.index(), None);
                 PairwiseEnd::Empty(self.key.pairwise_removed(key))
             }
         };
@@ -1898,26 +2000,26 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
             GroupHeld::Installing(slot) => {
                 let index = slot.index();
                 if expire {
-                    self.set_group(index, Slot::Empty);
+                    self.set_group::<I>(index, Slot::Empty);
                     GroupEnd::Empty(slot)
                 } else {
-                    self.set_group(index, Slot::Held);
+                    self.set_group::<I>(index, Slot::Held);
                     GroupEnd::Installed(self.key.group_installed(slot))
                 }
             }
             GroupHeld::Replacing(installed) | GroupHeld::Selecting(installed) => {
                 let index = installed.index();
                 if expire {
-                    self.set_group(index, Slot::Empty);
+                    self.set_group::<I>(index, Slot::Empty);
                     GroupEnd::Empty(self.key.group_removed(installed))
                 } else {
-                    self.set_group(index, Slot::Held);
+                    self.set_group::<I>(index, Slot::Held);
                     GroupEnd::Installed(installed)
                 }
             }
             GroupHeld::Removing(installed) => {
                 let index = installed.index();
-                self.set_group(index, Slot::Empty);
+                self.set_group::<I>(index, Slot::Empty);
                 GroupEnd::Empty(self.key.group_removed(installed))
             }
         };
@@ -1952,13 +2054,13 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
                 if expire {
                     AgreementEnd::Empty(slot)
                 } else {
-                    self.set_agreement(index, Slot::Held);
+                    self.set_agreement::<I>(index, Slot::Held);
                     AgreementEnd::Added(self.key.agreement_added(slot))
                 }
             }
             AgreementHeld::Ending(agreement) => {
                 let index = agreement.index();
-                self.set_agreement(index, Slot::Empty);
+                self.set_agreement::<I>(index, Slot::Empty);
                 AgreementEnd::Empty(self.key.agreement_ended(agreement))
             }
         };
@@ -1999,19 +2101,22 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
         let (place, running) = self.ended(command);
         let end = match running {
             ReceiveHeld::Setting(off) if !expire => {
-                self.set_receive(address);
+                self.set_receive::<I>(address);
                 ReceiveEnd::Receiving(self.key.receive_set(off))
             }
             // An expired setting leaves the hardware as before it.
             ReceiveHeld::Setting(off) => ReceiveEnd::Off(off),
             ReceiveHeld::Changing(receiving) if !expire => {
-                self.set_receive(self.receive);
+                let address = self.of::<I>().receive;
+                self.set_receive::<I>(address);
                 ReceiveEnd::Receiving(receiving)
             }
             // An end, or an expired change: the port cleared the address
             // and the rule.
             ReceiveHeld::Changing(receiving) | ReceiveHeld::Ending(receiving) => {
-                self.set_receive(None);
+                if self.fault != Some(Fault::EndLeavesReceive) {
+                    self.set_receive::<I>(None);
+                }
                 ReceiveEnd::Off(self.key.receive_ended(receiving))
             }
         };
@@ -2066,34 +2171,57 @@ impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize> DataPort<'id>
 impl<'id, L: Served, const PLACES: usize, const TX_FRONT: usize>
     ModelPort<'id, L, PLACES, TX_FRONT>
 {
-    /// The receive rule is set with `address`, or none.
-    fn set_receive(&mut self, address: Option<IndividualAddress>) {
-        self.receive = address;
-        self.program(Programmed::Receive(address));
+    /// What the hardware holds of the interface `I`: each interface's
+    /// state is its own, reached by its role.
+    const fn of<I: InterfaceRole>(&mut self) -> &mut InterfaceState {
+        match I::ROLE {
+            VifRole::Station => &mut self.station,
+            VifRole::AccessPoint => &mut self.access_point,
+        }
     }
 
-    /// A pairwise key place now holds the key of `peer`, or none.
-    fn set_pairwise(&mut self, index: u8, peer: Option<IndividualAddress>) {
-        if let Some(place) = self.pairwise.get_mut(usize::from(index)) {
+    /// The receive rule of `I` is set with `address`, or none.
+    fn set_receive<I: InterfaceRole>(&mut self, address: Option<IndividualAddress>) {
+        self.of::<I>().receive = address;
+        self.program(Programmed::Receive(I::ROLE, address));
+    }
+
+    /// A pairwise key place of `I` now holds the key of `peer`, or none.
+    fn set_pairwise<I: InterfaceRole>(&mut self, index: u8, peer: Option<IndividualAddress>) {
+        if let Some(place) = self.of::<I>().pairwise.get_mut(usize::from(index)) {
             *place = peer;
         }
-        self.program(Programmed::Pairwise(index, peer.is_some()));
+        self.program(Programmed::Pairwise(I::ROLE, index, peer.is_some()));
+        if peer.is_none() && self.fault == Some(Fault::RemovalClearsOtherKeys) {
+            // The fault: a removal clears every other pairwise key place,
+            // of each interface.
+            for state in [&mut self.station, &mut self.access_point] {
+                state.pairwise.iter_mut().for_each(|place| *place = None);
+            }
+        }
     }
 
-    fn set_group(&mut self, index: u8, slot: Slot) {
+    fn set_group<I: InterfaceRole>(&mut self, index: u8, slot: Slot) {
         let installed = matches!(slot, Slot::Held);
-        if let Some(place) = self.groups.get_mut(usize::from(index)) {
+        if let Some(place) = self.of::<I>().groups.get_mut(usize::from(index)) {
             *place = installed;
         }
-        self.program(Programmed::Group(index, installed));
+        self.program(Programmed::Group(I::ROLE, index, installed));
     }
 
-    fn set_agreement(&mut self, index: u8, slot: Slot) {
+    fn set_agreement<I: InterfaceRole>(&mut self, index: u8, slot: Slot) {
         let running = matches!(slot, Slot::Held);
-        if let Some(place) = self.agreements.get_mut(usize::from(index)) {
+        if let Some(place) = self.of::<I>().agreements.get_mut(usize::from(index)) {
             *place = running;
         }
-        self.program(Programmed::Agreement(index, running));
+        self.program(Programmed::Agreement(I::ROLE, index, running));
+        if !running && self.fault == Some(Fault::EndClearsOtherAgreements) {
+            let other = match I::ROLE {
+                VifRole::Station => &mut self.access_point,
+                VifRole::AccessPoint => &mut self.station,
+            };
+            other.agreements = [false; MODEL_AGREEMENTS];
+        }
     }
 
     /// A command began on the one place.
@@ -2394,7 +2522,13 @@ mod places {
     /// station's one, an access point's one a client.
     #[test]
     fn the_model_holds_every_pairwise_place_of_its_layout() {
-        assert_eq!(<StationModel as Served>::PAIRWISE, 1);
-        assert_eq!(<AccessPointModel<3> as Served>::PAIRWISE, 3);
+        assert_eq!(<StationModel as Served>::STATION_PAIRWISE, 1);
+        assert_eq!(<StationModel as Served>::ACCESS_POINT_PAIRWISE, 0);
+        assert_eq!(<AccessPointModel<3> as Served>::ACCESS_POINT_PAIRWISE, 3);
+        assert_eq!(<StationAccessPointModel<2> as Served>::STATION_PAIRWISE, 1);
+        assert_eq!(
+            <StationAccessPointModel<2> as Served>::ACCESS_POINT_PAIRWISE,
+            2
+        );
     }
 }

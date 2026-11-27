@@ -357,8 +357,6 @@ pub struct LowerMacCapabilities {
     pub rates: RateSupport,
     /// MAC work the backend performs autonomously.
     pub services: HardwareServices,
-    /// Virtual interfaces the backend configures at once.
-    pub vifs: u8,
     /// Transmit queues, each holding at most one attempt in flight: one or
     /// four. With four, queue `n` serves the access category whose ACI is
     /// `n`; with one, every access category shares it. See
@@ -459,7 +457,6 @@ mod tests {
                 spatial_streams: 1,
             },
             services: HardwareServices::FCS,
-            vifs: 2,
             tx_queues: 4,
             max_mpdu_length: 2304,
             tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),

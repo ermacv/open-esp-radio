@@ -26,9 +26,9 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_testing_conformance as suite;
 use oer_protocols_ieee80211_testing_model::{
-    AccessPointModel, Air, Anomaly, Fault, HardwareState, MODEL_PLACES, MODEL_SHORT_AMPDU_MCS,
-    MODEL_TX_BODY, ModelCaps, ModelLink, ModelMemory, ModelPort, Programmed, Served, StationModel,
-    StationModelOf,
+    AccessPointModel, Air, Anomaly, Fault, HardwareState, InterfaceState, MODEL_PLACES,
+    MODEL_SHORT_AMPDU_MCS, MODEL_TX_BODY, ModelCaps, ModelLink, ModelMemory, ModelPort, Programmed,
+    Served, StationAccessPointModel, StationModel, StationModelOf,
 };
 use oer_protocols_radio_port::{Mint, branded};
 
@@ -59,6 +59,8 @@ impl<'id, L: Served> suite::Harness<'id, L> for Model<'id, L> {
     type Port = ModelPort<'id, L>;
     type Record = Vec<Programmed>;
     type State = HardwareState;
+    type Programmed = Programmed;
+    type InterfaceState = InterfaceState;
 
     fn port(&mut self) -> &mut Self::Port {
         &mut self.port
@@ -116,6 +118,12 @@ impl<'id, L: Served> suite::Harness<'id, L> for Model<'id, L> {
     }
     fn state(&self) -> HardwareState {
         self.port.state()
+    }
+    fn interface_record<I: InterfaceRole>(&self) -> Vec<Programmed> {
+        self.port.interface_record::<I>()
+    }
+    fn interface_state<I: InterfaceRole>(&self) -> InterfaceState {
+        self.port.interface_state::<I>()
     }
     fn port_octets(&self) -> suite::PortOctets {
         if self.port.counts().overwritten == 0 {
@@ -395,6 +403,107 @@ fn a_role_frame_comes_home_fails_when_the_model_keeps_it() {
     installed(|mut model, rights| {
         model.port.fault(Fault::RoleFramesStay);
         suite::a_role_frame_comes_home_at_its_end_and_at_a_stop(&mut model, rights);
+    });
+}
+
+/// The settings of the case of a station and an access point together.
+fn two_interfaces() -> suite::TwoInterfaces<ModelCaps> {
+    let address = |last: u8| {
+        oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, last]))
+            .unwrap()
+    };
+    suite::TwoInterfaces {
+        station: address(1),
+        station_rule: StationReceive::Bss {
+            bssid: address(9),
+            filter: SupportedFilter::<ModelCaps, Station>::new(ReceiveFilter::BSS_MEMBER).unwrap(),
+        },
+        access_point: address(9),
+        access_point_rule:
+            oer_protocols_ieee80211_contracts_port::AccessPointReceive {
+                filter: SupportedFilter::<
+                    ModelCaps,
+                    oer_protocols_ieee80211_contracts_port::AccessPoint,
+                >::new(ReceiveFilter::BSS_MEMBER)
+                .unwrap(),
+            },
+        client: address(3),
+    }
+}
+
+/// A station and an access point on one radio: the station is taken down
+/// and set up again while the access point runs.
+#[test]
+fn one_stops_while_the_other_runs() {
+    installed_as::<StationAccessPointModel<2>>(|mut model, rights| {
+        suite::one_stops_while_the_other_runs(&mut model, rights, two_interfaces());
+    });
+}
+
+/// The case fails on a model whose key removal takes the other
+/// interface's keys.
+#[test]
+#[should_panic(expected = "the access point holds what it held")]
+fn one_stops_while_the_other_runs_fails_when_a_removal_takes_the_others_keys() {
+    installed_as::<StationAccessPointModel<2>>(|mut model, rights| {
+        model.port.fault(Fault::RemovalClearsOtherKeys);
+        suite::one_stops_while_the_other_runs(&mut model, rights, two_interfaces());
+    });
+}
+
+/// The case fails on a model whose agreement's end clears the other
+/// interface's agreements.
+#[test]
+#[should_panic(expected = "the access point holds what it held")]
+fn one_stops_while_the_other_runs_fails_when_an_end_takes_the_others_agreements() {
+    installed_as::<StationAccessPointModel<2>>(|mut model, rights| {
+        model.port.fault(Fault::EndClearsOtherAgreements);
+        suite::one_stops_while_the_other_runs(&mut model, rights, two_interfaces());
+    });
+}
+
+/// The case fails on a model whose rule's end leaves the rule set.
+#[test]
+#[should_panic(expected = "the station taken down holds nothing in the hardware")]
+fn one_stops_while_the_other_runs_fails_when_an_ended_rule_stays() {
+    installed_as::<StationAccessPointModel<2>>(|mut model, rights| {
+        model.port.fault(Fault::EndLeavesReceive);
+        suite::one_stops_while_the_other_runs(&mut model, rights, two_interfaces());
+    });
+}
+
+/// The case of a client's key fails on a model whose removal of one
+/// client's key takes the other's.
+#[test]
+#[should_panic(
+    expected = "the removal of the first client's key left the second client's as it was"
+)]
+fn a_clients_key_goes_alone_fails_when_a_removal_takes_the_others_keys() {
+    installed_as::<AccessPointModel<2>>(|mut model, rights| {
+        model.port.fault(Fault::RemovalClearsOtherKeys);
+        suite::a_clients_key_goes_alone(&mut model, rights);
+    });
+}
+
+/// The case of the receive rule fails on a model whose rule's end leaves
+/// it set.
+#[test]
+#[should_panic(expected = "an ended rule leaves the hardware as before its setting")]
+fn the_receive_rule_is_a_right_fails_when_an_ended_rule_stays() {
+    installed(|mut model, rights| {
+        model.port.fault(Fault::EndLeavesReceive);
+        let bss =
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 9]))
+                .unwrap();
+        let filter = SupportedFilter::<ModelCaps, Station>::new(ReceiveFilter::BSS_MEMBER).unwrap();
+        suite::the_receive_rule_is_a_right(
+            &mut model,
+            rights,
+            oer_protocols_ieee802_wire::IndividualAddress::new(Eui48::new([2, 0, 0, 0, 0, 1]))
+                .unwrap(),
+            StationReceive::OtherBssManagement,
+            StationReceive::Bss { bssid: bss, filter },
+        );
     });
 }
 

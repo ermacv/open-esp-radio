@@ -52,17 +52,7 @@ fn zero_and_oversized_block_ack_windows_are_not_supported() {
 }
 
 #[test]
-fn implemented_roles_and_monitor_taps_are_explicit() {
-    assert!(
-        CAPABILITIES
-            .interfaces
-            .supports_role(crate::VifRole::Station)
-    );
-    assert!(
-        !CAPABILITIES
-            .interfaces
-            .supports_role(crate::VifRole::AccessPoint)
-    );
+fn implemented_monitor_taps_are_explicit() {
     assert!(
         !CAPABILITIES
             .interfaces
