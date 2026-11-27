@@ -1,9 +1,8 @@
 //! The coexistence event priority table every supported Espressif chip
 //! shares.
 //!
-//! Each chip's radio arbiter keeps one [`CoexPtiTable`] as shared state: the
-//! vendor coexistence scheduler changes entries at run time, and every
-//! protocol programs its own MAC priority fields from the values read here.
+//! No code of this tree changes the table: every protocol programs its own
+//! MAC priority fields from the vendor's values.
 //! A priority is a request to the hardware arbiter, never a grant.
 
 /// Number of coexistence events, event zero included.
@@ -73,12 +72,6 @@ macro_rules! event_indices {
                     $(EventIndex::$variant => &entries[$value],)+
                 }
             }
-
-            fn entry_mut<T>(self, entries: &mut [T; COEX_EVENT_COUNT]) -> &mut T {
-                match self.0 {
-                    $(EventIndex::$variant => &mut entries[$value],)+
-                }
-            }
         }
     };
 }
@@ -135,44 +128,12 @@ event_indices! {
     Event48 = 48,
 }
 
-/// The table events whose priority IEEE 802.15.4 reads
-/// (`coex_ieee802154_pti_get`).
-pub mod ieee802154_events {
-    use super::{CoexEventId, EventIndex};
-
-    pub const IDLE: CoexEventId = CoexEventId(EventIndex::Event44);
-    pub const IMMEDIATE: CoexEventId = CoexEventId(EventIndex::Event43);
-    pub const TIMED: CoexEventId = CoexEventId(EventIndex::Event42);
-}
-
-/// The table events whose priority Wi-Fi reads (`coex_pti_get`).
-pub mod wifi_events {
-    use super::{CoexEventId, EventIndex};
-
-    /// The event whose priority Wi-Fi's power management reads on every
-    /// beacon (`coex_pti_get(0)`).
-    pub const BEACON: CoexEventId = CoexEventId(EventIndex::Event0);
-    /// The slice event (`coex_pti_get(1)`), whose priority bounds a
-    /// connection frame's scheduler priority.
-    pub const SLICE: CoexEventId = CoexEventId(EventIndex::Event1);
-    /// The event a Probe Request requests under the reconnect policy, which
-    /// it only requests the air with (`pp_coex_tx_request`).
-    pub const PROBE_REQUEST: CoexEventId = CoexEventId(EventIndex::Event45);
-    /// The event a connection frame requests under the reconnect policy,
-    /// whose priority it then carries (`coex_pti_get(46)`).
-    pub const CONNECTION: CoexEventId = CoexEventId(EventIndex::Event46);
-}
-
 /// One four-bit coexistence priority, the shared-table domain every
 /// supported chip's MAC PTI fields accept.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct CoexPti(oer_portable_bounded::Index<16>);
 
 impl CoexPti {
-    /// The shared priority domain's maximum. Chip bindings const-check this
-    /// domain against their generated MAC field geometry.
-    pub const MAX: u8 = 0x0f;
-
     /// A priority of the four-bit hardware domain, or `None` above it.
     pub const fn new(value: u8) -> Option<Self> {
         match oer_portable_bounded::Index::new(value as usize) {
@@ -193,10 +154,8 @@ impl CoexPti {
     }
 }
 
-/// Priority of every coexistence event.
-///
-/// The vendor coexistence scheduler changes entries at run time; the table
-/// is therefore shared state of the arbiter, not a constant of any protocol.
+/// Priority of every coexistence event: the vendor's cold table, which no
+/// code of this tree changes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CoexPtiTable([CoexPti; COEX_EVENT_COUNT]);
 
@@ -206,15 +165,6 @@ impl CoexPtiTable {
 
     pub const fn pti(&self, event: CoexEventId) -> CoexPti {
         *event.entry(&self.0)
-    }
-
-    pub fn set(&mut self, event: CoexEventId, pti: CoexPti) {
-        *event.entry_mut(&mut self.0) = pti;
-    }
-
-    /// Every event's priority, by event number.
-    pub const fn priorities(&self) -> &[CoexPti; COEX_EVENT_COUNT] {
-        &self.0
     }
 }
 

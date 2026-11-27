@@ -4,15 +4,14 @@
 //! coexistence turns it into a [`Coexisting`] and leaving turns it back, so
 //! a client takes part at most once and `coex_enable` and `coex_disable`
 //! cannot be unbalanced. A client leaves common power only while it shows
-//! its [`CoexAbsent`]: it cannot leave power while it takes part. External
-//! coexistence takes part with its own [`ExternalCoexistence`].
+//! its [`CoexAbsent`]: it cannot leave power while it takes part.
 //!
 //! Coexistence does not depend on the client's common power: Wi-Fi enables
 //! it before entering power.
 
 use core::marker::PhantomData;
 
-use crate::power::radio::{RadioClient, RadioClientKind};
+use crate::power::radio::RadioClientKind;
 
 /// Client `K` takes no part in coexistence.
 ///
@@ -67,12 +66,6 @@ impl<K: RadioClientKind> CoexAbsent<K> {
             _client: PhantomData,
         }
     }
-
-    /// A state outside a radio split, for host tests of the later stages.
-    #[cfg(test)]
-    pub const fn for_host_test() -> Self {
-        Self::issued()
-    }
 }
 
 /// Client `K` takes part in coexistence.
@@ -82,19 +75,7 @@ pub struct Coexisting<K: RadioClientKind> {
     _client: PhantomData<fn() -> K>,
 }
 
-impl<K: RadioClientKind> Coexisting<K> {
-    /// The client that takes part.
-    pub const fn client(&self) -> RadioClient {
-        K::CLIENT
-    }
-}
-
-/// External coexistence takes part in coexistence.
-#[must_use = "external coexistence is stopped through the shared radio's owner"]
-#[derive(Debug)]
-pub struct ExternalCoexistence {
-    _private: (),
-}
+impl<K: RadioClientKind> Coexisting<K> {}
 
 impl<K: RadioClientKind> CoexAbsent<K> {
     /// Enter coexistence.
@@ -109,16 +90,6 @@ impl<K: RadioClientKind> Coexisting<K> {
     pub(crate) const fn leave(self) -> CoexAbsent<K> {
         let Self { _client } = self;
         CoexAbsent { _client }
-    }
-}
-
-impl ExternalCoexistence {
-    pub(crate) const fn started() -> Self {
-        Self { _private: () }
-    }
-
-    pub(crate) const fn stop(self) {
-        let Self { _private: () } = self;
     }
 }
 

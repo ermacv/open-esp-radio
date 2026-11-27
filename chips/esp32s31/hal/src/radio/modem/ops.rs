@@ -669,49 +669,6 @@ pub(crate) fn set_wifi_low_power_clock_divider<P: Placement>(
     });
 }
 
-// SOURCE: BLOB_LIBCOEX_TIMER_CLOCK, S31_MODEM_LPCON_STRUCT.
-pub(crate) fn select_coex_timer_clock_source<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_lpcon::CoexLpClock<P>,
-    value: CoexTimerClockSource,
-) {
-    registers.modify_coex_lp_clk_conf(|w| {
-        w.set_clk_coex_lp_sel_osc_slow(match value {
-            CoexTimerClockSource::Selector1 => true,
-            CoexTimerClockSource::Selector2 => false,
-            CoexTimerClockSource::Selector4 => false,
-            CoexTimerClockSource::Selector8 => false,
-        });
-        w.set_clk_coex_lp_sel_osc_fast(match value {
-            CoexTimerClockSource::Selector1 => false,
-            CoexTimerClockSource::Selector2 => true,
-            CoexTimerClockSource::Selector4 => false,
-            CoexTimerClockSource::Selector8 => false,
-        });
-        w.set_clk_coex_lp_sel_xtal(match value {
-            CoexTimerClockSource::Selector1 => false,
-            CoexTimerClockSource::Selector2 => false,
-            CoexTimerClockSource::Selector4 => true,
-            CoexTimerClockSource::Selector8 => false,
-        });
-        w.set_clk_coex_lp_sel_xtal32k(match value {
-            CoexTimerClockSource::Selector1 => false,
-            CoexTimerClockSource::Selector2 => false,
-            CoexTimerClockSource::Selector4 => false,
-            CoexTimerClockSource::Selector8 => true,
-        });
-    });
-}
-
-// SOURCE: BLOB_LIBCOEX_TIMER_CLOCK, S31_MODEM_LPCON_STRUCT.
-pub(crate) fn set_coex_timer_clock_divider<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_lpcon::CoexLpClock<P>,
-    value: CoexTimerClockDividerMinusOne,
-) {
-    registers.modify_coex_lp_clk_conf(|w| {
-        w.set_clk_coex_lp_div_num_low_bits(value.get());
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::tie_baseband_i2c_power;

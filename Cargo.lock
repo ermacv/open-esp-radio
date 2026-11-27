@@ -1628,7 +1628,6 @@ name = "oer-chips-family-radio-coex"
 version = "0.1.0"
 dependencies = [
  "oer-portable-bounded",
- "oer-protocols-radio-coex",
 ]
 
 [[package]]
