@@ -116,6 +116,13 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         words: core::iter::repeat_n(word, WORDS).collect(),
         words_overflow: u32::MAX,
     };
+    let standing = Standing {
+        last: Some(u8::MAX),
+        next: NextAt::Ring(u8::MAX),
+        tail: u8::MAX,
+        tail_word: TailWord::Completed,
+        cursor: Cursor::Moved,
+    };
     let turned = Turned::Turned {
         before: counts,
         after: counts,
@@ -126,7 +133,25 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
             wake_micros: u32::MAX,
         },
         start_micros: u32::MAX,
+        exhausted: Some(Exhausted {
+            before: standing,
+            first: u8::MAX,
+            after_first: standing,
+            leave: Leave::Stayed { micros: u32::MAX },
+            second: u8::MAX,
+            after_second: standing,
+        }),
     };
+    let unit = UnitSeen {
+        descriptors: u8::MAX,
+        written: u16::MAX,
+        header: [u8::MAX; 22],
+    };
+    let served = Served::Units {
+        count: u8::MAX,
+        after: standing,
+    };
+    let header = Header::Seen(unit);
     let hang = HangCounters {
         rx: u8::MAX,
         tx: u8::MAX,
@@ -162,6 +187,27 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         ("failed rounds", encoded_length(&failed)),
         ("windowed", encoded_length(&windowed)),
         ("turned", encoded_length(&turned)),
+        ("served", encoded_length(&served)),
+        ("header", encoded_length(&header)),
+        (
+            "exited",
+            encoded_length(&Exited::Done {
+                before: standing,
+                first: u8::MAX,
+                after_first: standing,
+                base: Some(u32::MAX),
+                leave: Leave::Stayed { micros: u32::MAX },
+                second: u8::MAX,
+                after: standing,
+            }),
+        ),
+        (
+            "bursted",
+            encoded_length(&Bursted::Sent {
+                ended: u16::MAX,
+                acknowledged: u16::MAX,
+            }),
+        ),
     ] {
         assert!(
             length <= MAX_POSTCARD_BYTES,
@@ -189,8 +235,23 @@ fn every_request_fits_the_images_payload_bound() {
         encoded_length(&Turn {
             millis: u32::MAX,
             kind: TurnKind::CloseAndWake,
+            then: Then::Exhaust {
+                stall_millis: u16::MAX,
+                take: Take::TwoPasses,
+            },
         }),
         encoded_length(&HandOver),
+        encoded_length(&FirstService),
+        encoded_length(&UnitHeader { index: u8::MAX }),
+        encoded_length(&Exit {
+            way: Way::Base(Doorbell::Silent),
+        }),
+        encoded_length(&Burst {
+            length: u16::MAX,
+            to: To::Group,
+            frames: u16::MAX,
+            gap_micros: u32::MAX,
+        }),
     ] {
         assert!(length <= usize::from(MAXIMUM_PAYLOAD_BYTES));
     }
@@ -204,8 +265,9 @@ fn both_images_share_the_radio_s_endpoints_and_keep_their_own_apart() {
     // Five endpoints (two snapshots, the bring-up, the counters, the stop)
     // and their four answers: the two snapshots share their page.
     assert_eq!(shared.len(), 9);
-    // Each side's own: the sender three endpoints and three answers, the
-    // receiver five and five (the hand-over's among them).
-    assert_eq!(sender.len(), 9 + 6);
-    assert_eq!(receiver.len(), 9 + 10);
+    // Each side's own: the sender four endpoints and four answers, the
+    // receiver eight and eight (the hand-over's, the first service's, its
+    // headers' and the exit's among them).
+    assert_eq!(sender.len(), 9 + 8);
+    assert_eq!(receiver.len(), 9 + 16);
 }

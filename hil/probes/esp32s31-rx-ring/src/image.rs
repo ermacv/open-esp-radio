@@ -646,6 +646,232 @@ async fn window(
     Ok(counts)
 }
 
+/// [`service::FirstService`]: one service, every completed unit copied in
+/// place, each one's descriptors, bytes after its header and first 22
+/// octets kept.
+fn first_service(
+    ring: &mut Ring,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+) -> heapless::Vec<service::UnitSeen, { service::UNITS }> {
+    let served = ring.serve(&cycles, |view| {
+        let mut units = heapless::Vec::new();
+        while let Some(unit) = view.next_unit() {
+            let mut copy = [0_u8; COPY];
+            let (descriptors, (copied, written)) = match unit {
+                Unit::Single(single) => (
+                    1,
+                    single.copy_in_place(|frame| (frame.copy_to(&mut copy), frame.len())),
+                ),
+                Unit::Chain(chain) => (
+                    chain.count(),
+                    chain.copy_in_place(|frame| (frame.copy_to(&mut copy), frame.len())),
+                ),
+            };
+            let mut header = [0_u8; 22];
+            for (cell, byte) in header.iter_mut().zip(copy.get(..copied).unwrap_or(&[])) {
+                *cell = *byte;
+            }
+            let _ = units.push(service::UnitSeen {
+                descriptors: u8::try_from(descriptors).unwrap_or(u8::MAX),
+                written: u16::try_from(written).unwrap_or(u16::MAX),
+                header,
+            });
+        }
+        units
+    });
+    match served {
+        Ok(units) | Err((_, units)) => units,
+    }
+}
+
+/// `RX_CONTROL` (bit 0 the append/reload doorbell) and `RX_DESCRIPTOR_BASE`
+/// of the walker, as the PAC's `WifiMacRxDma` lays them out in `WIFI_MAC`
+/// (offsets 0x80 and 0x84). tasks/444's write of BASE is the probe's own,
+/// beside the ring that owns these words: no HAL door, and the probe takes no
+/// PAC. SOURCE: the PAC's `instances::wifi_mac::BASE` (0x2010_4000,
+/// ESP_IDF_ESP32S31_MODEM_REG_BASE) and `WifiMacRxDma`'s offsets.
+const WIFI_MAC_BASE: usize = 0x2010_4000;
+const RX_CONTROL_ADDRESS: usize = WIFI_MAC_BASE + 0x80;
+const RX_BASE_ADDRESS: usize = WIFI_MAC_BASE + 0x84;
+
+/// Write `RX_DESCRIPTOR_BASE` again with the word it holds (the cold
+/// publication's d0, the first descriptor a whole service re-arms), then
+/// ring the doorbell or not; the word written.
+#[allow(
+    unsafe_code,
+    reason = "tasks/444: the probe's own write of RX_DESCRIPTOR_BASE and its doorbell, asked by the architect"
+)]
+fn write_base_again(doorbell: service::Doorbell) -> u32 {
+    let base = core::ptr::with_exposed_provenance_mut::<u32>(RX_BASE_ADDRESS);
+    let control = core::ptr::with_exposed_provenance_mut::<u32>(RX_CONTROL_ADDRESS);
+    // SAFETY: both are 4-aligned device words of the WIFI_MAC block, mapped
+    // for the image's life; the ring that owns them is lent to this
+    // command alone and makes no access meanwhile. The read and the writes
+    // are volatile, of one word each.
+    unsafe {
+        let word = core::ptr::read_volatile(base);
+        core::ptr::write_volatile(base, word);
+        if matches!(doorbell, service::Doorbell::Rung) {
+            let value = core::ptr::read_volatile(control);
+            core::ptr::write_volatile(control, value | 1);
+        }
+        word
+    }
+}
+
+/// How long [`exit`] reads the cursor for NEXT to leave zero.
+const EXIT_BOUND_MICROS: u32 = 2_000;
+
+/// Read the standing until NEXT leaves zero, at most [`EXIT_BOUND_MICROS`].
+fn leave_zero(ring: &mut Ring) -> service::Leave {
+    let began = EmbassyClock.now();
+    loop {
+        let standing = pair::standing_of(ring.standing());
+        let micros = micros_since(began);
+        if standing.next != service::NextAt::Zero {
+            return service::Leave::Left { micros };
+        }
+        if micros >= EXIT_BOUND_MICROS {
+            return service::Leave::Stayed { micros };
+        }
+    }
+}
+
+/// [`service::Exit`]: one of tasks/444's ways out of a ring written whole.
+fn exit(
+    ring: &mut Ring,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+    way: service::Way,
+) -> service::Exited {
+    let before = pair::standing_of(ring.standing());
+    let reach = match way {
+        service::Way::WithholdLast => Reach::BeforeLast,
+        service::Way::Whole | service::Way::Base(_) => Reach::Every,
+    };
+    let first = exhaust_service(ring, cycles, reach);
+    let after_first = pair::standing_of(ring.standing());
+    let base = match way {
+        service::Way::Base(doorbell) => Some(write_base_again(doorbell)),
+        service::Way::Whole | service::Way::WithholdLast => None,
+    };
+    let leave = leave_zero(ring);
+    let second = match way {
+        service::Way::WithholdLast => exhaust_service(ring, cycles, Reach::Every),
+        service::Way::Whole | service::Way::Base(_) => 0,
+    };
+    service::Exited::Done {
+        before,
+        first,
+        after_first,
+        base,
+        leave,
+        second,
+        after: pair::standing_of(ring.standing()),
+    }
+}
+
+/// How far one service of an unserved ring reaches.
+#[derive(Clone, Copy)]
+enum Reach {
+    /// Every completed unit.
+    Every,
+    /// Every unit before the one that reaches the ring's last descriptor
+    /// (the walker's LAST after a cold start and a whole ring written).
+    BeforeLast,
+}
+
+/// The descriptors one service of an unserved ring re-arms, as far as
+/// `reach`. Each unit is copied in place; its bytes are not checked.
+fn exhaust_service(
+    ring: &mut Ring,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+    reach: Reach,
+) -> u8 {
+    let limit = match reach {
+        Reach::Every => RING,
+        Reach::BeforeLast => RING - 1,
+    };
+    let served = ring.serve(&cycles, |view| {
+        let mut taken = 0_usize;
+        while let Some(unit) = view.next_unit() {
+            let count = match &unit {
+                Unit::Single(_) => 1,
+                Unit::Chain(chain) => chain.count(),
+            };
+            if taken.saturating_add(count) > limit {
+                // Dropped: it stays completed, and the view yields nothing
+                // after it.
+                break;
+            }
+            let mut copy = [0_u8; COPY];
+            match unit {
+                Unit::Single(single) => {
+                    let _ = single.copy_in_place(|frame| frame.copy_to(&mut copy));
+                }
+                Unit::Chain(chain) => {
+                    let _ = chain.copy_in_place(|frame| frame.copy_to(&mut copy));
+                }
+            }
+            taken = taken.saturating_add(count);
+        }
+        taken
+    });
+    let taken = match served {
+        Ok(taken) | Err((_, taken)) => taken,
+    };
+    u8::try_from(taken).unwrap_or(u8::MAX)
+}
+
+/// How long the two passes read the cursor for NEXT to leave zero.
+const LEAVE_BOUND_MICROS: u64 = 1_000;
+
+/// [`service::Then::Exhaust`]: the ring unserved for `stall_millis`, its
+/// standing, the first service, the standing again, and for two passes the
+/// cursor until NEXT leaves zero, then the second service.
+async fn exhaust(
+    ring: &mut Ring,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+    stall_millis: u16,
+    take: service::Take,
+) -> service::Exhausted {
+    wait_micros(u64::from(stall_millis) * 1_000).await;
+    let before = pair::standing_of(ring.standing());
+    let reach = match take {
+        service::Take::Whole => Reach::Every,
+        service::Take::WithholdLast | service::Take::TwoPasses => Reach::BeforeLast,
+    };
+    let first = exhaust_service(ring, cycles, reach);
+    let after_first = pair::standing_of(ring.standing());
+    let (leave, second, after_second) = match take {
+        service::Take::Whole | service::Take::WithholdLast => {
+            (service::Leave::NotRead, 0, after_first)
+        }
+        service::Take::TwoPasses => {
+            let began = EmbassyClock.now();
+            let leave = loop {
+                let standing = pair::standing_of(ring.standing());
+                let micros = micros_since(began);
+                if standing.next != service::NextAt::Zero {
+                    break service::Leave::Left { micros };
+                }
+                if u64::from(micros) >= LEAVE_BOUND_MICROS {
+                    break service::Leave::Stayed { micros };
+                }
+            };
+            let second = exhaust_service(ring, cycles, Reach::Every);
+            (leave, second, pair::standing_of(ring.standing()))
+        }
+    };
+    service::Exhausted {
+        before,
+        first,
+        after_first,
+        leave,
+        second,
+        after_second,
+    }
+}
+
 /// Wait `micros` on the executor's clock.
 async fn wait_micros(micros: u64) {
     if let Some(at) = EmbassyClock
@@ -696,6 +922,9 @@ pub(crate) enum Answer {
     Windowed(service::Windowed),
     Stood(service::Stood),
     Turned(service::Turned),
+    Served(service::Served),
+    Header(service::Header),
+    Exited(service::Exited),
     HandedOver(service::HandedOver),
 }
 
@@ -747,6 +976,24 @@ impl From<service::Turned> for Answer {
     }
 }
 
+impl From<service::Served> for Answer {
+    fn from(answer: service::Served) -> Self {
+        Self::Served(answer)
+    }
+}
+
+impl From<service::Header> for Answer {
+    fn from(answer: service::Header) -> Self {
+        Self::Header(answer)
+    }
+}
+
+impl From<service::Exited> for Answer {
+    fn from(answer: service::Exited) -> Self {
+        Self::Exited(answer)
+    }
+}
+
 impl From<service::HandedOver> for Answer {
     fn from(answer: service::HandedOver) -> Self {
         Self::HandedOver(answer)
@@ -786,6 +1033,9 @@ impl oer_hil_agent::serve::Answer for Answer {
             Self::Windowed(answer) => frame.write(answer),
             Self::Stood(answer) => frame.write(answer),
             Self::Turned(answer) => frame.write(answer),
+            Self::Served(answer) => frame.write(answer),
+            Self::Header(answer) => frame.write(answer),
+            Self::Exited(answer) => frame.write(answer),
             Self::HandedOver(answer) => frame.write(answer),
         }
     }
@@ -1035,6 +1285,11 @@ fn refuse(identity: Reply<'_>, request: ReceiverCommand, refusal: Refusal) {
         ReceiverCommand::Window(_) => answer(identity, service::Windowed::Refused(refusal)),
         ReceiverCommand::Stall(_) => answer(identity, service::Stood::Refused(refusal)),
         ReceiverCommand::Turn(_) => answer(identity, service::Turned::Refused(refusal)),
+        ReceiverCommand::FirstService(_) => {
+            answer(identity, service::Served::Refused(refusal));
+        }
+        ReceiverCommand::UnitHeader(_) => answer(identity, service::Header::Refused(refusal)),
+        ReceiverCommand::Exit(_) => answer(identity, service::Exited::Refused(refusal)),
         ReceiverCommand::HandOver(_) => answer(identity, service::HandedOver::Refused(refusal)),
     }
 }
@@ -1204,6 +1459,9 @@ async fn worker(
         channel,
     };
     let mut sender = None;
+    // The last first service's units, which `UnitHeader` reads; a probe's
+    // record kept between commands.
+    let mut headers: heapless::Vec<service::UnitSeen, { service::UNITS }> = heapless::Vec::new();
     let mut receiving = Receiving::Up {
         ring,
         enabled,
@@ -1438,6 +1696,12 @@ async fn worker(
                 );
                 let started = micros_since(began);
                 turns.access = Some((access, clocks_on));
+                let exhausted = match request.then {
+                    service::Then::Window => None,
+                    service::Then::Exhaust { stall_millis, take } => {
+                        Some(exhaust(&mut ring, cycles, stall_millis, take).await)
+                    }
+                };
                 let after = {
                     let mut service = Service {
                         ring: &mut ring,
@@ -1476,6 +1740,7 @@ async fn worker(
                         stop_micros: stopped,
                         rf,
                         start_micros: started,
+                        exhausted,
                     },
                 );
             }
@@ -1570,6 +1835,28 @@ async fn worker(
                                 }
                             }
                         }
+                    }
+                    ReceiverCommand::FirstService(_) => {
+                        headers = first_service(ring, cycles);
+                        answer(
+                            id,
+                            service::Served::Units {
+                                count: u8::try_from(headers.len()).unwrap_or(u8::MAX),
+                                after: pair::standing_of(ring.standing()),
+                            },
+                        );
+                    }
+                    ReceiverCommand::Exit(request) => {
+                        answer(id, exit(ring, cycles, request.way));
+                    }
+                    ReceiverCommand::UnitHeader(request) => {
+                        answer(
+                            id,
+                            match headers.get(usize::from(request.index)) {
+                                Some(seen) => service::Header::Seen(*seen),
+                                None => service::Header::Beyond,
+                            },
+                        );
                     }
                     ReceiverCommand::Stall(request) => {
                         wait_micros(u64::from(request.millis) * 1_000).await;

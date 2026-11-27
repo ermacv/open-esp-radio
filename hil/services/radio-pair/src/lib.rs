@@ -61,6 +61,14 @@ oer_protocols_hil_protocol::messages! {
     topic Stood = "radio-pair/stood";
     endpoint Turn = "radio-pair/turn" => Turned;
     topic Turned = "radio-pair/turned";
+    endpoint Burst = "radio-pair/burst" => Bursted;
+    topic Bursted = "radio-pair/bursted";
+    endpoint FirstService = "radio-pair/first-service" => Served;
+    topic Served = "radio-pair/served";
+    endpoint UnitHeader = "radio-pair/unit-header" => Header;
+    topic Header = "radio-pair/header";
+    endpoint Exit = "radio-pair/exit" => Exited;
+    topic Exited = "radio-pair/exited";
     endpoint HandOver = "radio-pair/hand-over" => HandedOver;
     topic HandedOver = "radio-pair/handed-over";
 }
@@ -492,6 +500,135 @@ pub enum SentOne {
     Refused(Refusal),
 }
 
+/// Send `frames` non-QoS Data frames of `length` octets (without their FCS)
+/// to `to`, each awaited, `gap_micros` apart (zero: back to back).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Burst {
+    pub length: u16,
+    pub to: To,
+    pub frames: u16,
+    pub gap_micros: u32,
+}
+
+/// Whom a [`Burst`]'s frames are addressed to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum To {
+    /// The receiver the host named ([`Target`]): it acknowledges each.
+    Receiver,
+    /// The broadcast address, which no station acknowledges.
+    Group,
+    /// A broadcast Probe Request of [`PROBE_SSID`] (`length` unused): a
+    /// management frame no station acknowledges, and which no access point
+    /// answers.
+    ProbeRequest,
+}
+
+/// The SSID of [`To::ProbeRequest`]: fixed, no access point's, never the
+/// wildcard.
+pub const PROBE_SSID: &[u8] = b"oer-444-no-such-network";
+
+/// The answer to [`Burst`]: how many frames ended, and how many of them
+/// acknowledged (status 0).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Bursted {
+    Sent { ended: u16, acknowledged: u16 },
+    Failed(Failure),
+    Refused(Refusal),
+}
+
+/// The units one service gives at most: one a descriptor.
+pub const UNITS: usize = RING_DESCRIPTORS;
+
+/// The ring's first service after the bring-up: every completed unit
+/// copied, each one's MAC header kept for [`UnitHeader`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct FirstService;
+
+/// The answer to [`FirstService`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Served {
+    Units {
+        /// The units the service gave, which [`UnitHeader`] reads by index.
+        count: u8,
+        /// The walker's standing after the service and its doorbells.
+        after: Standing,
+    },
+    Refused(Refusal),
+}
+
+/// The unit `index` of the last [`FirstService`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct UnitHeader {
+    pub index: u8,
+}
+
+/// The answer to [`UnitHeader`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Header {
+    Seen(UnitSeen),
+    /// No such unit in the last first service.
+    Beyond,
+    Refused(Refusal),
+}
+
+/// One of tasks/444's ways out of a ring written whole, the tail too, on a
+/// quiet air: the first service and what follows it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Exit {
+    pub way: Way,
+}
+
+/// A way out of a ring written whole.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Way {
+    /// One service of every unit.
+    Whole,
+    /// One service of every unit but the last descriptor's (its doorbell
+    /// rung), the cursor read until NEXT leaves zero, then a service of the
+    /// rest.
+    WithholdLast,
+    /// One service of every unit, then `RX_DESCRIPTOR_BASE` written by the
+    /// probe with the first re-armed descriptor, and the doorbell or not.
+    Base(Doorbell),
+}
+
+/// Whether [`Way::Base`] rings the doorbell after its write.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Doorbell {
+    Rung,
+    Silent,
+}
+
+/// The answer to [`Exit`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Exited {
+    Done {
+        before: Standing,
+        /// Descriptors the first service re-armed.
+        first: u8,
+        after_first: Standing,
+        /// [`Way::Base`]: the word written to `RX_DESCRIPTOR_BASE`.
+        base: Option<u32>,
+        /// NEXT read until it left zero, after the first service (and the
+        /// write).
+        leave: Leave,
+        /// Descriptors the second service re-armed ([`Way::WithholdLast`]).
+        second: u8,
+        after: Standing,
+    },
+    Refused(Refusal),
+}
+
+/// One unit of a service: its descriptors, the bytes after its header, and
+/// its frame's first 22 octets (Frame Control, Duration, Address 1 to 3;
+/// IEEE 802.11-2020 9.3.2.1).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct UnitSeen {
+    pub descriptors: u8,
+    pub written: u16,
+    pub header: [u8; 22],
+}
+
 /// One case's ends by the frame before it: acknowledged (status 0), ACK
 /// timeouts (status 5), and every other end in all.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -627,11 +764,37 @@ pub enum Stood {
 }
 
 /// One turn: a window of `millis`, the stop, what `kind` names, the cold
-/// start with the channel tuned again, a window of `millis`.
+/// start with the channel tuned again, what `then` names, a window of
+/// `millis`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Turn {
     pub millis: u32,
     pub kind: TurnKind,
+    pub then: Then,
+}
+
+/// What a turn does after its cold start, before its last window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Then {
+    /// Nothing: the window serves the ring at once.
+    Window,
+    /// The ring stays unserved for `stall_millis` (the walker may write
+    /// every descriptor, the tail too), then one service takes what `take`
+    /// names; the walker's standing is read before and after.
+    Exhaust { stall_millis: u16, take: Take },
+}
+
+/// What the first service after an unserved ring takes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Take {
+    /// Every completed unit.
+    Whole,
+    /// Every completed unit but the one at the ring's last descriptor; the
+    /// window after takes it.
+    WithholdLast,
+    /// As `WithholdLast`, then the cursor is read until NEXT leaves zero
+    /// (bounded), then a second service takes the rest.
+    TwoPasses,
 }
 
 /// What a turn does between the stop and the cold start.
@@ -662,9 +825,38 @@ pub enum Turned {
         stop_micros: u32,
         rf: TurnedRf,
         start_micros: u32,
+        /// What [`Then::Exhaust`] read; absent after [`Then::Window`].
+        exhausted: Option<Exhausted>,
     },
     Failed(Failure),
     Refused(Refusal),
+}
+
+/// The walker before and after the services of [`Then::Exhaust`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Exhausted {
+    /// After the stall, before any service.
+    pub before: Standing,
+    /// Descriptors the first service re-armed.
+    pub first: u8,
+    /// After the first service and its doorbell.
+    pub after_first: Standing,
+    pub leave: Leave,
+    /// Descriptors the second service re-armed ([`Take::TwoPasses`]).
+    pub second: u8,
+    /// After the second service, or the first's again without one.
+    pub after_second: Standing,
+}
+
+/// Whether NEXT left zero after the first service ([`Take::TwoPasses`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Leave {
+    /// Not read: no second pass.
+    NotRead,
+    /// NEXT read non-zero after `micros`.
+    Left { micros: u32 },
+    /// NEXT still zero at the bound, `micros`.
+    Stayed { micros: u32 },
 }
 
 oer_protocols_hil_agent::service! {
@@ -680,6 +872,7 @@ oer_protocols_hil_agent::service! {
         Target(Target) => command target,
         Round(Round) => command round,
         Single(Single) => command single,
+        Burst(Burst) => command burst,
     }
 }
 
@@ -695,6 +888,9 @@ oer_protocols_hil_agent::service! {
         Window(Window) => command window,
         Stall(Stall) => command stall,
         Turn(Turn) => command turn,
+        FirstService(FirstService) => command first_service,
+        UnitHeader(UnitHeader) => command unit_header,
+        Exit(Exit) => command exit,
         HandOver(HandOver) => command hand_over,
     }
 }

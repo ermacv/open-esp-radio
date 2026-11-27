@@ -28,8 +28,8 @@ use std::{
 use oer_hil_services_radio_pair::{
     self as service, BringUp, BroughtUp, Counters, Expect, Expecting, HandOver, HandedOver,
     ReceiveCounters, ReceiverRequest, Record, Round, SenderRequest, Sent, SnapshotCold,
-    SnapshotPage, SnapshotUp, Stall, Stood, Stop, Stopped, Target, Targeted, Turn, TurnKind,
-    Turned, TurnedRf, Window, Windowed,
+    SnapshotPage, SnapshotUp, Stall, Stood, Stop, Stopped, Take, Target, Targeted, Then, Turn,
+    TurnKind, Turned, TurnedRf, Window, Windowed,
 };
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{Case, Cx, Failure, Role, Scenario, check};
@@ -44,7 +44,7 @@ const ROLES: &[Role] = &[
 
 const SCENARIO: Scenario = Scenario::with_roles("radio-pair", ROLES).using_air_exclusively();
 
-const CASES: [Case; 7] = [
+const CASES: [Case; 10] = [
     Case {
         name: "cold-snapshots",
         run: cold_snapshots,
@@ -66,6 +66,13 @@ const CASES: [Case; 7] = [
         name: "case-c",
         run: case_c,
     },
+    // After case C: the ring filled whole before its first service
+    // (`tasks/444`), a reproduction that records and judges nothing of the
+    // ring.
+    Case {
+        name: "ring-full",
+        run: ring_full,
+    },
     Case {
         name: "stop",
         run: stop,
@@ -74,6 +81,16 @@ const CASES: [Case; 7] = [
     Case {
         name: "first-frame",
         run: first_frame::first_frame,
+    },
+    // After it: the receiver booted for each sample (`tasks/444`).
+    Case {
+        name: "ring-boots",
+        run: ring_boots::ring_boots,
+    },
+    // The ways out of the ring written whole (`tasks/444`).
+    Case {
+        name: "ring-exits",
+        run: ring_boots::ring_exits,
     },
 ];
 
@@ -113,6 +130,7 @@ struct Addresses {
 static ADDRESSES: Mutex<Option<Addresses>> = Mutex::new(None);
 
 mod first_frame;
+mod ring_boots;
 
 fn main() -> ExitCode {
     oer_tools_hil_harness::main(&SCENARIO, &CASES)
@@ -315,6 +333,7 @@ fn turns(
             Turn {
                 millis: TURN_MS,
                 kind,
+                then: Then::Window,
             },
             within(TURN_MS).saturating_add(Duration::from_millis(u64::from(TURN_MS))),
         )?;
@@ -478,6 +497,69 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
         counters(cx, role, "counters-after-failure")?;
     }
     Err(Failure::Fail(failed.join("; ")))
+}
+
+/// The ring-full reproduction's cold starts of each take.
+const FULL_REPEATS: u32 = 20;
+/// The ring unserved after each cold start: case C's rounds write many more
+/// than the ring's sixteen descriptors in it.
+const FULL_STALL_MS: u16 = 100;
+/// The sender's rounds while the reproduction runs: about 135 a second,
+/// past its about 35 s.
+const FULL_ROUNDS: u32 = 6_000;
+
+/// The ring filled whole before its first service (`tasks/444`): with case
+/// C's rounds on the air, `FULL_REPEATS` turns of each [`Take`], each a cold
+/// start, the ring unserved for `FULL_STALL_MS`, the take, then a window. It
+/// keeps every answer; it fails only when a step does not answer.
+fn ring_full(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    let rounds = cx.device(SENDER)?.post(Round {
+        rounds: FULL_ROUNDS,
+    })?;
+    let mut failed = Vec::new();
+    for (take, name) in [
+        (Take::Whole, "whole"),
+        (Take::WithholdLast, "withhold-last"),
+        (Take::TwoPasses, "two-passes"),
+    ] {
+        let mut turns = Vec::new();
+        for _ in 0..FULL_REPEATS {
+            let turned = cx.device(RECEIVER)?.call(
+                Turn {
+                    millis: TURN_MS,
+                    kind: TurnKind::Restart,
+                    then: Then::Exhaust {
+                        stall_millis: FULL_STALL_MS,
+                        take,
+                    },
+                },
+                within(TURN_MS)
+                    .saturating_add(Duration::from_millis(u64::from(TURN_MS)))
+                    .saturating_add(Duration::from_millis(u64::from(FULL_STALL_MS))),
+            )?;
+            let ended = !matches!(
+                turned,
+                Turned::Turned {
+                    exhausted: Some(_),
+                    ..
+                }
+            );
+            turns.push(turned);
+            if ended {
+                failed.push(format!("{name}: {:?}", turns.last()));
+                break;
+            }
+        }
+        keep(cx, RECEIVER, &format!("ring-full-{name}"), &turns);
+        counters(cx, RECEIVER, &format!("counters-ring-full-{name}"))?;
+    }
+    let sent = cx.device(SENDER)?.wait(rounds, ROUNDS_TIMEOUT)?;
+    keep(cx, SENDER, "ring-full-rounds", &sent);
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(Failure::Fail(failed.join("; ")))
+    }
 }
 
 /// The receiver's steps, each from its request to its answer, in

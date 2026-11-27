@@ -9896,6 +9896,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "tasks/380: the probe's second claim of the system timer, approved by the architect",
     ),
     (
+        "hil/probes/esp32s31-rx-ring/src/image.rs",
+        "unsafe_code",
+        1,
+        "tasks/444: the probe's own write of RX_DESCRIPTOR_BASE, asked by the architect",
+    ),
+    (
         "hil/scenarios/aes/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
