@@ -33,9 +33,7 @@ use oer_chips_esp32s31_hal::{
 };
 use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
-use oer_chips_esp32s31_radio_phy::{
-    PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
-};
+use oer_chips_esp32s31_radio_phy::{PhyCalibrationIdentity, phy_get_rf_cal_version};
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_hil_services_radio_pair::{self as service, Refusal, SenderCommand, SenderRequest};
 use oer_portable_clock::{Clock, Timer};
@@ -170,16 +168,14 @@ fn main(
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
     let (radio, partitions) = runtime_radio
-        .split::<ChipClocks, _>(
-            ConcurrentPhy::new(),
-            oer_chips_esp32s31_platform_runtime::phy_fault::identity(),
-        )
+        .split::<ChipClocks>(oer_chips_esp32s31_platform_runtime::phy_fault::identity())
         .unwrap_or_else(|failure| {
             let fault = failure.fault();
             let _owners = failure;
             oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault)
         });
-    let pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
+    let power_detector =
+        crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
     let timer = runtime_system_timer;
     let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
@@ -218,7 +214,8 @@ fn main(
         clocks: runtime_clocks,
         wifi: partitions.wifi,
         coex: partitions.wifi_coex,
-        pilot,
+        power_detector,
+        phy: partitions.phy,
         identity,
         mac_irq: wifi_irqs.mac,
         power_irq: wifi_irqs.power,
@@ -605,8 +602,9 @@ async fn worker(
     let cooperative = Cooperative::new(EmbassyClock);
     let timer = CooperativeTimer::new(&cooperative, cycles);
     let mut platform = ();
+    let mut phy_memory = MaybeUninit::uninit();
     let up = async {
-        let brought = apart!(bring_up(parts, &timer, &mut platform))?;
+        let brought = apart!(bring_up(parts, &mut phy_memory, &timer, &mut platform))?;
         // The ring's parts: the table, the walker's registers, the arena
         // and its buffers.
         let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
@@ -618,6 +616,11 @@ async fn worker(
             .ok_or((phase::RING, 5))?;
         let Brought {
             mut slot,
+            mut phy,
+            open,
+            register_micros,
+            // The sender runs no pass after its bring-up.
+            power_detector: _power_detector,
             mut clocked,
             first,
             mut walker,
@@ -636,9 +639,11 @@ async fn worker(
             first,
             crate::radio::CBW,
         );
-        let prepared = apart!(prepare(
+        let (prepared, open) = apart!(prepare(
             &mut slot,
             &mut clocked,
+            &mut phy,
+            open,
             &mut walker,
             &mut sources,
             reset,
@@ -664,12 +669,24 @@ async fn worker(
         );
         let (frames, ordinary) = transmit::prepare(&sources)?;
         Ok((
-            slot, access, clocks_on, ring, enabled, mac_irq, power_irq, station, held, frames,
+            slot,
+            (phy, open, register_micros),
+            access,
+            clocks_on,
+            ring,
+            enabled,
+            mac_irq,
+            power_irq,
+            station,
+            held,
+            frames,
             ordinary,
         ))
     };
     let (
         mut slot,
+        // The registered PHY with RF open stays held for the run.
+        (phy, _open, register_micros),
         mut access,
         clocks_on,
         mut ring,
@@ -690,8 +707,15 @@ async fn worker(
             return down(inbox).await;
         }
     };
-    answer(bring, service::BroughtUp::Up { station, ap });
-    let up = match pair::up(&mut slot, held.clocks(), reset, identity) {
+    answer(
+        bring,
+        service::BroughtUp::Up {
+            station,
+            ap,
+            register_micros,
+        },
+    );
+    let up = match pair::up(&mut slot, held.clocks(), reset, &phy, identity) {
         Ok(readings) => readings,
         Err(_) => cold.clone(),
     };

@@ -50,14 +50,14 @@ impl ChannelRegisters<'_> {
 /// A channel operation's owned PHY custody and exclusive MAC/platform loans.
 /// Its guard remains owned by the operation future, including before polling.
 #[must_use = "a channel operation must return its exact radio domain"]
-pub struct ChannelTransaction<'a, B: crate::power::PlatformClockBackend, P, T> {
-    radio: crate::radio::domain::transaction::RadioTransaction<B, T>,
+pub struct ChannelTransaction<'a, B: crate::power::PlatformClockBackend, P> {
+    radio: crate::radio::domain::transaction::RadioTransaction<B>,
     mac: &'a mut WifiRadioRegisters,
     platform: &'a mut P,
 }
-impl<'a, B: crate::power::PlatformClockBackend, P, T> ChannelTransaction<'a, B, P, T> {
+impl<'a, B: crate::power::PlatformClockBackend, P> ChannelTransaction<'a, B, P> {
     pub(crate) fn new(
-        radio: crate::radio::domain::transaction::RadioTransaction<B, T>,
+        radio: crate::radio::domain::transaction::RadioTransaction<B>,
         mac: &'a mut WifiRadioRegisters,
         platform: &'a mut P,
     ) -> Self {
@@ -68,19 +68,16 @@ impl<'a, B: crate::power::PlatformClockBackend, P, T> ChannelTransaction<'a, B, 
         }
     }
     /// Lend the channel port only while this operation retains its owned guard.
-    pub fn parts_mut(&mut self) -> (RadioChannelHal<'_, P>, &mut T) {
-        let (hardware, attachment) = self.radio.hardware_with_attachment();
-        (
-            RadioChannelHal::from_leased(
-                self.platform,
-                self.mac,
-                &mut hardware.registers,
-                &mut hardware.restore,
-            ),
-            attachment,
+    pub fn channel_mut(&mut self) -> RadioChannelHal<'_, P> {
+        let hardware = self.radio.hardware_mut();
+        RadioChannelHal::from_leased(
+            self.platform,
+            self.mac,
+            &mut hardware.registers,
+            &mut hardware.restore,
         )
     }
-    pub fn reunite(self) -> crate::radio::domain::RadioDomain<B, T> {
+    pub fn reunite(self) -> crate::radio::domain::RadioDomain<B> {
         self.radio.reunite()
     }
 }

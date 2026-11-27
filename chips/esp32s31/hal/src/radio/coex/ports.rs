@@ -81,7 +81,7 @@ impl TimerClockConfig {
 
 impl<'radio> CoexDomainPorts<'radio> {
     /// Lend the domain's coexistence resources for one transaction.
-    pub fn new<B: PlatformClockBackend, T>(radio: &'radio mut RadioDomain<B, T>) -> Self {
+    pub fn new<B: PlatformClockBackend>(radio: &'radio mut RadioDomain<B>) -> Self {
         let (bank, port) = radio.coex_ports();
         Self {
             timer: CoexDomainTimer { bank },

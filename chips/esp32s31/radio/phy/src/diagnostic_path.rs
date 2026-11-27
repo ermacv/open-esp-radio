@@ -1,12 +1,9 @@
 //! The variant paths of the PHY's errors, for diagnostics that do not
 //! format. Each `match` is exhaustive: a new variant breaks the build.
 
-use oer_chips_esp32s31_hal::radio::domain::RadioClient;
 use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
 use crate::calibration::registration::PhyCalibrationPath;
-use crate::concurrent::{ConcurrentAcquire, ConcurrentPhyError, JoinRefused};
-use crate::state::client::{PhyClientAcquireError, PhyPllTrackClass, PhyTrackTimeError};
 
 impl PhyCalibrationPath {
     pub const fn name(self) -> oer_portable_diagnostics::Name<32> {
@@ -24,109 +21,6 @@ impl PhyCalibrationPath {
 impl DiagnosticPath for PhyCalibrationPath {
     fn push_path(&self, path: &mut DiagPath) {
         path.name(self.name().as_str());
-    }
-}
-
-impl DiagnosticPath for ConcurrentAcquire {
-    fn push_path(&self, path: &mut DiagPath) {
-        path.name(match self {
-            Self::Settled => "Settled",
-            Self::TrackingDue => "TrackingDue",
-        });
-    }
-}
-
-impl DiagnosticPath for PhyPllTrackClass {
-    fn push_path(&self, path: &mut DiagPath) {
-        path.name(match self {
-            Self::Wifi => "Wifi",
-            Self::BluetoothIeee802154 => "BluetoothIeee802154",
-        });
-    }
-}
-
-impl DiagnosticPath for PhyTrackTimeError {
-    fn push_path(&self, path: &mut DiagPath) {
-        match self {
-            Self::DeadlineOverflow { class } => {
-                path.name("DeadlineOverflow");
-                class.push_path(path);
-            }
-            Self::TimeReversed {
-                class,
-                previous_micros,
-                now_micros,
-            } => {
-                path.name("TimeReversed");
-                class.push_path(path);
-                path.wide(*previous_micros);
-                path.wide(*now_micros);
-            }
-        }
-    }
-}
-
-impl DiagnosticPath for PhyClientAcquireError {
-    fn push_path(&self, path: &mut DiagPath) {
-        match self {
-            Self::TrackingTime(error) => {
-                path.name("TrackingTime");
-                error.push_path(path);
-            }
-        }
-    }
-}
-
-impl DiagnosticPath for ConcurrentPhyError {
-    fn push_path(&self, path: &mut DiagPath) {
-        match self {
-            Self::NotRegistered => path.name("NotRegistered"),
-            Self::AlreadyRegistered => path.name("AlreadyRegistered"),
-            Self::TrackingPending => path.name("TrackingPending"),
-            Self::NoTrackingPending => path.name("NoTrackingPending"),
-            Self::Poisoned => path.name("Poisoned"),
-            Self::RfClosed => path.name("RfClosed"),
-            Self::RfOpen => path.name("RfOpen"),
-            Self::EpochMismatch => path.name("EpochMismatch"),
-            Self::ClientsActive => path.name("ClientsActive"),
-            Self::Clock(error) => {
-                path.name("Clock");
-                error.push_path(path);
-            }
-            Self::Acquire(error) => {
-                path.name("Acquire");
-                error.push_path(path);
-            }
-            Self::Time(error) => {
-                path.name("Time");
-                error.push_path(path);
-            }
-            Self::ClientAbsent(client) => {
-                path.name("ClientAbsent");
-                path.name(match client {
-                    RadioClient::Wifi => "Wifi",
-                    RadioClient::Bluetooth => "Bluetooth",
-                    RadioClient::Ieee802154 => "Ieee802154",
-                });
-            }
-            Self::ClientPhase(client) => {
-                path.name("ClientPhase");
-                path.name(match client {
-                    RadioClient::Wifi => "Wifi",
-                    RadioClient::Bluetooth => "Bluetooth",
-                    RadioClient::Ieee802154 => "Ieee802154",
-                });
-            }
-        }
-    }
-}
-
-impl<B: oer_chips_esp32s31_hal::power::PlatformClockBackend, E: DiagnosticPath> DiagnosticPath
-    for JoinRefused<'_, B, E>
-{
-    /// The refusal's error; the radio it returns is not part of the path.
-    fn push_path(&self, path: &mut DiagPath) {
-        self.error.push_path(path);
     }
 }
 

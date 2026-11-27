@@ -182,15 +182,11 @@ fn service(
         engine.advance(hardware.as_ref(), &mut SarModel(hardware.clone()))
     })
 }
-type Returned =
-    DetachedRadioDomain<crate::test_clocks::TestClockBackend, crate::concurrent::ConcurrentPhy>;
+type Returned = DetachedRadioDomain<crate::test_clocks::TestClockBackend>;
 fn transaction() -> (Returned, PhyTransaction, FaultHandle, PhyRegistrationEpoch) {
     let seat = Box::leak(Box::new(TransactionSeat::for_host(report)));
     let (mut radio, _) = RadioHardware::for_host_test()
-        .split::<crate::test_clocks::TestClockBackend, _>(
-            crate::concurrent::ConcurrentPhy::new(),
-            seat.claim().unwrap(),
-        )
+        .split::<crate::test_clocks::TestClockBackend>(seat.claim().unwrap())
         .expect("identity capacity");
     let epoch = radio.begin_registration_for_host_test().epoch();
     let diagnostic = radio.fault_handle();

@@ -159,24 +159,10 @@ pub trait RadioClientKind: sealed::RadioClientKind + 'static {
 /// The IEEE 802.11 client.
 #[derive(Debug)]
 pub enum WifiClient {}
-/// The Bluetooth LE client.
-#[derive(Debug)]
-pub enum BluetoothClient {}
-/// The IEEE 802.15.4 client.
-#[derive(Debug)]
-pub enum Ieee802154Client {}
 
 impl sealed::RadioClientKind for WifiClient {}
 impl RadioClientKind for WifiClient {
     const CLIENT: RadioClient = RadioClient::Wifi;
-}
-impl sealed::RadioClientKind for BluetoothClient {}
-impl RadioClientKind for BluetoothClient {
-    const CLIENT: RadioClient = RadioClient::Bluetooth;
-}
-impl sealed::RadioClientKind for Ieee802154Client {}
-impl RadioClientKind for Ieee802154Client {
-    const CLIENT: RadioClient = RadioClient::Ieee802154;
 }
 
 /// Proof that client `K` holds common radio power.
@@ -197,22 +183,6 @@ impl RadioClientKind for Ieee802154Client {
 ///     wifi: &WifiRadioRegisters,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &CoexAbsent<WifiClient>,
-/// ) {
-///     let _ = radio.exit_common_power(wifi, power, coex);
-/// }
-/// ```
-///
-/// Not with another client's:
-///
-/// ```compile_fail,E0308
-/// use oer_chips_esp32s31_hal::radio::domain::{BluetoothClient, CoexAbsent, CommonPower, RadioDomain};
-/// use oer_chips_esp32s31_hal::radio::ieee80211::registers::WifiRadioRegisters;
-///
-/// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
-///     radio: &mut RadioDomain<B>,
-///     wifi: &WifiRadioRegisters,
-///     power: CommonPower<BluetoothClient>,
-///     coex: &CoexAbsent<BluetoothClient>,
 /// ) {
 ///     let _ = radio.exit_common_power(wifi, power, coex);
 /// }

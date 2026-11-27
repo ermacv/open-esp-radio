@@ -26,8 +26,7 @@ impl PhyRegistrationEpoch {
 
 /// The one owner's right over one PHY registration: [`begin`] gives it, and
 /// it is neither `Clone` nor `Copy`, so only the owner that began the
-/// registration (the registered PHY domain) holds it. A BTBB gain is
-/// published only with it ([`crate::radio::domain::BtbbPublisher::publish`]).
+/// registration (the PHY's one owner) holds it.
 ///
 /// [`begin`]: crate::system::owner::PhyInitializationAccess::begin_registration
 #[derive(Debug, Eq, PartialEq)]

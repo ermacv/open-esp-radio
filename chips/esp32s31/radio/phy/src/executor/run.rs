@@ -71,7 +71,7 @@ pub trait PhyParamTrackingPort {
 
     fn complete<'port>(
         &'port mut self,
-        pending: &'port mut crate::state::client::PhyPendingTracking,
+        pending: &'port mut crate::tracking::parameters::PhyParamTrackingTransition,
         state: &'port mut crate::PhyState,
     ) -> impl Future<
         Output = Result<crate::tracking::parameters::PhyParamTrackingCompletion, Self::Error>,
@@ -131,11 +131,12 @@ pub enum PhyParamTrackingRunError<E> {
 /// returns only a value outcome and cannot mint hardware-registration proof.
 pub async fn run_phy_register<P: PhyRegisterPort>(
     transition: &mut PhyRegisterTransition,
+    state: &mut crate::PhyState,
     port: &mut P,
 ) -> Result<PhyRegisterOutcome, PhyRegisterRunError<P::Error>> {
     loop {
         match transition
-            .step_local()
+            .step_local(state)
             .map_err(PhyRegisterRunError::Transition)?
         {
             PhyRegisterLocalStep::StateAdvanced => {}
@@ -162,7 +163,7 @@ pub async fn run_phy_register<P: PhyRegisterPort>(
                     .await
                     .map_err(PhyRegisterRunError::Port)?;
                 transition
-                    .advance_external(completion)
+                    .advance_external(state, completion)
                     .map_err(PhyRegisterRunError::Transition)?;
             }
             PhyRegisterLocalStep::Complete(outcome) => return Ok(outcome),
@@ -239,14 +240,14 @@ pub fn run_phy_calibration_tracking<'a, P: PhyCalibrationTrackingPort>(
 /// Drive every selected child of one unique pending PHY-client request.
 ///
 /// `EnterCritical`/`ExitCritical` are ownership boundaries rather than CPU
-/// interrupt masking: the affine [`crate::state::client::PhyPendingTracking`]
+/// interrupt masking: the affine [`crate::tracking::parameters::PhyParamTrackingTransition`]
 /// owner excludes a concurrent radio transition while asynchronous hardware
 /// timers and interrupts remain able to make progress.
 ///
 /// On error, callers must consume `pending` through its fail-stop path. A
 /// terminal success leaves it ready for `into_owner`.
 pub async fn run_phy_param_tracking<P: PhyParamTrackingPort>(
-    pending: &mut crate::state::client::PhyPendingTracking,
+    pending: &mut crate::tracking::parameters::PhyParamTrackingTransition,
     state: &mut crate::PhyState,
     port: &mut P,
 ) -> Result<crate::tracking::parameters::PhyParamTrackingOutcome, PhyParamTrackingRunError<P::Error>>

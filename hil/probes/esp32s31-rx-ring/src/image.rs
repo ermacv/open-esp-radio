@@ -18,7 +18,7 @@ use crate::case_c::{CASES, Case, byte, word_padded};
 use crate::pair;
 use crate::radio::{
     Brought, Cooperative, CooperativeTimer, Failure, Radio, SessionParts, apart, begin, bring_up,
-    held as held_radio, phase, prepare, stop,
+    held as held_radio, phase, prepare, stop, track_if_due,
 };
 use crate::usb;
 use core::mem::MaybeUninit;
@@ -47,7 +47,9 @@ use oer_chips_esp32s31_hal::{
 use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_phy::{
-    PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
+    PhyCalibrationIdentity, RomShortDelay,
+    owner::{RegisteredPhy, RfOpen},
+    phy_get_rf_cal_version,
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_hil_services_radio_pair::{self as service, ReceiverCommand, ReceiverRequest, Refusal};
@@ -191,16 +193,14 @@ fn main(
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
     let (radio, partitions) = runtime_radio
-        .split::<ChipClocks, _>(
-            ConcurrentPhy::new(),
-            oer_chips_esp32s31_platform_runtime::phy_fault::identity(),
-        )
+        .split::<ChipClocks>(oer_chips_esp32s31_platform_runtime::phy_fault::identity())
         .unwrap_or_else(|failure| {
             let fault = failure.fault();
             let _owners = failure;
             oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault)
         });
-    let pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
+    let power_detector =
+        crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
     let timer = runtime_system_timer;
     let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
@@ -239,7 +239,8 @@ fn main(
         clocks: runtime_clocks,
         wifi: partitions.wifi,
         coex: partitions.wifi_coex,
-        pilot,
+        power_detector,
+        phy: partitions.phy,
         identity,
         mac_irq: wifi_irqs.mac,
         power_irq: wifi_irqs.power,
@@ -938,10 +939,66 @@ fn first_of<T, const N: usize>(items: impl Iterator<Item = T>) -> Option<[T; N]>
     collected.into_array().ok()
 }
 
+/// A turn's failure to close RF: the phase it names.
+const CLOSE: u32 = 13;
+/// A turn's failure to wake RF: the phase it names.
+const WAKE: u32 = 14;
+
+/// RF closed and woken again over the radio in `slot`, as the vendor's last
+/// `esp_phy_disable` and next `esp_phy_enable`: RF's proof again and the
+/// close's and the wake's times in microseconds.
+async fn close_and_wake(
+    slot: &mut Option<Radio>,
+    phy: &mut RegisteredPhy<'_>,
+    open: RfOpen,
+    timer: &CooperativeTimer<'_>,
+    platform: &mut (),
+    clocks: &ChipClocks,
+) -> Result<(RfOpen, u32, u32), Failure> {
+    let radio = slot.take().ok_or((CLOSE, 1))?;
+    let began = timer.now();
+    let (radio, closed) = {
+        let mut operation =
+            core::pin::pin!(oer_chips_esp32s31_radio_phy::close::<_, (), RomShortDelay>(
+                timer, radio, phy, open, platform
+            ));
+        let mut completion = MaybeUninit::uninit();
+        let (returned, result) =
+            oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
+                .await
+                .split();
+        (returned.read(), result.read())
+    };
+    let close_micros = crate::radio::micros_between(began, timer.now());
+    let Ok(closed) = closed else {
+        *slot = Some(radio);
+        return Err((CLOSE, 0));
+    };
+    let began = timer.now();
+    let (radio, woken) = {
+        let mut operation =
+            core::pin::pin!(oer_chips_esp32s31_radio_phy::wake::<_, RomShortDelay>(
+                timer, radio, phy, closed, clocks
+            ));
+        let mut completion = MaybeUninit::uninit();
+        let (returned, result) =
+            oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
+                .await
+                .split();
+        (returned.read(), result.read())
+    };
+    let wake_micros = crate::radio::micros_between(began, timer.now());
+    *slot = Some(radio);
+    let open = woken.map_err(|_| (WAKE, 0))?;
+    Ok((open, close_micros, wake_micros))
+}
+
 /// The owners a turn passes through: the radio, the running MAC with its
-/// clocks' proof, the walker's interrupt banks and the cold start's inputs.
-struct Turns<'a> {
+/// clocks' proof, the walker's interrupt banks, the cold start's inputs and
+/// the registered PHY.
+struct Turns<'a, 'p> {
     slot: &'a mut Option<Radio>,
+    phy: &'a mut RegisteredPhy<'p>,
     access: Option<(RadioAccess, WifiClocksOn)>,
     mac_irq: &'a mut MacInterruptRegisters,
     power_irq: &'a mut MacPowerInterruptRegisters,
@@ -1013,8 +1070,9 @@ async fn worker(
     let cooperative = Cooperative::new(EmbassyClock);
     let timer = CooperativeTimer::new(&cooperative, cycles);
     let mut platform = ();
+    let mut phy_memory = MaybeUninit::uninit();
     let up = async {
-        let brought = apart!(bring_up(parts, &timer, &mut platform))?;
+        let brought = apart!(bring_up(parts, &mut phy_memory, &timer, &mut platform))?;
         let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
         let table = RxTable::place::<ChipDma>(table).map_err(|_| (phase::RING, 1))?;
         let (arena, mut fresh) = Arena::<RingRx, BYTES>::claim().ok_or((phase::RING, 2))?;
@@ -1031,6 +1089,10 @@ async fn worker(
             .ok_or((phase::RING, 6))?;
         let Brought {
             mut slot,
+            mut phy,
+            open,
+            register_micros,
+            power_detector,
             mut clocked,
             first,
             mut walker,
@@ -1047,9 +1109,11 @@ async fn worker(
             first,
             crate::radio::CBW,
         );
-        let prepared = apart!(prepare(
+        let (prepared, open) = apart!(prepare(
             &mut slot,
             &mut clocked,
+            &mut phy,
+            open,
             &mut walker,
             &mut sources,
             reset,
@@ -1074,12 +1138,26 @@ async fn worker(
             parts,
         );
         Ok((
-            slot, access, clocks_on, ring, enabled, arena, spares, sources, mac, channel, mac_irq,
-            power_irq, station, held,
+            slot,
+            (phy, open, register_micros, power_detector),
+            access,
+            clocks_on,
+            ring,
+            enabled,
+            arena,
+            spares,
+            sources,
+            mac,
+            channel,
+            mac_irq,
+            power_irq,
+            station,
+            held,
         ))
     };
     let (
         mut slot,
+        (mut phy, open, register_micros, mut power_detector),
         access,
         clocks_on,
         ring,
@@ -1103,13 +1181,21 @@ async fn worker(
             return down(inbox).await;
         }
     };
-    answer(bring, service::BroughtUp::Up { station, ap });
-    let up = match pair::up(&mut slot, held.clocks(), reset, identity) {
+    answer(
+        bring,
+        service::BroughtUp::Up {
+            station,
+            ap,
+            register_micros,
+        },
+    );
+    let up = match pair::up(&mut slot, held.clocks(), reset, &phy, identity) {
         Ok(readings) => readings,
         Err(_) => cold.clone(),
     };
     let mut turns = Turns {
         slot: &mut slot,
+        phy: &mut phy,
         access: Some((access, clocks_on)),
         mac_irq: &mut mac_irq,
         power_irq: &mut power_irq,
@@ -1121,6 +1207,7 @@ async fn worker(
     let mut receiving = Receiving::Up {
         ring,
         enabled,
+        open,
         steps: Steps::Open,
     };
     loop {
@@ -1186,13 +1273,14 @@ async fn worker(
                     answer(id, service::Turned::Refused(Refusal::NoSender));
                     continue;
                 };
-                let (mut ring, enabled) =
+                let (mut ring, enabled, open) =
                     match core::mem::replace(&mut receiving, Receiving::Stopped) {
                         Receiving::Up {
                             ring,
                             enabled,
+                            open,
                             steps: Steps::Open,
-                        } => (ring, enabled),
+                        } => (ring, enabled, open),
                         held => {
                             let refusal = match held {
                                 Receiving::Up { .. } => Refusal::StepFailed,
@@ -1234,6 +1322,7 @@ async fn worker(
                         Receiving::Up {
                             ring,
                             enabled,
+                            open,
                             steps: Steps::Failed,
                         },
                         phase,
@@ -1246,6 +1335,7 @@ async fn worker(
                         Receiving::Up {
                             ring,
                             enabled,
+                            open,
                             steps: Steps::Failed,
                         },
                         phase::RING,
@@ -1260,6 +1350,7 @@ async fn worker(
                             Receiving::Up {
                                 ring,
                                 enabled,
+                                open,
                                 steps: Steps::Failed,
                             },
                             phase,
@@ -1272,6 +1363,45 @@ async fn worker(
                     stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
                 let stopped = micros_since(began);
                 let handles = parts.ring.len() + spares.len();
+                // RF closed and woken, with the tracking pass when one is due,
+                // when the turn's kind asks for it.
+                let rf = match request.kind {
+                    service::TurnKind::Restart => Ok((open, service::TurnedRf::Kept)),
+                    service::TurnKind::CloseAndWake => match apart!(close_and_wake(
+                        turns.slot,
+                        turns.phy,
+                        open,
+                        &timer,
+                        &mut platform,
+                        held.clocks()
+                    )) {
+                        Ok((open, close_micros, wake_micros)) => apart!(track_if_due(
+                            turns.slot,
+                            turns.phy,
+                            open,
+                            &timer,
+                            &mut platform,
+                            &mut power_detector
+                        ))
+                        .map(|open| {
+                            (
+                                open,
+                                service::TurnedRf::ClosedAndWoken {
+                                    close_micros,
+                                    wake_micros,
+                                },
+                            )
+                        }),
+                        Err(failure) => Err(failure),
+                    },
+                };
+                let (open, rf) = match rf {
+                    Ok(rf) => rf,
+                    Err((phase, index)) => {
+                        turns.access = Some((access, clocks_on));
+                        failed!(Receiving::Stopped, phase, index)
+                    }
+                };
                 // T5: the next start from the cold preparation.
                 let began = EmbassyClock.now();
                 let mut clocked = WifiClocked::from_running(access, clocks_on);
@@ -1279,6 +1409,8 @@ async fn worker(
                 let prepared = apart!(prepare(
                     turns.slot,
                     &mut clocked,
+                    turns.phy,
+                    open,
                     &mut walker,
                     turns.sources,
                     reset,
@@ -1287,7 +1419,7 @@ async fn worker(
                     &timer,
                     &mut platform,
                 ));
-                let prepared = match prepared {
+                let (prepared, open) = match prepared {
                     Ok(prepared) => prepared,
                     Err((phase, index)) => {
                         turns.access = Some(clocked.into_running());
@@ -1322,6 +1454,7 @@ async fn worker(
                         Receiving::Up {
                             ring,
                             enabled,
+                            open,
                             steps: Steps::Failed,
                         },
                         phase,
@@ -1331,6 +1464,7 @@ async fn worker(
                 receiving = Receiving::Up {
                     ring,
                     enabled,
+                    open,
                     steps: Steps::Open,
                 };
                 answer(
@@ -1340,6 +1474,7 @@ async fn worker(
                         after: after.to_service(),
                         handles: u8::try_from(handles).unwrap_or(u8::MAX),
                         stop_micros: stopped,
+                        rf,
                         start_micros: started,
                     },
                 );
@@ -1462,6 +1597,8 @@ enum Receiving {
     Up {
         ring: oer_portable_memory::Occupied<'static, Ring>,
         enabled: oer_chips_esp32s31_hal::radio::ieee80211::dma::receive::WalkerEnabled,
+        /// RF is open.
+        open: RfOpen,
         steps: Steps,
     },
     /// A failed turn's stop took the ring down: the radio is stopped.

@@ -55,16 +55,16 @@ impl PhyRegisterPort for StopAfterFirstMmio {
 #[test]
 fn executor_awaits_only_lowered_identity_bound_operations() {
     let mut transition = PhyRegisterTransition::with_production_config();
+    let mut state = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut port = StopAfterFirstMmio { calls: 0 };
 
     assert_eq!(
-        run_ready(run_phy_register(&mut transition, &mut port)),
+        run_ready(run_phy_register(&mut transition, &mut state, &mut port)),
         Err(PhyRegisterRunError::Port(2))
     );
     assert_eq!(port.calls, 2);
-    assert!(transition.state().is_some());
     assert!(matches!(
-        transition.step_local(),
+        transition.step_local(&mut state),
         Ok(
             crate::calibration::registration::PhyRegisterLocalStep::External(
                 PhyRegisterAction::Mmio(_)
@@ -109,25 +109,28 @@ fn skipped_calibration_executor_never_calls_the_hardware_port() {
         rfpll_cap_tracking_threshold: None,
         calibration_tracking_threshold: None,
         diagnostics: crate::tracking::parameters::PhyTrackingDiagnostics::Enabled,
-        bluetooth_ieee802154_power_tracking_enabled: true,
         calibration_tracking_enabled: true,
         relaxed_power_tracking_threshold: false,
     };
-    let mut outer = crate::tracking::parameters::PhyParamTrackingTransition::new(
-        crate::tracking::parameters::PhyParamTrackRequest::new(false, true),
-        policy,
-    );
+    let mut outer = crate::tracking::parameters::PhyParamTrackingTransition::new(policy);
     outer
         .advance(crate::tracking::parameters::PhyParamTrackingCompletion::EnteredCritical)
         .unwrap();
     outer
-            .advance(
-                crate::tracking::parameters::PhyParamTrackingCompletion::BluetoothIeee802154TxPowerTracked {
-                    enabled: true,
-                    gain_updated: false,
-                },
-            )
-            .unwrap();
+        .advance(
+            crate::tracking::parameters::PhyParamTrackingCompletion::WifiI2cTracked {
+                band_changed: false,
+            },
+        )
+        .unwrap();
+    outer
+        .advance(
+            crate::tracking::parameters::PhyParamTrackingCompletion::WifiTxPowerTracked {
+                enabled: true,
+                gain_updated: false,
+            },
+        )
+        .unwrap();
 
     let mut state = crate::PhyState::new(crate::PhyConfig::production());
     let mut child = outer.begin_calibration_tracking(&mut state).unwrap();
@@ -158,7 +161,7 @@ impl PhyParamTrackingPort for CriticalOnlyTrackingPort {
 
     fn complete<'port>(
         &'port mut self,
-        pending: &'port mut crate::state::client::PhyPendingTracking,
+        pending: &'port mut crate::tracking::parameters::PhyParamTrackingTransition,
         _state: &'port mut crate::PhyState,
     ) -> impl Future<
         Output = Result<crate::tracking::parameters::PhyParamTrackingCompletion, Self::Error>,
@@ -177,26 +180,22 @@ impl PhyParamTrackingPort for CriticalOnlyTrackingPort {
 }
 
 #[test]
-fn outer_executor_holds_affine_client_owner_across_software_critical_section() {
-    let request = crate::tracking::parameters::PhyParamTrackRequest::new(true, false);
+fn outer_executor_runs_only_the_critical_section_of_an_inhibited_pass() {
     let policy = crate::tracking::parameters::PhyParamTrackingPolicy {
         tracking_inhibited: true,
         rfpll_cap_tracking_enabled: true,
         rfpll_cap_tracking_threshold: None,
         calibration_tracking_threshold: None,
         diagnostics: crate::tracking::parameters::PhyTrackingDiagnostics::Enabled,
-        bluetooth_ieee802154_power_tracking_enabled: true,
         calibration_tracking_enabled: true,
         relaxed_power_tracking_threshold: false,
     };
-    let mut pending = crate::state::client::PhyPendingTracking::for_test(request, policy);
+    let mut pending = crate::tracking::parameters::PhyParamTrackingTransition::new(policy);
     let mut state = crate::PhyState::new(crate::PhyConfig::production());
     let mut port = CriticalOnlyTrackingPort { calls: 0 };
     let outcome = run_ready(run_phy_param_tracking(&mut pending, &mut state, &mut port)).unwrap();
-    assert_eq!(outcome.clients, request);
     assert!(outcome.tracking_inhibited);
     assert_eq!(port.calls, 2);
-    assert!(pending.into_owner().is_ok());
 }
 
 struct FailingTrackingPort;
@@ -208,7 +207,7 @@ impl PhyParamTrackingPort for WaitingTrackingPort {
 
     async fn complete<'port>(
         &'port mut self,
-        pending: &'port mut crate::state::client::PhyPendingTracking,
+        pending: &'port mut crate::tracking::parameters::PhyParamTrackingTransition,
         _state: &'port mut crate::PhyState,
     ) -> Result<crate::tracking::parameters::PhyParamTrackingCompletion, Self::Error> {
         use crate::tracking::parameters::{PhyParamTrackingAction, PhyParamTrackingCompletion};
@@ -221,19 +220,17 @@ impl PhyParamTrackingPort for WaitingTrackingPort {
 }
 
 #[test]
-fn cancelling_tracking_while_waiting_cannot_release_an_ordinary_client_owner() {
-    let request = crate::tracking::parameters::PhyParamTrackRequest::new(false, true);
+fn cancelling_tracking_while_waiting_leaves_the_pass_unfinished() {
     let policy = crate::tracking::parameters::PhyParamTrackingPolicy {
         tracking_inhibited: false,
         rfpll_cap_tracking_enabled: false,
         rfpll_cap_tracking_threshold: None,
         calibration_tracking_threshold: None,
         diagnostics: crate::tracking::parameters::PhyTrackingDiagnostics::Enabled,
-        bluetooth_ieee802154_power_tracking_enabled: true,
         calibration_tracking_enabled: true,
         relaxed_power_tracking_threshold: false,
     };
-    let mut pending = crate::state::client::PhyPendingTracking::for_test(request, policy);
+    let mut pending = crate::tracking::parameters::PhyParamTrackingTransition::new(policy);
     let mut state = crate::PhyState::new(crate::PhyConfig::production());
     let mut port = WaitingTrackingPort;
     {
@@ -245,13 +242,8 @@ fn cancelling_tracking_while_waiting_cannot_release_an_ordinary_client_owner() {
     }
     assert!(matches!(
         pending.action(),
-        crate::tracking::parameters::PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack { .. }
+        crate::tracking::parameters::PhyParamTrackingAction::WifiI2cTrack
     ));
-    let pending = match pending.into_owner() {
-        Ok(_) => panic!("cancelled tracking released the client owner"),
-        Err(pending) => pending,
-    };
-    assert_eq!(pending.fail().request(), &request);
 }
 
 impl PhyParamTrackingPort for FailingTrackingPort {
@@ -259,7 +251,7 @@ impl PhyParamTrackingPort for FailingTrackingPort {
 
     fn complete<'port>(
         &'port mut self,
-        _pending: &'port mut crate::state::client::PhyPendingTracking,
+        _pending: &'port mut crate::tracking::parameters::PhyParamTrackingTransition,
         _state: &'port mut crate::PhyState,
     ) -> impl Future<
         Output = Result<crate::tracking::parameters::PhyParamTrackingCompletion, Self::Error>,
@@ -269,19 +261,17 @@ impl PhyParamTrackingPort for FailingTrackingPort {
 }
 
 #[test]
-fn outer_executor_error_preserves_pending_owner_for_explicit_poisoning() {
-    let request = crate::tracking::parameters::PhyParamTrackRequest::new(false, true);
+fn outer_executor_error_leaves_the_pass_where_it_failed() {
     let policy = crate::tracking::parameters::PhyParamTrackingPolicy {
         tracking_inhibited: false,
         rfpll_cap_tracking_enabled: false,
         rfpll_cap_tracking_threshold: None,
         calibration_tracking_threshold: None,
         diagnostics: crate::tracking::parameters::PhyTrackingDiagnostics::Enabled,
-        bluetooth_ieee802154_power_tracking_enabled: true,
         calibration_tracking_enabled: true,
         relaxed_power_tracking_threshold: false,
     };
-    let mut pending = crate::state::client::PhyPendingTracking::for_test(request, policy);
+    let mut pending = crate::tracking::parameters::PhyParamTrackingTransition::new(policy);
     let mut state = crate::PhyState::new(crate::PhyConfig::production());
     assert_eq!(
         run_ready(run_phy_param_tracking(
@@ -295,5 +285,4 @@ fn outer_executor_error_preserves_pending_owner_for_explicit_poisoning() {
         pending.action(),
         crate::tracking::parameters::PhyParamTrackingAction::EnterCritical
     );
-    assert_eq!(pending.fail().request(), &request);
 }

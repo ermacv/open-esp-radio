@@ -1,9 +1,7 @@
 use super::*;
-use crate::tracking::calibration::PhyCalibrationTrackingRequest;
 use crate::tracking::calibration::{
     PhyCalibrationTrackingAction, PhyCalibrationTrackingTransition,
 };
-use crate::tracking::parameters::PhyCalibrationTrackClass;
 
 const PARAMETERS: PhyCalibrationTrackingParameters = PhyCalibrationTrackingParameters {
     current_temperature: 50,
@@ -18,19 +16,13 @@ const PARAMETERS: PhyCalibrationTrackingParameters = PhyCalibrationTrackingParam
 
 #[test]
 fn independent_references_select_only_due_hardware_branches() {
-    for class in [
-        PhyCalibrationTrackClass::Wifi,
-        PhyCalibrationTrackClass::BluetoothIeee802154,
-    ] {
-        let request = PhyCalibrationTrackingRequest {
-            clients: class.clients(),
-        };
+    {
         let decision = PARAMETERS.decision();
         assert!(!decision.common.is_due());
         assert!(decision.transmit.is_due());
         assert_eq!(decision.transmit.delta(), 30);
         assert_eq!(
-            PhyCalibrationTrackingTransition::new(request, PARAMETERS).action(),
+            PhyCalibrationTrackingTransition::new(PARAMETERS).action(),
             PhyCalibrationTrackingAction::SetGrantProtect { enabled: true },
         );
         let unchanged = PhyCalibrationTrackingParameters {
@@ -39,7 +31,7 @@ fn independent_references_select_only_due_hardware_branches() {
             ..PARAMETERS
         };
         assert!(matches!(
-            PhyCalibrationTrackingTransition::new(request, unchanged).action(),
+            PhyCalibrationTrackingTransition::new(unchanged).action(),
             PhyCalibrationTrackingAction::Complete(outcome)
                 if !outcome.common_updated && !outcome.transmit_updated
         ));
@@ -49,7 +41,7 @@ fn independent_references_select_only_due_hardware_branches() {
         };
         assert!(forced.decision().transmit.is_due());
         assert_eq!(
-            PhyCalibrationTrackingTransition::new(request, forced).action(),
+            PhyCalibrationTrackingTransition::new(forced).action(),
             PhyCalibrationTrackingAction::SetGrantProtect { enabled: true },
         );
         // Observing demand did not commit or overwrite the source references.

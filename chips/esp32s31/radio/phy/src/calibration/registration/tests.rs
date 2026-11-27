@@ -10,50 +10,64 @@ use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 use oer_chips_esp32s31_hal::types::PhyFrequencyControl;
 
-fn complete_mmio(transition: &mut PhyRegisterTransition, action: PhyRegisterMmioAction) {
+fn complete_mmio(
+    transition: &mut PhyRegisterTransition,
+    phy: &mut crate::state::PhyState,
+    action: PhyRegisterMmioAction,
+) {
     transition
-        .advance_external(PhyRegisterCompletion::Mmio(PhyRegisterMmioCompletion {
-            action,
-        }))
+        .advance_external(
+            phy,
+            PhyRegisterCompletion::Mmio(PhyRegisterMmioCompletion { action }),
+        )
         .unwrap();
 }
 
 fn complete_delay(
     transition: &mut PhyRegisterTransition,
+    phy: &mut crate::state::PhyState,
     phase: PhyRegisterDelayPhase,
     micros: u32,
 ) {
     transition
-        .advance_external(PhyRegisterCompletion::DelayElapsed { phase, micros })
+        .advance_external(phy, PhyRegisterCompletion::DelayElapsed { phase, micros })
         .unwrap();
 }
 
-fn complete_failure_cleanup(transition: &mut PhyRegisterTransition) {
+fn complete_failure_cleanup(
+    transition: &mut PhyRegisterTransition,
+    phy: &mut crate::state::PhyState,
+) {
     assert!(!transition.failure_cleanup_completed());
     complete_mmio(
         transition,
+        phy,
         PhyRegisterMmioAction::SetCalibrationClock { enabled: false },
     );
     complete_mmio(
         transition,
+        phy,
         PhyRegisterMmioAction::SetBbpllCalibration {
             calibration: PhyBbpllCalibration::Disabled,
         },
     );
     complete_mmio(
         transition,
+        phy,
         PhyRegisterMmioAction::SetHardwareFrequencyControl {
             control: PhyFrequencyControl::Hardware,
         },
     );
     complete_mmio(
         transition,
+        phy,
         PhyRegisterMmioAction::ConfigureForceTxRx {
             phase: PhyForceTxRxPhase::DisableInitialPhase,
         },
     );
     complete_delay(
         transition,
+        phy,
         PhyRegisterDelayPhase::ForceTxRx {
             enabled: false,
             completed_phase: 0,
@@ -63,6 +77,7 @@ fn complete_failure_cleanup(transition: &mut PhyRegisterTransition) {
     assert!(!transition.failure_cleanup_completed());
     complete_mmio(
         transition,
+        phy,
         PhyRegisterMmioAction::ConfigureForceTxRx {
             phase: PhyForceTxRxPhase::DisableFinalPhase,
         },
@@ -70,6 +85,7 @@ fn complete_failure_cleanup(transition: &mut PhyRegisterTransition) {
     assert!(!transition.failure_cleanup_completed());
     complete_delay(
         transition,
+        phy,
         PhyRegisterDelayPhase::ForceTxRx {
             enabled: false,
             completed_phase: 1,
@@ -104,135 +120,44 @@ fn the_chip_maximum_is_the_largest_production_target_power() {
 }
 
 #[test]
-fn state_owner_cannot_escape_before_a_terminal_parent_outcome() {
-    let transition = PhyRegisterTransition::with_production_config();
-    assert!(!transition.failure_cleanup_completed());
-    let transition = match transition.into_model_parts() {
-        Ok(_) => panic!("an active cold initializer must retain its unique state owner"),
-        Err(transition) => transition,
-    };
-    let transition = match transition.into_failed_parts() {
-        Ok(_) => panic!("an active cold initializer is not a terminal failure"),
-        Err(transition) => transition,
-    };
-    assert!(transition.state().is_some());
-}
-
-#[test]
-fn apply_profile_invariant_errors_restore_the_exact_parent_phase() {
+fn apply_profile_invariant_error_restores_the_exact_parent_phase() {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config();
     transition.phase = Some(super::Phase::ApplyProfile);
     let config = transition.config.take().unwrap();
 
     assert_eq!(
-        transition.step_local(),
+        transition.step_local(&mut phy),
         Err(super::PhyRegisterTransitionError::MissingStateOwner)
     );
     assert!(matches!(transition.phase, Some(super::Phase::ApplyProfile)));
 
     transition.config = Some(config);
-    let state = transition.state.take().unwrap();
     assert_eq!(
-        transition.step_local(),
-        Err(super::PhyRegisterTransitionError::MissingStateOwner)
-    );
-    assert!(transition.config.is_some());
-    assert!(matches!(transition.phase, Some(super::Phase::ApplyProfile)));
-
-    transition.state = Some(state);
-    assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::StateAdvanced
     );
-}
-
-#[test]
-fn mark_registered_invariant_error_restores_the_exact_tail_phase() {
-    let mut transition = PhyRegisterTransition::with_production_config();
-    let state = transition.state.take().unwrap();
-    transition.phase = Some(super::Phase::Tail(super::TailStep::MarkRegistered));
-
-    assert_eq!(
-        transition.step_local(),
-        Err(super::PhyRegisterTransitionError::MissingStateOwner)
-    );
-    assert!(matches!(
-        transition.phase,
-        Some(super::Phase::Tail(super::TailStep::MarkRegistered))
-    ));
-
-    transition.state = Some(state);
-    assert_eq!(
-        transition.step_local().unwrap(),
-        PhyRegisterLocalStep::StateAdvanced
-    );
-    assert!(transition.state().unwrap().phy_registered());
-}
-
-#[test]
-fn calibration_clock_invariant_error_restores_the_exact_prelude_phase() {
-    let mut transition = PhyRegisterTransition::with_production_config();
-    let state = transition.state.take().unwrap();
-    transition.phase = Some(super::Phase::Prelude(
-        super::PreludeStep::CalibrationClockOn,
-    ));
-    let completion = PhyRegisterCompletion::Mmio(PhyRegisterMmioCompletion {
-        action: PhyRegisterMmioAction::SetCalibrationClock { enabled: true },
-    });
-
-    assert_eq!(
-        transition.advance_external(completion),
-        Err(super::PhyRegisterTransitionError::MissingStateOwner)
-    );
-    assert!(matches!(
-        transition.phase,
-        Some(super::Phase::Prelude(
-            super::PreludeStep::CalibrationClockOn
-        ))
-    ));
-
-    transition.state = Some(state);
-    transition.advance_external(completion).unwrap();
-    assert!(matches!(transition.phase, Some(super::Phase::Rf(_))));
-    assert!(transition.state().is_some());
-}
-
-#[test]
-fn complete_without_the_registered_marker_rejects_model_extraction() {
-    let mut transition = PhyRegisterTransition::with_production_config();
-    transition.phase = Some(super::Phase::Complete(PhyRegisterOutcome {
-        #[cfg(oer_trace)]
-        rf_calibration: None,
-        #[cfg(oer_trace)]
-        ready_waits: super::ReadyWaitDiagnostics::default(),
-        full_calibration_performed: true,
-        calibration_path: PhyCalibrationPath::FullUncached,
-    }));
-
-    let transition = match transition.into_model_parts() {
-        Ok(_) => panic!("terminal phase without its marker must fail closed"),
-        Err(transition) => transition,
-    };
-    assert!(!transition.state().unwrap().phy_registered());
 }
 
 #[test]
 fn wrong_rf_completion_preserves_the_exact_child_owner() {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config();
-    let state = transition.state.take().unwrap();
     transition.phase = Some(super::Phase::Rf(
-        crate::calibration::cold::PhyRfColdInit::new(state),
+        crate::calibration::cold::PhyRfColdInit::new(),
     ));
 
     assert_eq!(
-        transition.advance_external(PhyRegisterCompletion::Rf(
-            crate::analog::i2c::PhyRfInitPrefixCompletion::BbpllCalibrationConfigured,
-        )),
+        transition.advance_external(
+            &mut phy,
+            PhyRegisterCompletion::Rf(
+                crate::analog::i2c::PhyRfInitPrefixCompletion::BbpllCalibrationConfigured,
+            )
+        ),
         Err(super::PhyRegisterTransitionError::WrongCompletion)
     );
-    assert!(transition.state().is_some());
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::External(PhyRegisterAction::Rf(
             crate::analog::i2c::PhyRfInitPrefixAction::ConfigureFeBbClock,
         ))
@@ -241,27 +166,29 @@ fn wrong_rf_completion_preserves_the_exact_child_owner() {
 
 #[test]
 fn wrong_baseband_completion_preserves_the_exact_child_owner() {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config();
-    let state = transition.state.take().unwrap();
     transition.phase = Some(super::Phase::Baseband(
-        crate::calibration::baseband::PhyBbInitTransition::new(state),
+        crate::calibration::baseband::PhyBbInitTransition::new(),
     ));
 
     assert_eq!(
-        transition.advance_external(PhyRegisterCompletion::Baseband(
-            crate::calibration::baseband::PhyBbInitCompletion::Mmio(
-                crate::calibration::baseband::PhyBbMmioCompletion {
-                    action: crate::calibration::baseband::PhyBbMmioAction::SetBasebandMode {
-                        mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
-                    },
-                }
-            ),
-        )),
+        transition.advance_external(
+            &mut phy,
+            PhyRegisterCompletion::Baseband(
+                crate::calibration::baseband::PhyBbInitCompletion::Mmio(
+                    crate::calibration::baseband::PhyBbMmioCompletion {
+                        action: crate::calibration::baseband::PhyBbMmioAction::SetBasebandMode {
+                            mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
+                        },
+                    }
+                ),
+            )
+        ),
         Err(super::PhyRegisterTransitionError::WrongCompletion)
     );
-    assert!(transition.state().is_some());
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::External(PhyRegisterAction::Baseband(
             crate::calibration::baseband::PhyBbInitAction::Mmio(
                 crate::calibration::baseband::PhyBbMmioAction::EnableBasebandInitialization,
@@ -272,20 +199,23 @@ fn wrong_baseband_completion_preserves_the_exact_child_owner() {
 
 #[test]
 fn wrong_temperature_completion_preserves_the_exact_child_owner() {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config();
     transition.phase = Some(super::Phase::Temperature(
         crate::analog::temperature::PhyTemperatureTransition::new(),
     ));
 
     assert_eq!(
-        transition.advance_external(PhyRegisterCompletion::Temperature(
-            crate::analog::temperature::PhyTemperatureCompletion::CodeSampled { value: 0 },
-        )),
+        transition.advance_external(
+            &mut phy,
+            PhyRegisterCompletion::Temperature(
+                crate::analog::temperature::PhyTemperatureCompletion::CodeSampled { value: 0 },
+            )
+        ),
         Err(super::PhyRegisterTransitionError::WrongCompletion)
     );
-    assert!(transition.state().is_some());
     assert!(matches!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::External(PhyRegisterAction::Temperature(
             crate::analog::temperature::PhyTemperatureAction::ReadMasked { .. }
         ))
@@ -309,17 +239,17 @@ fn temperature_step_error_restores_the_terminal_child() {
         .advance(crate::analog::temperature::PhyTemperatureCompletion::CodeSampled { value: 128 })
         .unwrap();
 
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
+
     let mut transition = PhyRegisterTransition::with_production_config();
     transition.phase = Some(super::Phase::Temperature(temperature));
     assert_eq!(
-        transition.step_local(),
+        transition.step_local(&mut phy),
         Err(super::PhyRegisterTransitionError::MissingStateOwner)
     );
-    assert!(transition.state().is_some());
-    transition.temperature_control =
-        Some(transition.state().unwrap().register_temperature_control());
+    transition.temperature_control = Some(phy.register_temperature_control());
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::StateAdvanced
     );
 }
@@ -359,22 +289,28 @@ fn parent_timer_and_final_i2c_bindings_preserve_action_identity() {
 
 #[test]
 fn prelude_has_async_delay_and_reset_sample_edges() {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config();
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::External(PhyRegisterAction::Mmio(
             PhyRegisterMmioAction::PrepareColdStart
         ))
     );
-    complete_mmio(&mut transition, PhyRegisterMmioAction::PrepareColdStart);
     complete_mmio(
         &mut transition,
+        &mut phy,
+        PhyRegisterMmioAction::PrepareColdStart,
+    );
+    complete_mmio(
+        &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::ConfigureForceTxRx {
             phase: PhyForceTxRxPhase::EnableInitialPhase,
         },
     );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::External(PhyRegisterAction::DelayMicros {
             phase: PhyRegisterDelayPhase::ForceTxRx {
                 enabled: true,
@@ -385,6 +321,7 @@ fn prelude_has_async_delay_and_reset_sample_edges() {
     );
     complete_delay(
         &mut transition,
+        &mut phy,
         PhyRegisterDelayPhase::ForceTxRx {
             enabled: true,
             completed_phase: 0,
@@ -393,31 +330,39 @@ fn prelude_has_async_delay_and_reset_sample_edges() {
     );
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::ConfigureForceTxRx {
             phase: PhyForceTxRxPhase::EnableFinalPhase,
         },
     );
     complete_delay(
         &mut transition,
+        &mut phy,
         PhyRegisterDelayPhase::ForceTxRx {
             enabled: true,
             completed_phase: 1,
         },
         1,
     );
-    complete_mmio(&mut transition, PhyRegisterMmioAction::ResetFrequencyModule);
     complete_mmio(
         &mut transition,
+        &mut phy,
+        PhyRegisterMmioAction::ResetFrequencyModule,
+    );
+    complete_mmio(
+        &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::SetHardwareFrequencyControl {
             control: PhyFrequencyControl::Software,
         },
     );
     complete_delay(
         &mut transition,
+        &mut phy,
         PhyRegisterDelayPhase::HardwareFrequencyDisabled,
         2,
     );
-    let action = transition.step_local().unwrap();
+    let action = transition.step_local(&mut phy).unwrap();
     assert_eq!(
         action,
         PhyRegisterLocalStep::External(PhyRegisterAction::SampleI2cMasterReset {
@@ -439,6 +384,7 @@ fn prelude_has_async_delay_and_reset_sample_edges() {
 
 #[test]
 fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config_and_calibration(
         CALIBRATION_IDENTITY,
         Some(retained_cache(CALIBRATION_IDENTITY)),
@@ -448,42 +394,50 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
         sample: PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT - 1,
     }));
     transition
-        .advance_external(PhyRegisterCompletion::I2cMasterResetSampled {
-            host: Host::Host0,
-            sample: PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT - 1,
-            busy: true,
-        })
+        .advance_external(
+            &mut phy,
+            PhyRegisterCompletion::I2cMasterResetSampled {
+                host: Host::Host0,
+                sample: PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT - 1,
+                busy: true,
+            },
+        )
         .unwrap();
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::External(PhyRegisterAction::Mmio(
             PhyRegisterMmioAction::SetCalibrationClock { enabled: false }
         ))
     );
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::SetCalibrationClock { enabled: false },
     );
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::SetBbpllCalibration {
             calibration: PhyBbpllCalibration::Disabled,
         },
     );
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::SetHardwareFrequencyControl {
             control: PhyFrequencyControl::Hardware,
         },
     );
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::ConfigureForceTxRx {
             phase: PhyForceTxRxPhase::DisableInitialPhase,
         },
     );
     complete_delay(
         &mut transition,
+        &mut phy,
         PhyRegisterDelayPhase::ForceTxRx {
             enabled: false,
             completed_phase: 0,
@@ -492,12 +446,14 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
     );
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::ConfigureForceTxRx {
             phase: PhyForceTxRxPhase::DisableFinalPhase,
         },
     );
     complete_delay(
         &mut transition,
+        &mut phy,
         PhyRegisterDelayPhase::ForceTxRx {
             enabled: false,
             completed_phase: 1,
@@ -505,28 +461,28 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
         1,
     );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::Failed(PhyRegisterFailure::I2cMasterResetTimedOut {
             host: Host::Host0,
             samples: PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT,
         })
     );
     assert!(transition.calibration_cache().is_none());
-    let transition = match transition.into_model_parts() {
-        Ok(_) => panic!("a failed registration cannot yield completed model parts"),
+    let transition = match transition.into_completed_cache() {
+        Ok(_) => panic!("a failed registration gives no completed cache"),
         Err(transition) => transition,
     };
     assert!(transition.failure_cleanup_completed());
-    let (state, retry_cache) = match transition.into_failed_parts() {
-        Ok(parts) => parts,
-        Err(_) => panic!("terminal failure must release its ordinary state owner"),
+    let retry_cache = match transition.into_failed_parts() {
+        Ok(cache) => cache,
+        Err(_) => panic!("terminal failure gives the caller's cache back"),
     };
-    assert!(!state.phy_registered());
     assert!(retry_cache.unwrap().matches(CALIBRATION_IDENTITY));
 }
 
 #[test]
-fn success_tail_marks_owned_state_before_releasing_radio() {
+fn success_tail_releases_the_radio_and_gives_the_cache() {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition =
         PhyRegisterTransition::with_production_config_and_calibration(CALIBRATION_IDENTITY, None);
     #[cfg(oer_trace)]
@@ -540,45 +496,43 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
     }
     transition.phase = Some(super::Phase::Tail(super::TailStep::BackupCalibration));
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::StateAdvanced
     );
     assert!(transition.calibration_cache().is_none());
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::SetBbpllCalibration {
             calibration: PhyBbpllCalibration::Disabled,
         },
     );
     transition
-        .advance_external(PhyRegisterCompletion::FinalI2cRead {
-            address: super::PHY_REGISTER_FINAL_I2C_ADDRESS,
-            value: 0,
-        })
+        .advance_external(
+            &mut phy,
+            PhyRegisterCompletion::FinalI2cRead {
+                address: super::PHY_REGISTER_FINAL_I2C_ADDRESS,
+                value: 0,
+            },
+        )
         .unwrap();
-    assert_eq!(
-        transition.step_local().unwrap(),
-        PhyRegisterLocalStep::StateAdvanced
-    );
-    assert!(transition.state().unwrap().phy_registered());
-    let mut transition = match transition.into_model_parts() {
-        Ok(_) => panic!("the registered marker alone is not terminal success"),
-        Err(transition) => transition,
-    };
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::SetHardwareFrequencyControl {
             control: PhyFrequencyControl::Hardware,
         },
     );
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::ConfigureForceTxRx {
             phase: PhyForceTxRxPhase::DisableInitialPhase,
         },
     );
     complete_delay(
         &mut transition,
+        &mut phy,
         PhyRegisterDelayPhase::ForceTxRx {
             enabled: false,
             completed_phase: 0,
@@ -587,12 +541,14 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
     );
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::ConfigureForceTxRx {
             phase: PhyForceTxRxPhase::DisableFinalPhase,
         },
     );
     complete_delay(
         &mut transition,
+        &mut phy,
         PhyRegisterDelayPhase::ForceTxRx {
             enabled: false,
             completed_phase: 1,
@@ -600,7 +556,7 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
         1,
     );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::Complete(PhyRegisterOutcome {
             #[cfg(oer_trace)]
             rf_calibration: diagnostics,
@@ -621,12 +577,11 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
         Ok(_) => panic!("a successful cold initializer is not a terminal failure"),
         Err(transition) => transition,
     };
-    let (state, calibration_cache) = match transition.into_model_parts() {
-        Ok(parts) => parts,
-        Err(_) => panic!("a completed cold initializer must release its state owner"),
+    let calibration_cache = match transition.into_completed_cache() {
+        Ok(cache) => cache,
+        Err(_) => panic!("a completed registration gives its cache"),
     };
     assert!(calibration_cache.unwrap().matches(CALIBRATION_IDENTITY));
-    assert!(state.phy_registered());
 }
 
 const CALIBRATION_IDENTITY: PhyCalibrationIdentity = PhyCalibrationIdentity {
@@ -665,6 +620,7 @@ fn retained_cache(identity: PhyCalibrationIdentity) -> crate::state::PhyCalibrat
 #[test]
 fn complete_cache_selects_partial_calibration_and_republishes_hardware_tables() {
     let cache = retained_cache(CALIBRATION_IDENTITY);
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config_and_calibration(
         CALIBRATION_IDENTITY,
         Some(cache),
@@ -672,7 +628,7 @@ fn complete_cache_selects_partial_calibration_and_republishes_hardware_tables() 
     transition.phase = Some(super::Phase::ApplyProfile);
 
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::StateAdvanced
     );
     assert_eq!(
@@ -680,36 +636,12 @@ fn complete_cache_selects_partial_calibration_and_republishes_hardware_tables() 
         PhyCalibrationPath::PartialFromCache
     );
     assert!(transition.calibration_cache().is_none());
-    assert!(transition.state().unwrap().baseband_calibration_complete());
-    assert!(
-        transition
-            .state()
-            .unwrap()
-            .tx_power_parameters()
-            .already_calibrated
-    );
-    assert!(transition.state().unwrap().rc_calibration_complete());
-    assert!(
-        transition
-            .state()
-            .unwrap()
-            .rx_gain_init_parameters()
-            .dc_calibrated
-    );
-    assert!(
-        !transition
-            .state()
-            .unwrap()
-            .rx_gain_init_parameters()
-            .tables_initialized
-    );
-    assert!(
-        !transition
-            .state()
-            .unwrap()
-            .channel_frequency_control()
-            .frequency_table_initialized
-    );
+    assert!(phy.baseband_calibration_complete());
+    assert!(phy.tx_power_parameters().already_calibrated);
+    assert!(phy.rc_calibration_complete());
+    assert!(phy.rx_gain_init_parameters().dc_calibrated);
+    assert!(!phy.rx_gain_init_parameters().tables_initialized);
+    assert!(!phy.channel_frequency_control().frequency_table_initialized);
     let temperature = transition.temperature_control.unwrap();
     assert!(temperature.updates_offset_130());
     assert!(!temperature.updates_reference_copies());
@@ -721,6 +653,7 @@ fn rejected_caller_cache_falls_back_to_full_calibration() {
         rf_cal_version: CALIBRATION_IDENTITY.rf_cal_version + 1,
         ..CALIBRATION_IDENTITY
     });
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config_and_calibration(
         CALIBRATION_IDENTITY,
         Some(cache),
@@ -728,7 +661,7 @@ fn rejected_caller_cache_falls_back_to_full_calibration() {
     transition.phase = Some(super::Phase::ApplyProfile);
 
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::StateAdvanced
     );
     assert_eq!(
@@ -736,14 +669,8 @@ fn rejected_caller_cache_falls_back_to_full_calibration() {
         PhyCalibrationPath::FullAfterRejectedCache
     );
     assert!(transition.calibration_cache().is_none());
-    assert!(!transition.state().unwrap().baseband_calibration_complete());
-    assert!(
-        !transition
-            .state()
-            .unwrap()
-            .tx_power_parameters()
-            .already_calibrated
-    );
+    assert!(!phy.baseband_calibration_complete());
+    assert!(!phy.tx_power_parameters().already_calibrated);
     let temperature = transition.temperature_control.unwrap();
     assert!(temperature.updates_offset_130());
     assert!(temperature.updates_reference_copies());
@@ -755,6 +682,7 @@ fn incomplete_cache_falls_back_without_retaining_partial_state() {
     let mut snapshot = cache.into_snapshot();
     snapshot.wifi.rx_gain_dc_calibrated = false;
     let cache = crate::state::PhyCalibrationCache::from_snapshot(snapshot).unwrap();
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config_and_calibration(
         CALIBRATION_IDENTITY,
         Some(cache),
@@ -762,14 +690,14 @@ fn incomplete_cache_falls_back_without_retaining_partial_state() {
     transition.phase = Some(super::Phase::ApplyProfile);
 
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::StateAdvanced
     );
     assert_eq!(
         transition.calibration_path,
         PhyCalibrationPath::FullAfterRejectedCache
     );
-    let state = transition.state().unwrap();
+    let state = &phy;
     assert!(!state.baseband_calibration_complete());
     assert!(!state.rx_gain_init_parameters().dc_calibrated);
     assert!(!state.rx_gain_init_parameters().tables_initialized);
@@ -780,6 +708,7 @@ fn incomplete_cache_falls_back_without_retaining_partial_state() {
 fn final_i2c_failure_returns_only_the_original_retry_cache() {
     let retry_cache = retained_cache(CALIBRATION_IDENTITY);
     let retry_snapshot = *retry_cache.snapshot();
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     let mut transition = PhyRegisterTransition::with_production_config_and_calibration(
         CALIBRATION_IDENTITY,
         Some(retry_cache),
@@ -787,54 +716,56 @@ fn final_i2c_failure_returns_only_the_original_retry_cache() {
     transition.phase = Some(super::Phase::Tail(super::TailStep::BackupCalibration));
 
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::StateAdvanced
     );
     assert!(!transition.calibration_cache_ready);
     assert!(transition.calibration_cache().is_none());
     complete_mmio(
         &mut transition,
+        &mut phy,
         PhyRegisterMmioAction::SetBbpllCalibration {
             calibration: PhyBbpllCalibration::Disabled,
         },
     );
     transition
-        .advance_external(PhyRegisterCompletion::FinalI2cDeadlineExceeded {
-            address: super::PHY_REGISTER_FINAL_I2C_ADDRESS,
-        })
+        .advance_external(
+            &mut phy,
+            PhyRegisterCompletion::FinalI2cDeadlineExceeded {
+                address: super::PHY_REGISTER_FINAL_I2C_ADDRESS,
+            },
+        )
         .unwrap();
     assert!(!transition.calibration_cache_ready);
     assert!(transition.calibration_cache().is_none());
     assert!(!transition.failure_cleanup_completed());
-    complete_failure_cleanup(&mut transition);
+    complete_failure_cleanup(&mut transition, &mut phy);
     assert!(transition.failure_cleanup_completed());
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut phy).unwrap(),
         PhyRegisterLocalStep::Failed(PhyRegisterFailure::FinalI2cDeadlineExceeded)
     );
-    let transition = match transition.into_model_parts() {
-        Ok(_) => panic!("late failure must not yield completed model parts"),
+    let transition = match transition.into_completed_cache() {
+        Ok(_) => panic!("late failure gives no completed cache"),
         Err(transition) => transition,
     };
-    let (state, recovered_retry_cache) = transition
+    let recovered_retry_cache = transition
         .into_failed_parts()
-        .unwrap_or_else(|_| panic!("late failure must return its ordinary state and retry input"));
-    assert!(!state.phy_registered());
+        .unwrap_or_else(|_| panic!("late failure gives its retry input back"));
     let recovered_retry_cache = recovered_retry_cache.expect("caller input must be preserved");
     assert_eq!(*recovered_retry_cache.snapshot(), retry_snapshot);
     assert_ne!(
         retry_snapshot,
-        state
-            .calibration_cache(CALIBRATION_IDENTITY)
-            .into_snapshot()
+        phy.calibration_cache(CALIBRATION_IDENTITY).into_snapshot()
     );
 }
 
 /// What the registration's own steps produce, written apart from the code:
 /// the action `step_local` gives at each prelude and tail step.
 fn produced(transition: &mut PhyRegisterTransition, phase: super::Phase) -> PhyRegisterAction {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
     transition.phase = Some(phase);
-    match transition.step_local().unwrap() {
+    match transition.step_local(&mut phy).unwrap() {
         PhyRegisterLocalStep::External(action) => action,
         other => panic!("a step that produces an action gave {other:?}"),
     }
@@ -1022,4 +953,38 @@ fn every_cleanup_step_produces_the_tail_s_action() {
             "{step:?}"
         );
     }
+}
+
+#[test]
+fn an_active_transition_refuses_both_ends_and_comes_back_whole() {
+    let mut phy = crate::state::PhyState::new(crate::state::PhyConfig::esp32s31_default());
+    let retry = retained_cache(CALIBRATION_IDENTITY);
+    let retry_snapshot = *retry.snapshot();
+    let transition = PhyRegisterTransition::with_production_config_and_calibration(
+        CALIBRATION_IDENTITY,
+        Some(retry),
+    );
+    assert!(!transition.failure_cleanup_completed());
+    let transition = match transition.into_completed_cache() {
+        Ok(_) => panic!("an active registration gives no completed cache"),
+        Err(transition) => transition,
+    };
+    let mut transition = match transition.into_failed_parts() {
+        Ok(_) => panic!("an active registration is not a terminal failure"),
+        Err(transition) => transition,
+    };
+    // Whole: where it was, with the caller's cache, and it still steps.
+    assert!(matches!(
+        transition.phase,
+        Some(super::Phase::Prelude(super::PreludeStep::Prepare))
+    ));
+    assert_eq!(
+        transition
+            .calibration_cache
+            .as_ref()
+            .map(|cache| *cache.snapshot()),
+        Some(retry_snapshot)
+    );
+    assert!(transition.config.is_some());
+    assert!(transition.step_local(&mut phy).is_ok());
 }

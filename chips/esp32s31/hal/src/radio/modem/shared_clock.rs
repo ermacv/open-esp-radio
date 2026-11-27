@@ -1,7 +1,6 @@
 //! Route-owned MODEM_LPCON shared-clock capability.
 //!
-//! The register block travels with the mutually exclusive Wi-Fi, Bluetooth
-//! and IEEE 802.15.4 route. Public callers receive observations and semantic
+//! The register block travels with the Wi-Fi route. Public callers receive observations and semantic
 //! route operations, never a register handle or a droppable clock token.
 
 #![forbid(unsafe_code)]
@@ -31,13 +30,6 @@ pub enum CoexistenceLowPowerClockSource {
 pub struct CoexistenceLowPowerClockObservation {
     pub source: CoexistenceLowPowerClockSource,
     pub divider_minus_one: u16,
-}
-
-/// Semantic Bluetooth low-power-clock observation without register authority.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BluetoothLowPowerClockObservation {
-    pub exclusive_main_xtal_selected: bool,
-    pub bluetooth_divider_configured: bool,
 }
 
 impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
@@ -191,67 +183,6 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
                 registers.read_coex_lp_clk_conf().clk_coex_lp_div_num(),
             ),
         })
-    }
-
-    /// Deselect every Bluetooth low-power timer source.
-    ///
-    /// This is `modem_clock_hal_deselect_all_ble_rtc_timer_lpclk_source`: one
-    /// write per selector, in the vendor's slow-oscillator, fast-oscillator,
-    /// 32-kHz crystal, main-crystal order. The divider is untouched.
-    #[doc(hidden)]
-    pub fn deselect_bluetooth_low_power_timer_sources(&mut self) {
-        let registers = &mut self.peripherals.bluetooth_lp_timer_clock;
-        super::ops::deselect_bluetooth_low_power_timer_slow_oscillator(registers);
-        super::ops::deselect_bluetooth_low_power_timer_fast_oscillator(registers);
-        super::ops::deselect_bluetooth_low_power_timer_crystal_32khz(registers);
-        super::ops::deselect_bluetooth_low_power_timer_crystal(registers);
-    }
-
-    /// Select the main crystal as the only Bluetooth low-power timer source
-    /// and program its divider.
-    ///
-    /// This is the source and divider half of
-    /// `modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, MAIN_XTAL, divider)`:
-    /// every selector is cleared, the main crystal is selected and the
-    /// divider written, each as its own field write.
-    #[doc(hidden)]
-    pub fn select_bluetooth_low_power_timer_main_crystal(
-        &mut self,
-        divider: ModemLowPowerClockDivider,
-    ) {
-        self.deselect_bluetooth_low_power_timer_sources();
-        let registers = &mut self.peripherals.bluetooth_lp_timer_clock;
-        super::ops::select_bluetooth_low_power_timer_crystal(registers);
-        super::ops::set_bluetooth_low_power_timer_divider(registers, divider);
-    }
-
-    #[doc(hidden)]
-    pub fn bluetooth_low_power_clock_observation(&self) -> BluetoothLowPowerClockObservation {
-        let lp_timer_conf = self
-            .peripherals
-            .bluetooth_lp_timer_clock
-            .read_lp_timer_conf();
-        let (
-            slow_oscillator_selected,
-            fast_oscillator_selected,
-            crystal_selected,
-            crystal_32khz_selected,
-            divider_minus_one,
-        ) = (
-            lp_timer_conf.clk_lp_timer_sel_osc_slow(),
-            lp_timer_conf.clk_lp_timer_sel_osc_fast(),
-            lp_timer_conf.clk_lp_timer_sel_xtal(),
-            lp_timer_conf.clk_lp_timer_sel_xtal32k(),
-            lp_timer_conf.clk_lp_timer_div_num(),
-        );
-        BluetoothLowPowerClockObservation {
-            exclusive_main_xtal_selected: !slow_oscillator_selected
-                && !fast_oscillator_selected
-                && crystal_selected
-                && !crystal_32khz_selected,
-            bluetooth_divider_configured: u32::from(divider_minus_one)
-                == super::BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER.get(),
-        }
     }
 }
 

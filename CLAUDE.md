@@ -133,7 +133,13 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   context: its owner gives each block's owner an operation, and does in it
   what the word's other users need. A port holds state about its hardware
   only: no count or delay of a policy, no plan for later, nothing that
-  outlives a stop.
+  outlives a stop. A value that is split has its reunion: it takes every
+  part, and holding the parts is its proof, so it cannot refuse. This holds
+  up to the chip's root: what the code itself runs on (its clock, its cache
+  and mapping, its memory) is set up and taken down by code placed in
+  memory the operation does not reach. An existing refusal of a reunion, a
+  split that drops a part and a set-up without its take-down are debt to
+  remove, never a precedent to repeat.
 - **Runtime panics.** Runtime code has zero panics; a change adds no runtime
   panic site. Compile-time panics and test assertions are allowed; a
   compile-time check is `const { if !cond { panic!("…") } }` as a const item
@@ -346,7 +352,7 @@ A page never relaxes a rule above: where they differ, the rule above holds.
 | Subject | Contract |
 |---|---|
 | Unsafe homes and their exceptions (PHY-fault `LinkSlot`, trace clock slot, `ContextCell`), lint catalogues, panic budgets and `panic_const_async_fn_resumed` | [docs/unsafe.md](docs/unsafe.md) |
-| Harts, executors, interrupt enable, signal raisers, pilot handlers and lines | [Execution](docs/architecture.md#execution), [interrupt-table](chips/family/platform/interrupt-table/README.md), [executor](chips/family/platform/executor/README.md) |
+| Harts, executors, interrupt enable, signal raisers, the radio interrupt levels' handlers and lines | [Execution](docs/architecture.md#execution), [interrupt-table](chips/family/platform/interrupt-table/README.md), [executor](chips/family/platform/executor/README.md) |
 | Fatal policy, terminal-site classes and reset owners | [Fatal decisions and reset](docs/architecture.md#fatal-decisions-and-reset), [terminal-site registry](tools/test/layers/README.md#terminal-site-registry) |
 | WT/WTC triggers, `read-observed` and `zero-register-writes` words | [register model](tools/registers/model/README.md) |
 | Runtime-switchable network-core diagnostics, the one exception to zero-cost instrumentation | [Switchable network-core diagnostics](docs/architecture.md#switchable-network-core-diagnostics) |

@@ -1,22 +1,11 @@
 use super::*;
-use crate::power::radio::{BluetoothClient, WifiClient};
+use crate::power::radio::WifiClient;
 
-/// The second participant starts coexistence, whatever it is, and a client
-/// takes part with its one state.
+/// A client takes part with its one state, and leaves with it.
 #[test]
-fn participants_follow_the_client_states() {
-    let mut participants = CoexParticipants::default();
-    let (wifi, count) = participants.enter_client(CoexAbsent::<WifiClient>::issued());
-    assert_eq!(count, 1);
-    let (external, count) = participants.enter_external();
-    assert_eq!(count, 2);
-    let (bluetooth, count) = participants.enter_client(CoexAbsent::<BluetoothClient>::issued());
-    assert_eq!(count, 3);
-    assert_eq!(wifi.client(), RadioClient::Wifi);
-
-    let (_wifi, count) = participants.leave_client(wifi);
-    assert_eq!(count, 2);
-    assert_eq!(participants.leave_external(external), 1);
-    let (_bluetooth, count) = participants.leave_client(bluetooth);
-    assert_eq!(count, 0);
+fn a_client_takes_part_with_its_one_state() {
+    let coexisting = CoexAbsent::<WifiClient>::issued().enter();
+    assert_eq!(coexisting.client(), RadioClient::Wifi);
+    let _absent: CoexAbsent<WifiClient> = coexisting.leave();
+    ExternalCoexistence::started().stop();
 }

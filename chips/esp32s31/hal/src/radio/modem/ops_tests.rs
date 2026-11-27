@@ -16,7 +16,7 @@ use oer_chips_esp32s31_pac::{
     dictionaries::Reset,
     hp_sys_clkrst::HpSysClkrstRadio,
     instances,
-    modem_lpcon::{BluetoothLpTimerClock, CoexLpClock, ModemLpconPower},
+    modem_lpcon::{CoexLpClock, ModemLpconPower},
     modem_syscon::{ModemSysconClockReset, ModemSysconRadio, dictionaries::ClockGate},
     pmu::PmuRadio,
 };
@@ -927,85 +927,6 @@ golden!(
 );
 
 golden!(
-    deselect_bluetooth_low_power_timer_slow_oscillator,
-    BluetoothLpTimerClock,
-    modem_lpcon,
-    |b| {
-        ops::deselect_bluetooth_low_power_timer_slow_oscillator(&mut b);
-    },
-    [(0, &[]), (u32::MAX, &[(0x0004, 0xfffffffe)])]
-);
-
-golden!(
-    deselect_bluetooth_low_power_timer_fast_oscillator,
-    BluetoothLpTimerClock,
-    modem_lpcon,
-    |b| {
-        ops::deselect_bluetooth_low_power_timer_fast_oscillator(&mut b);
-    },
-    [(0, &[]), (u32::MAX, &[(0x0004, 0xfffffffd)])]
-);
-
-golden!(
-    deselect_bluetooth_low_power_timer_crystal_32khz,
-    BluetoothLpTimerClock,
-    modem_lpcon,
-    |b| {
-        ops::deselect_bluetooth_low_power_timer_crystal_32khz(&mut b);
-    },
-    [(0, &[]), (u32::MAX, &[(0x0004, 0xfffffff7)])]
-);
-
-golden!(
-    deselect_bluetooth_low_power_timer_crystal,
-    BluetoothLpTimerClock,
-    modem_lpcon,
-    |b| {
-        ops::deselect_bluetooth_low_power_timer_crystal(&mut b);
-    },
-    [(0, &[]), (u32::MAX, &[(0x0004, 0xfffffffb)])]
-);
-
-golden!(
-    select_bluetooth_low_power_timer_crystal,
-    BluetoothLpTimerClock,
-    modem_lpcon,
-    |b| {
-        ops::select_bluetooth_low_power_timer_crystal(&mut b);
-    },
-    [(0, &[(0x0004, 0x00000004)]), (u32::MAX, &[])]
-);
-
-golden!(
-    set_bluetooth_low_power_timer_divider_zero,
-    BluetoothLpTimerClock,
-    modem_lpcon,
-    |b| {
-        ops::set_bluetooth_low_power_timer_divider(
-            &mut b,
-            ModemLowPowerClockDivider::new(0).expect("divider"),
-        );
-    },
-    [(0, &[]), (u32::MAX, &[(0x0004, 0xffff000f)])]
-);
-
-golden!(
-    set_bluetooth_low_power_timer_divider_a5a,
-    BluetoothLpTimerClock,
-    modem_lpcon,
-    |b| {
-        ops::set_bluetooth_low_power_timer_divider(
-            &mut b,
-            ModemLowPowerClockDivider::new(0xa5a).expect("divider"),
-        );
-    },
-    [
-        (0, &[(0x0004, 0x0000a5a0)]),
-        (u32::MAX, &[(0x0004, 0xffffa5af)])
-    ]
-);
-
-golden!(
     deselect_wifi_low_power_clock_slow_oscillator,
     ModemLpconPower,
     modem_lpcon,
@@ -1767,20 +1688,6 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_deselect_bluetooth_low_power_timer_sources,
-    |r| {
-        r.deselect_bluetooth_low_power_timer_sources();
-    },
-    [
-        (0, &[]),
-        (
-            u32::MAX,
-            &[("bluetooth_lp_timer_clock", 0x0004, 0xfffffff0)]
-        )
-    ]
-);
-
-owner_golden!(
     owner_publish_modem_power_state,
     |r| {
         r.publish_modem_power_state();
@@ -2439,38 +2346,6 @@ owner_golden!(
     [
         (0, &[("coex_lp_clock", 0x0008, 0x00000a58)]),
         (u32::MAX, &[("coex_lp_clock", 0x0008, 0xffff0a58)])
-    ]
-);
-
-owner_golden!(
-    owner_select_bluetooth_low_power_timer_main_crystal_zero,
-    |r| {
-        r.select_bluetooth_low_power_timer_main_crystal(
-            ModemLowPowerClockDivider::new(0).expect("divider"),
-        );
-    },
-    [
-        (0, &[("bluetooth_lp_timer_clock", 0x0004, 0x00000004)]),
-        (
-            u32::MAX,
-            &[("bluetooth_lp_timer_clock", 0x0004, 0xffff0004)]
-        )
-    ]
-);
-
-owner_golden!(
-    owner_select_bluetooth_low_power_timer_main_crystal_a5a,
-    |r| {
-        r.select_bluetooth_low_power_timer_main_crystal(
-            ModemLowPowerClockDivider::new(0xa5a).expect("divider"),
-        );
-    },
-    [
-        (0, &[("bluetooth_lp_timer_clock", 0x0004, 0x0000a5a4)]),
-        (
-            u32::MAX,
-            &[("bluetooth_lp_timer_clock", 0x0004, 0xffffa5a4)]
-        )
     ]
 );
 

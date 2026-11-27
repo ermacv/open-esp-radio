@@ -28,8 +28,8 @@ use crate::power::clock::{
     ModemClockModule, ModemClockPlannerIdentity, ModemExecution, ModemPlatformClocks,
 };
 pub use crate::power::radio::{
-    BluetoothClient, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, Ieee802154Client,
-    RadioClient, RadioClientKind, WifiClient,
+    CommonPower, CommonPowerExitFailure, CommonRadioPowerError, RadioClient, RadioClientKind,
+    WifiClient,
 };
 pub use crate::power::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
@@ -37,7 +37,6 @@ pub use crate::power::{
 };
 #[cfg(test)]
 use crate::radio::coex::PhyGrantProtectError;
-use crate::radio::coex::participation::CoexParticipants;
 pub use crate::radio::coex::participation::{CoexAbsent, Coexisting, ExternalCoexistence};
 use crate::radio::coex::{
     CoexClockPort, CoexEventId, CoexPolicyTimerBank, CoexPti, CoexPtiTable,
@@ -70,9 +69,8 @@ impl RadioClientOwner for WifiRadioRegisters {
     type Client = WifiClient;
 }
 
-/// Shared registers, the PHY and power state that must stay with them,
-/// and the upper layer's attachment.
-struct SharedRadioState<B: PlatformClockBackend, T> {
+/// Shared registers and the PHY and power state that must stay with them.
+struct SharedRadioState<B: PlatformClockBackend> {
     registers: SharedRadioRegisters,
     phy: PhyRouteState,
     power: CommonRadioPower<B>,
@@ -83,12 +81,10 @@ struct SharedRadioState<B: PlatformClockBackend, T> {
     coex_pti: CoexPtiTable,
     phy_grant_protected: bool,
     external_coex: Option<crate::radio::coex::ExternalCoexConfig>,
-    coex_participants: CoexParticipants,
-    attachment: T,
     identity: PhyIdentity,
 }
 
-impl<B: PlatformClockBackend, T> SharedRadioState<B, T> {
+impl<B: PlatformClockBackend> SharedRadioState<B> {
     /// The platform clock references the radio holds: common power and the
     /// modem clock dependencies (also while poisoned).
     fn platform_clock_holds(&self) -> PlatformClockHolds {
@@ -177,6 +173,39 @@ const fn phy_module(module: PhyClockModule) -> ModemClockModule {
     }
 }
 
+/// The right to the PHY's one state place.
+///
+/// [`RadioHardware::split`](crate::system::root::RadioHardware::split) makes
+/// it once, beside the domain, in
+/// [`ProtocolPartitions`](crate::system::root::ProtocolPartitions);
+/// [`RadioHardware::reunite`](crate::system::root::RadioHardware::reunite)
+/// takes it back. The PHY's owner makes its place from it, so one split has
+/// one place.
+///
+/// ```compile_fail,E0451
+/// let _forged = oer_chips_esp32s31_hal::radio::domain::PhyStateRight { _sealed: () };
+/// ```
+///
+/// ```compile_fail
+/// fn requires_clone<T: Clone>() {}
+/// requires_clone::<oer_chips_esp32s31_hal::radio::domain::PhyStateRight>();
+/// ```
+#[must_use = "the PHY's place is made from this right, and the reunion takes it back"]
+#[derive(Debug)]
+pub struct PhyStateRight {
+    _sealed: (),
+}
+
+impl PhyStateRight {
+    pub(crate) const fn issued() -> Self {
+        Self { _sealed: () }
+    }
+
+    pub(crate) const fn returned(self) {
+        let Self { _sealed: () } = self;
+    }
+}
+
 /// The shared radio domain: the shared radio registers, the shared PHY
 /// software state and common radio power, owned by value.
 ///
@@ -194,17 +223,16 @@ const fn phy_module(module: PhyClockModule) -> ModemClockModule {
 /// `T` is state an upper layer keeps with the domain, such as the PHY
 /// layer's registered domain. The HAL never interprets it.
 #[must_use = "dropping the radio domain permanently loses the shared registers"]
-pub struct RadioDomain<B: PlatformClockBackend, T = ()> {
-    state: SharedRadioState<B, T>,
+pub struct RadioDomain<B: PlatformClockBackend> {
+    state: SharedRadioState<B>,
 }
 
-impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
-    /// Place the shared owner, its PHY state and `attachment` in one domain.
-    /// This performs no MMIO.
+impl<B: PlatformClockBackend> RadioDomain<B> {
+    /// Place the shared owner and its PHY state in one domain. This performs
+    /// no MMIO.
     pub(crate) fn new(
         registers: SharedRadioRegisters,
         phy: PhyRouteState,
-        attachment: T,
         identity: PhyIdentity,
         clock_identity: ModemClockPlannerIdentity,
     ) -> Self {
@@ -218,8 +246,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 coex_pti: CoexPtiTable::VENDOR,
                 phy_grant_protected: false,
                 external_coex: None,
-                coex_participants: CoexParticipants::default(),
-                attachment,
                 identity,
             },
         }
@@ -238,7 +264,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     )]
     pub(crate) fn into_parts(
         self,
-    ) -> Result<(SharedRadioRegisters, PhyRouteState, T), (Self, RadioDomainReleaseError)> {
+    ) -> Result<(SharedRadioRegisters, PhyRouteState), (Self, RadioDomainReleaseError)> {
         let state = self.state;
         if state.power.any_client() {
             return Err((
@@ -276,10 +302,10 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 RadioDomainReleaseError::PlatformClocksHeld,
             ));
         }
-        Ok((state.registers, state.phy, state.attachment))
+        Ok((state.registers, state.phy))
     }
 
-    fn from_state(state: SharedRadioState<B, T>) -> Self {
+    fn from_state(state: SharedRadioState<B>) -> Self {
         Self { state }
     }
 
@@ -367,12 +393,12 @@ pub enum RadioDomainReleaseError {
     Restore(crate::system::root::RadioPhyReleaseError),
 }
 
-impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
-    fn state(&self) -> &SharedRadioState<B, T> {
+impl<B: PlatformClockBackend> RadioDomain<B> {
+    fn state(&self) -> &SharedRadioState<B> {
         &self.state
     }
 
-    fn state_mut(&mut self) -> &mut SharedRadioState<B, T> {
+    fn state_mut(&mut self) -> &mut SharedRadioState<B> {
         &mut self.state
     }
 
@@ -432,27 +458,15 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             .enter_wifi(state.registers.radio_phy_mut(), clocks)
     }
 
-    /// How many radios take part in coexistence.
-    pub fn coex_participant_count(&self) -> u32 {
-        self.state().coex_participants.count()
+    /// Enter client `K` into coexistence. The shared radio's owner applies
+    /// the coexistence policy.
+    pub fn enter_coex<K: RadioClientKind>(&mut self, absent: CoexAbsent<K>) -> Coexisting<K> {
+        absent.enter()
     }
 
-    /// Enter client `K` into the coexistence participant set; returns how many
-    /// take part now. The shared radio's owner applies the coexistence policy.
-    pub fn enter_coex<K: RadioClientKind>(
-        &mut self,
-        absent: CoexAbsent<K>,
-    ) -> (Coexisting<K>, u32) {
-        self.state_mut().coex_participants.enter_client(absent)
-    }
-
-    /// Leave client `K` from the coexistence participant set; returns how
-    /// many still take part.
-    pub fn leave_coex<K: RadioClientKind>(
-        &mut self,
-        coexisting: Coexisting<K>,
-    ) -> (CoexAbsent<K>, u32) {
-        self.state_mut().coex_participants.leave_client(coexisting)
+    /// Leave client `K` from coexistence.
+    pub fn leave_coex<K: RadioClientKind>(&mut self, coexisting: Coexisting<K>) -> CoexAbsent<K> {
+        coexisting.leave()
     }
 
     /// Leave common radio power as the protocol that owns `owner`.
@@ -579,7 +593,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         &mut self,
         config: crate::radio::coex::ExternalCoexConfig,
         platform: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<(ExternalCoexistence, u32), crate::radio::coex::ExternalCoexError> {
+    ) -> Result<ExternalCoexistence, crate::radio::coex::ExternalCoexError> {
         let state = self.state_mut();
         oer_chips_family_radio_power::domain::start_external(
             &mut state.external_coex,
@@ -591,7 +605,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 platform,
             },
         )?;
-        Ok(state.coex_participants.enter_external())
+        Ok(ExternalCoexistence::started())
     }
 
     /// Stop external coexistence, the register half of
@@ -601,15 +615,13 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// # Errors
     ///
     /// The planner rejected releasing the module clock after the registers
-    /// were stopped; external coexistence left the
-    /// participant set either way. On success it returns how many radios
-    /// still take part.
+    /// were stopped; external coexistence stopped either way.
     pub fn stop_external_coex(
         &mut self,
         external: ExternalCoexistence,
-    ) -> Result<u32, crate::radio::coex::ExternalCoexError> {
+    ) -> Result<(), crate::radio::coex::ExternalCoexError> {
         let state = self.state_mut();
-        let remaining = state.coex_participants.leave_external(external);
+        external.stop();
         oer_chips_family_radio_power::domain::stop_external(
             &mut state.external_coex,
             &mut ExternalBinding {
@@ -619,7 +631,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 platform: (),
             },
         )?;
-        Ok(remaining)
+        Ok(())
     }
 
     /// The running external coexistence, if any.
@@ -736,7 +748,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     ///
     /// ```compile_fail,E0499
     /// use oer_chips_esp32s31_hal::{radio::domain::RadioDomain, power::PlatformClockBackend};
-    /// fn overlap<B: PlatformClockBackend, T>(radio: &mut RadioDomain<B, T>) {
+    /// fn overlap<B: PlatformClockBackend>(radio: &mut RadioDomain<B>) {
     ///     let (mut timers, mut clock) = radio.coex_ports();
     ///     let _other = radio.coex_ports();
     ///     let _ = clock.sample_low_power_clock();
@@ -750,16 +762,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             CoexPolicyTimerBank::new(timers, &state.coex_pti),
             CoexClockPort::new(phy),
         )
-    }
-
-    /// Borrow the upper layer's attachment.
-    pub fn attachment(&self) -> &T {
-        &self.state().attachment
-    }
-
-    /// Mutably borrow the upper layer's attachment.
-    pub fn attachment_mut(&mut self) -> &mut T {
-        &mut self.state_mut().attachment
     }
 
     /// The radio's power, clock and reset words under this domain, and the

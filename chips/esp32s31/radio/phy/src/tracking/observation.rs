@@ -320,7 +320,6 @@ use super::{
 pub enum Operation {
     Rfpll,
     WifiPower,
-    BluetoothIeee802154Power,
     WifiI2c,
     Calibration,
     Temperature,
@@ -347,14 +346,14 @@ pub enum Operation {
     /// RX gain calibration).
     GrantProtectCommon,
     /// The grant-protect request held around the transmit branch (TXDC/PWDET
-    /// of each requested class and the gain publication).
+    /// and the gain publication).
     GrantProtectTransmit,
     /// The Wi-Fi baseband held off by a calibration branch, from
     /// `DisableWifiBaseband` to `EnableMacBaseband`.
     WifiBasebandOff,
 }
 
-pub const OPERATION_COUNT: usize = 22;
+pub const OPERATION_COUNT: usize = 21;
 const POLLED_COUNT: usize = 3;
 
 impl Operation {
@@ -384,7 +383,6 @@ impl Operation {
         Some(match action {
             Parameter::RfpllCapTrack { .. } => Self::Rfpll,
             Parameter::WifiTxPowerTrack { .. } => Self::WifiPower,
-            Parameter::BluetoothIeee802154TxPowerTrack { .. } => Self::BluetoothIeee802154Power,
             Parameter::WifiI2cTrack => Self::WifiI2c,
             Parameter::CalibrationTrack { .. } => Self::Calibration,
             Parameter::TemperatureRead => Self::Temperature,
@@ -401,9 +399,8 @@ impl Operation {
             Calibration::RecalibrateRxGain => Self::RxGain,
             Calibration::RestoreChipChannel { .. } => Self::ChannelRestore,
             Calibration::ForceTxRxOff { .. } => Self::ForceTxRx,
-            Calibration::CalibrateTxDcPwdet { .. } => Self::TxDcPwdet,
-            Calibration::PublishWifiTxGain { .. }
-            | Calibration::PublishBluetoothIeee802154TxGain => Self::TxGainPublication,
+            Calibration::CalibrateTxDcPwdet => Self::TxDcPwdet,
+            Calibration::PublishWifiTxGain { .. } => Self::TxGainPublication,
             Calibration::AwaitSoftwareFrequencySettle => Self::FrequencySettle,
             Calibration::SetHardwareFrequencyControl { .. }
             | Calibration::SetForcedDigitalGain { .. }

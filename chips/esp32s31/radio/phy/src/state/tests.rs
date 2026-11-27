@@ -158,7 +158,6 @@ fn calibration_tracking_references_are_semantic_and_commit_per_branch() {
     assert_eq!(initial.transmit_reference_temperature, 20);
 
     state.apply_calibration_tracking_outcome(PhyCalibrationTrackingOutcome {
-        clients: (crate::tracking::parameters::PhyCalibrationTrackClass::Wifi).clients(),
         threshold: 30,
         common_reference_temperature: 50,
         transmit_reference_temperature: 50,
@@ -192,7 +191,6 @@ fn calibration_tracking_references_are_semantic_and_commit_per_branch() {
             dco: [[5; 4]; 3],
             total_measurements: 144,
         }),
-        bluetooth_ieee802154_tx_dc_pwdet: None,
     });
     let committed = state.calibration_tracking_parameters(Some(31));
     assert_eq!(committed.threshold_override, Some(31));
@@ -221,8 +219,6 @@ fn calibration_tracking_references_are_semantic_and_commit_per_branch() {
     assert_eq!(state.tx_dc_pwdet_parameters().dco, [[5; 4]; 3]);
 
     state.apply_calibration_tracking_outcome(PhyCalibrationTrackingOutcome {
-        clients: (crate::tracking::parameters::PhyCalibrationTrackClass::BluetoothIeee802154)
-            .clients(),
         threshold: 30,
         common_reference_temperature: 60,
         transmit_reference_temperature: 60,
@@ -232,19 +228,20 @@ fn calibration_tracking_references_are_semantic_and_commit_per_branch() {
         dcode: None,
         rx_gain: None,
         channel: None,
-        bluetooth_ieee802154_tx_dc_pwdet: Some(crate::tx::dc_power_detector::PhyTxDcPwdetOutcome {
+        wifi_tx_dc_pwdet: Some(crate::tx::dc_power_detector::PhyTxDcPwdetOutcome {
             dco: [[6; 4]; 3],
             total_measurements: 144,
         }),
-        wifi_tx_dc_pwdet: None,
     });
+    // A common update without its dcode, RX-gain and channel results is
+    // inconsistent: nothing of it is published, the transmit half included.
     let rejected = state.calibration_tracking_parameters(None);
+    assert_eq!(state.tx_dc_pwdet_parameters().dco, [[5; 4]; 3]);
     assert_eq!(rejected.common_reference_temperature, 50);
     assert_eq!(rejected.transmit_reference_temperature, 50);
     assert_eq!(state.common.dcode, [7; 8]);
 
     state.apply_calibration_tracking_outcome(PhyCalibrationTrackingOutcome {
-        clients: (crate::tracking::parameters::PhyCalibrationTrackClass::Wifi).clients(),
         threshold: 30,
         common_reference_temperature: 70,
         transmit_reference_temperature: 70,
@@ -270,7 +267,6 @@ fn calibration_tracking_references_are_semantic_and_commit_per_branch() {
             },
         }),
         wifi_tx_dc_pwdet: None,
-        bluetooth_ieee802154_tx_dc_pwdet: None,
     });
     let rejected_partial_rx = state.calibration_tracking_parameters(None);
     assert_eq!(rejected_partial_rx.common_reference_temperature, 50);
@@ -294,22 +290,18 @@ fn periodic_gain_tracking_commits_only_terminal_runtime_outcomes() {
             previous_tracking_temperature: 0,
             previous_tracking_gain_base: 0,
             wifi_gain_base: 0,
-            bluetooth_ieee802154_gain_base: 0,
             relaxed_threshold: true,
             wifi_gain_publication_skipped: false,
         }
     );
 
     state.apply_tx_power_tracking_outcome(PhyTxPowerTrackingOutcome {
-        class: crate::tracking::parameters::PhyCalibrationTrackClass::BluetoothIeee802154,
         gain_updated: true,
         tracking_temperature: 25,
         tracking_gain_base: 5,
-        wifi_gain_base: 0,
-        bluetooth_ieee802154_gain_base: 5,
+        wifi_gain_base: 5,
     });
-    assert_eq!(state.bluetooth_tx_gain_parameters().base, 5);
-    assert_eq!(state.channel_parameters().tx_gain_base, 0);
+    assert_eq!(state.channel_parameters().tx_gain_base, 5);
     assert_eq!(state.config, immutable_config);
     assert_eq!(
         state.tx_power_tracking_parameters(false),
@@ -318,35 +310,30 @@ fn periodic_gain_tracking_commits_only_terminal_runtime_outcomes() {
             reference_temperature: 0,
             previous_tracking_temperature: 25,
             previous_tracking_gain_base: 5,
-            wifi_gain_base: 0,
-            bluetooth_ieee802154_gain_base: 5,
+            wifi_gain_base: 5,
             relaxed_threshold: false,
             wifi_gain_publication_skipped: false,
         }
     );
 
     state.apply_tx_power_tracking_outcome(PhyTxPowerTrackingOutcome {
-        class: crate::tracking::parameters::PhyCalibrationTrackClass::Wifi,
         gain_updated: false,
         tracking_temperature: -60,
         tracking_gain_base: -12,
         wifi_gain_base: -12,
-        bluetooth_ieee802154_gain_base: -12,
     });
-    assert_eq!(state.bluetooth_tx_gain_parameters().base, 5);
-    assert_eq!(state.channel_parameters().tx_gain_base, 0);
+    assert_eq!(state.channel_parameters().tx_gain_base, 5);
+    assert_eq!(
+        state
+            .tx_power_tracking_parameters(false)
+            .previous_tracking_temperature,
+        25
+    );
 }
 
 #[test]
 fn tracking_gain_regeneration_uses_live_typed_state_and_honors_wifi_skip() {
     let mut state = PhyState::new(PhyConfig::production());
-    let mut bluetooth = state.bluetooth_tx_gain_parameters();
-    bluetooth.base = (-7_i8) as u8;
-    assert_eq!(
-        state.bluetooth_ieee802154_tracking_gain_image(-7),
-        calculate_bluetooth_tx_gain(bluetooth)
-    );
-
     let parameters = state.channel_parameters();
     let mut wifi = calculate_wifi_tx_gain(PhyWifiTxGainRequest {
         channel: 11,
@@ -360,15 +347,7 @@ fn tracking_gain_regeneration_uses_live_typed_state_and_honors_wifi_skip() {
 
     state.config.tx_gain_skip_publication = true;
     assert_eq!(state.wifi_tracking_gain_image(11, 5), None);
-    assert!(
-        state
-            .tracking_gain_generator(
-                crate::tracking::parameters::PhyCalibrationTrackClass::Wifi,
-                11,
-                5
-            )
-            .is_none()
-    );
+    assert!(state.tracking_gain_generator(11, 5).is_none());
 }
 
 #[test]
@@ -381,15 +360,8 @@ fn calibration_gain_regeneration_uses_pending_txdc_seed_before_state_commit() {
     let expected_seed = [0x1234_1234; 6];
 
     assert_ne!(state.channel_parameters().tx_gain_seed, expected_seed);
-    assert_ne!(state.bluetooth_tx_gain_parameters().seed, expected_seed);
     assert_eq!(
         state.wifi_calibration_gain_image(11, pending).unwrap().seed,
-        expected_seed
-    );
-    assert_eq!(
-        state
-            .bluetooth_ieee802154_calibration_gain_image(pending)
-            .seed,
         expected_seed
     );
 
@@ -403,7 +375,6 @@ fn cache_contains_calibration_but_not_runtime_role_state() {
     calibrated.set_dot11p_configuration(1, 4);
     calibrated.set_current_level(9);
     calibrated.set_tx_power_tracking_slow(0);
-    calibrated.set_bt_power_tracking(0);
     calibrated.set_ble_channel_base(21);
     calibrated.mark_baseband_calibration_complete();
     calibrated.apply_tx_power_outcome(PhyTxPowerOutcome {
@@ -435,7 +406,6 @@ fn cache_contains_calibration_but_not_runtime_role_state() {
     );
     assert_eq!(restored.current_level(), 0);
     assert_eq!(restored.tx_power_tracking_slow(), 1);
-    assert_eq!(restored.bt_power_tracking(), 1);
     assert_eq!(restored.ble_channel_base(), 0);
     assert!(
         !restored
@@ -492,9 +462,7 @@ fn cached_calibration_restores_products_but_resets_runtime_and_hardware_epoch_st
     let mut state = PhyState::new(PhyConfig::esp32s31_default());
     state.set_dot11p_configuration(1, 7);
     state.set_current_level(8);
-    state.set_bt_power_tracking(0);
     state.set_ble_channel_base(9);
-    state.common.registered = true;
     state.common.frequency_table_initialized = true;
     state.wifi.channel_initialized = true;
 
@@ -540,14 +508,12 @@ fn cached_calibration_restores_products_but_resets_runtime_and_hardware_epoch_st
     );
     assert!(!state.common.frequency_table_initialized);
     assert!(!state.wifi.channel_initialized);
-    assert!(!state.common.registered);
     assert_eq!(
         state.common.temperature_acquisition,
         crate::tracking::temperature::StoredAcquisition::UNOBSERVED
     );
     assert_eq!(state.dot11p_configuration().enabled, 0);
     assert_eq!(state.current_level(), 0);
-    assert_eq!(state.bt_power_tracking(), 1);
     assert_eq!(state.ble_channel_base(), 0);
     assert_eq!(
         state.wifi.tracking_gain_base,
@@ -581,7 +547,6 @@ fn runtime_views_are_independent_named_state() {
     let mut state = PhyState::default();
     state.set_dot11p_configuration(1, 0x5a);
     state.set_current_level(0x34);
-    state.set_bt_power_tracking(0x12);
     state.set_ble_channel_base(0x56);
     state.set_initialization_parameter(u32::MAX);
     state.set_temperature_tracking_debug(0x78, 0x9a);
@@ -595,7 +560,6 @@ fn runtime_views_are_independent_named_state() {
         }
     );
     assert_eq!(state.current_level(), 0x34);
-    assert_eq!(state.bt_power_tracking(), 0x12);
     assert_eq!(state.ble_channel_base(), 0x56);
     assert!(state.initialization_parameter());
     assert_eq!(
@@ -783,9 +747,9 @@ fn wifi_gain_adjustment_is_separate_from_bluetooth_attenuation() {
     let baseline = state.wifi_tracking_gain_image(13, 127).unwrap();
     state.config.bluetooth_tx_gain_attenuation = 31;
     assert_eq!(state.wifi_tracking_gain_image(13, 127), Some(baseline));
-    let bluetooth = state.bluetooth_ieee802154_tracking_gain_image(0);
+    let bluetooth = state.bluetooth_tx_gain_image();
     state.wifi.tx_gain_adjustment = 1;
-    assert_eq!(state.bluetooth_ieee802154_tracking_gain_image(0), bluetooth);
+    assert_eq!(state.bluetooth_tx_gain_image(), bluetooth);
     assert_ne!(state.wifi_tracking_gain_image(13, 127), Some(baseline));
     assert_eq!(state.channel_parameters().tx_gain_adjustment, 1);
     assert_eq!(

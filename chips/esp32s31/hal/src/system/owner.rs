@@ -379,8 +379,7 @@ impl RadioAccess {
     #[doc(hidden)]
     pub fn claim_for_host_test() -> Self {
         let (_shared, partitions) = crate::system::root::RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend, _>(
-                (),
+            .split::<crate::power::test_clocks::CountingBackend>(
                 crate::radio::domain::transaction::PhyIdentity::for_host_test(),
             )
             .expect("identity capacity");
@@ -425,21 +424,21 @@ impl RadioAccess {
     /// Borrow the channel HAL for one channel transaction, with the shared
     /// PHY borrowed from the radio domain.
     #[cfg(test)]
-    pub fn channel_hal<'hal, B: PlatformClockBackend, P, T>(
+    pub fn channel_hal<'hal, B: PlatformClockBackend, P>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<B, T>,
+        radio: &'hal mut RadioDomain<B>,
     ) -> channel::RadioChannelHal<'hal, P> {
         let (phy, restore) = radio.phy_parts_mut();
         channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore)
     }
 
     /// Consume PHY custody for one channel operation, borrowing its MAC and platform.
-    pub fn channel_transaction<'hal, B: PlatformClockBackend, P, T>(
+    pub fn channel_transaction<'hal, B: PlatformClockBackend, P>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: crate::radio::domain::transaction::RadioTransaction<B, T>,
-    ) -> crate::radio::ieee80211::channel::ChannelTransaction<'hal, B, P, T> {
+        radio: crate::radio::domain::transaction::RadioTransaction<B>,
+    ) -> crate::radio::ieee80211::channel::ChannelTransaction<'hal, B, P> {
         crate::radio::ieee80211::channel::ChannelTransaction::new(
             radio,
             &mut self.registers,

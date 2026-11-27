@@ -7,7 +7,9 @@ use oer_chips_esp32s31_hal::{
     radio::ieee80211::dma::receive::{NextAt, Standing},
     system::owner::RadioAccess,
 };
-use oer_chips_esp32s31_radio_phy::{PhyCalibrationIdentity, PhyCalibrationSnapshot};
+use oer_chips_esp32s31_radio_phy::{
+    PhyCalibrationIdentity, PhyCalibrationSnapshot, owner::RegisteredPhy,
+};
 use oer_hil_services_radio_pair as service;
 use service::{Item, PAGE_READINGS, Reading, Refusal, SnapshotPage, Value};
 
@@ -130,7 +132,8 @@ fn power(readings: &mut Readings, radio: &Radio, clocks: &ChipClocks) {
 
 /// The snapshot after the bring-up: the cold snapshot's words again, the
 /// temperature code, the RF PLL's frequency block and the PHY's calibration
-/// results, read in one PHY transaction over the radio in `slot`.
+/// results the registered state holds now, the first two read in one PHY
+/// transaction over the radio in `slot`.
 ///
 /// # Errors
 /// [`Refusal::NotUp`] when no radio is in `slot`.
@@ -138,15 +141,12 @@ pub(crate) fn up(
     slot: &mut Option<Radio>,
     clocks: &ChipClocks,
     reset_cause: u32,
+    phy: &RegisteredPhy<'_>,
     identity: PhyCalibrationIdentity,
 ) -> Result<Readings, Refusal> {
+    let calibration = Some(phy.calibration_cache(identity).into_snapshot());
     let mut readings = cold(reset_cause, slot.as_ref().ok_or(Refusal::NotUp)?, clocks);
     let radio = slot.take().ok_or(Refusal::NotUp)?;
-    let calibration = radio
-        .attachment()
-        .calibration_cache(identity)
-        .ok()
-        .map(|cache| cache.into_snapshot());
     let mut transaction = radio.detach(Operation::Maintain);
     let hardware = transaction.hardware_mut();
     let temperature = oer_chips_esp32s31_hal::radio::phy::temperature::read_code(hardware);

@@ -2,7 +2,7 @@
 //!
 //! Reference: the pinned esp-phy-lib `libphy.a` of
 //! `chips/esp32s31/vendor/artifacts.toml`.
-//! RFPLL precedes BT/154 power, Wi-Fi I2C/power, one combined RX/TX
+//! RFPLL precedes Wi-Fi I2C/power, one combined RX/TX
 //! calibration child, then temperature acquisition. The finite graph is
 //! separate from physical admission and child hardware equivalence. The
 //! registered owner is retained across every child and poisoned on incomplete
@@ -11,30 +11,6 @@
 //! positions; OER also retains its wider exclusive maintenance boundary.
 
 use core::fmt;
-
-/// Active protocol classes passed by the shared-PHY scheduler.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PhyParamTrackRequest {
-    wifi: bool,
-    bluetooth_ieee802154: bool,
-}
-
-impl PhyParamTrackRequest {
-    pub const fn new(wifi: bool, bluetooth_ieee802154: bool) -> Self {
-        Self {
-            wifi,
-            bluetooth_ieee802154,
-        }
-    }
-
-    pub const fn wifi(self) -> bool {
-        self.wifi
-    }
-
-    pub const fn bluetooth_ieee802154(self) -> bool {
-        self.bluetooth_ieee802154
-    }
-}
 
 /// Diagnostic-print policy forwarded to the recovered vendor children.
 ///
@@ -58,13 +34,6 @@ pub enum PhyTrackingDiagnostics {
     Enabled,
 }
 
-impl PhyTrackingDiagnostics {
-    #[cfg(test)]
-    pub const fn enabled(self) -> bool {
-        matches!(self, Self::Enabled)
-    }
-}
-
 /// Driver-owned projections consumed by the outer tracking function.
 ///
 /// `tracking_inhibited` is the OR of the two vendor guard bytes. Collapsing
@@ -79,7 +48,6 @@ pub(crate) struct PhyParamTrackingPolicy {
     pub(crate) rfpll_cap_tracking_threshold: Option<u8>,
     pub(crate) calibration_tracking_threshold: Option<u8>,
     pub(crate) diagnostics: PhyTrackingDiagnostics,
-    pub(crate) bluetooth_ieee802154_power_tracking_enabled: bool,
     pub(crate) calibration_tracking_enabled: bool,
     pub(crate) relaxed_power_tracking_threshold: bool,
 }
@@ -102,34 +70,8 @@ impl PhyParamTrackingPolicy {
             rfpll_cap_tracking_threshold: debug.rfpll_threshold_override(),
             calibration_tracking_threshold: debug.calibration_threshold_override(),
             diagnostics: PhyTrackingDiagnostics::Disabled,
-            bluetooth_ieee802154_power_tracking_enabled: state.bt_power_tracking() != 0,
             calibration_tracking_enabled: true,
             relaxed_power_tracking_threshold: state.tx_power_tracking_slow() != 0,
-        }
-    }
-}
-
-/// TX calibration/gain class inside the shared RX/TX transaction.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyCalibrationTrackClass {
-    Wifi,
-    BluetoothIeee802154,
-}
-
-impl PhyCalibrationTrackClass {
-    /// Select only this TX class in a combined calibration request.
-    pub const fn clients(self) -> PhyParamTrackRequest {
-        match self {
-            Self::Wifi => PhyParamTrackRequest::new(true, false),
-            Self::BluetoothIeee802154 => PhyParamTrackRequest::new(false, true),
-        }
-    }
-
-    /// Exact class selector used by the pinned vendor child.
-    pub const fn selector(self) -> u8 {
-        match self {
-            Self::Wifi => 0,
-            Self::BluetoothIeee802154 => 1,
         }
     }
 }
@@ -137,22 +79,15 @@ impl PhyCalibrationTrackClass {
 /// Non-I/O arithmetic of `phy_temp_to_power_new` in the current PHY archive.
 ///
 /// The function first truncates the temperature subtraction to a signed 16-bit
-/// delta. Positive deltas use divisor eight for Wi-Fi and five for Bluetooth; zero and negative
-/// deltas use divisor three for Wi-Fi and four for Bluetooth/IEEE 802.15.4.
-/// The quotient becomes the protocol gain-base byte and is finally truncated
-/// and sign-extended from eight bits.
+/// delta. Wi-Fi's positive deltas use divisor eight, its zero and negative
+/// deltas divisor three. The quotient becomes the gain-base byte and is
+/// finally truncated and sign-extended from eight bits.
 pub const fn temperature_to_tracking_power(
     current_temperature: i16,
     reference_temperature: i16,
-    class: PhyCalibrationTrackClass,
 ) -> i8 {
     let delta = current_temperature.wrapping_sub(reference_temperature);
-    let divisor = match (class, delta > 0) {
-        (PhyCalibrationTrackClass::Wifi, true) => 8,
-        (PhyCalibrationTrackClass::BluetoothIeee802154, true) => 5,
-        (PhyCalibrationTrackClass::Wifi, false) => 3,
-        (PhyCalibrationTrackClass::BluetoothIeee802154, false) => 4,
-    };
+    let divisor = if delta > 0 { 8 } else { 3 };
     (delta / divisor) as i8
 }
 
@@ -163,13 +98,8 @@ pub enum PhyParamTrackingAction {
     RfpllCapTrack {
         diagnostics: PhyTrackingDiagnostics,
     },
-    BluetoothIeee802154TxPowerTrack {
-        enabled: bool,
-        diagnostics: PhyTrackingDiagnostics,
-    },
     CalibrationTrack {
         diagnostics: PhyTrackingDiagnostics,
-        clients: PhyParamTrackRequest,
     },
     WifiI2cTrack,
     WifiTxPowerTrack {
@@ -186,11 +116,6 @@ pub enum PhyParamTrackingAction {
 pub enum PhyParamTrackingCompletion {
     EnteredCritical,
     RfpllCapTracked(PhyParamTrackingRfpllCompletion),
-    /// `gain_updated`: the tracking gain base changed and was republished.
-    BluetoothIeee802154TxPowerTracked {
-        enabled: bool,
-        gain_updated: bool,
-    },
     CalibrationTracked(PhyParamTrackingCalibrationCompletion),
     /// `band_changed`: the Wi-Fi PHY-I2C temperature band changed and both
     /// masked writes completed.
@@ -231,13 +156,11 @@ pub struct PhyParamTrackingRfpllCompletion {
 ///
 /// ```compile_fail
 /// use oer_chips_esp32s31_radio_phy::tracking::parameters::{
-///     PhyCalibrationTrackClass, PhyParamTrackingCalibrationCompletion,
-///     PhyParamTrackingCompletion,
+///     PhyParamTrackingCalibrationCompletion, PhyParamTrackingCompletion,
 /// };
 ///
 /// let forged = PhyParamTrackingCompletion::CalibrationTracked(
 ///     PhyParamTrackingCalibrationCompletion {
-///         clients: PhyCalibrationTrackClass::BluetoothIeee802154.clients(),
 ///         common_updated: true,
 ///         transmit_updated: true,
 ///     },
@@ -245,42 +168,22 @@ pub struct PhyParamTrackingRfpllCompletion {
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyParamTrackingCalibrationCompletion {
-    clients: PhyParamTrackRequest,
     common_updated: bool,
     transmit_updated: bool,
-}
-
-// Host tests and the vendor probe read back the committed branches;
-// production consumes them through the parent transition.
-#[cfg(test)]
-impl PhyParamTrackingCalibrationCompletion {
-    /// The common calibration references were recalibrated and committed.
-    pub const fn common_updated(&self) -> bool {
-        self.common_updated
-    }
-
-    /// The transmit calibration references were recalibrated and committed.
-    pub const fn transmit_updated(&self) -> bool {
-        self.transmit_updated
-    }
 }
 
 /// Committed calibration branches, not merely invocation of their wrapper.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CalibrationProgress {
     pub common: bool,
-    /// The transmit references were committed, whichever clients requested
-    /// tracking; `wifi` and `bluetooth_ieee802154` narrow it to requesters.
+    /// The transmit references were committed.
     pub transmit: bool,
-    pub wifi: bool,
-    pub bluetooth_ieee802154: bool,
 }
 
 /// TX-power tracking branches that changed and republished their gain base.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct TxPowerProgress {
     pub wifi: bool,
-    pub bluetooth_ieee802154: bool,
 }
 
 /// Observable outer-wrapper result. Child hardware postconditions are not
@@ -289,7 +192,6 @@ pub struct TxPowerProgress {
 /// which children committed an update.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyParamTrackingOutcome {
-    pub clients: PhyParamTrackRequest,
     pub tracking_inhibited: bool,
     /// The RFPLL capacitance correction ran and committed its reference.
     pub rfpll_corrected: bool,
@@ -309,7 +211,6 @@ pub enum PhyParamTrackingTransitionError {
 enum PhyParamTrackingStep {
     EnterCritical,
     RfpllCapTrack,
-    BluetoothIeee802154TxPowerTrack,
     WifiI2cTrack,
     WifiTxPowerTrack,
     CalibrationTrack,
@@ -321,7 +222,6 @@ enum PhyParamTrackingStep {
 /// Finite exact-order outer transition for one scheduler request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyParamTrackingTransition {
-    request: PhyParamTrackRequest,
     policy: PhyParamTrackingPolicy,
     step: PhyParamTrackingStep,
     rfpll_corrected: bool,
@@ -331,22 +231,16 @@ pub struct PhyParamTrackingTransition {
 }
 
 impl PhyParamTrackingTransition {
-    pub(crate) const fn new(request: PhyParamTrackRequest, policy: PhyParamTrackingPolicy) -> Self {
+    pub(crate) const fn new(policy: PhyParamTrackingPolicy) -> Self {
         Self {
-            request,
             policy,
             step: PhyParamTrackingStep::EnterCritical,
             rfpll_corrected: false,
             wifi_i2c_changed: false,
-            tx_power: TxPowerProgress {
-                wifi: false,
-                bluetooth_ieee802154: false,
-            },
+            tx_power: TxPowerProgress { wifi: false },
             calibration: CalibrationProgress {
                 common: false,
                 transmit: false,
-                wifi: false,
-                bluetooth_ieee802154: false,
             },
         }
     }
@@ -357,12 +251,6 @@ impl PhyParamTrackingTransition {
             PhyParamTrackingStep::RfpllCapTrack => PhyParamTrackingAction::RfpllCapTrack {
                 diagnostics: self.policy.diagnostics,
             },
-            PhyParamTrackingStep::BluetoothIeee802154TxPowerTrack => {
-                PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack {
-                    enabled: self.policy.bluetooth_ieee802154_power_tracking_enabled,
-                    diagnostics: self.policy.diagnostics,
-                }
-            }
             PhyParamTrackingStep::WifiI2cTrack => PhyParamTrackingAction::WifiI2cTrack,
             PhyParamTrackingStep::WifiTxPowerTrack => PhyParamTrackingAction::WifiTxPowerTrack {
                 enabled: true,
@@ -370,13 +258,11 @@ impl PhyParamTrackingTransition {
             },
             PhyParamTrackingStep::CalibrationTrack => PhyParamTrackingAction::CalibrationTrack {
                 diagnostics: self.policy.diagnostics,
-                clients: self.request,
             },
             PhyParamTrackingStep::TemperatureRead => PhyParamTrackingAction::TemperatureRead,
             PhyParamTrackingStep::ExitCritical => PhyParamTrackingAction::ExitCritical,
             PhyParamTrackingStep::Complete => {
                 PhyParamTrackingAction::Complete(PhyParamTrackingOutcome {
-                    clients: self.request,
                     tracking_inhibited: self.policy.tracking_inhibited,
                     rfpll_corrected: self.rfpll_corrected,
                     wifi_i2c_changed: self.wifi_i2c_changed,
@@ -398,7 +284,7 @@ impl PhyParamTrackingTransition {
                 } else if self.policy.rfpll_cap_tracking_enabled {
                     PhyParamTrackingStep::RfpllCapTrack
                 } else {
-                    self.first_client_step()
+                    PhyParamTrackingStep::WifiI2cTrack
                 }
             }
             (
@@ -406,17 +292,7 @@ impl PhyParamTrackingTransition {
                 PhyParamTrackingCompletion::RfpllCapTracked(completion),
             ) => {
                 self.rfpll_corrected = completion.corrected;
-                self.first_client_step()
-            }
-            (
-                PhyParamTrackingStep::BluetoothIeee802154TxPowerTrack,
-                PhyParamTrackingCompletion::BluetoothIeee802154TxPowerTracked {
-                    enabled,
-                    gain_updated,
-                },
-            ) if enabled == self.policy.bluetooth_ieee802154_power_tracking_enabled => {
-                self.tx_power.bluetooth_ieee802154 = gain_updated;
-                self.first_wifi_step()
+                PhyParamTrackingStep::WifiI2cTrack
             }
             (
                 PhyParamTrackingStep::WifiI2cTrack,
@@ -438,12 +314,9 @@ impl PhyParamTrackingTransition {
             (
                 PhyParamTrackingStep::CalibrationTrack,
                 PhyParamTrackingCompletion::CalibrationTracked(completion),
-            ) if completion.clients == self.request => {
+            ) => {
                 self.calibration.common = completion.common_updated;
                 self.calibration.transmit = completion.transmit_updated;
-                self.calibration.wifi = completion.transmit_updated && self.request.wifi();
-                self.calibration.bluetooth_ieee802154 =
-                    completion.transmit_updated && self.request.bluetooth_ieee802154();
                 PhyParamTrackingStep::TemperatureRead
             }
             (
@@ -507,22 +380,6 @@ impl PhyParamTrackingTransition {
         PhyParamTrackingTemperatureTransition::lower(self.action(), state)
     }
 
-    const fn first_client_step(self) -> PhyParamTrackingStep {
-        if self.request.bluetooth_ieee802154 {
-            PhyParamTrackingStep::BluetoothIeee802154TxPowerTrack
-        } else {
-            self.first_wifi_step()
-        }
-    }
-
-    const fn first_wifi_step(self) -> PhyParamTrackingStep {
-        if self.request.wifi {
-            PhyParamTrackingStep::WifiI2cTrack
-        } else {
-            self.first_calibration_step()
-        }
-    }
-
     const fn first_calibration_step(self) -> PhyParamTrackingStep {
         if self.policy.calibration_tracking_enabled {
             PhyParamTrackingStep::CalibrationTrack
@@ -576,11 +433,6 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
         })
     }
 
-    #[cfg(test)]
-    pub const fn parent_action(&self) -> PhyParamTrackingAction {
-        self.parent_action
-    }
-
     pub const fn request(&self) -> super::rfpll::thermal::Request {
         self.child.request()
     }
@@ -588,15 +440,6 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
     #[inline(always)]
     pub const fn action(&self) -> super::rfpll::thermal::Action {
         self.child.action()
-    }
-
-    #[cfg(test)]
-    #[inline(always)]
-    pub fn advance(
-        &mut self,
-        completion: super::rfpll::thermal::Completion,
-    ) -> Result<(), super::rfpll::Error> {
-        self.child.advance(completion)
     }
 
     pub(crate) fn transition_mut(&mut self) -> &mut super::rfpll::thermal::Transition {
@@ -628,7 +471,6 @@ impl<'state> PhyParamTrackingRfpllTransition<'state> {
 /// child reaches its terminal action and commits its outcome.
 pub struct PhyParamTrackingCalibrationTransition<'state> {
     parent_action: PhyParamTrackingAction,
-    clients: PhyParamTrackRequest,
     child: crate::tracking::calibration::PhyCalibrationTrackingTransition,
     state: &'state mut crate::state::PhyState,
 }
@@ -649,23 +491,16 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         policy: PhyParamTrackingPolicy,
         state: &'state mut crate::state::PhyState,
     ) -> Result<Self, PhyParamTrackingChildError> {
-        let PhyParamTrackingAction::CalibrationTrack { clients, .. } = parent_action else {
+        let PhyParamTrackingAction::CalibrationTrack { .. } = parent_action else {
             return Err(PhyParamTrackingChildError::UnsupportedAction);
         };
         Ok(Self {
             parent_action,
-            clients,
             child: crate::tracking::calibration::PhyCalibrationTrackingTransition::start(
-                crate::tracking::calibration::PhyCalibrationTrackingRequest { clients },
                 state.calibration_tracking_parameters(policy.calibration_tracking_threshold),
             ),
             state,
         })
-    }
-
-    #[cfg(test)]
-    pub const fn parent_action(&self) -> PhyParamTrackingAction {
-        self.parent_action
     }
 
     pub const fn action(&self) -> crate::tracking::calibration::PhyCalibrationTrackingAction {
@@ -745,10 +580,8 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         crate::tracking::calibration::PhyCalibrationTxDcPwdetTransition,
         crate::tracking::calibration::PhyCalibrationTrackingChildError,
     > {
-        self.child.begin_tx_dc_pwdet(
-            self.state.tx_dc_pwdet_parameters(),
-            self.state.bluetooth_tx_dc_pwdet_transition(),
-        )
+        self.child
+            .begin_tx_dc_pwdet(self.state.tx_dc_pwdet_parameters())
     }
 
     pub fn begin_tx_gain_publication(
@@ -769,11 +602,6 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         crate::tracking::calibration::PhyCalibrationTrackingExternalBinding::lower(self.action())
     }
 
-    #[cfg(test)]
-    pub const fn state(&self) -> &crate::state::PhyState {
-        self.state
-    }
-
     #[expect(
         clippy::result_large_err,
         reason = "the pending variant must retain the allocation-free calibration outcome and live state owner"
@@ -787,7 +615,6 @@ impl<'state> PhyParamTrackingCalibrationTransition<'state> {
         self.state.apply_calibration_tracking_outcome(outcome);
         Ok(PhyParamTrackingCompletion::CalibrationTracked(
             PhyParamTrackingCalibrationCompletion {
-                clients: self.clients,
                 common_updated: outcome.common_updated,
                 transmit_updated: outcome.transmit_updated,
             },
@@ -822,23 +649,14 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         policy: PhyParamTrackingPolicy,
         state: &'state mut crate::state::PhyState,
     ) -> Result<Self, PhyParamTrackingChildError> {
-        let (class, enabled, diagnostics) = match parent_action {
-            PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack {
-                enabled,
-                diagnostics,
-            } => (
-                PhyCalibrationTrackClass::BluetoothIeee802154,
-                enabled,
-                diagnostics,
-            ),
-            PhyParamTrackingAction::WifiTxPowerTrack {
-                enabled,
-                diagnostics,
-            } => (PhyCalibrationTrackClass::Wifi, enabled, diagnostics),
-            _ => return Err(PhyParamTrackingChildError::UnsupportedAction),
+        let PhyParamTrackingAction::WifiTxPowerTrack {
+            enabled,
+            diagnostics,
+        } = parent_action
+        else {
+            return Err(PhyParamTrackingChildError::UnsupportedAction);
         };
         let request = crate::tracking::power::PhyTxPowerTrackingRequest {
-            class,
             enabled,
             wifi_channel: state.current_wifi_channel(),
         };
@@ -850,23 +668,6 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
             ),
             state,
         })
-    }
-
-    #[cfg(test)]
-    pub const fn parent_action(&self) -> PhyParamTrackingAction {
-        let request = self.child.request();
-        match request.class {
-            PhyCalibrationTrackClass::Wifi => PhyParamTrackingAction::WifiTxPowerTrack {
-                enabled: request.enabled,
-                diagnostics: self.diagnostics,
-            },
-            PhyCalibrationTrackClass::BluetoothIeee802154 => {
-                PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack {
-                    enabled: request.enabled,
-                    diagnostics: self.diagnostics,
-                }
-            }
-        }
     }
 
     #[cfg(any(target_arch = "riscv32", test))]
@@ -883,29 +684,6 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         self.child.action()
     }
 
-    pub fn advance(
-        &mut self,
-        completion: crate::tracking::power::PhyTxPowerTrackingCompletion,
-    ) -> Result<(), crate::tracking::power::PhyTxPowerTrackingTransitionError> {
-        self.child.advance(completion)
-    }
-
-    /// Bind the current child action to the existing target HAL/PAC edge while
-    /// the exact live state remains exclusively borrowed by this transaction.
-    pub fn lower_external(
-        &self,
-    ) -> Result<
-        crate::tracking::power::PhyTxPowerTrackingExternalBinding,
-        crate::tracking::power::PhyTxPowerTrackingBindingError,
-    > {
-        crate::tracking::power::PhyTxPowerTrackingExternalBinding::lower(self.action(), self.state)
-    }
-
-    #[cfg(test)]
-    pub const fn state(&self) -> &crate::state::PhyState {
-        self.state
-    }
-
     /// Commit the terminal child result and mint its identity-bound parent
     /// completion. An incomplete child is returned unchanged.
     pub fn commit(self) -> Result<PhyParamTrackingCompletion, Self> {
@@ -917,17 +695,9 @@ impl<'state> PhyParamTrackingTxPowerTransition<'state> {
         self.state.apply_tx_power_tracking_outcome(outcome);
         let gain_updated = outcome.gain_updated;
         let enabled = self.child.request().enabled;
-        Ok(match outcome.class {
-            PhyCalibrationTrackClass::BluetoothIeee802154 => {
-                PhyParamTrackingCompletion::BluetoothIeee802154TxPowerTracked {
-                    enabled,
-                    gain_updated,
-                }
-            }
-            PhyCalibrationTrackClass::Wifi => PhyParamTrackingCompletion::WifiTxPowerTracked {
-                enabled,
-                gain_updated,
-            },
+        Ok(PhyParamTrackingCompletion::WifiTxPowerTracked {
+            enabled,
+            gain_updated,
         })
     }
 }
@@ -987,11 +757,6 @@ impl<'state> PhyParamTrackingWifiI2cTransition<'state> {
         self.child.lower_external()
     }
 
-    #[cfg(test)]
-    pub const fn state(&self) -> &crate::state::PhyState {
-        self.state
-    }
-
     pub fn commit(self) -> Result<PhyParamTrackingCompletion, Self> {
         let crate::tracking::i2c::PhyWifiI2cTrackingAction::Complete(outcome) = self.child.action()
         else {
@@ -1040,38 +805,6 @@ impl<'state> PhyParamTrackingTemperatureTransition<'state> {
             child: crate::analog::temperature::PhyTemperatureTransition::new(),
             state,
         })
-    }
-
-    pub const fn action(&self) -> crate::analog::temperature::PhyTemperatureAction {
-        self.child.action()
-    }
-
-    pub fn advance(
-        &mut self,
-        completion: crate::analog::temperature::PhyTemperatureCompletion,
-    ) -> Result<(), crate::analog::temperature::PhyTemperatureTransitionError> {
-        self.child.advance(completion)
-    }
-
-    pub fn lower_external(
-        &self,
-    ) -> Result<
-        crate::analog::temperature::PhyTemperatureExternalBinding,
-        crate::analog::temperature::PhyTemperatureBindingError,
-    > {
-        crate::analog::temperature::PhyTemperatureExternalBinding::lower(self.action())
-    }
-
-    #[cfg(test)]
-    pub const fn state(&self) -> &crate::state::PhyState {
-        self.state
-    }
-
-    /// Commit a successful sensor outcome and mint the exact parent
-    /// completion. Failed and incomplete children are returned unchanged.
-    #[cfg(test)]
-    pub fn commit(self) -> Result<PhyParamTrackingCompletion, Self> {
-        self.commit_observed(None, None)
     }
 
     pub(crate) fn commit_observed(

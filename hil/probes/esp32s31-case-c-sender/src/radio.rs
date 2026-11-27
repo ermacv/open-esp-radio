@@ -28,12 +28,11 @@ use oer_chips_esp32s31_hal::{
 use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_phy::{
-    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
-    PhyTxTargetPowerProfile, RomShortDelay,
-    concurrent::{ConcurrentAcquire, ConcurrentPhy, PhyClientAccess, phy_ready},
-    maintain_concurrent_phy, register_concurrent_phy, select_concurrent_wifi_channel,
-    wifi_client::{WifiPhyMembership, join_wifi, set_wifi_rx},
+    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig, PhyState,
+    PhyTxTargetPowerProfile, RomShortDelay, enable_wifi_rx,
+    owner::{PhyPlace, PhyStateRight, RegisteredPhy, RfOpen, Tracking, tracking_due},
 };
+use oer_portable_clock::Clock as _;
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::Occupied;
 use oer_portable_memory::arena::Brand;
@@ -48,7 +47,7 @@ pub(crate) const CHANNEL: u8 = 13;
 /// number and CBW 0 (`radio-system` `channel::lower_ghz2_4_channel`).
 pub(crate) const CBW: u8 = 0;
 
-pub(crate) type Radio = RadioDomain<ChipClocks, ConcurrentPhy>;
+pub(crate) type Radio = RadioDomain<ChipClocks>;
 pub(crate) type Cooperative =
     oer_chips_family_platform_executor::Cooperative<Esp32s31, EmbassyClock>;
 /// The executor's cooperative timer beside the settle counter at the adopted
@@ -67,11 +66,8 @@ pub(crate) mod phase {
     pub const POWER: u32 = 2;
     pub const CLOCKS: u32 = 3;
     pub const INITIALIZED: u32 = 4;
-    pub const JOIN: u32 = 5;
     pub const MAINTAIN: u32 = 6;
-    pub const RX_ENABLE: u32 = 7;
     pub const CHANNEL: u32 = 8;
-    pub const POWER_PROFILE: u32 = 9;
     pub const MAC_COLD: u32 = 10;
     pub const RING: u32 = 11;
     #[allow(dead_code, reason = "the receive ring's probe's phase")]
@@ -87,7 +83,9 @@ pub(crate) struct SessionParts {
     pub(crate) coex: oer_chips_esp32s31_hal::radio::domain::CoexAbsent<
         oer_chips_esp32s31_hal::radio::domain::WifiClient,
     >,
-    pub(crate) pilot: phy_pilot::Client,
+    pub(crate) power_detector: phy_pilot::Client,
+    /// The right to the PHY's one state place.
+    pub(crate) phy: PhyStateRight,
     pub(crate) identity: PhyCalibrationIdentity,
     pub(crate) mac_irq: MacInterruptRegisters,
     pub(crate) power_irq: MacPowerInterruptRegisters,
@@ -168,18 +166,26 @@ pub(crate) fn held(slot: &mut Option<Radio>) -> Result<&mut Radio, Failure> {
     slot.as_mut().ok_or((phase::REGISTER, 9))
 }
 
-/// The PHY's registration over the radio in `slot`.
-async fn register(
+/// The PHY's registration over the radio in `slot`, into `place`: the
+/// registered handle and the proof that RF is open.
+async fn register<'p>(
     slot: &mut Option<Radio>,
+    place: PhyPlace<'p>,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
     clocks: &ChipClocks,
     identity: PhyCalibrationIdentity,
-) -> Result<(), Failure> {
+) -> Result<(RegisteredPhy<'p>, RfOpen), Failure> {
     let radio = slot.take().ok_or((phase::REGISTER, 1))?;
-    let mut operation = core::pin::pin!(register_concurrent_phy::<_, (), RomShortDelay, _>(
+    let mut operation = core::pin::pin!(oer_chips_esp32s31_radio_phy::register::<
+        _,
+        (),
+        RomShortDelay,
+        _,
+    >(
         timer,
         radio,
+        place,
         platform,
         clocks,
         PhyRegisterConfig::new(identity),
@@ -190,32 +196,42 @@ async fn register(
         .await
         .split();
     *slot = Some(returned.read());
-    let _outcome = result.read().map_err(|_| (phase::REGISTER, 0))?.outcome();
-    Ok(())
+    let registered = result.read().map_err(|_| (phase::REGISTER, 0))?;
+    Ok((registered.phy, registered.open))
 }
 
-/// The PHY's tracking over the radio in `slot`.
-async fn maintain(
+/// The PHY's tracking pass over the radio in `slot`, when one is due.
+pub(crate) async fn track_if_due(
     slot: &mut Option<Radio>,
+    phy: &mut RegisteredPhy<'_>,
+    open: RfOpen,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
-    pilot: &mut phy_pilot::Client,
-) -> Result<(), Failure> {
+    power_detector: &mut phy_pilot::Client,
+) -> Result<RfOpen, Failure> {
+    if let Tracking::NotBefore(_) = tracking_due(phy.state(), timer.now()) {
+        return Ok(open);
+    }
     let radio = slot.take().ok_or((phase::MAINTAIN, 1))?;
-    let mut operation = core::pin::pin!(maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-        timer,
-        radio,
-        platform,
-        NoopPhyTargetObserver,
-        pilot,
-    ));
+    let mut operation =
+        core::pin::pin!(
+            oer_chips_esp32s31_radio_phy::track::<_, (), RomShortDelay, _>(
+                timer,
+                radio,
+                phy,
+                open,
+                platform,
+                NoopPhyTargetObserver,
+                power_detector,
+            )
+        );
     let mut completion = MaybeUninit::uninit();
     let (returned, result) = oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
         .await
         .split();
     *slot = Some(returned.read());
-    result.read().map_err(|_| (phase::MAINTAIN, 0))?;
-    Ok(())
+    let (open, _outcome) = result.read().map_err(|_| (phase::MAINTAIN, 0))?;
+    Ok(open)
 }
 
 /// The channel's selection over the radio in `slot`, by its primary number
@@ -223,20 +239,29 @@ async fn maintain(
 async fn tune(
     slot: &mut Option<Radio>,
     clocked: &mut WifiClocked,
+    phy: &mut RegisteredPhy<'_>,
+    open: RfOpen,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
     channel: Ghz2_4Channel,
-) -> Result<(), Failure> {
+) -> Result<RfOpen, Failure> {
     let radio = slot.take().ok_or((phase::CHANNEL, 2))?;
     let transaction =
         radio.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Channel);
     let mut observer = NoopPhyTargetObserver;
     let selection = clocked.channel_transaction(platform, transaction);
-    let mut operation = core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
+    let mut operation = core::pin::pin!(oer_chips_esp32s31_radio_phy::select_channel::<
+        RomShortDelay,
+        _,
+        _,
+        _,
+    >(
         timer,
         u16::from(channel.primary()),
         CBW,
         selection,
+        phy,
+        open,
         &mut observer,
     ));
     let mut completion = MaybeUninit::uninit();
@@ -244,12 +269,11 @@ async fn tune(
         .await
         .split();
     *slot = Some(returned.read());
-    result.read().map_err(|_| (phase::CHANNEL, 1))?;
-    Ok(())
+    result.read().map_err(|_| (phase::CHANNEL, 1))
 }
 
-/// What stays held for the run beside the radio: coexistence, power, the
-/// membership and the pilot, and the platform's clocks.
+/// What stays held for the run beside the radio: coexistence, power and the
+/// platform's clocks.
 pub(crate) struct Held {
     _coex: Option<
         oer_chips_esp32s31_hal::radio::domain::Coexisting<
@@ -259,8 +283,6 @@ pub(crate) struct Held {
     _power: oer_chips_esp32s31_hal::radio::domain::CommonPower<
         oer_chips_esp32s31_hal::radio::domain::WifiClient,
     >,
-    _membership: WifiPhyMembership,
-    _pilot: phy_pilot::Client,
     clocks: ChipClocks,
 }
 
@@ -273,9 +295,15 @@ impl Held {
 
 /// Wi-Fi brought up to its first reset (S0 to S3): the clocked client with
 /// the first reset's proof, the walker's registers by value, the cold
-/// start's sources, the channel tuned.
-pub(crate) struct Brought {
+/// start's sources, the channel tuned, the registered PHY with RF open.
+pub(crate) struct Brought<'p> {
     pub(crate) slot: Option<Radio>,
+    pub(crate) phy: RegisteredPhy<'p>,
+    pub(crate) open: RfOpen,
+    /// The registration's time, in microseconds.
+    pub(crate) register_micros: u32,
+    /// The power detector's conversion, which a tracking pass takes.
+    pub(crate) power_detector: phy_pilot::Client,
     pub(crate) clocked: WifiClocked,
     pub(crate) first: MacFirstReset,
     pub(crate) walker: WifiRxDmaRegisters,
@@ -288,20 +316,22 @@ pub(crate) struct Brought {
     pub(crate) held: Held,
 }
 
-/// Bring Wi-Fi up in the radio system's order: the PHY's registration,
-/// coexistence, power, the clocks (and the first reset's proof), the PHY
-/// client, the tracking due, RX enable and the channel.
-pub(crate) async fn bring_up(
+/// Bring Wi-Fi up in the radio system's order: the PHY's registration into
+/// the place made of `memory` and the split's right, coexistence, power, the clocks (and the first reset's proof),
+/// the tracking due, RX enable and the channel.
+pub(crate) async fn bring_up<'p>(
     parts: SessionParts,
+    memory: &'p mut MaybeUninit<PhyState>,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
-) -> Result<Brought, Failure> {
+) -> Result<Brought<'p>, Failure> {
     let SessionParts {
         radio,
         clocks,
         wifi,
         coex,
-        mut pilot,
+        mut power_detector,
+        phy: right,
         identity,
         mac_irq,
         power_irq,
@@ -311,9 +341,18 @@ pub(crate) async fn bring_up(
         cycles: _,
     } = parts;
     let mut slot = Some(radio);
-    apart!(register(&mut slot, timer, platform, &clocks, identity))?;
+    let began = timer.now();
+    let (mut phy, open) = apart!(register(
+        &mut slot,
+        PhyPlace::new(right, memory),
+        timer,
+        platform,
+        &clocks,
+        identity
+    ))?;
+    let register_micros = micros_between(began, timer.now());
     let radio = held(&mut slot)?;
-    let (coexisting, _participants) = radio.enter_coex(coex);
+    let coexisting = radio.enter_coex(coex);
     let (cold, walker) = WifiCold::from_partition(wifi);
     let (powered, power) = cold
         .power_up(radio, &clocks)
@@ -324,21 +363,26 @@ pub(crate) async fn bring_up(
     clocked
         .set_initialized(radio, WifiInitialization::Initialized)
         .map_err(|_| (phase::INITIALIZED, 0))?;
-    let (membership, acquired) = {
-        let ready = phy_ready(radio).map_err(|_| (phase::JOIN, 0))?;
-        let PhyClientAccess::Available(available) = ready.client::<WifiPhyMembership>() else {
-            return Err((phase::JOIN, 1));
-        };
-        let joined = join_wifi(available, &clocked, timer).map_err(|_| (phase::JOIN, 2))?;
-        (joined.membership, joined.acquired)
-    };
-    if acquired == ConcurrentAcquire::TrackingDue {
-        apart!(maintain(&mut slot, timer, platform, &mut pilot))?;
-    }
-    set_wifi_rx(held(&mut slot)?, &membership, true).map_err(|_| (phase::RX_ENABLE, 0))?;
+    let open = apart!(track_if_due(
+        &mut slot,
+        &mut phy,
+        open,
+        timer,
+        platform,
+        &mut power_detector
+    ))?;
+    enable_wifi_rx(held(&mut slot)?, &open);
     let channel =
         Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20).map_err(|_| (phase::CHANNEL, 0))?;
-    apart!(tune(&mut slot, &mut clocked, timer, platform, channel))?;
+    let open = apart!(tune(
+        &mut slot,
+        &mut clocked,
+        &mut phy,
+        open,
+        timer,
+        platform,
+        channel
+    ))?;
     let radio = held(&mut slot)?;
     let ceiling = Country::new(*b"DE")
         .ok()
@@ -355,10 +399,8 @@ pub(crate) async fn bring_up(
             ))
         })
         .ok_or((phase::CEILING, 0))?;
-    let tx_power = radio
-        .attachment()
-        .phy_state()
-        .map_err(|_| (phase::POWER_PROFILE, 0))?
+    let tx_power = phy
+        .state()
         .tx_target_power_profile()
         .with_maximum_quarter_dbm(ceiling.quarter_dbm());
     let events = [
@@ -379,6 +421,10 @@ pub(crate) async fn bring_up(
     };
     Ok(Brought {
         slot,
+        phy,
+        open,
+        register_micros,
+        power_detector,
         clocked,
         first,
         walker,
@@ -391,8 +437,6 @@ pub(crate) async fn bring_up(
         held: Held {
             _coex: Some(coexisting),
             _power: power,
-            _membership: membership,
-            _pilot: pilot,
             clocks,
         },
     })
@@ -400,7 +444,7 @@ pub(crate) async fn bring_up(
 
 /// The cold preparation (S5) with the walker's registers lent, then the
 /// channel (S6): the preparation's proof, which the core's opening takes.
-/// A failed preparation gives none.
+/// A failed preparation gives none, and RF's proof does not come back.
 #[allow(
     clippy::too_many_arguments,
     reason = "each is one owner the preparation borrows"
@@ -408,6 +452,8 @@ pub(crate) async fn bring_up(
 pub(crate) async fn prepare(
     slot: &mut Option<Radio>,
     clocked: &mut WifiClocked,
+    phy: &mut RegisteredPhy<'_>,
+    open: RfOpen,
     walker: &mut WifiRxDmaRegisters,
     sources: &mut Sources,
     reset: MacBlockReset,
@@ -415,15 +461,23 @@ pub(crate) async fn prepare(
     channel: Ghz2_4Channel,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
-) -> Result<MacPrepared, Failure> {
+) -> Result<(MacPrepared, RfOpen), Failure> {
     let (_outcome, prepared) = {
         let mut hal = clocked.cold_mac_hal(walker);
         initialize_wifi_mac(reset, sources, &mut hal, timer, mac)
             .await
             .map_err(|_| (phase::MAC_COLD, 0))?
     };
-    apart!(tune(slot, clocked, timer, platform, channel))?;
-    Ok(prepared)
+    let open = apart!(tune(slot, clocked, phy, open, timer, platform, channel))?;
+    Ok((prepared, open))
+}
+
+/// The microseconds from `began` to `ended`, saturated.
+pub(crate) fn micros_between(
+    began: oer_portable_time::Instant,
+    ended: oer_portable_time::Instant,
+) -> u32 {
+    u32::try_from(ended.saturating_duration_since(began).as_micros()).unwrap_or(u32::MAX)
 }
 
 /// The station's receive policy under which a frame addressed to the

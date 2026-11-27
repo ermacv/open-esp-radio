@@ -6,8 +6,8 @@ use crate::{
     tracking::{
         i2c::PhyWifiI2cTrackingBand as Band,
         parameters::{
-            PhyParamTrackRequest, PhyParamTrackingCompletion, PhyParamTrackingPolicy,
-            PhyParamTrackingTransition, PhyParamTrackingWifiI2cTransition,
+            PhyParamTrackingCompletion, PhyParamTrackingPolicy, PhyParamTrackingTransition,
+            PhyParamTrackingWifiI2cTransition,
         },
     },
 };
@@ -25,8 +25,7 @@ fn state(temperature: i16) -> PhyState {
 fn child(state: &mut PhyState) -> PhyParamTrackingWifiI2cTransition<'_> {
     let mut policy = PhyParamTrackingPolicy::for_registered_state(state);
     policy.rfpll_cap_tracking_enabled = false;
-    let mut parent =
-        PhyParamTrackingTransition::new(PhyParamTrackRequest::new(true, false), policy);
+    let mut parent = PhyParamTrackingTransition::new(policy);
     parent
         .advance(PhyParamTrackingCompletion::EnteredCritical)
         .expect("enter the tracking owner");

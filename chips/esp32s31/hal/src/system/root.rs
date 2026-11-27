@@ -410,8 +410,8 @@ impl RadioPartitions {
 /// use oer_chips_esp32s31_hal::system::root::RadioHardware;
 ///
 /// # fn split_twice<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(hardware: RadioHardware, identity: oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity) {
-/// let _first = hardware.split::<B, _>((), identity);
-/// let _second = hardware.split::<B, _>((), identity);
+/// let _first = hardware.split::<B>(identity);
+/// let _second = hardware.split::<B>(identity);
 /// # }
 /// ```
 #[must_use = "dropping the radio root permanently loses the unique hardware capability"]
@@ -518,6 +518,8 @@ impl WifiPartition {
 pub struct ProtocolPartitions {
     pub wifi: WifiPartition,
     pub wifi_coex: CoexAbsent<WifiClient>,
+    /// The right to the PHY's one state place.
+    pub phy: crate::radio::domain::PhyStateRight,
 }
 
 /// Why a split cannot become the neutral root again.
@@ -528,32 +530,31 @@ pub enum ReunionError {
 
 /// Rejected reunion returning both unchanged owners.
 #[must_use = "a rejected reunion still owns the domain and every partition"]
-pub struct ReunionFailure<B: PlatformClockBackend, T = ()> {
-    shared: RadioDomain<B, T>,
+pub struct ReunionFailure<B: PlatformClockBackend> {
+    shared: RadioDomain<B>,
     partitions: ProtocolPartitions,
     error: ReunionError,
 }
 
-impl<B: PlatformClockBackend, T> ReunionFailure<B, T> {
+impl<B: PlatformClockBackend> ReunionFailure<B> {
     pub const fn error(&self) -> ReunionError {
         self.error
     }
 
-    pub fn into_parts(self) -> (RadioDomain<B, T>, ProtocolPartitions) {
+    pub fn into_parts(self) -> (RadioDomain<B>, ProtocolPartitions) {
         (self.shared, self.partitions)
     }
 }
 
-/// Refused split, retaining the exact hardware, attachment and PHY identity.
+/// Refused split, retaining the exact hardware and PHY identity.
 #[must_use = "a refused split retains all input owners"]
-pub struct RadioSplitFailure<T> {
+pub struct RadioSplitFailure {
     hardware: RadioHardware,
-    attachment: T,
     identity: crate::radio::domain::transaction::PhyIdentity,
     error: oer_chips_family_radio_modem_clock::IdentityExhausted,
 }
 
-impl<T> core::fmt::Debug for RadioSplitFailure<T> {
+impl core::fmt::Debug for RadioSplitFailure {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RadioSplitFailure")
             .field("error", &self.error)
@@ -561,7 +562,7 @@ impl<T> core::fmt::Debug for RadioSplitFailure<T> {
     }
 }
 
-impl<T> RadioSplitFailure<T> {
+impl RadioSplitFailure {
     pub const fn error(&self) -> oer_chips_family_radio_modem_clock::IdentityExhausted {
         self.error
     }
@@ -570,10 +571,9 @@ impl<T> RadioSplitFailure<T> {
         self,
     ) -> (
         RadioHardware,
-        T,
         crate::radio::domain::transaction::PhyIdentity,
     ) {
-        (self.hardware, self.attachment, self.identity)
+        (self.hardware, self.identity)
     }
 
     /// Observation for the image's existing PHY fault reporter. No reset or MMIO occurs here.
@@ -597,39 +597,32 @@ impl RadioHardware {
     /// `B` is the platform clock backend shared by every provider used with
     /// this domain.
     ///
-    /// `attachment` is the upper layer's state kept with the domain, such
-    /// as the PHY layer's registered domain slot.
-    ///
     /// # Errors
     ///
     /// Identity exhaustion returns every input owner before any split or MMIO.
-    pub fn split<B: PlatformClockBackend, T>(
+    pub fn split<B: PlatformClockBackend>(
         self,
-        attachment: T,
         identity: crate::radio::domain::transaction::PhyIdentity,
-    ) -> Result<(RadioDomain<B, T>, ProtocolPartitions), RadioSplitFailure<T>> {
+    ) -> Result<(RadioDomain<B>, ProtocolPartitions), RadioSplitFailure> {
         self.split_with_clock_identity(
-            attachment,
             identity,
             crate::power::clock::ModemClockPlannerIdentity::new(),
         )
     }
 
-    fn split_with_clock_identity<B: PlatformClockBackend, T>(
+    fn split_with_clock_identity<B: PlatformClockBackend>(
         self,
-        attachment: T,
         identity: crate::radio::domain::transaction::PhyIdentity,
         clock_identity: Result<
             crate::power::clock::ModemClockPlannerIdentity,
             oer_chips_family_radio_modem_clock::IdentityExhausted,
         >,
-    ) -> Result<(RadioDomain<B, T>, ProtocolPartitions), RadioSplitFailure<T>> {
+    ) -> Result<(RadioDomain<B>, ProtocolPartitions), RadioSplitFailure> {
         let clock_identity = match clock_identity {
             Ok(identity) => identity,
             Err(error) => {
                 return Err(RadioSplitFailure {
                     hardware: self,
-                    attachment,
                     identity,
                     error,
                 });
@@ -640,13 +633,13 @@ impl RadioHardware {
             RadioDomain::new(
                 shared,
                 PhyRouteState::new(self.phy_registration),
-                attachment,
                 identity,
                 clock_identity,
             ),
             ProtocolPartitions {
                 wifi,
                 wifi_coex: CoexAbsent::issued(),
+                phy: crate::radio::domain::PhyStateRight::issued(),
             },
         ))
     }
@@ -663,11 +656,11 @@ impl RadioHardware {
         clippy::result_large_err,
         reason = "rejection returns the domain and every partition without allocation"
     )]
-    pub fn reunite<B: PlatformClockBackend, T>(
-        shared: RadioDomain<B, T>,
+    pub fn reunite<B: PlatformClockBackend>(
+        shared: RadioDomain<B>,
         partitions: ProtocolPartitions,
-    ) -> Result<(Self, T), ReunionFailure<B, T>> {
-        let (registers, phy, attachment) = match shared.into_parts() {
+    ) -> Result<Self, ReunionFailure<B>> {
+        let (registers, phy) = match shared.into_parts() {
             Ok(parts) => parts,
             Err((shared, error)) => {
                 return Err(ReunionFailure {
@@ -677,16 +670,18 @@ impl RadioHardware {
                 });
             }
         };
-        let ProtocolPartitions { wifi, wifi_coex: _ } = partitions;
-        Ok((
-            Self::returned(
-                RadioPartitions {
-                    shared: registers,
-                    wifi,
-                },
-                phy,
-            ),
-            attachment,
+        let ProtocolPartitions {
+            wifi,
+            wifi_coex: _,
+            phy: right,
+        } = partitions;
+        right.returned();
+        Ok(Self::returned(
+            RadioPartitions {
+                shared: registers,
+                wifi,
+            },
+            phy,
         ))
     }
 }

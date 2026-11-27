@@ -3,7 +3,7 @@
 use core::mem::size_of;
 
 use crate::{
-    PhyCalibrationCache, PhyState, RegisteredPhyState,
+    PhyCalibrationCache, PhyState,
     calibration::{baseband::PhyBbInitTransition, registration::PhyRegisterTransition},
     rx::gain::RxProgram,
 };
@@ -17,9 +17,6 @@ use crate::{
 // layouts; they prevent a return to an opaque 508-byte state plus a 524-byte
 // duplicate without making compiler padding part of the API.
 const PHY_STATE_LIMIT: usize = 384;
-// The shared domain retains the registration plus the bounded client
-// scheduler.
-const CONCURRENT_PHY_LIMIT: usize = 448;
 const PHY_CALIBRATION_CACHE_LIMIT: usize = 320;
 const PHY_REGISTER_TRANSITION_LIMIT: usize = 2_560;
 const PHY_BB_INIT_TRANSITION_LIMIT: usize = 1_600;
@@ -27,8 +24,6 @@ const PHY_RX_PROGRAM_LIMIT: usize = 512;
 
 const _: () = {
     if size_of::<PhyState>() > PHY_STATE_LIMIT
-        || size_of::<RegisteredPhyState>() > PHY_STATE_LIMIT
-        || size_of::<crate::concurrent::ConcurrentPhy>() > CONCURRENT_PHY_LIMIT
         || size_of::<PhyCalibrationCache>() > PHY_CALIBRATION_CACHE_LIMIT
         || size_of::<PhyRegisterTransition>() > PHY_REGISTER_TRANSITION_LIMIT
         || size_of::<PhyBbInitTransition>() > PHY_BB_INIT_TRANSITION_LIMIT

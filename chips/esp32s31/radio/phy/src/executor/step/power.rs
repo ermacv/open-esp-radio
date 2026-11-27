@@ -94,15 +94,10 @@ enum Work {
 }
 #[inline(never)]
 fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, Failure> {
-    use crate::tracking::parameters::PhyCalibrationTrackClass as Class;
-    let (class, channel, gain_base, count, bank) = match action {
+    // Wi-Fi's gain bank: 32 entries from bank 0.
+    let (channel, gain_base, count, bank) = match action {
         Action::Complete(_) => return Ok(Work::Complete),
-        Action::RegenerateWifiGain { channel, gain_base } => {
-            (Class::Wifi, channel, gain_base, 32, 0)
-        }
-        Action::RegenerateBluetoothIeee802154Gain { gain_base } => {
-            (Class::BluetoothIeee802154, 0, gain_base, 16, 32)
-        }
+        Action::RegenerateWifiGain { channel, gain_base } => (channel, gain_base, 32, 0),
         action => {
             return crate::tracking::power::ControlBinding::lower(action)
                 .map(Work::Control)
@@ -110,14 +105,14 @@ fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, 
         }
     };
     if gain.entry == u8::MAX {
-        if let Some(generator) = state.tracking_gain_generator(class, channel, gain_base) {
+        if let Some(generator) = state.tracking_gain_generator(channel, gain_base) {
             gain.generator = generator;
             Ok(Work::Lower(bank))
         } else {
             Ok(Work::Skipped)
         }
     } else {
-        let record = gain_record(state, class, gain)?;
+        let record = gain_record(state, gain)?;
         Ok(Work::Record(record, gain.entry + 1 == count))
     }
 }
@@ -195,21 +190,13 @@ fn elapsed<C: oer_portable_clock::Clock>(
 #[inline(never)]
 fn gain_record(
     state: &PhyState,
-    class: crate::tracking::parameters::PhyCalibrationTrackClass,
     gain: &mut Cursor,
 ) -> Result<oer_chips_esp32s31_hal::types::PhyGainMemoryEntry, Failure> {
-    let value = match class {
-        crate::tracking::parameters::PhyCalibrationTrackClass::Wifi => {
-            crate::channel::next_wifi_tx_gain(&mut gain.generator)
-        }
-        crate::tracking::parameters::PhyCalibrationTrackClass::BluetoothIeee802154 => {
-            crate::calibration::bluetooth::next_bluetooth_tx_gain(&mut gain.generator, gain.entry).0
-        }
-    };
+    let value = crate::channel::next_wifi_tx_gain(&mut gain.generator);
     // Exactly the quartet from the general seed/output32 view. Both pinned
     // profiles select its seed-only rows; unsupported extra rows fail closed.
     let (seed, config) = state
-        .tracking_gain_seed(class, value.gain_64)
+        .tracking_gain_seed(value.gain_64)
         .ok_or(Failure::Binding)?;
     Ok(oer_chips_esp32s31_hal::types::PhyGainMemoryEntry::transmit(
         gain.memory_base.wrapping_add(gain.entry),

@@ -4735,7 +4735,7 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/phy/restore.rs", 371, PHY_DRIVER),
     ("radio/phy/temperature.rs", 171, PHY_DRIVER),
     ("radio/phy/temperature/", 79, PHY_DRIVER),
-    ("radio/domain/transaction.rs", 532, PHY_DRIVER),
+    ("radio/domain/transaction.rs", 500, PHY_DRIVER),
     ("radio/domain/transaction/", 321, PHY_DRIVER),
 ];
 
@@ -6263,11 +6263,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         BY_PHY_PROGRAMS,
     ),
     (
-        "chips/esp32s31/radio/phy/src/concurrent.rs",
-        1,
-        BY_PHY_PROGRAMS,
-    ),
-    (
         "chips/esp32s31/radio/phy/src/lifecycle.rs",
         1,
         BY_PHY_PROGRAMS,
@@ -6345,7 +6340,7 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         BY_PHY_PROGRAMS,
     ),
     ("chips/family/drivers/regi2c/src/lib.rs", 1, BY_PHY_PROGRAMS),
-    ("chips/family/radio/power/src/domain.rs", 2, BY_PHY_OWNER),
+    ("chips/family/radio/power/src/domain.rs", 1, BY_PHY_OWNER),
     (
         "chips/family/radio/power/src/membership.rs",
         1,
@@ -6658,7 +6653,7 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
         BY_PHY_PROGRAMS,
     ),
     (
-        "chips/esp32s31/radio/phy/src/target_port/concurrent.rs::_quarantined",
+        "chips/esp32s31/radio/phy/src/target_port/owner.rs::_quarantined",
         1,
         BY_PHY_PROGRAMS,
     ),
@@ -6901,18 +6896,8 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         BY_TRANSMIT,
     ),
     (
-        "chips/esp32s31/radio/phy/src/concurrent.rs",
-        22,
-        BY_PHY_PROGRAMS,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/diagnostic_path.rs",
+        "chips/esp32s31/radio/phy/src/target_port/owner.rs",
         1,
-        BY_PHY_PROGRAMS,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
-        9,
         BY_PHY_PROGRAMS,
     ),
     ("chips/family/platform/executor/src/executor.rs", 2, BY_PUMP),
@@ -9323,12 +9308,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        BY_PHY_PROGRAMS,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
         BY_PHY_PROGRAMS,
@@ -9370,28 +9349,10 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         BY_PHY_PROGRAMS,
     ),
     (
-        "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
-        "clippy::large_enum_variant",
-        1,
-        "the allocation-free failure retains the exact registration transition",
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
-        "clippy::result_large_err",
-        2,
-        "fail-stop error retains the allocation-free PHY transition / failure retains the unique transition",
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/target_port/concurrent/operations.rs",
-        "clippy::result_large_err",
-        1,
-        "fail-stop error retains the allocation-free PHY transition",
-    ),
-    (
         "chips/esp32s31/radio/phy/src/target_port/domain.rs",
         "clippy::result_large_err",
-        2,
-        "fail-stop error retains the allocation-free PHY transition / failure retains the unique transition",
+        1,
+        "a registration's failure is its report, made once an operation",
     ),
     (
         "chips/esp32s31/radio/phy/src/target_port/domain.rs",
