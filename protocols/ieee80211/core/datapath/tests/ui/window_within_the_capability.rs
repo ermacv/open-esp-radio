@@ -5,11 +5,10 @@ use oer_protocols_ieee80211_testing_model::{MODEL_CHAIN_SLOTS, MODEL_AGREEMENTS,
 
 pub type Station<const WINDOW: usize> = Engine<
     'static,
-    ModelPort<'static, StationModel<8>>,
+    ModelPort<'static, StationModel>,
     Arenas,
     (),
     1,
-    8,
     8,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,

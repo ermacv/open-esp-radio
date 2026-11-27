@@ -52,9 +52,10 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_protocols_ieee802_wire::{EtherType, Eui48};
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateEnd, AggregateOutcome, ArenaOutcome, Chain, DataPort, FrameSet, GateOpen, HEADROOM,
-    HeaderLen, IdleChain, Ieee80211Capabilities, MpduLength, OnAir, PhyRate, PortRate, Ppdu,
-    QueueRight, RetryPlan, RxMetadata, Settled as Kept, SingleEnd, SingleOutcome, SingleResponse,
+    AggregateEnd, AggregateOutcome, AggregatePpdu, AmpduRate, ArenaOutcome, DataPort, First,
+    FrameSet, GateOpen, HEADROOM, HeaderLen, Ieee80211Capabilities, Layout, LongChain, LongIn,
+    LongIs, LongNow, LongPlace, LongPpdu, LongSettled, MpduLength, PhyRate, PortRate, Queue,
+    QueueNow, QueuePlaces, RetryPlan, RxMetadata, Second, SingleEnd, SingleOutcome, SingleResponse,
     TxEstimate, TxFacts, TxOutcome,
 };
 use oer_protocols_ieee80211_core_upper_mac::{
@@ -303,8 +304,8 @@ pub enum PpduKind {
     },
 }
 
-/// The publication the plane plans: the caller's rate plan turns it into
-/// a [`Ppdu`] ([`DataPlane::publication`]).
+/// The publication the plane plans: the caller's rate plan answers it in
+/// the kind it asks ([`PlanRates`], [`DataPlane::publication`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PpduPlan {
     /// The arena that goes.
@@ -315,6 +316,26 @@ pub struct PpduPlan {
     pub frames: u8,
     /// Single MPDU or A-MPDU.
     pub kind: PpduKind,
+}
+
+/// The rates of the plane's publications, asked by the kind the plane
+/// planned: a single MPDU's plan, or an aggregate's rate with its plan of a
+/// prefix of one frame. Each answers its own kind, so no answer is of a
+/// kind the plane did not ask; `None` when the policy gives none now, and
+/// the chain waits.
+pub trait PlanRates<'id, K> {
+    /// The plan of a single MPDU of `plan`.
+    fn single(&mut self, plan: PpduPlan) -> Option<RetryPlan<PortRate<'id, K>>>;
+    /// The rates of an aggregate of `plan`.
+    fn aggregate(&mut self, plan: PpduPlan) -> Option<AggregateRates<'id, K>>;
+}
+
+/// An aggregate's rates, as its rate selection answers them.
+pub struct AggregateRates<'id, K> {
+    /// The aggregate's rate.
+    pub rate: AmpduRate<'id, K>,
+    /// The plan of a prefix of one frame.
+    pub alone: RetryPlan<PortRate<'id, K>>,
 }
 
 impl PpduPlan {
@@ -441,25 +462,27 @@ pub enum ArenaSide {
     Second,
 }
 
-/// A chain's right, in its place in the book.
-#[derive(Debug)]
-enum Held<'id, const SLOTS: usize> {
+/// Where a chain is: what the plane reads of its place.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Phase {
+    /// Inside a transition of the plane, which puts the places back
+    /// before it returns, and after [`DataPlane::idle_rights`].
+    Moving,
     /// It holds nothing.
-    Idle(IdleChain<'id, SLOTS>),
+    Idle,
     /// It takes or keeps frames.
-    Open(Chain<'id, SLOTS>),
-    /// It is on the air, its queue's right with it.
-    Air(OnAir<'id, SLOTS>),
+    Open,
+    /// It is on the air.
+    Air,
 }
 
-/// A transmit queue's right as the plane holds it: here, or with the
-/// chain on the air, whose settlement gives it back.
-#[derive(Debug)]
-enum Lane<'id> {
-    /// The queue is free.
-    Free(QueueRight<'id>),
-    /// The plane's chain on the air holds it.
-    Carrying,
+/// Where the long chain of `place` is.
+const fn phase_of<M, const SLOTS: usize>(place: &LongPlace<'_, M, SLOTS>) -> Phase {
+    match place.now() {
+        LongIs::Idle => Phase::Idle,
+        LongIs::Open(_) => Phase::Open,
+        LongIs::OnAir(..) => Phase::Air,
+    }
 }
 
 /// What the plane knows of the frames one arena holds. Frames are named by
@@ -467,11 +490,7 @@ enum Lane<'id> {
 /// carries the sequence number `first + o`. The arena holds the positions
 /// of `pending` in their order; a settlement compacts the arena, not the
 /// book.
-struct ArenaBook<'id, K, const SLOTS: usize> {
-    /// The arena's right. `None` only inside a transition of the plane,
-    /// which puts the next right back before it returns, and after
-    /// [`DataPlane::idle_arenas`], which the plane does not outlive.
-    right: Option<Held<'id, SLOTS>>,
+struct ArenaBook<'id, K> {
     /// The link generation that filled it.
     epoch: u32,
     tid: WmmUserPriority,
@@ -557,10 +576,9 @@ const fn ones(bits: u64) -> u8 {
     bits.count_ones() as u8
 }
 
-impl<'id, K, const SLOTS: usize> ArenaBook<'id, K, SLOTS> {
-    const fn new(arena: IdleChain<'id, SLOTS>) -> Self {
+impl<K> ArenaBook<'_, K> {
+    const fn new() -> Self {
         Self {
-            right: Some(Held::Idle(arena)),
             epoch: 0,
             tid: WmmUserPriority::UP0,
             first: SequenceNumber::ZERO,
@@ -619,21 +637,6 @@ impl<'id, K, const SLOTS: usize> ArenaBook<'id, K, SLOTS> {
         self.retained = false;
     }
 
-    /// Whether its arena is on the air.
-    const fn on_air(&self) -> bool {
-        matches!(self.right, Some(Held::Air(_)))
-    }
-
-    /// The arena is the standby: it is not on the air and takes frames.
-    const fn takes(&self) -> bool {
-        matches!(self.right, Some(Held::Idle(_) | Held::Open(_))) && !self.retained
-    }
-
-    /// Whether it holds frames the next publication may put on the air.
-    const fn publishable(&self) -> bool {
-        matches!(self.right, Some(Held::Open(_))) && self.pending != 0
-    }
-
     /// The oldest sequence number the arena holds of `tid` for the link
     /// generation `epoch`.
     fn oldest(&self, epoch: u32, tid: WmmUserPriority) -> Option<SequenceNumber> {
@@ -666,26 +669,121 @@ pub struct DataPlane<'id, K, const SLOTS: usize> {
     limits: [Option<PpduLimit>; 8],
     /// Each TID's sequence number after the last MPDU the link's data drew.
     next: [Option<SequenceNumber>; 8],
-    first: ArenaBook<'id, K, SLOTS>,
-    second: ArenaBook<'id, K, SLOTS>,
-    /// A queue's right, in the order of `QUEUES`.
-    lanes: [Lane<'id>; 4],
+    first: ArenaBook<'id, K>,
+    second: ArenaBook<'id, K>,
+    /// The two long chains' places, each beside its book, and the queues'.
+    /// `None` only after [`DataPlane::idle_rights`], which the plane does
+    /// not outlive.
+    rights: Option<Rights<'id, SLOTS>>,
+}
+
+/// The radio's two long chains, idle, as its bundle names them.
+pub type LongPair<'id, const SLOTS: usize> =
+    (LongChain<'id, First, SLOTS>, LongChain<'id, Second, SLOTS>);
+
+/// An end's outcome over the port `P` and its two frame sets, the frames
+/// that went and those acknowledged, copied out of the port's place.
+type EndOf<'id, P> = (
+    ArenaOutcome<
+        <P as DataPort<'id>>::Ack,
+        <P as DataPort<'id>>::BlockAck,
+        <P as DataPort<'id>>::Denial,
+    >,
+    FrameSet,
+    FrameSet,
+);
+
+/// The plane's places: its two long chains', each of its marker's type,
+/// and the four queues'.
+struct Rights<'id, const SLOTS: usize> {
+    first: LongPlace<'id, First, SLOTS>,
+    second: LongPlace<'id, Second, SLOTS>,
+    queues: QueuePlaces<'id>,
+}
+
+/// The place of the long chain of `side`, lent as `$right`, and the
+/// queues' as `$queues`, to `$body`: each side's is of its own marker's
+/// type, so `$body` is checked for both. `$none` while the plane holds no
+/// places.
+macro_rules! on_side {
+    ($plane:expr, $side:expr, $none:expr, |$right:ident, $queues:ident| $body:expr) => {{
+        match (&mut $plane.rights, $side) {
+            (
+                Some(Rights {
+                    first: $right,
+                    queues: $queues,
+                    ..
+                }),
+                ArenaSide::First,
+            ) => $body,
+            (
+                Some(Rights {
+                    second: $right,
+                    queues: $queues,
+                    ..
+                }),
+                ArenaSide::Second,
+            ) => $body,
+            (None, _) => $none,
+        }
+    }};
 }
 
 impl<'id, K, const SLOTS: usize> DataPlane<'id, K, SLOTS> {
-    /// The plane of flowing data, with the installation's two idle chains,
-    /// each to its book, and the four queues' rights; it holds no link.
-    pub fn new(arenas: [IdleChain<'id, SLOTS>; 2], queues: [QueueRight<'id>; 4]) -> Self {
-        let [first, second] = arenas;
+    /// The plane of flowing data, with the installation's two idle long
+    /// chains, each beside its book, and the four queues; it holds no link.
+    pub fn new(
+        chains: (LongChain<'id, First, SLOTS>, LongChain<'id, Second, SLOTS>),
+        queues: [Queue<'id>; 4],
+    ) -> Self {
+        let (first, second) = chains;
         Self {
-            lanes: queues.map(Lane::Free),
             linkage: Linkage::Unlinked,
             epoch: 0,
             rate: None,
             limits: [None; 8],
             next: [None; 8],
-            first: ArenaBook::new(first),
-            second: ArenaBook::new(second),
+            first: ArenaBook::new(),
+            second: ArenaBook::new(),
+            rights: Some(Rights {
+                first: LongPlace::new(first),
+                second: LongPlace::new(second),
+                queues: QueuePlaces::new(queues),
+            }),
+        }
+    }
+
+    /// Where the right of the chain of `side` is.
+    const fn phase(&self, side: ArenaSide) -> Phase {
+        match (&self.rights, side) {
+            (None, _) => Phase::Moving,
+            (Some(rights), ArenaSide::First) => phase_of(&rights.first),
+            (Some(rights), ArenaSide::Second) => phase_of(&rights.second),
+        }
+    }
+
+    /// Whether the chain of `side` is on the air.
+    fn side_on_air(&self, side: ArenaSide) -> bool {
+        self.phase(side) == Phase::Air
+    }
+
+    /// The chain of `side` is the standby: it is not on the air and takes
+    /// frames.
+    fn takes(&self, side: ArenaSide) -> bool {
+        matches!(self.phase(side), Phase::Idle | Phase::Open) && !self.side_book(side).retained
+    }
+
+    /// Whether the chain of `side` holds frames the next publication may
+    /// put on the air.
+    fn side_publishable(&self, side: ArenaSide) -> bool {
+        self.phase(side) == Phase::Open && self.side_book(side).pending != 0
+    }
+
+    /// The book of the chain of `side`.
+    const fn side_book(&self, side: ArenaSide) -> &ArenaBook<'id, K> {
+        match side {
+            ArenaSide::First => &self.first,
+            ArenaSide::Second => &self.second,
         }
     }
 }
@@ -711,13 +809,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
     /// engine's search: no lifetime expires within its bounds.
     #[cfg(test)]
     pub(crate) fn key(&self) -> std::string::String {
-        let book = |book: &ArenaBook<'id, K, SLOTS>| {
-            let right = match &book.right {
-                None => std::string::String::from("moving"),
-                Some(Held::Idle(_)) => std::string::String::from("idle"),
-                Some(Held::Open(arena)) => std::format!("open{}", arena.frames()),
-                Some(Held::Air(air)) => std::format!("air{}", air.sent().bits()),
-            };
+        let book = |book: &ArenaBook<'id, K>, right: std::string::String| {
             let frames: std::vec::Vec<(u8, u16, u8)> = book
                 .held()
                 .map(|(position, frame)| (position.0, frame.psdu, frame.attempts))
@@ -743,81 +835,63 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
             self.rate,
             self.limits,
             self.next,
-            book(&self.first),
-            book(&self.second)
+            book(
+                &self.first,
+                held_key(self.rights.as_ref().map(|rights| &rights.first))
+            ),
+            book(
+                &self.second,
+                held_key(self.rights.as_ref().map(|rights| &rights.second))
+            )
         )
     }
 
     /// Whether both chains are idle: the data may stop. A chain idle has
     /// given its queue's right back.
-    pub const fn is_idle(&self) -> bool {
-        matches!(
-            (&self.first.right, &self.second.right),
-            (Some(Held::Idle(_)), Some(Held::Idle(_)))
-        )
+    pub fn is_idle(&self) -> bool {
+        self.phase(ArenaSide::First) == Phase::Idle && self.phase(ArenaSide::Second) == Phase::Idle
     }
 
-    /// The two chains and the four queues' rights back, when both chains
-    /// are idle: the data stops, and the plane goes with it (its caller
-    /// drops it). `None` while one holds frames or is on the air; the plane
-    /// keeps them.
-    pub fn idle_rights(&mut self) -> Option<([IdleChain<'id, SLOTS>; 2], [QueueRight<'id>; 4])> {
+    /// The two long chains and the four queues back, when both chains are
+    /// idle: the data stops, and the plane goes with it (its caller drops
+    /// it). `None` while one holds frames or is on the air; the plane keeps
+    /// them.
+    pub fn idle_rights(&mut self) -> Option<(LongPair<'id, SLOTS>, [Queue<'id>; 4])> {
         if !self.is_idle() {
             return None;
         }
-        let lanes = core::mem::replace(&mut self.lanes, [const { Lane::Carrying }; 4]);
-        match (lanes, self.first.right.take(), self.second.right.take()) {
-            (
-                [
-                    Lane::Free(voice),
-                    Lane::Free(video),
-                    Lane::Free(best_effort),
-                    Lane::Free(background),
-                ],
-                Some(Held::Idle(first)),
-                Some(Held::Idle(second)),
-            ) => Some(([first, second], [voice, video, best_effort, background])),
-            (lanes, first, second) => {
-                // Both chains idle hold no queue's right: every lane is
-                // free. Should one not be, the plane keeps what it held.
-                self.lanes = lanes;
-                self.first.right = first;
-                self.second.right = second;
+        let Rights {
+            first,
+            second,
+            queues,
+        } = self.rights.take()?;
+        match (first.into_idle(), second.into_idle(), queues.into_queues()) {
+            (Ok(first), Ok(second), Ok(queues)) => Some(((first, second), queues)),
+            (first, second, queues) => {
+                // Both chains idle hold no queue: every place is free. Should
+                // one not be, the plane keeps what it held.
+                self.rights = Some(Rights {
+                    first: first.map_or_else(|place| place, LongPlace::new),
+                    second: second.map_or_else(|place| place, LongPlace::new),
+                    queues: match queues {
+                        Ok(queues) => QueuePlaces::new(queues),
+                        Err(queues) => queues,
+                    },
+                });
                 None
             }
         }
     }
 
-    /// The lane of the queue of `category`.
-    const fn lane_mut(
-        &mut self,
-        category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
-    ) -> &mut Lane<'id> {
-        use oer_protocols_ieee80211_wire::qos::WmmAccessCategory as Ac;
-        let [voice, video, best_effort, background] = &mut self.lanes;
-        match category {
-            Ac::Voice => voice,
-            Ac::Video => video,
-            Ac::BestEffort => best_effort,
-            Ac::Background => background,
-        }
-    }
-
-    /// A settlement's queue right back to its lane.
-    pub(crate) fn lane_back(&mut self, right: QueueRight<'id>) {
-        let category = right.category();
-        *self.lane_mut(category) = Lane::Free(right);
-    }
-
     /// The book of the arena of `side`: each book is its own arena's.
-    const fn book(&self, side: ArenaSide) -> &ArenaBook<'id, K, SLOTS> {
+    const fn book(&self, side: ArenaSide) -> &ArenaBook<'id, K> {
         match side {
             ArenaSide::First => &self.first,
             ArenaSide::Second => &self.second,
         }
     }
 
-    const fn book_mut(&mut self, side: ArenaSide) -> &mut ArenaBook<'id, K, SLOTS> {
+    const fn book_mut(&mut self, side: ArenaSide) -> &mut ArenaBook<'id, K> {
         match side {
             ArenaSide::First => &mut self.first,
             ArenaSide::Second => &mut self.second,
@@ -867,7 +941,9 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         port: &mut P,
         mut returned: impl FnMut(P::Memory),
         events: &mut impl EventSink<DataEvent>,
-    ) {
+    ) where
+        P::Layout: Layout<Longs = (First, Second)>,
+    {
         for side in [ArenaSide::First, ArenaSide::Second] {
             self.withdraw(port, side, &mut returned, events);
         }
@@ -886,12 +962,15 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         port: &mut P,
         mut returned: impl FnMut(P::Memory),
         events: &mut impl EventSink<DataEvent>,
-    ) -> [Withdrawn; 8] {
+    ) -> [Withdrawn; 8]
+    where
+        P::Layout: Layout<Longs = (First, Second)>,
+    {
         let mut unsent: [Option<(SequenceNumber, SequenceNumber, u8)>; 8] = [None; 8];
         let mut transmitted = [false; 8];
         for side in [ArenaSide::First, ArenaSide::Second] {
             let book = self.book(side);
-            if book.epoch == self.epoch && matches!(book.right, Some(Held::Open(_))) {
+            if book.epoch == self.epoch && self.phase(side) == Phase::Open {
                 let tid = book.tid;
                 let first = book.first;
                 for (position, frame) in book.held() {
@@ -926,8 +1005,8 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
     }
 
     /// Whether an arena is on the air: its end is owed.
-    pub const fn on_air(&self) -> bool {
-        self.first.on_air() || self.second.on_air()
+    pub fn on_air(&self) -> bool {
+        self.side_on_air(ArenaSide::First) || self.side_on_air(ArenaSide::Second)
     }
 
     /// While an arena is on the air, the frames the standby still takes
@@ -959,24 +1038,18 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         side: ArenaSide,
         returned: &mut impl FnMut(P::Memory),
         events: &mut impl EventSink<DataEvent>,
-    ) {
-        let book = self.book_mut(side);
-        let right = match book.right.take() {
-            Some(Held::Open(arena)) => {
-                let mut leave = |memory| {
-                    report(events, || DataEvent::DataLost(DataLoss::LeftBehind));
-                    returned(memory);
-                };
-                Held::Idle(port.withdraw(arena, &mut leave))
-            }
-            Some(held @ (Held::Idle(_) | Held::Air(_))) => {
-                book.right = Some(held);
-                return;
-            }
-            None => return,
+    ) where
+        P::Layout: Layout<Longs = (First, Second)>,
+    {
+        let mut leave = |memory| {
+            report(events, || DataEvent::DataLost(DataLoss::LeftBehind));
+            returned(memory);
         };
-        book.right = Some(right);
-        book.clear();
+        if on_side!(self, side, false, |right, _queues| withdraw_held(
+            right, port, &mut leave
+        )) {
+            self.book_mut(side).clear();
+        }
     }
 
     /// The port's A-MPDU limits at the aggregate rate changed: every TID's
@@ -1033,8 +1106,8 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         let sides = [ArenaSide::First, ArenaSide::Second];
         sides
             .into_iter()
-            .find(|side| self.book(*side).takes() && self.book(*side).pending != 0)
-            .or_else(|| sides.into_iter().find(|side| self.book(*side).takes()))
+            .find(|side| self.takes(*side) && self.book(*side).pending != 0)
+            .or_else(|| sides.into_iter().find(|side| self.takes(*side)))
     }
 
     /// The TID whose frames the standby holds: only its next frames join
@@ -1060,7 +1133,10 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         numbers: &mut TxNumbers,
         key: Option<&mut T>,
         now: Instant,
-    ) -> Intake<P::Memory> {
+    ) -> Intake<P::Memory>
+    where
+        P::Layout: Layout<Longs = (First, Second)>,
+    {
         let refused = |msdu: OutboundMsdu<P::Memory>, reason| Intake::Refused {
             memory: msdu.memory,
             reason,
@@ -1134,60 +1210,57 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
             }
         }
         let epoch = self.epoch;
-        let Self {
-            first,
-            second,
-            next,
-            ..
-        } = self;
-        let book = match side {
-            ArenaSide::First => first,
-            ArenaSide::Second => second,
-        };
         // An empty arena opens for the frame's TID: one that is open and
         // holds nothing goes idle first, since it was opened for another.
         if count == 0 {
-            let idle = match book.right.take() {
-                Some(Held::Open(arena)) => Some(port.withdraw(arena, &mut |_memory| {})),
-                Some(Held::Idle(idle)) => Some(idle),
-                Some(held @ Held::Air(_)) => {
-                    book.right = Some(held);
-                    None
-                }
-                None => None,
-            };
-            if let Some(idle) = idle {
-                book.right = Some(Held::Open(port.open(idle, link, tid.tid())));
-            }
+            on_side!(self, side, (), |right, _queues| reopen(
+                right, port, link, tid
+            ));
         }
         // A book names 64 positions: a book that took them all takes no
         // more until the arena empties, as a full arena.
-        let Some(position) = Position::new(if count == 0 { 0 } else { book.taken }) else {
-            return Intake::Wait(msdu, Waits::Arena);
-        };
-        let Some(Held::Open(arena)) = book.right.as_mut() else {
-            return Intake::Wait(msdu, Waits::Arena);
-        };
-        let Ok(place) = port.place(arena, length) else {
-            // Its slots are full: the next settlement frees one.
+        let taken = self.book(side).taken;
+        let Some(position) = Position::new(if count == 0 { 0 } else { taken }) else {
             return Intake::Wait(msdu, Waits::Arena);
         };
         let counter = numbers.counter(tid);
-        let ccmp = match (protection, key) {
-            (DataProtection::Open, _) => None,
-            (DataProtection::Ccmp(()), Some(key)) => match key.draw() {
-                Ok(packet_number) => {
-                    Some(CcmpHeader::new(packet_number, CcmpKeyId::PAIRWISE).encode())
-                }
-                // The place goes unwritten: the arena keeps its slot.
-                Err(_) => return refused(msdu, IntakeRefusal::PacketNumberExhausted),
-            },
-            (DataProtection::Ccmp(()), None) => return refused(msdu, IntakeRefusal::NoKey),
+        // The front is made once the chain has a place: its packet number
+        // is drawn then, and its sequence number taken after.
+        let front = || {
+            let ccmp = match (protection, key) {
+                (DataProtection::Open, _) => None,
+                (DataProtection::Ccmp(()), Some(key)) => match key.draw() {
+                    Ok(packet_number) => {
+                        Some(CcmpHeader::new(packet_number, CcmpKeyId::PAIRWISE).encode())
+                    }
+                    // The place goes unwritten: the arena keeps its slot.
+                    Err(_) => return Err(IntakeRefusal::PacketNumberExhausted),
+                },
+                (DataProtection::Ccmp(()), None) => return Err(IntakeRefusal::NoKey),
+            };
+            let sequence_number = counter.take();
+            Ok(move |headroom: &mut [u8; HEADROOM]| {
+                write_front(headroom, &header, tid, sequence_number, ccmp)
+            })
         };
-        let sequence_number = counter.take();
-        place.write(msdu.memory, |headroom| {
-            write_front(headroom, &header, tid, sequence_number, ccmp)
-        });
+        match on_side!(self, side, Written::Full(msdu.memory), |right, _queues| {
+            write_in(right, port, length, msdu.memory, front)
+        }) {
+            Written::Written => {}
+            // Its slots are full: the next settlement frees one.
+            Written::Full(memory) => {
+                return Intake::Wait(
+                    OutboundMsdu {
+                        memory,
+                        length: msdu.length,
+                        priority: msdu.priority,
+                    },
+                    Waits::Arena,
+                );
+            }
+            Written::Refused(memory, reason) => return Intake::Refused { memory, reason },
+        }
+        let book = self.book_mut(side);
         if count == 0 {
             book.epoch = epoch;
             book.tid = tid;
@@ -1198,7 +1271,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         book.pending |= position.bit();
         book.taken = position.0.saturating_add(1);
         book.octets = book.octets.saturating_add(octets);
-        *tid.select_mut(next) = Some(sequence.wrapping_add(1));
+        *tid.select_mut(&mut self.next) = Some(sequence.wrapping_add(1));
         Intake::Taken(tid)
     }
 
@@ -1213,8 +1286,11 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         port: &mut P,
         gate: &GateOpen<'id>,
         now: Instant,
-        how: impl FnOnce(PpduPlan) -> Option<Ppdu<'id, K>>,
-    ) -> Option<PpduPlan> {
+        how: &mut impl PlanRates<'id, K>,
+    ) -> Option<PpduPlan>
+    where
+        P::Layout: Layout<Longs = (First, Second)>,
+    {
         let side = self.publishable()?;
         self.publication_of(port, gate, now, side, how)
     }
@@ -1227,8 +1303,11 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         gate: &GateOpen<'id>,
         now: Instant,
         side: ArenaSide,
-        how: impl FnOnce(PpduPlan) -> Option<Ppdu<'id, K>>,
-    ) -> Option<PpduPlan> {
+        how: &mut impl PlanRates<'id, K>,
+    ) -> Option<PpduPlan>
+    where
+        P::Layout: Layout<Longs = (First, Second)>,
+    {
         let link = self.current()?;
         let book = self.book(side);
         let frames = book.count();
@@ -1256,48 +1335,35 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         let protect = |rate: &oer_protocols_ieee80211_contracts_port::PortRate<'id, K>| {
             policy.every_he_txop_protection(rate.get())
         };
-        let ppdu = match (how(plan)?, kind) {
-            (Ppdu::Single(single), PpduKind::Single) => {
-                Ppdu::Single(single.with_protection(protect))
+        // The rate selection answers the kind the plan asks, in its own
+        // type: no answer is of another kind.
+        let (ppdu, alone) = match kind {
+            PpduKind::Single => {
+                let single = how.single(plan)?.with_protection(protect);
+                (LongPpdu::Single(single), single)
             }
-            (Ppdu::Aggregate { rate, alone, .. }, PpduKind::Aggregate { spacing }) => {
-                Ppdu::Aggregate {
-                    rate,
-                    spacing,
-                    protection: policy.every_he_txop_protection(rate.rate().get()),
-                    alone: alone.with_protection(protect),
-                }
-            }
-            (Ppdu::Single(_), PpduKind::Aggregate { .. })
-            | (Ppdu::Aggregate { .. }, PpduKind::Single)
-            | (Ppdu::NoAck { .. } | Ppdu::Group { .. } | Ppdu::BlockAckRequest { .. }, _) => {
-                return None;
-            }
-        };
-        let alone = match ppdu {
-            Ppdu::Single(plan) | Ppdu::Aggregate { alone: plan, .. } => plan,
-            Ppdu::NoAck { .. } | Ppdu::Group { .. } | Ppdu::BlockAckRequest { .. } => {
-                return None;
+            PpduKind::Aggregate { spacing } => {
+                let AggregateRates { rate, alone } = how.aggregate(plan)?;
+                let alone = alone.with_protection(protect);
+                (
+                    LongPpdu::Aggregate(AggregatePpdu {
+                        rate,
+                        spacing,
+                        protection: policy.every_he_txop_protection(rate.rate().get()),
+                        alone,
+                    }),
+                    alone,
+                )
             }
         };
-        // The chain goes on its TID's queue, whose right it takes; while the
-        // queue carries a chain, the chain waits.
+        // The chain goes on its TID's queue, which it takes; while the queue
+        // carries a chain, the chain waits.
         let category = self.book(side).tid.access_category();
-        let lane = self.lane_mut(category);
-        let Lane::Free(_) = lane else {
-            return None;
-        };
-        let Lane::Free(queue) = core::mem::replace(lane, Lane::Carrying) else {
-            return None;
-        };
+        let sent = on_side!(self, side, None, |right, queues| publish_held(
+            right, queues, category, port, ppdu, gate, now
+        ))?;
         let book = self.book_mut(side);
-        let Some(Held::Open(arena)) = book.right.take() else {
-            *self.lane_mut(category) = Lane::Free(queue);
-            return None;
-        };
-        let on_air = port.publish(arena, queue, ppdu, gate, now);
-        // What went: the arena's first frames, as many as the port sent.
-        let sent = on_air.sent().count();
+        // What went: the chain's first frames, as many as the port sent.
         let (psdu, octets) = book.held().take(usize::from(sent)).fold(
             (0_u32, 0_u32),
             |(psdu, octets), (_, frame)| {
@@ -1307,7 +1373,6 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
                 )
             },
         );
-        book.right = Some(Held::Air(on_air));
         book.published = Some(Published {
             alone,
             psdu,
@@ -1326,12 +1391,8 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         let sides = [ArenaSide::First, ArenaSide::Second];
         sides
             .into_iter()
-            .find(|side| self.book(*side).publishable() && self.book(*side).retained)
-            .or_else(|| {
-                sides
-                    .into_iter()
-                    .find(|side| self.book(*side).publishable())
-            })
+            .find(|side| self.side_publishable(*side) && self.book(*side).retained)
+            .or_else(|| sides.into_iter().find(|side| self.side_publishable(*side)))
     }
 }
 
@@ -1424,23 +1485,21 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         facts: TxFacts,
         gate: Option<&GateOpen<'id>>,
         now: Instant,
-        how: impl FnOnce(PpduPlan) -> Option<Ppdu<'id, K>>,
+        how: &mut impl PlanRates<'id, K>,
         mut returned: impl FnMut(P::Memory),
         events: &mut impl EventSink<DataEvent>,
     ) -> Option<Settled<P::Ack, P::BlockAck, P::Denial>>
     where
         P: DataPort<'id, Caps = K, Ack: Copy, BlockAck: Copy, Denial: Copy>,
+        P::Layout: Layout<Longs = (First, Second)>,
     {
         let side = [ArenaSide::First, ArenaSide::Second]
             .into_iter()
-            .find(|side| self.book(*side).on_air())?;
-        let (outcome, sent, acknowledged) = {
-            let Some(Held::Air(on_air)) = &self.book(side).right else {
-                return None;
-            };
-            let ended = port.ended(facts, on_air, now)?;
-            (ended.outcome, ended.sent, ended.acknowledged)
-        };
+            .find(|side| self.side_on_air(*side))?;
+        let (outcome, sent, acknowledged) =
+            on_side!(self, side, None, |right, _queues| ended_held(
+                right, port, facts, now
+            ))?;
         let book = self.book(side);
         let published = book.published?;
         let tid = book.tid;
@@ -1458,20 +1517,17 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
             && acknowledged == sent
             && sent.len() == u32::from(count);
         let retry = self.current().and_then(|link| link.retry);
-        let book = self.book_mut(side);
-        let Some(Held::Air(on_air)) = book.right.take() else {
-            return None;
-        };
-        book.published = None;
+        self.book_mut(side).published = None;
         if !current {
             // An ended link's frames neither retry nor move its windows.
-            let (settled, queue) = port.settle(on_air, FrameSet::EMPTY, &mut returned);
-            let right = match settled {
-                Kept::Kept(arena) => port.withdraw(arena, &mut returned),
-                Kept::Idle(idle) => idle,
-            };
-            book.right = Some(Held::Idle(right));
-            self.lane_back(queue);
+            on_side!(self, side, None, |right, queues| settle_held(
+                right,
+                queues,
+                port,
+                FrameSet::EMPTY,
+                &mut returned,
+                Afterward::Withdraw
+            ))?;
             let book = self.book_mut(side);
             book.clear();
             return Some(Settled {
@@ -1485,6 +1541,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
                 ahead: None,
             });
         }
+        let book = self.book_mut(side);
         let sent_count = sent.count();
         let mut decision = Decision::default();
         match &outcome {
@@ -1547,13 +1604,15 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
             decision.pending |= original.bit();
         }
         let retried = ones(decision.pending);
-        let (settled, queue) = port.settle(on_air, decision.keep, &mut returned);
-        let right = match settled {
-            Kept::Kept(arena) => Held::Open(arena),
-            Kept::Idle(idle) => Held::Idle(idle),
-        };
-        book.right = Some(right);
-        self.lane_back(queue);
+        let keep = decision.keep;
+        on_side!(self, side, None, |right, queues| settle_held(
+            right,
+            queues,
+            port,
+            keep,
+            &mut returned,
+            Afterward::Keep
+        ))?;
         let book = self.book_mut(side);
         if decision.pending == 0 {
             book.clear();
@@ -1586,7 +1645,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         // A whole BlockAck lets the other arena go at once: after the
         // settlement, which gives back the queue's right it needs.
         let ahead = match gate {
-            Some(gate) if whole && self.book(other(side)).publishable() => {
+            Some(gate) if whole && self.side_publishable(other(side)) => {
                 self.publication_of(port, gate, now, other(side), how)
             }
             _ => None,
@@ -1686,6 +1745,174 @@ fn write_front(
         (*c0, *c1, *c2, *c3, *c4, *c5, *c6, *c7) = (p0, p1, p2, p3, p4, p5, p6, p7);
     }
     front_of(header)
+}
+
+/// What a settlement leaves of a chain that kept frames.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Afterward {
+    /// Its frames are kept for their retry: the chain stays open.
+    Keep,
+    /// An ended link's: the kept frames go home too, and the chain is idle.
+    Withdraw,
+}
+
+/// A long chain's place's key for the engine's search.
+#[cfg(test)]
+fn held_key<M, const SLOTS: usize>(place: Option<&LongPlace<'_, M, SLOTS>>) -> std::string::String {
+    match place.map(LongPlace::now) {
+        None => std::string::String::from("moving"),
+        Some(LongIs::Idle) => std::string::String::from("idle"),
+        Some(LongIs::Open(frames)) => std::format!("open{frames}"),
+        Some(LongIs::OnAir(sent, _)) => std::format!("air{}", FrameSet::prefix(sent).bits()),
+    }
+}
+
+/// Withdraw the frames of the open chain of `place`, each through `leave`:
+/// it is idle after. Whether it was open.
+fn withdraw_held<'id, P, M, const SLOTS: usize>(
+    place: &mut LongPlace<'id, M, SLOTS>,
+    port: &mut P,
+    leave: &mut impl FnMut(P::Memory),
+) -> bool
+where
+    P: DataPort<'id>,
+    M: LongIn<<P::Layout as Layout>::Longs>,
+{
+    match place.state() {
+        LongNow::Open(open) => {
+            open.withdraw(port, leave);
+            true
+        }
+        LongNow::Idle(_) | LongNow::OnAir(_) => false,
+    }
+}
+
+/// Open the chain of `place` for `link` and `tid`: an open one that holds
+/// nothing goes idle first. A chain on the air stays.
+fn reopen<'id, P, M, const SLOTS: usize>(
+    place: &mut LongPlace<'id, M, SLOTS>,
+    port: &mut P,
+    link: &P::Link<oer_protocols_ieee80211_contracts_port::Station>,
+    tid: WmmUserPriority,
+) where
+    P: DataPort<'id>,
+    M: LongIn<<P::Layout as Layout>::Longs>,
+{
+    let idle = match place.state() {
+        LongNow::Open(open) => open.withdraw(port, &mut |_memory| {}),
+        LongNow::Idle(idle) => idle,
+        LongNow::OnAir(_) => return,
+    };
+    idle.open(port, link, tid.tid());
+}
+
+/// What a write into a chain did with the memory.
+enum Written<M> {
+    /// The frame is in its place.
+    Written,
+    /// The chain has no free place: the memory comes back.
+    Full(M),
+    /// The front could not be made: the memory comes back, refused.
+    Refused(M, IntakeRefusal),
+}
+
+/// Write `memory` into the next place of length `length` of the open chain
+/// of `place`, its front made by `front` once the place is found.
+fn write_in<'id, P, M, const SLOTS: usize, W>(
+    place: &mut LongPlace<'id, M, SLOTS>,
+    port: &mut P,
+    length: MpduLength<P::Caps>,
+    memory: P::Memory,
+    front: impl FnOnce() -> Result<W, IntakeRefusal>,
+) -> Written<P::Memory>
+where
+    P: DataPort<'id>,
+    M: LongIn<<P::Layout as Layout>::Longs>,
+    W: FnOnce(&mut [u8; HEADROOM]) -> HeaderLen,
+{
+    let LongNow::Open(mut open) = place.state() else {
+        return Written::Full(memory);
+    };
+    let Ok(frame) = open.place(port, length) else {
+        return Written::Full(memory);
+    };
+    match front() {
+        Ok(front) => {
+            frame.write(memory, front);
+            Written::Written
+        }
+        Err(reason) => Written::Refused(memory, reason),
+    }
+}
+
+/// Publish the open chain of `place` on the queue of `category` as `ppdu`,
+/// when that queue is free: how many frames went.
+fn publish_held<'id, P, M, const SLOTS: usize>(
+    place: &mut LongPlace<'id, M, SLOTS>,
+    queues: &mut QueuePlaces<'id>,
+    category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
+    port: &mut P,
+    ppdu: LongPpdu<'id, P::Caps>,
+    gate: &GateOpen<'id>,
+    now: Instant,
+) -> Option<u8>
+where
+    P: DataPort<'id>,
+    M: LongIn<<P::Layout as Layout>::Longs>,
+{
+    let (LongNow::Open(open), QueueNow::Free(free)) =
+        (place.state(), queues.at_mut(category).state())
+    else {
+        return None;
+    };
+    Some(open.publish(free, port, ppdu, gate, now).went())
+}
+
+/// The end of the chain on the air of `place`, read in place: its outcome,
+/// the frames that went and those acknowledged.
+fn ended_held<'id, P, M, const SLOTS: usize>(
+    place: &mut LongPlace<'id, M, SLOTS>,
+    port: &mut P,
+    facts: TxFacts,
+    now: Instant,
+) -> Option<EndOf<'id, P>>
+where
+    P: DataPort<'id, Ack: Copy, BlockAck: Copy, Denial: Copy>,
+    M: LongIn<<P::Layout as Layout>::Longs>,
+{
+    let LongNow::OnAir(on_air) = place.state() else {
+        return None;
+    };
+    let ended = on_air.ended(port, facts, now)?;
+    Some((ended.outcome, ended.sent, ended.acknowledged))
+}
+
+/// Settle the ended chain of `place`, the frames of `keep` kept: its
+/// queue's place is free again. A chain that keeps frames stays open with
+/// them, or, for an ended link's, withdraws them too. Whether it was on the
+/// air.
+fn settle_held<'id, P, M, const SLOTS: usize>(
+    place: &mut LongPlace<'id, M, SLOTS>,
+    queues: &mut QueuePlaces<'id>,
+    port: &mut P,
+    keep: FrameSet,
+    returned: &mut impl FnMut(P::Memory),
+    afterward: Afterward,
+) -> Option<()>
+where
+    P: DataPort<'id>,
+    M: LongIn<<P::Layout as Layout>::Longs>,
+{
+    let LongNow::OnAir(on_air) = place.state() else {
+        return None;
+    };
+    match (on_air.settle(port, keep, returned, queues), afterward) {
+        (LongSettled::Kept(open), Afterward::Withdraw) => {
+            open.withdraw(port, returned);
+        }
+        (LongSettled::Kept(_) | LongSettled::Idle(_), _) => {}
+    }
+    Some(())
 }
 
 #[cfg(test)]

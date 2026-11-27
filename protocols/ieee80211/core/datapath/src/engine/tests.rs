@@ -5,13 +5,13 @@
 use super::*;
 use crate::AggregateRetry;
 use crate::model::{Running, running};
-use crate::plane::{AggregateRate, HtLimits, PpduKind};
+use crate::plane::{AggregateRate, AggregateRates, HtLimits};
 use core::num::NonZeroU8;
 use oer_portable_time::Duration;
 use oer_protocols_ieee802_wire::Eui48;
 use oer_protocols_ieee80211_contracts_port::DataPort;
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduRate, FrameSet, HEADROOM, Ppdu, Protection, RetryStage,
+    AmpduRate, FrameSet, HEADROOM, Protection, RetryStage,
 };
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, InstalledCcmpTxKey, SoftwareCcmpKey,
@@ -29,6 +29,7 @@ use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::phy::{
     HtGuardInterval, HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
 };
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_ieee80211_wire::security::LinkProtection;
 use oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate;
 use std::collections::VecDeque;
@@ -54,17 +55,11 @@ pub(super) const CLIENT_A: [u8; 6] = [2, 0, 0, 0, 0, 0x0a];
 pub(super) const CLIENT_B: [u8; 6] = [2, 0, 0, 0, 0, 0x0b];
 pub(super) const DESTINATION: [u8; 6] = [2, 0, 0, 0, 0, 0x10];
 pub(super) const PAYLOAD: usize = 100;
-pub(super) const ETHERNET: usize = 14;
 pub(super) const BEST_EFFORT: WmmAccessCategory = WmmAccessCategory::BestEffort;
 
 /// The tests' receive window: below the model port's eight staging places
 /// (`WINDOW < STAGING`).
 pub(super) const MODEL_WINDOW: usize = MODEL_PLACES - 1;
-
-/// A station's single places in the tests.
-pub(super) const STATION_SINGLES: usize = 8;
-/// An access point's controller's.
-pub(super) const AP_SINGLES: usize = 17;
 
 /// Key material of a test key, which software alone owns.
 pub(super) struct TestKey;
@@ -81,12 +76,11 @@ pub(super) type StationEngine<'id, const POOL: usize> =
 /// window `W`: the search's small port takes the model's numbers.
 pub(super) type StationEngineOn<'id, const POOL: usize, const P: usize, const W: usize> = Engine<
     'id,
-    ModelPort<'id, StationModel<STATION_SINGLES>, P>,
+    ModelPort<'id, StationModel, P>,
     Arenas,
     Key,
     1,
     POOL,
-    STATION_SINGLES,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
     MODEL_CHAIN_SLOTS,
@@ -96,12 +90,11 @@ pub(super) type StationEngineOn<'id, const POOL: usize, const P: usize, const W:
 /// An access point's engine of `PEERS` clients over the model port.
 pub(super) type ApEngine<'id, const PEERS: usize, const POOL: usize> = Engine<
     'id,
-    ModelPort<'id, AccessPointModel<AP_SINGLES, PEERS>>,
+    ModelPort<'id, AccessPointModel<PEERS>>,
     Singles,
     Key,
     PEERS,
     POOL,
-    AP_SINGLES,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
     MODEL_CHAIN_SLOTS,
@@ -226,16 +219,27 @@ pub(super) fn once<R>(rate: R) -> RetryPlan<R> {
 /// learned.
 pub(super) struct Fixed<'id> {
     pub plan: RetryPlan<PortRate<'id, ModelCaps>>,
-    pub single: Ppdu<'id, ModelCaps>,
-    pub aggregate: Ppdu<'id, ModelCaps>,
+    pub aggregate: AggregateRates<'id, ModelCaps>,
     pub lessons: usize,
 }
 
 impl<'id> Rates<'id, ModelCaps> for Fixed<'id> {
-    fn arena(&mut self, _peer: u8, plan: PpduPlan) -> Option<Ppdu<'id, ModelCaps>> {
-        Some(match plan.kind {
-            PpduKind::Single => self.single,
-            PpduKind::Aggregate { .. } => self.aggregate,
+    fn arena_single(
+        &mut self,
+        _peer: u8,
+        _plan: PpduPlan,
+    ) -> Option<RetryPlan<PortRate<'id, ModelCaps>>> {
+        Some(self.plan)
+    }
+
+    fn arena_aggregate(
+        &mut self,
+        _peer: u8,
+        _plan: PpduPlan,
+    ) -> Option<AggregateRates<'id, ModelCaps>> {
+        Some(AggregateRates {
+            rate: self.aggregate.rate,
+            alone: self.aggregate.alone,
         })
     }
 
@@ -350,11 +354,8 @@ pub(super) fn fixed<'id, L: Served, const P: usize>(port: &ModelPort<'id, L, P>)
     let aggregate: AmpduRate<'id, ModelCaps> = port.ampdu_rate(port.rate(ht()).unwrap()).unwrap();
     Fixed {
         plan: once(single),
-        single: Ppdu::Single(once(single)),
-        aggregate: Ppdu::Aggregate {
+        aggregate: AggregateRates {
             rate: aggregate,
-            spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
-            protection: Protection::None,
             alone: once(single),
         },
         lessons: 0,
@@ -397,17 +398,18 @@ fn fresh_numbers() -> TxNumbers {
 }
 
 /// An access point's open link to `client`.
-pub(super) fn client_link(client: [u8; 6]) -> ClientLink {
+pub(super) fn client_link(client: [u8; 6]) -> ClientLink<ModelLink> {
     ClientLink {
         client,
         access_point: ACCESS_POINT_ADDRESS,
         qos: PeerQos::Qos,
+        port: ModelLink { protected: false },
         numbers: fresh_numbers(),
     }
 }
 
 /// What a section is lent, held apart from the engine.
-pub(super) struct Around<'id, L, const P: usize = MODEL_PLACES> {
+pub(super) struct Around<'id, L: Served, const P: usize = MODEL_PLACES> {
     pub port: ModelPort<'id, L, P>,
     pub net: Net,
     pub rates: Fixed<'id>,
@@ -497,7 +499,7 @@ pub(super) fn agree<'id, const POOL: usize>(
     peer: &mut LinkedPeer<'_, StationEngine<'id, POOL>>,
     tid: WmmUserPriority,
     size: u16,
-    around: &mut Around<'id, StationModel<STATION_SINGLES>>,
+    around: &mut Around<'id, StationModel>,
 ) {
     let NamePlace::Unnamed(unnamed) = peer.naming() else {
         panic!("no TID is named");
@@ -512,11 +514,11 @@ pub(super) fn agree<'id, const POOL: usize>(
 /// A station's engine flowing, its gate open, linked, aggregating at HT
 /// MCS 7.
 fn station<'id, const POOL: usize, const P: usize, const W: usize>(
-    run: Running<'id, StationModel<STATION_SINGLES>, P>,
+    run: Running<'id, StationModel, P>,
     engine: &mut StationEngineOn<'id, POOL, P, W>,
     attempts: u8,
     lifetime: Duration,
-) -> Around<'id, StationModel<STATION_SINGLES>, P> {
+) -> Around<'id, StationModel, P> {
     let Running {
         port,
         data: rights,
@@ -559,7 +561,7 @@ fn key_change(byte: u8) -> KeyChange<Key> {
 /// Ask the station's linked access point's key to change to `byte`'s.
 fn change_key<'id, const POOL: usize>(
     engine: &mut StationEngine<'id, POOL>,
-    around: &mut Around<'id, StationModel<STATION_SINGLES>>,
+    around: &mut Around<'id, StationModel>,
     byte: u8,
 ) -> Rest {
     let mut data = station_flowing(engine);
@@ -600,7 +602,7 @@ fn key_changing<'id, const POOL: usize>(engine: &mut StationEngine<'id, POOL>) -
 /// the installation ended.
 #[test]
 fn a_key_changes_behind_its_command_and_its_end_runs_the_intake() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         let _ = change_key(&mut engine, &mut around, 1);
@@ -626,7 +628,7 @@ fn a_key_changes_behind_its_command_and_its_end_runs_the_intake() {
 /// its end.
 #[test]
 fn a_key_change_waits_for_the_air_and_sends_home_what_the_old_key_wrote() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=2 {
@@ -669,7 +671,7 @@ fn first_sequence<L: Served>(around: &Around<'_, L>, index: usize) -> u16 {
 /// head is owed.
 #[test]
 fn a_key_change_owes_a_block_ack_request_for_a_transmitted_frame_it_sent_home() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -701,7 +703,7 @@ fn a_key_change_owes_a_block_ack_request_for_a_transmitted_frame_it_sent_home() 
 /// drawn. Once the BlockAckReq went, it is owed no more.
 #[test]
 fn a_key_change_owes_a_block_ack_request_to_the_number_it_set_back_and_it_ends_once_sent() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -743,7 +745,7 @@ fn a_key_change_owes_a_block_ack_request_to_the_number_it_set_back_and_it_ends_o
 /// nothing takes from it until its name ends.
 #[test]
 fn a_named_tids_queue_owes_no_round() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(1, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -766,7 +768,7 @@ fn a_named_tids_queue_owes_no_round() {
 /// nothing.
 #[test]
 fn a_whole_aggregates_end_puts_the_standby_on_the_air_as_it_was_written() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -800,7 +802,7 @@ fn a_whole_aggregates_end_puts_the_standby_on_the_air_as_it_was_written() {
 /// frames: it waits for the name's end.
 #[test]
 fn a_named_tids_msdu_does_not_join_its_standby() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -829,7 +831,7 @@ fn a_named_tids_msdu_does_not_join_its_standby() {
 /// aggregate's settlement reports the rate it went at.
 #[test]
 fn an_arena_kept_for_a_retry_goes_before_the_standby() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -872,7 +874,7 @@ fn an_arena_kept_for_a_retry_goes_before_the_standby() {
 /// missed goes home.
 #[test]
 fn an_aggregate_of_an_ended_link_sends_what_it_missed_home() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -903,7 +905,7 @@ fn an_aggregate_of_an_ended_link_sends_what_it_missed_home() {
 /// settles them, not the frames acknowledged before.
 #[test]
 fn an_aggregates_retry_settles_its_missed_frames_alone() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -934,7 +936,7 @@ fn an_aggregates_retry_settles_its_missed_frames_alone() {
 /// alone: missed again, both have no attempt left and go home.
 #[test]
 fn an_aggregates_retry_spends_the_attempts_of_its_missed_frames() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -962,7 +964,7 @@ fn an_aggregates_retry_spends_the_attempts_of_its_missed_frames() {
 /// it missed goes home, and the new link sends none of it.
 #[test]
 fn an_aggregate_of_an_ended_link_keeps_nothing_for_the_next_link() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -999,7 +1001,7 @@ fn an_aggregate_of_an_ended_link_keeps_nothing_for_the_next_link() {
 /// standby's publication without taking the budget.
 #[test]
 fn the_standbys_tid_goes_on_and_another_waits_without_taking_the_budget() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(1, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -1022,7 +1024,7 @@ fn the_standbys_tid_goes_on_and_another_waits_without_taking_the_budget() {
 /// nothing changes.
 #[test]
 fn a_link_without_qos_names_no_tid() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         {
@@ -1065,7 +1067,7 @@ fn a_link_without_qos_names_no_tid() {
 /// from its TIDs' spaces.
 #[test]
 fn the_stations_own_numbers_are_taken_one_by_one_apart_from_its_tids() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -1086,7 +1088,7 @@ fn the_stations_own_numbers_are_taken_one_by_one_apart_from_its_tids() {
 /// round while more wait.
 #[test]
 fn a_section_takes_its_budget_and_owes_a_round_while_more_wait() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(2, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -1108,7 +1110,7 @@ fn a_section_takes_its_budget_and_owes_a_round_while_more_wait() {
 /// the controller is told the installation's end once.
 #[test]
 fn a_rekey_removes_the_installed_key_and_installs_the_new_one() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         let _ = change_key(&mut engine, &mut around, 1);
@@ -1127,7 +1129,7 @@ fn a_rekey_removes_the_installed_key_and_installs_the_new_one() {
 /// new key is not installed, the removal is told, and the data stops.
 #[test]
 fn a_stop_during_a_rekey_installs_no_new_key() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         let _ = change_key(&mut engine, &mut around, 1);
@@ -1158,7 +1160,7 @@ fn a_stop_during_a_rekey_installs_no_new_key() {
 /// the controller is told.
 #[test]
 fn an_expired_installation_leaves_the_link_without_a_key() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.expire_next();
@@ -1174,7 +1176,7 @@ fn an_expired_installation_leaves_the_link_without_a_key() {
 /// only then gives the rights back.
 #[test]
 fn a_stop_during_a_key_change_waits_for_it_removes_the_key_and_closes_the_gate() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
@@ -1202,7 +1204,7 @@ fn a_stop_during_a_key_change_waits_for_it_removes_the_key_and_closes_the_gate()
 
 #[test]
 fn a_station_without_an_agreement_sends_one_mpdu_an_arena_and_delivers_in_order() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=3 {
@@ -1230,7 +1232,7 @@ fn a_station_without_an_agreement_sends_one_mpdu_an_arena_and_delivers_in_order(
 
 #[test]
 fn a_station_under_an_agreement_aggregates_within_its_window() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -1258,7 +1260,7 @@ fn a_station_under_an_agreement_aggregates_within_its_window() {
 
 #[test]
 fn a_station_without_a_link_refuses_what_the_network_offers_at_once() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let Running {
             port, data: rights, ..
         } = run;
@@ -1277,7 +1279,7 @@ fn a_station_without_a_link_refuses_what_the_network_offers_at_once() {
 
 #[test]
 fn a_held_link_keeps_its_data_until_released() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -1299,7 +1301,7 @@ fn a_held_link_keeps_its_data_until_released() {
 /// it.
 #[test]
 fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -1338,7 +1340,7 @@ fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
 /// data MPDU after carries it.
 #[test]
 fn a_named_tid_is_told_its_number_once_its_frames_in_the_arenas_have_gone() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=2 {
@@ -1389,7 +1391,7 @@ fn a_named_tid_is_told_its_number_once_its_frames_in_the_arenas_have_gone() {
 /// a voice MSDU behind a best-effort backlog goes in the next arena.
 #[test]
 fn a_voice_msdu_goes_in_the_next_arena_ahead_of_a_best_effort_backlog() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=3 {
@@ -1415,7 +1417,7 @@ fn a_voice_msdu_goes_in_the_next_arena_ahead_of_a_best_effort_backlog() {
 /// next arena, and goes once its window moves.
 #[test]
 fn a_tid_held_by_its_window_lets_the_other_tid_of_its_category_go() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -1447,7 +1449,7 @@ fn a_tid_held_by_its_window_lets_the_other_tid_of_its_category_go() {
 /// sends each home exactly once.
 #[test]
 fn a_link_that_ends_sends_every_waiting_msdu_home_once() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
@@ -1478,7 +1480,7 @@ fn a_link_that_ends_sends_every_waiting_msdu_home_once() {
 
 #[test]
 fn a_stop_with_an_arena_on_the_air_ends_once_it_ended_and_the_gate_closed() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=3 {
@@ -1515,9 +1517,9 @@ fn a_stop_with_an_arena_on_the_air_ends_once_it_ended_and_the_gate_closed() {
 /// An access point's engine of `PEERS` flowing, its gate open, with two
 /// clients linked.
 fn access_point<'id, const PEERS: usize, const POOL: usize>(
-    run: Running<'id, AccessPointModel<AP_SINGLES, PEERS>>,
+    run: Running<'id, AccessPointModel<PEERS>>,
     engine: &mut ApEngine<'id, PEERS, POOL>,
-) -> Around<'id, AccessPointModel<AP_SINGLES, PEERS>> {
+) -> Around<'id, AccessPointModel<PEERS>> {
     let Running {
         port,
         data: rights,
@@ -1541,42 +1543,37 @@ fn access_point<'id, const PEERS: usize, const POOL: usize>(
     around
 }
 
-/// The data place of `category` in an access point's layout: after the
-/// controller's, in QUEUES' order.
-fn data_place(category: WmmAccessCategory) -> u8 {
-    let offset = oer_protocols_ieee80211_contracts_port::QUEUES
-        .iter()
-        .position(|queued| *queued == category)
-        .unwrap();
-    (AP_SINGLES + offset) as u8
-}
-
 #[test]
-fn an_access_points_msdu_is_copied_into_its_queues_place_and_its_memory_goes_home_at_the_write() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+fn an_access_points_msdu_goes_by_its_handle_and_its_memory_comes_home_at_its_end() {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.offer(7, WmmUserPriority::UP0, CLIENT_B);
+        around.port.set_air(BEST_EFFORT, Air::Hold);
         let _ = engine.offered(&mut around.turn());
-        // Home at the write, before its end.
-        assert_eq!(around.net.home, [7]);
-        let single = around
-            .port
-            .single(data_place(BEST_EFFORT))
-            .unwrap()
-            .to_vec();
+        // On the air by its handle: its memory is the port's until its end.
+        assert!(around.net.home.is_empty());
+        let front = around.port.front(7).unwrap().to_vec();
         // A QoS data frame from the DS: Address 1 the client, 2 the access
-        // point, 3 the source; then LLC/SNAP and the payload, copied.
-        assert_eq!(single[0], 0x88);
-        assert_eq!(single[1] & 0x03, 0x02);
-        assert_eq!(single[4..10], CLIENT_B);
-        assert_eq!(single[10..16], ACCESS_POINT_ADDRESS);
-        assert_eq!(single[16..22], STATION);
-        let payload = &around.net.frames[0].2[ETHERNET..];
-        assert_eq!(&single[26 + 8..], payload);
+        // point, 3 the source; then LLC/SNAP, in front of the body.
+        assert_eq!(front.len(), 26 + 8);
+        assert_eq!(front[0], 0x88);
+        assert_eq!(front[1] & 0x03, 0x02);
+        assert_eq!(front[4..10], CLIENT_B);
+        assert_eq!(front[10..16], ACCESS_POINT_ADDRESS);
+        assert_eq!(front[16..22], STATION);
         around.port.set_air(BEST_EFFORT, Air::Ack);
         let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(around.net.home, [7], "home at its end");
         assert_eq!(around.rates.lessons, 1);
+        assert!(
+            !around
+                .seen
+                .0
+                .iter()
+                .any(|event| matches!(event, Event::Lost(_))),
+            "a delivered single loses nothing"
+        );
     });
 }
 
@@ -1584,7 +1581,7 @@ fn an_access_points_msdu_is_copied_into_its_queues_place_and_its_memory_goes_hom
 /// on the air ended, and its next data MPDU carries it.
 #[test]
 fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         let client = Peer::new(1).unwrap();
@@ -1621,9 +1618,9 @@ fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
             };
             let _ = named.release(&mut around.turn());
         }
-        let single = around.port.single(data_place(BEST_EFFORT)).unwrap();
+        let front = around.port.front(2).unwrap();
         let control = oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
-            single[22], single[23],
+            front[22], front[23],
         ]);
         assert_eq!(SequenceNumber::from_sequence_control(control).get(), 1);
         // The other client's TID, with nothing on the air, is told at once,
@@ -1644,21 +1641,24 @@ fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
 
 #[test]
 fn an_access_points_queue_carries_one_single_and_the_next_waits_for_its_end() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
         around.net.offer(2, WmmUserPriority::UP0, CLIENT_B);
         around.net.offer(3, WmmUserPriority::UP6, CLIENT_B);
         let _ = engine.offered(&mut around.turn());
-        // Voice and best effort each carry one; the second best effort
-        // waits in its queue.
-        assert_eq!(around.net.home, [3, 1]);
+        // Voice and best effort each carry one, by its handle; the second
+        // best effort waits in its queue.
+        assert!(around.net.home.is_empty());
         assert_eq!(engine.queued(), 1);
         around.port.set_air(BEST_EFFORT, Air::NoAck);
         around.port.set_air(WmmAccessCategory::Voice, Air::Ack);
         let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
-        assert_eq!(around.net.home, [3, 1, 2]);
+        // Each end sends its memory home, in the queues' order (voice
+        // first); 2 goes on the freed queue at once.
+        assert_eq!(around.net.home, [3, 1]);
+        assert!(around.port.front(2).is_some(), "2 is on the air");
         assert_eq!(engine.queued(), 0);
         assert!(around.seen.0.contains(&Event::Lost(DataLoss::RetryLimit)));
     });
@@ -1666,7 +1666,7 @@ fn an_access_points_queue_carries_one_single_and_the_next_waits_for_its_end() {
 
 #[test]
 fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
@@ -1680,7 +1680,7 @@ fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
 /// the air when the link ended charges them at its end, after the unlink.
 #[test]
 fn a_second_link_of_a_peer_starts_without_the_first_links_account() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         let queue = QueueId::new(0, WmmUserPriority::UP0).unwrap();
@@ -1713,7 +1713,7 @@ fn a_second_link_of_a_peer_starts_without_the_first_links_account() {
 
 #[test]
 fn an_access_points_stop_waits_for_its_singles_and_every_right_comes_home() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
@@ -1724,11 +1724,8 @@ fn an_access_points_stop_waits_for_its_singles_and_every_right_comes_home() {
             ap_flowing(&mut engine).stop(&mut around.turn()),
             DataStop::Going
         ));
-        assert_eq!(around.net.home, [1, 2]);
-        assert!(
-            around.port.single(data_place(BEST_EFFORT)).is_some(),
-            "1 is on the air"
-        );
+        assert_eq!(around.net.home, [2], "2 was queued: the stop sends it home");
+        assert!(around.port.front(1).is_some(), "1 is on the air");
         around.port.set_air(BEST_EFFORT, Air::Ack);
         let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
         let DataPlace::Stopping(stopping) = engine.data() else {
@@ -1766,7 +1763,6 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         ModelCaps,
         Key,
         1,
-        STATION_SINGLES,
         MODEL_GROUPS,
         MODEL_AGREEMENTS,
         MODEL_CHAIN_SLOTS,
@@ -1778,7 +1774,6 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         ModelCaps,
         Key,
         2,
-        AP_SINGLES,
         MODEL_GROUPS,
         MODEL_AGREEMENTS,
         MODEL_CHAIN_SLOTS,
@@ -1790,7 +1785,7 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         size_of::<DataLink>(),
         size_of::<StationLink<ModelLink>>(),
         size_of::<StationEntry<ModelLink>>(),
-        size_of::<ClientLink>(),
+        size_of::<ClientLink<ModelLink>>(),
         size_of::<DataPlane<'static, ModelCaps, MODEL_CHAIN_SLOTS>>(),
         size_of::<Station>(),
         size_of::<Ap>(),
@@ -1806,10 +1801,10 @@ fn the_sizes_of_the_values_built_into_a_variant() {
 /// whatever its age (it went as one MPDU by its retry plan), so the cases
 /// keep two frames to retry.
 fn aggregating<'id>(
-    run: Running<'id, StationModel<STATION_SINGLES>>,
+    run: Running<'id, StationModel>,
     engine: &mut StationEngine<'id, 8>,
-    before: impl FnOnce(&mut Around<'id, StationModel<STATION_SINGLES>>),
-) -> Around<'id, StationModel<STATION_SINGLES>> {
+    before: impl FnOnce(&mut Around<'id, StationModel>),
+) -> Around<'id, StationModel> {
     let mut around = station(run, engine, 3, Duration::from_millis(1));
     linked(engine, |peer| {
         agree(peer, WmmUserPriority::UP0, 4, &mut around);
@@ -1834,7 +1829,7 @@ fn first_only<L: Served>(around: &mut Around<'_, L>) {
     around.port.acknowledge(FrameSet::prefix(1));
 }
 
-fn expired(around: &Around<'_, StationModel<STATION_SINGLES>>) -> usize {
+fn expired(around: &Around<'_, StationModel>) -> usize {
     around
         .seen
         .0
@@ -1845,7 +1840,7 @@ fn expired(around: &Around<'_, StationModel<STATION_SINGLES>>) -> usize {
 
 #[test]
 fn a_member_missed_within_its_lifetime_is_kept_and_one_missed_after_it_is_dropped_expired() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = aggregating(run, &mut engine, |_| {});
         // Within their lifetime: the missed members are kept and go again.
@@ -1867,7 +1862,7 @@ fn a_member_missed_within_its_lifetime_is_kept_and_one_missed_after_it_is_droppe
 /// network offered it: the time it waited in its queue is not counted.
 #[test]
 fn a_member_that_waited_in_its_queue_past_its_lifetime_still_has_its_lifetime_in_the_arena() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         // The three waited in their queue, held, longer than they live.
         let mut around = aggregating(run, &mut engine, |around| around.pass(5_000));
@@ -1885,7 +1880,7 @@ fn a_member_that_waited_in_its_queue_past_its_lifetime_still_has_its_lifetime_in
 /// goes once more when the gate opens, and that miss drops it expired.
 #[test]
 fn a_kept_member_that_ages_while_the_gate_closes_goes_once_more_and_its_miss_expires_it() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4, POLICY);
         let mut around = aggregating(run, &mut engine, |_| {});
         // The gate's closing is asked while the aggregate is on the air.
@@ -1919,12 +1914,12 @@ fn a_kept_member_that_ages_while_the_gate_closes_goes_once_more_and_its_miss_exp
     });
 }
 
-/// A single that ends while the gate's closing is polled comes back through
-/// the poll's sink: its place and its queue's right are home again, and the
-/// stop gives the proof back.
+/// A single that ends while the gate closes is pulled in the transmit
+/// section: its queue is back before the closing's barrier, which then
+/// ends, and the stop gives the proof back.
 #[test]
-fn a_single_that_ends_during_the_commands_poll_gives_its_place_and_queue_back() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+fn a_single_that_ends_while_the_gate_closes_gives_its_queue_back() {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.port.set_air(BEST_EFFORT, Air::Hold);
@@ -1937,9 +1932,10 @@ fn a_single_that_ends_during_the_commands_poll_gives_its_place_and_queue_back() 
             };
             let _ = open.close(&mut around.turn());
         }
-        // The single ends while the closing is polled, before the barrier.
+        // The single ends while the gate closes: its end is pulled in the
+        // transmit section, before the barrier.
         around.port.set_air(BEST_EFFORT, Air::Ack);
-        around.port.serve_in_next_poll();
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
         let _ = engine.round(&mut around.turn());
         assert_eq!(around.rates.lessons, 1);
         assert!(around.told.gate.is_some());

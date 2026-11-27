@@ -12,7 +12,7 @@
 //! | the receive rules a role may not request, a BSSID the role cannot take | [`SupportedFilter`] of the role, and the station's [`StationReceive`]; an access point's BSSID is its address |
 //! | an unsupported rate | [`PortRate`], checked against the port's channel; a BlockAckReq takes a [`LegacyPortRate`]; a retry plan's stages take checked rates |
 //! | an unsupported power | [`SupportedPower`] |
-//! | a response the frame or rate cannot carry | the buffer's [`TxFrame`] kind: an [`IndividualAddress`] or [`GroupAddress`] receiver, and for no ACK a [`NoAckHeader`] at a [`SupportedNoAck`] rate; the backend writes the QoS Ack Policy from the kind ([`QosControl`]) |
+//! | a response the frame or rate cannot carry | the publication's [`Ppdu`](crate::Ppdu) kind: an [`IndividualAddress`] or [`GroupAddress`] receiver, and for no ACK a [`NoAckHeader`] at a [`SupportedNoAck`] rate; the port writes the QoS Ack Policy from the kind ([`QosControl`]) |
 //! | a busy queue, no free buffer | a transmit ticket and buffers of a class ([`TxBufferClass`](crate::TxBufferClass)), tokens the caller holds; the backend keeps an attempt its queue cannot take yet |
 //! | a duplicate attempt identifier | the ticket, which comes back with the terminal |
 //! | an invalid length | [`MpduLength`] and [`ClassFrame`](crate::ClassFrame) |
@@ -238,14 +238,8 @@ impl<K> core::fmt::Debug for SupportedChannel<K> {
 pub trait InterfaceRole: crate::life::sealed::Sealed + 'static {
     /// The role: the hardware's selector a port reads from the type.
     const ROLE: VifRole;
-    /// The role's data places: none (a station's data goes in the arenas),
-    /// or one a transmit queue (an access point's).
-    type Data<'id>;
     /// The role's receive rule over the capabilities `K`.
     type Receive<K>;
-    /// The role's data places, for the installation's mint alone, indexed
-    /// from `first`.
-    fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id>;
 }
 
 /// The station role.
@@ -261,22 +255,12 @@ impl crate::life::sealed::Sealed for AccessPoint {}
 
 impl InterfaceRole for Station {
     const ROLE: VifRole = VifRole::Station;
-    type Data<'id> = ();
     type Receive<K> = StationReceive<K>;
-
-    fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id> {
-        crate::data::station_data(seal, first)
-    }
 }
 
 impl InterfaceRole for AccessPoint {
     const ROLE: VifRole = VifRole::AccessPoint;
-    type Data<'id> = crate::AccessPointData<'id>;
     type Receive<K> = crate::AccessPointReceive<K>;
-
-    fn data<'id>(seal: crate::MintSeal, first: u8) -> Self::Data<'id> {
-        crate::data::access_point_data(seal, first)
-    }
 }
 
 /// Receive rules an interface of role `R` may request of `K`.
@@ -626,8 +610,8 @@ pub enum QosBody {
 }
 
 /// The QoS Control field of a QoS data frame, but its Ack Policy: the
-/// backend writes that from the frame's response
-/// (its [`TxFrame`] kind), the one source of it.
+/// port writes that from the frame's response
+/// (its [`Ppdu`](crate::Ppdu) kind), the one source of it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct QosControl {
     /// The traffic identifier of this QoS data frame.
@@ -934,62 +918,6 @@ impl ResponseHeader for HeaderSpec<GroupAddress> {
     const ACK_POLICY: QosAckPolicy = QosAckPolicy::NoAck;
     fn into_header(self) -> HeaderSpec<Self::Address> {
         self
-    }
-}
-
-/// What a buffer request describes: the frame's kind, its header and its
-/// rate, from which its response follows. Only the kinds the hardware
-/// sends exist, so a frame and its response never disagree.
-#[derive(Debug)]
-pub enum TxFrame<'p, K> {
-    /// An individual data or management frame, which solicits an ACK.
-    Individual {
-        /// Checked acknowledged header and complete MPDU length.
-        frame: SizedFrame<AckHeader, K>,
-        /// The port-bound rates and retry budget of this attempt.
-        plan: crate::RetryPlan<PortRate<'p, K>>,
-    },
-    /// An individual frame that solicits no ACK and says so, at a rate that
-    /// carries one without it.
-    IndividualNoAck {
-        /// Checked unacknowledged header and complete MPDU length.
-        frame: SizedFrame<NoAckHeader, K>,
-        /// A port-bound rate that supports individual No Ack frames.
-        rate: SupportedNoAck<'p, K>,
-    },
-    /// A group data or management frame, which solicits no response.
-    Group {
-        /// Checked group receiver, header and complete MPDU length.
-        frame: SizedFrame<HeaderSpec<GroupAddress>, K>,
-        /// The port-bound rate of this group transmission.
-        rate: PortRate<'p, K>,
-    },
-    /// A BlockAckReq, which solicits a BlockAck, at a non-HT rate.
-    BlockAckRequest {
-        /// The peer asked to return its Block Ack state.
-        receiver: IndividualAddress,
-        /// The address of the requesting transmitter.
-        transmitter: Eui48,
-        /// The traffic identifier of the Block Ack agreement.
-        tid: Tid,
-        /// The first sequence number requested in the Block Ack window.
-        starting_sequence: SequenceNumber,
-        /// The non-HT rates and retry budget of the request.
-        plan: crate::RetryPlan<LegacyPortRate<'p, K>>,
-    },
-}
-
-impl<K> TxFrame<'_, K> {
-    /// The MPDU's length without its FCS: the length its buffer holds.
-    pub const fn mpdu_len(&self) -> usize {
-        match self {
-            Self::Individual { frame, .. } => frame.len.len as usize,
-            Self::IndividualNoAck { frame, .. } => frame.len.len as usize,
-            Self::Group { frame, .. } => frame.len.len as usize,
-            Self::BlockAckRequest { .. } => {
-                oer_protocols_ieee80211_wire::block_ack::BLOCK_ACK_REQUEST_LEN
-            }
-        }
     }
 }
 

@@ -1,19 +1,20 @@
 #![no_std]
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
-    Chain, DataPort, QueueRight, GateOpen, OnAir, PortRate, Ppdu, Protection, RetryPlan, RetryStage,
+    DataPort, FreeQueue, GateOpen, Layout, LongIn, LongOnAir, LongPpdu, OpenLong, PortRate,
+    Protection, RetryPlan, RetryStage,
 };
 // A rate is checked for one installation: another installation's goes to
 // none of this port's publications.
-pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
+pub fn publish<'p, 'a, 'b, P: DataPort<'a>, M: LongIn<<P::Layout as Layout>::Longs>, const S: usize>(
     port: &mut P,
-    arena: Chain<'a, S>,
-    queue: QueueRight<'a>,
+    open: OpenLong<'p, 'a, M, S>,
+    queue: FreeQueue<'_, 'a, ()>,
     own: PortRate<'a, P::Caps>,
     foreign: PortRate<'b, P::Caps>,
     gate: &GateOpen<'a>,
     now: Instant,
-) -> OnAir<'a, S> {
+) -> LongOnAir<'p, 'a, M, S> {
     let _ = (&own, &foreign);
     #[cfg(ui_reject)]
     let rate = foreign; // ui-error: lifetime may not live long enough
@@ -24,5 +25,5 @@ pub fn publish<'a, 'b, P: DataPort<'a>, const S: usize>(
         transmissions: core::num::NonZeroU8::MIN,
         protection: Protection::None,
     });
-    port.publish(arena, queue, Ppdu::Single(plan), gate, now) // ui-error: lifetime may not live long enough
+    open.publish(queue, port, LongPpdu::Single(plan), gate, now) // ui-error: lifetime may not live long enough
 }

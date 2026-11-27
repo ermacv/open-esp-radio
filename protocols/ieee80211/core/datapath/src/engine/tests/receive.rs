@@ -105,7 +105,7 @@ pub(super) fn beacon(sequence: u16) -> Vec<u8> {
 }
 
 /// The Ethernet frame a lent unit at `place` holds.
-fn lent_frame(around: &Around<'_, StationModel<STATION_SINGLES>>, index: usize) -> Vec<u8> {
+fn lent_frame(around: &Around<'_, StationModel>, index: usize) -> Vec<u8> {
     let (unit, span) = &around.net.lent[index];
     let bytes = around.port.place_bytes(unit.place()).unwrap();
     let start = usize::from(span.offset);
@@ -121,7 +121,7 @@ fn refusals<const POOL: usize>(engine: &mut StationEngine<'_, POOL>) -> RxRefusa
 /// frame, written in its place, and the controller is told nothing.
 #[test]
 fn received_data_is_lent_to_the_network_as_an_ethernet_frame_and_the_controller_is_told_nothing() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&data(1, IPV4, 9), meta());
@@ -145,7 +145,7 @@ fn received_data_is_lent_to_the_network_as_an_ethernet_frame_and_the_controller_
 /// does not decode, so it reaches neither the network nor the controller.
 #[test]
 fn a_frame_whose_header_does_not_decode_reaches_no_one() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&data(1, IPV4, 9)[..20], meta());
@@ -161,7 +161,7 @@ fn a_frame_whose_header_does_not_decode_reaches_no_one() {
 /// the round, and back to the ring at its close.
 #[test]
 fn management_and_eapol_are_read_by_the_controller_inside_the_round() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&beacon(1), meta());
@@ -186,7 +186,7 @@ fn management_and_eapol_are_read_by_the_controller_inside_the_round() {
 /// and none waits in the ring.
 #[test]
 fn every_management_frame_is_read_in_its_round_and_none_waits() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         for sequence in 0..6 {
@@ -204,7 +204,7 @@ fn every_management_frame_is_read_in_its_round_and_none_waits() {
 /// another BSS's data back, a management frame to the controller.
 #[test]
 fn every_staged_unit_is_routed_once() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         let mut foreign = data(2, IPV4, 2);
@@ -228,7 +228,7 @@ fn every_staged_unit_is_routed_once() {
 /// refused late while a younger unit waits on.
 #[test]
 fn above_the_lend_limit_a_unit_is_copied_then_waits_from_its_own_moment() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 1;
@@ -297,7 +297,7 @@ fn above_the_lend_limit_a_unit_is_copied_then_waits_from_its_own_moment() {
 /// plane, which a later round reads through.
 #[test]
 fn a_newcomer_at_the_last_free_place_is_refused_and_the_place_stays_free() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 1;
@@ -334,7 +334,7 @@ fn a_newcomer_at_the_last_free_place_is_refused_and_the_place_stays_free() {
 /// order, and a late head of one does not refuse the other's younger unit.
 #[test]
 fn a_held_clients_unit_leaves_at_the_head_and_the_others_go_in_order() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         around.net.lend_limit = 1;
@@ -402,7 +402,7 @@ fn lent_tag<L: Served>(around: &Around<'_, L>) -> u8 {
 /// the refusals are counted by reason, each saturating.
 #[test]
 fn refusals_are_counted_by_reason() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         // Protected without the port's evidence.
@@ -449,7 +449,7 @@ fn refusals_are_counted_by_reason() {
 /// order (`tasks/215`).
 #[test]
 fn a_frame_that_does_not_decapsulate_is_refused_at_once_behind_what_waits() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 0;
@@ -500,7 +500,7 @@ fn a_frame_that_does_not_decapsulate_is_refused_at_once_behind_what_waits() {
 /// CCMP header left before the Ethernet frame.
 #[test]
 fn verified_protected_data_is_delivered_after_its_ccmp_header() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&protected(1, 5), verified());
@@ -514,7 +514,7 @@ fn verified_protected_data_is_delivered_after_its_ccmp_header() {
 /// the network.
 #[test]
 fn a_protected_link_takes_unprotected_eapol_alone() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         {
@@ -554,7 +554,7 @@ fn a_protected_link_takes_unprotected_eapol_alone() {
 /// An A-MSDU's MSDUs are each written in place and copied, in order.
 #[test]
 fn an_a_msdus_msdus_are_copied_each_in_order() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&amsdu(&[1, 2, 3]), meta());
@@ -576,7 +576,7 @@ fn an_a_msdus_msdus_are_copied_each_in_order() {
 /// the engine's places are quiet; a lent unit is the machine's to wait for.
 #[test]
 fn a_stop_delivers_nothing_and_sends_back_what_waited() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 1;
@@ -599,7 +599,7 @@ fn a_stop_delivers_nothing_and_sends_back_what_waited() {
 /// of no linked client to the controller, of no peer.
 #[test]
 fn an_access_points_client_data_goes_to_the_network() {
-    running::<AccessPointModel<AP_SINGLES, 2>, _>(|run| {
+    running::<AccessPointModel<2>, _>(|run| {
         let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         let mut to_ds = data(1, IPV4, 6);
@@ -663,7 +663,7 @@ fn bar(starting: u16) -> Vec<u8> {
 }
 
 /// The tags of the data the network got, in order.
-fn tags(around: &Around<'_, StationModel<STATION_SINGLES>>) -> Vec<u8> {
+fn tags(around: &Around<'_, StationModel>) -> Vec<u8> {
     around
         .net
         .received
@@ -682,7 +682,7 @@ fn tags(around: &Around<'_, StationModel<STATION_SINGLES>>) -> Vec<u8> {
 /// was taken: the agreement added by its command, its reply sent.
 fn agreed<'id>(
     engine: &mut StationEngine<'id, 8>,
-    around: &mut Around<'id, StationModel<STATION_SINGLES>>,
+    around: &mut Around<'id, StationModel>,
     starting: u16,
 ) {
     around.port.land(&addba(starting), meta());
@@ -703,7 +703,7 @@ fn agreed<'id>(
 /// is owed only once the agreement runs.
 #[test]
 fn an_addba_request_adds_its_agreement_by_a_command_and_owes_its_response() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&addba(100), meta());
@@ -725,10 +725,7 @@ fn key_busy<const POOL: usize>(engine: &mut StationEngine<'_, POOL>) -> bool {
     busy
 }
 
-fn agreed_after<'id>(
-    engine: &mut StationEngine<'id, 8>,
-    around: &mut Around<'id, StationModel<STATION_SINGLES>>,
-) {
+fn agreed_after<'id>(engine: &mut StationEngine<'id, 8>, around: &mut Around<'id, StationModel>) {
     let _ = engine.round(&mut around.turn());
     assert_eq!(around.told.replies, 1);
     assert!(!key_busy(engine));
@@ -740,7 +737,7 @@ fn agreed_after<'id>(
 /// and what the reorder still holds when the link carries again goes once.
 #[test]
 fn a_frame_held_for_reorder_is_delivered_once_the_link_carries_again() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);
@@ -777,7 +774,7 @@ fn a_frame_held_for_reorder_is_delivered_once_the_link_carries_again() {
 /// count, and the link's release delivers nothing of it.
 #[test]
 fn a_frame_the_reorder_releases_while_the_link_is_held_is_refused() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);
@@ -802,7 +799,7 @@ fn a_frame_the_reorder_releases_while_the_link_is_held_is_refused() {
 /// goes, and the request goes back to the ring.
 #[test]
 fn a_block_ack_request_releases_what_it_moves_past() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);
@@ -820,7 +817,7 @@ fn a_block_ack_request_releases_what_it_moves_past() {
 /// in order.
 #[test]
 fn the_reorder_keeps_a_place_for_the_frame_that_closes_its_hole() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);
@@ -847,7 +844,7 @@ fn the_reorder_keeps_a_place_for_the_frame_that_closes_its_hole() {
 /// return.
 #[test]
 fn the_holes_frame_at_the_last_place_moves_the_window_and_is_refused() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);
@@ -885,7 +882,7 @@ fn the_holes_frame_at_the_last_place_moves_the_window_and_is_refused() {
 /// back to the ring: nothing delivered, nothing refused.
 #[test]
 fn a_control_frame_without_an_agreement_goes_back() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&bar(5), meta());
@@ -901,7 +898,7 @@ fn a_control_frame_without_an_agreement_goes_back() {
 /// home with its slot.
 #[test]
 fn a_stop_ends_the_agreements_and_their_slots_come_home() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);
@@ -937,7 +934,7 @@ fn a_stop_ends_the_agreements_and_their_slots_come_home() {
 /// window: the frame after it must not wait for the gap.
 #[test]
 fn architect_eapol_of_the_agreements_tid_leaves_no_hole() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);
@@ -960,7 +957,7 @@ fn architect_eapol_of_the_agreements_tid_leaves_no_hole() {
 /// A unit that waits is not overtaken by a later one the network can borrow.
 #[test]
 fn architect_a_later_unit_does_not_overtake_one_that_waits() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 1;
@@ -980,7 +977,7 @@ fn architect_a_later_unit_does_not_overtake_one_that_waits() {
 /// waits does not overtake it.
 #[test]
 fn architect_a_released_unit_does_not_overtake_one_that_waits() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 0);
@@ -1002,7 +999,7 @@ fn architect_a_released_unit_does_not_overtake_one_that_waits() {
 /// starts no second agreement of the TID.
 #[test]
 fn architect_a_request_repeated_during_its_addition_adds_one_agreement() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&addba(100), meta());
@@ -1029,7 +1026,7 @@ fn architect_a_request_repeated_during_its_addition_adds_one_agreement() {
 /// for an agreement's command is told when that command ends.
 #[test]
 fn architect_the_end_of_an_agreements_command_is_told() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);
@@ -1087,7 +1084,7 @@ fn architect_the_end_of_an_agreements_command_is_told() {
 /// releases both.
 #[test]
 fn architect_units_given_back_leave_the_reorders_room() {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         agreed(&mut engine, &mut around, 100);

@@ -150,9 +150,9 @@ enum KeyTold {
 /// The engine and everything around it.
 struct World<'id> {
     engine: StationEngine<'id, POOL>,
-    around: Around<'id, StationModel<STATION_SINGLES>>,
+    around: Around<'id, StationModel>,
     /// The data's rights, the machine's while the data is stopped.
-    stopped: Option<ModelRights<'id, StationModel<STATION_SINGLES>>>,
+    stopped: Option<ModelRights<'id, StationModel>>,
     /// The controller's, while closed.
     gate: Option<GateClosed<'id>>,
     left: Bounds,
@@ -194,7 +194,7 @@ struct World<'id> {
 }
 
 impl<'id> World<'id> {
-    fn new(run: Running<'id, StationModel<STATION_SINGLES>>, bounds: Bounds) -> Self {
+    fn new(run: Running<'id, StationModel>, bounds: Bounds) -> Self {
         let Running {
             port,
             data: rights,
@@ -487,10 +487,7 @@ impl<'id> World<'id> {
 
     /// The MSDUs the arenas hold.
     fn arena_ids(&self) -> Vec<u32> {
-        [0, 1]
-            .into_iter()
-            .flat_map(|chain| self.around.port.arena_memories(chain))
-            .collect()
+        self.around.port.long_memories()
     }
 
     fn aired_of(&self, id: u32) -> u8 {
@@ -499,11 +496,7 @@ impl<'id> World<'id> {
 
     /// The MSDUs of the arena on the air, in its order: a publication's.
     fn on_air_ids(&self) -> Vec<u32> {
-        self.around
-            .port
-            .on_air_chain()
-            .map(|chain| self.around.port.arena_memories(chain))
-            .unwrap_or_default()
+        self.around.port.on_air_memories()
     }
 
     /// The model's checks of a publication and of the arenas, from what the
@@ -871,10 +864,7 @@ impl<'id> World<'id> {
 
     /// The MSDUs in each place.
     fn places(&self) -> (Vec<u32>, Vec<u32>, usize) {
-        let arenas = [0, 1]
-            .into_iter()
-            .flat_map(|chain| self.around.port.arena_memories(chain))
-            .collect();
+        let arenas = self.around.port.long_memories();
         let waiting = self
             .around
             .net
@@ -1058,7 +1048,7 @@ struct Visit {
 }
 
 fn replay(path: &[Step], bounds: Bounds) -> Visit {
-    running::<StationModel<STATION_SINGLES>, _>(|run| {
+    running::<StationModel, _>(|run| {
         let mut world = World::new(run, bounds);
         let mut sent = None;
         for (index, step) in path.iter().enumerate() {

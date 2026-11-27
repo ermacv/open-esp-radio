@@ -8,7 +8,8 @@ its own: every instant and every arena is its caller's. It holds today:
   (`Network`), the rate policy (`Rates`) and the controller's end
   (`Told`): its transmit half and its receive half (below). Its state is a sum: the data is `Stopped`, or flowing or
   stopping with what it holds while it runs (a station's plane built with
-  its arenas, or an access point's lanes, the gate with the command's
+  its long chains' and queues' places, or an access point's queues'
+  places, a lane each, the gate with the command's
   place, the rights), and a peer is free or linked with its link. A
   controller acts through views of these places (`DataPlace`, `PeerPlace`,
   `GatePlace`, and on a station's linked peer `KeyPlace`), whose handles
@@ -23,7 +24,7 @@ its own: every instant and every arena is its caller's. It holds today:
   the interface's receive rule's right is held off (`ReceiveOff`), its
   controller asking for its rule until step 16 sets it through the engine;
   a key's command and the gate's closing stop the intake;
-- `plane`: the station's data transmission over the port's two data arenas;
+- `plane`: the station's data transmission over the port's two long chains;
 - `numbers`: the link's transmit numbers (`TxNumbers`: each TID's QoS
   sequence space and the station's own space, which management frames and
   non-QoS data share; the pairwise key's transmit half with its CCMP packet
@@ -109,12 +110,15 @@ ends the agreements by their commands before the key and the gate. An
 access point's receive agreements are phase D's: its banks stay free.
 
 The station's data transmission over the port's two long chains (its
-arenas) and the four queues' rights. `DataPlane::new` takes the
-installation's two idle chains and the rights; each book holds its
-chain's right in its place: idle, open or on the air, and each queue's
-right is free in the plane or held by the chain on the air. A chain goes
-on its TID's queue and takes its right; while that queue carries a chain,
-the chain waits. A settlement gives the right back.
+arenas, `First` and `Second`) and the four queues. `DataPlane::new` takes
+the installation's two idle long chains and the queues and builds their
+places (`LongPlace`, `QueuePlaces`); beside each book its chain's place is
+idle, open or on the air, of its marker's type. A chain goes on its TID's
+queue, whose place it leaves carried; while that queue carries a chain, the
+chain waits. A settlement frees the queue's place. The rate selection
+answers the kind the plane asks in its own type (`PlanRates::single`, a
+retry plan; `PlanRates::aggregate`, an aggregate's rates), so no answer is
+of a kind the plane did not ask.
 `DataPlane::link` takes one link's `DataLink` (header template,
 `AcAdmission`, retry policy, HT limits and each TID's `TxWindow`) into its
 `Linkage::Linked` variant, and `DataPlane::stop` ends it, after returning
@@ -137,9 +141,9 @@ earlier publication first, then the standby; more frames than one as an
 A-MPDU under the TID's agreement (`Ppdu::Aggregate`, with the access
 point's spacing and the protection the BSS asks), the longest prefix its
 rate admits going, else a single MPDU of the arena's first frame
-(`Ppdu::Single`), so the frames of a TID whose agreement ended drain one
+(`LongPpdu::Single`), so the frames of a TID whose agreement ended drain one
 MPDU at a time. `DataPlane::completed` reads the arena's end in place, settles it
-(`DataPort::settle`, which gives its queue's right back), then, when a
+(`DataPort::settle`, which gives its queue back), then, when a
 BlockAck acknowledged every frame the arena held, publishes the other
 arena at once (`Settled::ahead`).
 Acknowledged frames are delivered; missing ones of an A-MPDU are kept in

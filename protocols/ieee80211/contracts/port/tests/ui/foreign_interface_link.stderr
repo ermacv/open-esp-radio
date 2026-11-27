@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/foreign_interface_link.rs:20:51
+   |
+20 |     let _open = idle.open::<AccessPoint, P>(port, station, tid); // ui-error: E0308
+   |                      ----------------------       ^^^^^^^ expected `&<P as DataPort<'_>>::Link<AccessPoint>`, found `&<P as DataPort<'_>>::Link<Station>`
+   |                      |
+   |                      arguments to this method are incorrect
+   |
+   = note: expected reference `&<P as DataPort<'_>>::Link<oer_protocols_ieee80211_contracts_port::AccessPoint>`
+              found reference `&<P as DataPort<'id>>::Link<oer_protocols_ieee80211_contracts_port::Station>`
+note: method defined here
+  --> src/data/places.rs
+   |
+   |     pub fn open<I: InterfaceRole, P: DataPort<'id>>(
+   |            ^^^^

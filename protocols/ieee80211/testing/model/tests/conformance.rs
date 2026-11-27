@@ -32,9 +32,6 @@ use oer_protocols_ieee80211_testing_model::{
 };
 use oer_protocols_radio_port::{Mint, branded};
 
-/// The single places of the station: its eight purposes.
-const SINGLES: usize = 8;
-
 const ANOMALIES: [Anomaly; 4] = [
     Anomaly::MacFatal,
     Anomaly::CompletionStatus,
@@ -53,7 +50,7 @@ fn channel(number: u8) -> SupportedChannel<ModelCaps> {
     .unwrap()
 }
 
-struct Model<'id, L: Served = StationModel<SINGLES>> {
+struct Model<'id, L: Served = StationModel> {
     port: ModelPort<'id, L>,
     memory: u32,
 }
@@ -109,6 +106,11 @@ impl<'id, L: Served> suite::Harness<'id, L> for Model<'id, L> {
             self.port.set_air(category, Air::Ack);
         }
     }
+    fn answer_nothing(&mut self) {
+        for category in oer_protocols_ieee80211_contracts_port::QUEUES {
+            self.port.set_air(category, Air::NoAck);
+        }
+    }
     fn record(&self) -> Vec<Programmed> {
         self.port.record().to_vec()
     }
@@ -125,8 +127,8 @@ impl<'id, L: Served> suite::Harness<'id, L> for Model<'id, L> {
 }
 
 /// Run `body` with a fresh installation of the model's station.
-fn installed(body: impl for<'id> FnOnce(Model<'id>, suite::Rights<'id, StationModel<SINGLES>>)) {
-    installed_as::<StationModel<SINGLES>>(body);
+fn installed(body: impl for<'id> FnOnce(Model<'id>, suite::Rights<'id, StationModel>)) {
+    installed_as::<StationModel>(body);
 }
 
 /// Run `body` with a fresh installation of the model of the layout `L`.
@@ -249,7 +251,7 @@ fn a_stop_ends_everything_on_the_air() {
 
 #[test]
 fn no_call_returns_an_error() {
-    suite::no_call_returns_an_error::<ModelPort<'static, StationModel<SINGLES>>>();
+    suite::no_call_returns_an_error::<ModelPort<'static, StationModel>>();
 }
 
 /// The addresses lie in the unit's twelve octets before the EtherType, and
@@ -285,7 +287,7 @@ fn a_units_addresses_are_written_before_its_ether_type() {
 /// An access point of two clients: each client's key goes alone.
 #[test]
 fn a_clients_key_goes_alone() {
-    installed_as::<AccessPointModel<SINGLES, 2>>(|mut model, rights| {
+    installed_as::<AccessPointModel<2>>(|mut model, rights| {
         suite::a_clients_key_goes_alone(&mut model, rights);
     });
 }
@@ -354,7 +356,256 @@ fn a_stop_returns_every_chain_and_queue_fails_when_the_stop_leaves_them() {
 /// own queue: the radio numbers its chains once.
 #[test]
 fn chains_of_one_descriptor_of_both_kinds_are_apart() {
-    installed_as::<StationModelOf<SINGLES, 1>>(|mut model, rights| {
+    installed_as::<StationModelOf<1>>(|mut model, rights| {
         suite::chains_on_two_queues_end_each_with_its_queue(&mut model, rights);
     });
+}
+
+/// The four kinds of a publication, each on a queue's chain of one, each
+/// with its own response.
+#[test]
+fn each_kind_ends_with_its_own_response() {
+    installed(|mut model, rights| {
+        suite::each_kind_ends_with_its_own_response(&mut model, rights);
+    });
+}
+
+/// The case fails on a model that answers every kind as acknowledged data.
+#[test]
+#[should_panic(expected = "each kind ends with the response it solicits")]
+fn each_kind_ends_with_its_own_response_fails_when_the_model_answers_one_response() {
+    installed(|mut model, rights| {
+        model.port.fault(Fault::OneResponse);
+        suite::each_kind_ends_with_its_own_response(&mut model, rights);
+    });
+}
+
+/// A role's frame comes home by its handle at its end and at a stop.
+#[test]
+fn a_role_frame_comes_home_at_its_end_and_at_a_stop() {
+    installed(|mut model, rights| {
+        suite::a_role_frame_comes_home_at_its_end_and_at_a_stop(&mut model, rights);
+    });
+}
+
+/// The case fails on a model whose settlement keeps a role's frame.
+#[test]
+#[should_panic(expected = "the role's frame came home at its end")]
+fn a_role_frame_comes_home_fails_when_the_model_keeps_it() {
+    installed(|mut model, rights| {
+        model.port.fault(Fault::RoleFramesStay);
+        suite::a_role_frame_comes_home_at_its_end_and_at_a_stop(&mut model, rights);
+    });
+}
+
+/// A port of `PLACES` staging places of a fresh installation of the
+/// model's station, with its rights, to `body`.
+fn port_of<const PLACES: usize>(
+    body: impl for<'id> FnOnce(
+        ModelPort<'id, StationModel, PLACES>,
+        oer_protocols_ieee80211_contracts_port::LayoutRights<'id, StationModel>,
+        oer_protocols_ieee80211_contracts_port::GateClosed<'id>,
+    ),
+) {
+    let future = core::pin::pin!(branded(async |mint: Mint<'_, PortPools<StationModel>>| {
+        let install = mint.into_pools();
+        body(
+            ModelPort::new(install.key, install.issuer, channel(1)),
+            install.data,
+            install.gate,
+        );
+    }));
+    let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
+    assert!(core::future::Future::poll(future, &mut cx).is_ready());
+}
+
+/// The receive fact follows the ring and the staging places: raised while
+/// a frame waits and a place is free, quiet without a free place; a round's
+/// close asks for another round while frames wait and a place is free.
+#[test]
+fn the_receive_fact_follows_the_ring_and_its_places() {
+    use oer_protocols_ieee80211_contracts_port::{DataPort, Rest, Signal};
+    let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
+    port_of::<MODEL_PLACES>(|mut port, _, _| {
+        assert_eq!(port.poll_facts(&mut cx).rx, Signal::Quiet, "nothing waits");
+        for _ in 0..MODEL_PLACES + 2 {
+            port.land(
+                &suite::data_mpdu(20),
+                RxMeta::unavailable(channel(6).channel()),
+            );
+        }
+        assert_eq!(port.poll_facts(&mut cx).rx, Signal::Raised, "frames wait");
+        let mut round = Round::open(&mut port, suite::NOW);
+        while let Some(_unit) = round.staged() {}
+        assert_eq!(
+            round.close(),
+            Rest::Round,
+            "frames wait and places are free"
+        );
+    });
+    port_of::<0>(|mut port, _, _| {
+        port.land(
+            &suite::data_mpdu(20),
+            RxMeta::unavailable(channel(6).channel()),
+        );
+        assert_eq!(
+            port.poll_facts(&mut cx).rx,
+            Signal::Quiet,
+            "no place is free to stage it"
+        );
+        let round = Round::open(&mut port, suite::NOW);
+        assert_eq!(round.close(), Rest::Signal, "no place is free");
+    });
+}
+
+/// The transmit fact follows the air: quiet while a chain is held, raised
+/// once its air answers, and still raised while its end waits to be
+/// settled; a queue's place keeps what its holder noted of its frame until
+/// its settlement.
+#[test]
+fn the_transmit_fact_follows_the_air_and_a_place_keeps_its_note() {
+    use oer_protocols_ieee80211_contracts_port::{
+        DataPort, HEADROOM, HeaderLen, OneFrame, OnePpdu, PhyRate, Protection, QueueNow,
+        QueuePlaces, RetryPlan, RetryStage,
+    };
+    use oer_protocols_ieee80211_wire::qos::{Tid, WmmAccessCategory as Ac};
+    let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
+    port_of::<MODEL_PLACES>(|mut port, (radio, _), gate| {
+        let open = port.open_gate(gate);
+        let mut queues = QueuePlaces::<'_, u8>::new(radio.queues);
+        assert_eq!(port.poll_facts(&mut cx).tx, None, "nothing is on the air");
+        port.set_air(Ac::Voice, Air::Hold);
+        let rate = port
+            .rate(PhyRate::Legacy(
+                oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm6M,
+            ))
+            .unwrap();
+        let plan = RetryPlan::new(RetryStage {
+            rate,
+            transmissions: core::num::NonZeroU8::MIN,
+            protection: Protection::None,
+        });
+        let QueueNow::Free(free) = queues.at_mut(Ac::Voice).state() else {
+            panic!("voice is free");
+        };
+        let _ = free.send::<Station, _, _>(
+            &mut port,
+            OneFrame {
+                link: &ModelLink { protected: false },
+                tid: Tid::constant::<0>(),
+                body: ModelMemory {
+                    id: 1,
+                    len: 4,
+                    front: [0; HEADROOM],
+                },
+                header: |_headroom: &mut [u8; HEADROOM]| HeaderLen::new(24).unwrap(),
+            },
+            OnePpdu::Acked(plan),
+            &open,
+            suite::NOW,
+            7,
+        );
+        assert_eq!(queues.at(Ac::Voice).one(), Some(&7), "the note is kept");
+        assert_eq!(
+            port.poll_facts(&mut cx).tx,
+            None,
+            "a held chain raises nothing"
+        );
+        port.set_air(Ac::Voice, Air::Ack);
+        assert!(
+            port.poll_facts(&mut cx).tx.is_some(),
+            "an answered air raises"
+        );
+        let QueueNow::One(one) = queues.at_mut(Ac::Voice).state() else {
+            panic!("the frame is on the air");
+        };
+        assert!(
+            one.ended(
+                &mut port,
+                oer_protocols_ieee80211_contracts_port::TxFacts::DUE,
+                suite::NOW
+            )
+            .is_some()
+        );
+        port.set_air(Ac::Voice, Air::Hold);
+        assert!(
+            port.poll_facts(&mut cx).tx.is_some(),
+            "an end not yet settled stays raised"
+        );
+        let (_free, note) = one.settle(&mut port, &mut |_memory| {});
+        assert_eq!(note, 7);
+        assert_eq!(
+            queues.at(Ac::Voice).one(),
+            None,
+            "the note left with the frame"
+        );
+        assert_eq!(
+            port.poll_facts(&mut cx).tx,
+            None,
+            "nothing is on the air again"
+        );
+    });
+}
+
+/// The model's state key changes with what the hardware holds: a search
+/// that merges equal states merges no two different ones.
+#[test]
+fn the_state_key_changes_with_the_hardware() {
+    port_of::<MODEL_PLACES>(|mut port, _, _| {
+        let before = port.state_key();
+        port.set_air(
+            oer_protocols_ieee80211_wire::qos::WmmAccessCategory::Voice,
+            Air::Hold,
+        );
+        let held = port.state_key();
+        assert_ne!(before, held, "an air the hardware holds is state");
+        port.land(
+            &suite::data_mpdu(20),
+            RxMeta::unavailable(channel(6).channel()),
+        );
+        assert_ne!(held, port.state_key(), "a frame on the ring is state");
+    });
+}
+
+/// A long chain of one descriptor takes one frame and refuses a second
+/// place: its descriptors are full.
+#[test]
+fn a_full_long_chain_takes_no_more_frames() {
+    use oer_protocols_ieee80211_contracts_port::{
+        HEADROOM, HeaderLen, LayoutRights, LongNow, LongPlace,
+    };
+    let future = core::pin::pin!(branded(
+        async |mint: Mint<'_, PortPools<StationModelOf<1>>>| {
+            let install = mint.into_pools();
+            let mut port: ModelPort<'_, StationModelOf<1>> =
+                ModelPort::new(install.key, install.issuer, channel(1));
+            let (radio, _): LayoutRights<'_, StationModelOf<1>> = install.data;
+            let (first, _) = radio.chains;
+            let mut place = LongPlace::new(first);
+            let LongNow::Idle(idle) = place.state() else {
+                panic!("the chain is idle");
+            };
+            let mut open = idle.open::<Station, _>(
+                &mut port,
+                &ModelLink { protected: false },
+                oer_protocols_ieee80211_wire::qos::Tid::constant::<0>(),
+            );
+            let length = MpduLength::new(30).unwrap();
+            let memory = |id| ModelMemory {
+                id,
+                len: 4,
+                front: [0; HEADROOM],
+            };
+            open.place(&mut port, length)
+                .expect("one descriptor is free")
+                .write(memory(1), |_headroom| HeaderLen::new(26).unwrap());
+            assert!(
+                open.place(&mut port, length).is_err(),
+                "a full chain takes no more"
+            );
+            assert_eq!(open.frames(), 1);
+        }
+    ));
+    let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
+    assert!(core::future::Future::poll(future, &mut cx).is_ready());
 }

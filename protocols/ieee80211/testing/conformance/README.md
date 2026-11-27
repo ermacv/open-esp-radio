@@ -21,7 +21,9 @@ the port's answers against them; it reads no bookkeeping of the port's.
 | --- | --- |
 | `every_right_is_in_exactly_one_place` | A run, its data path (the gate opened, a pairwise key installed and removed, the gate closed) and its stop hand every right back; a retirement takes them whole and the release ends the port |
 | `a_second_run_is_as_the_first` | What the hardware programs in a run after a stop equals the first run's, and its state after each stop equals its state before the first start; after each anomaly, and after a stop whose last resort ran; the gate is closed at each start and the data's rights are home after each stop |
-| `a_stop_ends_everything_on_the_air` | A single on the air when the stop comes ends withdrawn through the sink; its place and queue come back |
+| `a_stop_ends_everything_on_the_air` | A role's frame on a queue's chain of one when the stop comes ends withdrawn; its memory comes home at its settlement and its queue is back |
+| `each_kind_ends_with_its_own_response` | The four kinds of a publication on the queues' chains of one: an acknowledged single ends with its ACK, a frame without acknowledgement and a group frame with none solicited, a BlockAckReq with its BlockAck; with nothing answering, the two that solicit a response time out and the others are delivered |
+| `a_role_frame_comes_home_at_its_end_and_at_a_stop` | A role's frame by its memory's handle comes home at its end's settlement, and at a stop's |
 | `the_indication_holds_until_the_stop` | An anomaly raises "the port needs a stop" in the facts, with no payload, until the stop |
 | `a_unit_is_in_one_place` | A unit taken in a round stays in its place, named by its handle; one not taken goes back at the close |
 | `a_publication_sends_the_prefix_its_rate_admits` | An aggregate at a rate that admits less than the arena holds sends the longest prefix as an A-MPDU; the rest stay with no attempt spent |

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::cost::{Response, transmission_micros};
-use crate::model::{Installed, SINGLES, installed};
+use crate::model::{Installed, installed};
 use core::num::{NonZeroU8, NonZeroU16};
 use oer_portable_time::Duration;
 use oer_protocols_ieee802_wire::{Eui48, IndividualAddress};
@@ -118,8 +118,28 @@ fn once<R>(rate: R) -> RetryPlan<R> {
 }
 
 /// The plane over a running model installation.
+/// The rates a test's plane publishes at: the single's plan and the
+/// aggregate's rates, each answering its own kind.
+struct Both<'id> {
+    single: RetryPlan<PortRate<'id, ModelCaps>>,
+    aggregate: AggregateRates<'id, ModelCaps>,
+}
+
+impl<'id> PlanRates<'id, ModelCaps> for Both<'id> {
+    fn single(&mut self, _plan: PpduPlan) -> Option<RetryPlan<PortRate<'id, ModelCaps>>> {
+        Some(self.single)
+    }
+
+    fn aggregate(&mut self, _plan: PpduPlan) -> Option<AggregateRates<'id, ModelCaps>> {
+        Some(AggregateRates {
+            rate: self.aggregate.rate,
+            alone: self.aggregate.alone,
+        })
+    }
+}
+
 struct World<'id> {
-    port: ModelPort<'id, StationModel<SINGLES>>,
+    port: ModelPort<'id, StationModel>,
     gate: GateOpen<'id>,
     plane: DataPlane<'id, ModelCaps, MODEL_CHAIN_SLOTS>,
     single: PortRate<'id, ModelCaps>,
@@ -213,44 +233,25 @@ impl<'id> World<'id> {
         assert_eq!(self.take(tag, tid), Intake::Taken(tid));
     }
 
-    /// The PPDUs a plan goes as: a single's and an aggregate's (the plane
+    /// The rates a plan goes at: a single's and an aggregate's (the plane
     /// takes the spacing from its plan).
-    fn ppdus(
-        single: PortRate<'id, ModelCaps>,
-        aggregate: AmpduRate<'id, ModelCaps>,
-    ) -> [Ppdu<'id, ModelCaps>; 2] {
-        [
-            Ppdu::Single(once(single)),
-            Ppdu::Aggregate {
+    fn rates(single: PortRate<'id, ModelCaps>, aggregate: AmpduRate<'id, ModelCaps>) -> Both<'id> {
+        Both {
+            single: once(single),
+            aggregate: AggregateRates {
                 rate: aggregate,
-                spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
-                protection: Protection::None,
                 alone: once(single),
             },
-        ]
-    }
-
-    /// The PPDU of `plan`, lent.
-    fn how(
-        ppdus: &[Ppdu<'id, ModelCaps>; 2],
-    ) -> impl FnOnce(PpduPlan) -> Option<Ppdu<'id, ModelCaps>> {
-        let [single, aggregate] = *ppdus;
-        move |plan| {
-            Some(match plan.kind {
-                PpduKind::Single => single,
-                PpduKind::Aggregate { .. } => aggregate,
-            })
         }
     }
 
     /// Publish the next arena; its plan and the fronts the model sent.
     fn publish(&mut self) -> (PpduPlan, Vec<Vec<u8>>) {
         let now = self.now();
-        let ppdus = Self::ppdus(self.single, self.aggregate);
-        let how = Self::how(&ppdus);
+        let mut how = Self::rates(self.single, self.aggregate);
         let plan = self
             .plane
-            .publication(&mut self.port, &self.gate, now, how)
+            .publication(&mut self.port, &self.gate, now, &mut how)
             .unwrap();
         let frames = self.port.published().last().unwrap().frames.clone();
         (plan, frames)
@@ -268,8 +269,7 @@ impl<'id> World<'id> {
 
     fn settle_with(&mut self, events: &mut impl EventSink<DataEvent>) -> Settled<(), (), ()> {
         let now = self.now();
-        let ppdus = Self::ppdus(self.single, self.aggregate);
-        let how = Self::how(&ppdus);
+        let mut how = Self::rates(self.single, self.aggregate);
         let returned = &mut self.returned;
         let settled = self
             .plane
@@ -278,7 +278,7 @@ impl<'id> World<'id> {
                 TxFacts::DUE,
                 Some(&self.gate),
                 now,
-                how,
+                &mut how,
                 |memory| returned.push(memory),
                 events,
             )
@@ -1182,27 +1182,23 @@ fn he_publication(link: DataLink, rate: PhyRate, frames: u8) -> Vec<Protection> 
         let single = world.port.rate(rate).unwrap();
         let aggregate = world.aggregate;
         let now = world.now();
-        let ppdus = [
-            Ppdu::Single(
-                once(single)
-                    .then(RetryStage {
-                        rate: single,
-                        transmissions: NonZeroU8::MIN,
-                        protection: Protection::None,
-                    })
-                    .ok()
-                    .unwrap(),
-            ),
-            Ppdu::Aggregate {
+        let mut how = Both {
+            single: once(single)
+                .then(RetryStage {
+                    rate: single,
+                    transmissions: NonZeroU8::MIN,
+                    protection: Protection::None,
+                })
+                .ok()
+                .unwrap(),
+            aggregate: AggregateRates {
                 rate: aggregate,
-                spacing: oer_protocols_ieee80211_wire::ht::MinimumMpduStartSpacing::NoRestriction,
-                protection: Protection::None,
                 alone: once(single),
             },
-        ];
+        };
         world
             .plane
-            .publication(&mut world.port, &world.gate, now, World::how(&ppdus))
+            .publication(&mut world.port, &world.gate, now, &mut how)
             .unwrap();
         let publication = world.port.published().last().unwrap();
         assert_eq!(

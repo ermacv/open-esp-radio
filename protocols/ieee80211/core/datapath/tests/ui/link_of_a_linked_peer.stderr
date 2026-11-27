@@ -1,7 +1,7 @@
 error[E0599]: no method named `link` found for struct `LinkedPeer<'a, E>` in the current scope
-  --> tests/ui/link_of_a_linked_peer.rs:31:14
+  --> tests/ui/link_of_a_linked_peer.rs:30:14
    |
-31 |         peer.link(); // ui-error: E0599
+30 |         peer.link(); // ui-error: E0599
    |              ^^^^
    |
 help: there is a method `unlink` with a similar name, but with different arguments
