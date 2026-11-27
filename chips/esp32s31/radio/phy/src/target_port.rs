@@ -65,7 +65,7 @@ use crate::{
         },
         saturation::{PhyRxSaturationCompletion, PhyRxSaturationExternalBinding},
     },
-    state::{PhyCalibrationCache, PhyState, client::PhyPendingTracking},
+    state::{PhyCalibrationCache, PhyState},
     target_executor::{
         PhyTargetPortError, complete_bluetooth_i2c, complete_bluetooth_pbus, complete_channel_i2c,
         complete_dcode_i2c, complete_final_i2c, complete_i2c_configuration, complete_masked_i2c,
@@ -76,6 +76,7 @@ use crate::{
         complete_tx_dc_pwdet_search_pbus, complete_tx_power_i2c, complete_txiq_init_i2c,
         complete_txiq_pbus, write_i2c_direct,
     },
+    tracking::parameters::PhyParamTrackingTransition,
     tracking::{
         calibration::{
             PhyCalibrationForceTxRxTransition, PhyCalibrationTrackingAction,
@@ -115,15 +116,14 @@ use crate::{
     },
 };
 
-mod concurrent;
-pub use concurrent::{
-    ConcurrentPhyRegisterFailure, ConcurrentPhyRegistration, ConcurrentPhyTrackingError,
-    ConcurrentRfError, ConcurrentTrackingTick, ConcurrentWifiChannelError, close_concurrent_rf,
-    maintain_concurrent_phy, register_concurrent_phy, select_concurrent_wifi_channel,
-    switch_concurrent_wifi_channel, track_concurrent_phy, wake_concurrent_rf,
+mod owner;
+pub use owner::{
+    ChannelFailure, CloseFailure, Registered, RegistrationCause, RegistrationFailure,
+    TrackingFailure, WakeFailure, close, disable_wifi_rx, enable_wifi_rx, register, select_channel,
+    switch_channel, track, wake,
 };
 mod domain;
-pub use domain::{PhyDomainRegisterFailure, PhyDomainRegistered, PhyRegisterConfig};
+pub use domain::{PhyRegisterConfig, PhyRegisterFailed};
 
 mod radio_lifecycle;
 pub(crate) use radio_lifecycle::PhyRfCloseTemperatureFailure;
@@ -338,23 +338,22 @@ pub enum TargetPhyRegisterError {
     MissingCompletedModelOwner,
 }
 
-/// Private witness accepted by the sole [`crate::RegisteredPhyState`] constructor.
+/// Private witness accepted by the sole [`crate::owner::RegisteredPhy`] constructor.
 ///
 /// The field is private to this module, so no sibling module can mint it even
 /// though the proof constructor can name the type through crate visibility.
 pub(crate) struct TargetRegistrationWitness {
-    grant: oer_chips_esp32s31_hal::system::owner::PhyRegistrationGrant,
+    sealed: (),
 }
 
 impl TargetRegistrationWitness {
-    const fn new(grant: oer_chips_esp32s31_hal::system::owner::PhyRegistrationGrant) -> Self {
-        Self { grant }
+    const fn new() -> Self {
+        Self { sealed: () }
     }
 
-    pub(crate) const fn epoch(
-        &self,
-    ) -> oer_chips_esp32s31_hal::system::owner::PhyRegistrationEpoch {
-        self.grant.epoch()
+    /// Spend the witness on the registered handle it is the proof of.
+    pub(crate) const fn spend(self) {
+        let Self { sealed: () } = self;
     }
 }
 
@@ -2010,7 +2009,7 @@ impl<
                     self.physical.hardware(),
                 )?
             }
-            PhyCalibrationTrackingAction::CalibrateTxDcPwdet { .. } => {
+            PhyCalibrationTrackingAction::CalibrateTxDcPwdet => {
                 use crate::tracking::observation::{Event, Operation};
                 let observer = ObserverSlot::new(&mut *self.observer);
                 observer.with(|observer| {
@@ -2030,8 +2029,7 @@ impl<
                 });
                 result?
             }
-            PhyCalibrationTrackingAction::PublishWifiTxGain { .. }
-            | PhyCalibrationTrackingAction::PublishBluetoothIeee802154TxGain => transition
+            PhyCalibrationTrackingAction::PublishWifiTxGain { .. } => transition
                 .begin_tx_gain_publication()
                 .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
                 .execute_target(self.physical.hardware()),
@@ -2092,7 +2090,7 @@ impl<
 
     async fn complete<'port>(
         &'port mut self,
-        pending: &'port mut PhyPendingTracking,
+        pending: &'port mut PhyParamTrackingTransition,
         state: &'port mut PhyState,
     ) -> Result<PhyParamTrackingCompletion, Self::Error> {
         self.observer.operation_started();
@@ -2112,8 +2110,7 @@ impl<
                     )
                     .await?
             }
-            PhyParamTrackingAction::BluetoothIeee802154TxPowerTrack { .. }
-            | PhyParamTrackingAction::WifiTxPowerTrack { .. } => {
+            PhyParamTrackingAction::WifiTxPowerTrack { .. } => {
                 let operation =
                     crate::tracking::observation::Operation::parameter(pending.action())
                         .ok_or(PhyTargetPortError::UnexpectedBinding)?;

@@ -11,32 +11,36 @@ use oer_chips_esp32s31_hal::types::PhyTxPowerTracking;
 #[test]
 fn cold_rx_borrows_one_program_and_rejects_an_external_leaf_completion() {
     use crate::rx::program::tests::{Oracle, parameters};
-    let mut parent = super::PhyBbInitTransition::new(crate::state::PhyState::default());
+    let mut parent_state = crate::state::PhyState::default();
+    let mut parent = super::PhyBbInitTransition::new();
     parent.step = super::PhyBbInitStep::RxGain(crate::rx::gain::RxProgram::new(parameters()));
     assert_eq!(
-        parent.step_local().expect("pending RX"),
+        parent.step_local(&mut parent_state).expect("pending RX"),
         super::PhyBbInitLocalStep::RxGain
     );
     let before = std::format!("{:?}", parent.rx_program_mut().expect("retained program"));
     assert_eq!(
-        parent.advance_external(super::PhyBbInitCompletion::Mmio(
-            super::PhyBbMmioCompletion {
+        parent.advance_external(
+            &mut parent_state,
+            super::PhyBbInitCompletion::Mmio(super::PhyBbMmioCompletion {
                 action: PhyBbMmioAction::EnableAgc
-            }
-        )),
+            })
+        ),
         Err(super::PhyBbInitTransitionError::WrongCompletion)
     );
     assert_eq!(
         std::format!("{:?}", parent.rx_program_mut().expect("same program")),
         before
     );
-    assert!(!parent.state().rx_gain_init_parameters().tables_initialized);
+    assert!(!(&parent_state).rx_gain_init_parameters().tables_initialized);
     Oracle::default().run(parent.rx_program_mut().expect("same program"));
     assert_eq!(
-        parent.step_local().expect("terminal child handoff"),
+        parent
+            .step_local(&mut parent_state)
+            .expect("terminal child handoff"),
         super::PhyBbInitLocalStep::StateAdvanced
     );
-    assert!(parent.state().rx_gain_init_parameters().tables_initialized);
+    assert!((&parent_state).rx_gain_init_parameters().tables_initialized);
     assert!(parent.rx_program_mut().is_none());
 }
 
@@ -210,38 +214,50 @@ fn finite_baseband_mmio_binding_preserves_dynamic_identity() {
     }
 }
 
-fn complete_parent_mmio(transition: &mut super::PhyBbInitTransition, action: PhyBbMmioAction) {
+fn complete_parent_mmio(
+    transition: &mut super::PhyBbInitTransition,
+    state: &mut crate::state::PhyState,
+    action: PhyBbMmioAction,
+) {
     transition
-        .advance_external(super::PhyBbInitCompletion::Mmio(
-            super::PhyBbMmioCompletion { action },
-        ))
+        .advance_external(
+            state,
+            super::PhyBbInitCompletion::Mmio(super::PhyBbMmioCompletion { action }),
+        )
         .unwrap();
 }
 
 #[test]
 fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
-    let mut fresh = super::PhyBbInitTransition::new(crate::state::PhyState::default());
+    let mut fresh_state = crate::state::PhyState::default();
+    let mut fresh = super::PhyBbInitTransition::new();
     assert_eq!(
-        fresh.step_local().unwrap(),
+        fresh.step_local(&mut fresh_state).unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(
             PhyBbMmioAction::EnableBasebandInitialization
         ))
     );
-    complete_parent_mmio(&mut fresh, PhyBbMmioAction::EnableBasebandInitialization);
     complete_parent_mmio(
         &mut fresh,
+        &mut fresh_state,
+        PhyBbMmioAction::EnableBasebandInitialization,
+    );
+    complete_parent_mmio(
+        &mut fresh,
+        &mut fresh_state,
         PhyBbMmioAction::SetBasebandMode {
             mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
         },
     );
     complete_parent_mmio(
         &mut fresh,
+        &mut fresh_state,
         PhyBbMmioAction::SetForcedDigitalGain {
             gain: PhyForcedDigitalGain::Enabled,
         },
     );
     assert_eq!(
-        fresh.step_local().unwrap(),
+        fresh.step_local(&mut fresh_state).unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::TxDc(
             crate::tx::dc_offset::PhyTxDcAction::ConfigurePbusDebugMode
         ))
@@ -249,22 +265,29 @@ fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
 
     let mut retained_state = crate::state::PhyState::default();
     retained_state.mark_baseband_calibration_complete();
-    let mut retained = super::PhyBbInitTransition::new(retained_state);
-    complete_parent_mmio(&mut retained, PhyBbMmioAction::EnableBasebandInitialization);
+    let mut retained_state = retained_state;
+    let mut retained = super::PhyBbInitTransition::new();
     complete_parent_mmio(
         &mut retained,
+        &mut retained_state,
+        PhyBbMmioAction::EnableBasebandInitialization,
+    );
+    complete_parent_mmio(
+        &mut retained,
+        &mut retained_state,
         PhyBbMmioAction::SetBasebandMode {
             mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
         },
     );
     complete_parent_mmio(
         &mut retained,
+        &mut retained_state,
         PhyBbMmioAction::SetForcedDigitalGain {
             gain: PhyForcedDigitalGain::Enabled,
         },
     );
     assert_eq!(
-        retained.step_local().unwrap(),
+        retained.step_local(&mut retained_state).unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::TxCfr(
             PhyTxCfrAction::ReadStartIndex
         ))
@@ -273,34 +296,37 @@ fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
 
 #[test]
 fn complete_parent_enters_the_recovered_bluetooth_gain_parent() {
-    let mut transition = super::PhyBbInitTransition::new(crate::state::PhyState::default());
+    let mut transition_state = crate::state::PhyState::default();
+    let mut transition = super::PhyBbInitTransition::new();
     transition.step = super::PhyBbInitStep::TxCfr(PhyTxCfrTransition::new());
     transition
-        .advance_external(super::PhyBbInitCompletion::TxCfr(
-            PhyTxCfrCompletion::StartIndexRead { base_index: 3 },
-        ))
+        .advance_external(
+            &mut transition_state,
+            super::PhyBbInitCompletion::TxCfr(PhyTxCfrCompletion::StartIndexRead { base_index: 3 }),
+        )
         .unwrap();
     let mut index = 0;
     while index != PHY_TX_CFR_ENTRY_COUNT {
-        let action = match transition.step_local().unwrap() {
+        let action = match transition.step_local(&mut transition_state).unwrap() {
             super::PhyBbInitLocalStep::External(super::PhyBbInitAction::TxCfr(
                 PhyTxCfrAction::ProgramEntry(entry),
             )) => entry,
             other => panic!("unexpected CFR action: {other:?}"),
         };
         transition
-            .advance_external(super::PhyBbInitCompletion::TxCfr(
-                PhyTxCfrCompletion::EntryProgrammed(action),
-            ))
+            .advance_external(
+                &mut transition_state,
+                super::PhyBbInitCompletion::TxCfr(PhyTxCfrCompletion::EntryProgrammed(action)),
+            )
             .unwrap();
         index += 1;
     }
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::StateAdvanced
     );
     assert!(matches!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::BluetoothTxGain(
             crate::calibration::bluetooth::PhyBluetoothTxGainInitAction::Rfpll(_)
         ))
@@ -311,34 +337,42 @@ fn complete_parent_enters_the_recovered_bluetooth_gain_parent() {
 fn complete_parent_tail_preserves_conditional_disable_and_tracking_order() {
     let mut state = crate::state::PhyState::default();
     state.set_initialization_parameter(1);
-    let mut transition = super::PhyBbInitTransition::new(state);
+    let mut transition_state = state;
+    let mut transition = super::PhyBbInitTransition::new();
     transition.step = super::PhyBbInitStep::SetIdleMode;
 
     complete_parent_mmio(
         &mut transition,
+        &mut transition_state,
         PhyBbMmioAction::SetBasebandMode {
             mode: oer_chips_esp32s31_hal::types::BasebandMode::Idle,
         },
     );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(
             PhyBbMmioAction::SetWifiEnabled { enabled: false }
         ))
     );
     complete_parent_mmio(
         &mut transition,
+        &mut transition_state,
         PhyBbMmioAction::SetWifiEnabled { enabled: false },
     );
-    complete_parent_mmio(&mut transition, PhyBbMmioAction::ConfigureI2cTxRate);
     complete_parent_mmio(
         &mut transition,
+        &mut transition_state,
+        PhyBbMmioAction::ConfigureI2cTxRate,
+    );
+    complete_parent_mmio(
+        &mut transition,
+        &mut transition_state,
         PhyBbMmioAction::ConfigureTxPowerTracking {
             tracking: PhyTxPowerTracking::Enabled,
         },
     );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::Complete(super::PhyBbInitOutcome {
             calibration_performed: false,
         })
@@ -349,7 +383,8 @@ fn complete_parent_tail_preserves_conditional_disable_and_tracking_order() {
 fn complete_parent_failure_always_restores_idle_mode_and_agc() {
     let state = crate::state::PhyState::default();
     let parameters = state.channel_parameters();
-    let mut transition = super::PhyBbInitTransition::new(state);
+    let mut transition_state = state;
+    let mut transition = super::PhyBbInitTransition::new();
     transition.step =
         super::PhyBbInitStep::Channel(crate::channel::PhyChipChannelTransition::at_depth(
             crate::channel::PhyChipChannelRequest {
@@ -360,11 +395,11 @@ fn complete_parent_failure_always_restores_idle_mode_and_agc() {
             crate::analog::pbus::PhyForceTxRxDepth::OUTERMOST.nested(),
         ));
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::StateAdvanced
     );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(
             PhyBbMmioAction::SetForcedDigitalGain {
                 gain: PhyForcedDigitalGain::Disabled
@@ -373,12 +408,13 @@ fn complete_parent_failure_always_restores_idle_mode_and_agc() {
     );
     complete_parent_mmio(
         &mut transition,
+        &mut transition_state,
         PhyBbMmioAction::SetForcedDigitalGain {
             gain: PhyForcedDigitalGain::Disabled,
         },
     );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(
             PhyBbMmioAction::SetBasebandMode {
                 mode: oer_chips_esp32s31_hal::types::BasebandMode::Idle,
@@ -387,19 +423,24 @@ fn complete_parent_failure_always_restores_idle_mode_and_agc() {
     );
     complete_parent_mmio(
         &mut transition,
+        &mut transition_state,
         PhyBbMmioAction::SetBasebandMode {
             mode: oer_chips_esp32s31_hal::types::BasebandMode::Idle,
         },
     );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(
             PhyBbMmioAction::EnableAgc
         ))
     );
-    complete_parent_mmio(&mut transition, PhyBbMmioAction::EnableAgc);
+    complete_parent_mmio(
+        &mut transition,
+        &mut transition_state,
+        PhyBbMmioAction::EnableAgc,
+    );
     assert_eq!(
-        transition.step_local().unwrap(),
+        transition.step_local(&mut transition_state).unwrap(),
         super::PhyBbInitLocalStep::Failed(super::PhyBbInitFailure::Channel(
             crate::channel::PhyChipChannelFailure::UnsupportedChannel(0)
         ))
@@ -517,11 +558,12 @@ fn every_parent_step_produces_the_vendor_s_register_action() {
             },
         ),
     ];
-    let mut transition = super::PhyBbInitTransition::new(crate::state::PhyState::default());
+    let mut transition_state = crate::state::PhyState::default();
+    let mut transition = super::PhyBbInitTransition::new();
     for (row, (step, expected)) in table.into_iter().enumerate() {
         transition.step = step;
         assert_eq!(
-            transition.step_local().unwrap(),
+            transition.step_local(&mut transition_state).unwrap(),
             super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(expected)),
             "row {row}"
         );

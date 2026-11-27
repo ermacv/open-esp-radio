@@ -179,51 +179,6 @@ fn last_leave_retains_membership_baseline_and_only_unreleased_references() {
     assert!(port.events().contains(&Event::Restore(88)));
 }
 
-struct Baseband(Vec<u8>);
-impl BtbbPort for Baseband {
-    fn initialize(&mut self, gain: u8) {
-        self.0.push(gain);
-    }
-}
-#[test]
-fn baseband_gain_checks_precede_first_init_and_later_join_has_no_effects() {
-    let mut state = BtbbMembership::default();
-    let mut port = Baseband(Vec::new());
-    assert_eq!(state.publish(None, 1, 4), Err(BtbbError::Unregistered));
-    assert_eq!(state.publish(Some(2), 1, 4), Err(BtbbError::Stale));
-    let old = state.publish(Some(1), 1, 4).unwrap();
-    let gain = state.publish(Some(1), 1, 5).unwrap();
-    assert_eq!(
-        state.acquire(Bluetooth, Some(1), &old, &mut port),
-        Err(BtbbError::Stale)
-    );
-    assert_eq!(
-        state.acquire(Bluetooth, Some(2), &gain, &mut port),
-        Err(BtbbError::Stale)
-    );
-    assert_eq!(
-        state.acquire(Bluetooth, None, &gain, &mut port),
-        Err(BtbbError::Unregistered)
-    );
-    assert!(port.0.is_empty());
-    assert_eq!(
-        state.acquire(Bluetooth, Some(1), &gain, &mut port),
-        Ok(BtbbAcquired::Initialized)
-    );
-    assert_eq!(
-        state.acquire(Ieee802154, Some(1), &gain, &mut port),
-        Ok(BtbbAcquired::Joined)
-    );
-    assert_eq!(
-        state.acquire(Bluetooth, Some(1), &gain, &mut port),
-        Err(BtbbError::AlreadyAcquired)
-    );
-    assert_eq!(port.0, [5]);
-    state.release(Bluetooth).unwrap();
-    state.release(Ieee802154).unwrap();
-    assert_eq!(state.release(Bluetooth), Err(BtbbError::NotAcquired));
-    assert!(!state.any_held());
-}
 struct LowPower {
     log: Vec<u8>,
     fail_acquire: bool,
@@ -287,17 +242,6 @@ fn low_power_refusals_preserve_selector_order_and_the_exact_guard() {
     assert_eq!(held, None);
     assert_eq!(port.log, [1, 2, 1, 2, 3, 4, 3, 4]);
 }
-#[test]
-fn coexistence_membership_counts_external_and_each_client_independently() {
-    let mut set = Participants::default();
-    assert_eq!(set.enter(Wifi), 1);
-    assert_eq!(set.enter(Bluetooth), 2);
-    assert_eq!(set.enter_external(), 3);
-    assert_eq!(set.leave(Wifi), 2);
-    assert_eq!(set.leave_external(), 1);
-    assert_eq!(set.leave(Bluetooth), 0);
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExtError {
     Active,

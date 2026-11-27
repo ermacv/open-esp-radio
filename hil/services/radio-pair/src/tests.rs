@@ -121,6 +121,10 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         after: counts,
         handles: u8::MAX,
         stop_micros: u32::MAX,
+        rf: TurnedRf::ClosedAndWoken {
+            close_micros: u32::MAX,
+            wake_micros: u32::MAX,
+        },
         start_micros: u32::MAX,
     };
     let hang = HangCounters {
@@ -182,7 +186,10 @@ fn every_request_fits_the_images_payload_bound() {
             record: Record::Chains,
         }),
         encoded_length(&Stall { millis: u32::MAX }),
-        encoded_length(&Turn { millis: u32::MAX }),
+        encoded_length(&Turn {
+            millis: u32::MAX,
+            kind: TurnKind::CloseAndWake,
+        }),
         encoded_length(&HandOver),
     ] {
         assert!(length <= usize::from(MAXIMUM_PAYLOAD_BYTES));

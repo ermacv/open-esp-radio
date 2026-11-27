@@ -21,10 +21,9 @@ use crate::{
         PhyRxTableInitParameters,
     },
     calibration::bluetooth::{
-        PhyBluetoothTxDcPwdetTransition, PhyBluetoothTxGainImage, PhyBluetoothTxGainInitOutcome,
-        PhyBluetoothTxGainInitParameters, PhyBluetoothTxGainInitTransition,
-        PhyBluetoothTxGainParameters, PhyBluetoothTxPowerOutcome, PhyBluetoothTxPowerParameters,
-        calculate_bluetooth_tx_gain,
+        PhyBluetoothTxGainImage, PhyBluetoothTxGainInitOutcome, PhyBluetoothTxGainInitParameters,
+        PhyBluetoothTxGainInitTransition, PhyBluetoothTxGainParameters, PhyBluetoothTxPowerOutcome,
+        PhyBluetoothTxPowerParameters, calculate_bluetooth_tx_gain,
     },
     channel::{
         PhyChipChannelOutcome, PhyChipChannelParameters, PhyWifiTxGainImage, PhyWifiTxGainRequest,
@@ -278,7 +277,6 @@ struct CommonPhyState {
     front_end_parameter: bool,
     clear_tone_after_ready: bool,
     initialization_parameter: bool,
-    registered: bool,
     temperature_debug: [u8; 2],
 }
 
@@ -344,7 +342,6 @@ struct WifiPhyState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct BluetoothPhyState {
-    power_tracking: u8,
     tracking_gain_base: u8,
     tx_dc_calibrated: bool,
     tx_power_calibrated: bool,
@@ -364,6 +361,9 @@ pub struct PhyState {
     common: CommonPhyState,
     wifi: WifiPhyState,
     bluetooth: BluetoothPhyState,
+    /// The instant of the last tracking pass; none until the first. It
+    /// outlives a close, as the calibration does.
+    tracked_at: Option<oer_portable_time::Instant>,
 }
 
 /// Typed retained calibration for one physical ESP32-S31 radio.
@@ -617,7 +617,6 @@ impl PhyState {
                 front_end_parameter: true,
                 clear_tone_after_ready: false,
                 initialization_parameter: false,
-                registered: false,
                 temperature_debug: [0; 2],
             },
             wifi: WifiPhyState {
@@ -650,7 +649,6 @@ impl PhyState {
                 shared_index_dc: [[0; 2]; 11],
             },
             bluetooth: BluetoothPhyState {
-                power_tracking: 1,
                 tracking_gain_base: bluetooth_tracking_gain_base,
                 tx_dc_calibrated: false,
                 tx_power_calibrated: false,
@@ -660,7 +658,18 @@ impl PhyState {
                 tx_power_adjustment: 0,
                 channel_base: 0,
             },
+            tracked_at: None,
         }
+    }
+
+    /// The instant of the last tracking pass, none before the first.
+    pub const fn tracked_at(&self) -> Option<oer_portable_time::Instant> {
+        self.tracked_at
+    }
+
+    /// A tracking pass completed at `now`.
+    pub(crate) const fn mark_tracked(&mut self, now: oer_portable_time::Instant) {
+        self.tracked_at = Some(now);
     }
 
     pub const fn config(&self) -> &PhyConfig {
@@ -713,15 +722,6 @@ impl PhyState {
     }
 
     #[cfg(test)]
-    pub fn set_bt_power_tracking(&mut self, value: u8) {
-        self.bluetooth.power_tracking = value;
-    }
-
-    pub const fn bt_power_tracking(&self) -> u8 {
-        self.bluetooth.power_tracking
-    }
-
-    #[cfg(test)]
     pub(crate) const fn bluetooth_tx_dc_transition(&self) -> PhyBluetoothTxDcTransition {
         PhyBluetoothTxDcTransition::new(
             PhyTxDcParameters {
@@ -747,20 +747,6 @@ impl PhyState {
     #[cfg(test)]
     pub(crate) const fn bluetooth_tx_dco(&self) -> [[u16; 4]; 3] {
         self.bluetooth.tx_dco
-    }
-
-    pub(crate) const fn bluetooth_tx_dc_pwdet_transition(&self) -> PhyBluetoothTxDcPwdetTransition {
-        PhyBluetoothTxDcPwdetTransition::new(
-            PhyTxDcPwdetParameters {
-                dco: self.bluetooth.tx_dco,
-                clear_tone_after_ready: self.common.clear_tone_after_ready,
-            },
-            self.config.bluetooth_tx_path,
-        )
-    }
-
-    pub fn apply_bluetooth_tx_dc_pwdet_outcome(&mut self, outcome: PhyTxDcPwdetOutcome) {
-        self.bluetooth.tx_dco = outcome.dco;
     }
 
     pub fn bluetooth_tx_power_parameters(&self) -> PhyBluetoothTxPowerParameters {
@@ -837,56 +823,27 @@ impl PhyState {
         calculate_bluetooth_tx_gain(self.bluetooth_tx_gain_parameters())
     }
 
-    /// Regenerate the shared Bluetooth/IEEE 802.15.4 gain bank from the live
-    /// calibration state and one temperature-tracked base value.
-    pub const fn bluetooth_ieee802154_tracking_gain_image(
-        &self,
-        gain_base: i8,
-    ) -> PhyBluetoothTxGainImage {
-        let mut parameters = self.bluetooth_tx_gain_parameters();
-        parameters.base = gain_base as u8;
-        calculate_bluetooth_tx_gain(parameters)
-    }
-
     #[cfg(any(target_arch = "riscv32", test))]
     pub(crate) fn tracking_gain_generator(
         &self,
-        class: crate::tracking::parameters::PhyCalibrationTrackClass,
         channel: u16,
         gain_base: i8,
     ) -> Option<crate::tx::gain::Generator> {
-        use crate::tracking::parameters::PhyCalibrationTrackClass as Class;
-        match class {
-            Class::Wifi => {
-                let parameters = self.channel_parameters();
-                if parameters.tx_gain_skip_publication {
-                    return None;
-                }
-                Some(crate::channel::begin_wifi_tx_gain(PhyWifiTxGainRequest {
-                    channel,
-                    calibration_curve: parameters.tx_gain_curve,
-                    correction: parameters.tx_gain_correction,
-                    base_and_delta: (gain_base as u8)
-                        .wrapping_add(parameters.tx_gain_adjustment as u8)
-                        as i8,
-                }))
-            }
-            Class::BluetoothIeee802154 => {
-                let mut parameters = self.bluetooth_tx_gain_parameters();
-                parameters.base = gain_base as u8;
-                Some(crate::calibration::bluetooth::begin_bluetooth_tx_gain(
-                    parameters,
-                ))
-            }
+        let parameters = self.channel_parameters();
+        if parameters.tx_gain_skip_publication {
+            return None;
         }
+        Some(crate::channel::begin_wifi_tx_gain(PhyWifiTxGainRequest {
+            channel,
+            calibration_curve: parameters.tx_gain_curve,
+            correction: parameters.tx_gain_correction,
+            base_and_delta: (gain_base as u8).wrapping_add(parameters.tx_gain_adjustment as u8)
+                as i8,
+        }))
     }
 
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) const fn tracking_gain_seed(
-        &self,
-        class: crate::tracking::parameters::PhyCalibrationTrackClass,
-        gain_64: u16,
-    ) -> Option<([u16; 4], u16)> {
+    pub(crate) const fn tracking_gain_seed(&self, gain_64: u16) -> Option<([u16; 4], u16)> {
         // These are the same quartet indices as the full concatenated view.
         // 0x20/0xa0 would read output32; neither recovered profile selects them.
         let row = match gain_64 {
@@ -895,24 +852,7 @@ impl PhyState {
             0x20 | 0xa0 => return None,
             _ => 0,
         };
-        let seed = match class {
-            crate::tracking::parameters::PhyCalibrationTrackClass::Wifi => self.wifi.tx_dco[row],
-            crate::tracking::parameters::PhyCalibrationTrackClass::BluetoothIeee802154 => {
-                self.bluetooth.tx_dco[row]
-            }
-        };
-        Some((seed, self.wifi.tx_iq_config))
-    }
-
-    /// Regenerate the shared calibration gain bank from a just-completed
-    /// TXDC/PWDET result that has not yet reached the outer state commit.
-    pub const fn bluetooth_ieee802154_calibration_gain_image(
-        &self,
-        tx_dc_pwdet: PhyTxDcPwdetOutcome,
-    ) -> PhyBluetoothTxGainImage {
-        let mut parameters = self.bluetooth_tx_gain_parameters();
-        parameters.seed = Self::packed_seed(&tx_dc_pwdet.dco);
-        calculate_bluetooth_tx_gain(parameters)
+        Some((self.wifi.tx_dco[row], self.wifi.tx_iq_config))
     }
 
     pub(crate) fn bluetooth_tx_gain_init_transition(
@@ -1203,11 +1143,7 @@ impl PhyState {
             _ => return,
         };
         // Validate the complete requested TX set before publishing any result.
-        if outcome.wifi_tx_dc_pwdet.is_some()
-            != (outcome.transmit_updated && outcome.clients.wifi())
-            || outcome.bluetooth_ieee802154_tx_dc_pwdet.is_some()
-                != (outcome.transmit_updated && outcome.clients.bluetooth_ieee802154())
-        {
+        if outcome.wifi_tx_dc_pwdet.is_some() != outcome.transmit_updated {
             return;
         }
 
@@ -1221,9 +1157,6 @@ impl PhyState {
         }
         if let Some(result) = outcome.wifi_tx_dc_pwdet {
             self.apply_tx_dc_pwdet_outcome(result);
-        }
-        if let Some(result) = outcome.bluetooth_ieee802154_tx_dc_pwdet {
-            self.apply_bluetooth_tx_dc_pwdet_outcome(result);
         }
         if outcome.transmit_updated {
             self.common
@@ -1246,7 +1179,6 @@ impl PhyState {
             previous_tracking_temperature: self.common.references.power_tracking(),
             previous_tracking_gain_base: self.common.tracking_gain_base,
             wifi_gain_base: self.wifi.tracking_gain_base as i8,
-            bluetooth_ieee802154_gain_base: self.bluetooth.tracking_gain_base as i8,
             relaxed_threshold,
             wifi_gain_publication_skipped: self.config.tx_gain_skip_publication,
         }
@@ -1254,30 +1186,17 @@ impl PhyState {
 
     /// Force the next diagnostic power child to regenerate its real gain bank.
     #[cfg(all(oer_debug_control, target_arch = "riscv32"))]
-    pub(crate) fn force_power_tracking_debug(&mut self, wifi: bool) {
-        use crate::tracking::{
-            parameters::PhyCalibrationTrackClass as Class,
-            power::{PhyTxPowerTrackingRequest, decide_tx_power_tracking},
-        };
-        let class = if wifi {
-            Class::Wifi
-        } else {
-            Class::BluetoothIeee802154
-        };
+    pub(crate) fn force_power_tracking_debug(&mut self) {
+        use crate::tracking::power::{PhyTxPowerTrackingRequest, decide_tx_power_tracking};
         let gain = decide_tx_power_tracking(
             PhyTxPowerTrackingRequest {
-                class,
                 enabled: true,
                 wifi_channel: self.current_wifi_channel(),
             },
             self.tx_power_tracking_parameters(self.tx_power_tracking_slow() != 0),
         )
         .gain_base;
-        if wifi {
-            self.wifi.tracking_gain_base = (gain as u8).wrapping_add(1);
-        } else {
-            self.bluetooth.tracking_gain_base = (gain as u8).wrapping_add(1);
-        }
+        self.wifi.tracking_gain_base = (gain as u8).wrapping_add(1);
     }
 
     /// Commit a completed tracking transaction to the live radio owner.
@@ -1289,14 +1208,7 @@ impl PhyState {
             .references
             .commit_power_tracking(outcome.tracking_temperature);
         self.common.tracking_gain_base = outcome.tracking_gain_base;
-        match outcome.class {
-            crate::tracking::parameters::PhyCalibrationTrackClass::Wifi => {
-                self.wifi.tracking_gain_base = outcome.wifi_gain_base as u8;
-            }
-            crate::tracking::parameters::PhyCalibrationTrackClass::BluetoothIeee802154 => {
-                self.bluetooth.tracking_gain_base = outcome.bluetooth_ieee802154_gain_base as u8;
-            }
-        }
+        self.wifi.tracking_gain_base = outcome.wifi_gain_base as u8;
     }
 
     pub const fn dcode_parameters(&self) -> PhyDcodeParameters {
@@ -1686,7 +1598,6 @@ impl PhyState {
         // cold RF graph regenerates them from retained calibration parameters.
         restored.common.frequency_table_initialized = false;
         restored.wifi.channel_initialized = false;
-        restored.common.registered = false;
         *self = restored;
         Ok(())
     }
@@ -1830,14 +1741,6 @@ impl PhyState {
         self.bluetooth.tx_power_calibrated = false;
     }
 
-    pub(crate) fn mark_phy_registered(&mut self) {
-        self.common.registered = true;
-    }
-
-    pub const fn phy_registered(&self) -> bool {
-        self.common.registered
-    }
-
     pub const fn rc_calibration_complete(&self) -> bool {
         self.common.rc_calibrated
     }
@@ -1959,5 +1862,3 @@ impl Default for PhyState {
 
 #[cfg(test)]
 mod tests;
-
-pub mod client;

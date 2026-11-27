@@ -809,12 +809,7 @@ impl<
                     };
                     use crate::tracking::power::PhyTxPowerTrackingAction as Action;
                     let action = child.action();
-                    let gain = **measured
-                        && matches!(
-                            action,
-                            Action::RegenerateWifiGain { .. }
-                                | Action::RegenerateBluetoothIeee802154Gain { .. }
-                        );
+                    let gain = **measured && matches!(action, Action::RegenerateWifiGain { .. });
                     let at = gain.then(|| clock.now());
                     // This owning route calls stepped control/gain atoms directly;
                     // no monolithic gain-image lowering is reachable here.

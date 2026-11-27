@@ -3,49 +3,27 @@
 See the [PHY architecture](../../README.md) for initialization, runtime
 terminology and the ownership relationship with protocol runtimes and coex.
 
-This module owns the source-derived tracking algorithms and read-only demand.
-It does not grant RF access, stop protocol runtimes, or implement coexistence.
-The registered domain and the shared PHY must remain in the radio domain
-lease throughout execution. A network queue credit, scheduler pause or CPU
+This module owns the source-derived tracking algorithms, Wi-Fi's only. It
+does not grant RF access, stop protocol runtimes, or implement coexistence.
+A pass runs on the registered state with RF open (`RfOpen`), inside the
+owned radio transaction. A network queue credit, scheduler pause or CPU
 mutex alone is not permission to mutate the shared PHY.
 
-## Inspecting conditions
+## When a pass is due
 
-The registered Bluetooth owner exposes `inspect_tracking(now_micros)`.
-The [inspection contract](inspection/README.md) separates evaluation deadlines,
-retained thermal conditions and physical admission. It reuses the executor's
-predicates and does not replace its ordered, consuming decision process.
+`owner::tracking_due(&PhyState, now)` answers `Due` or `NotBefore(t)`: due at
+once after a registration, whose state was never tracked, and otherwise once
+more than `TRACKING_PERIOD` (1 s, ESP-IDF's `PHY_TRACK_PLL_PERIOD_IN_US`)
+has passed since the last pass's end. It changes nothing while it answers.
+The owner asks after every registration and every wake, as the vendor asks
+at every enable, and arms its own timer for `t`. The instant reflects the
+source interval, not a measured maximum safe deferral.
 
-## Demand and execution
+## Execution
 
-`PhyClientSnapshot::tracking_schedule_at(now_micros)` returns
-`schedule::Schedule`:
-
-- `Inactive`: no client requires a timer.
-- `At(t)`: arm an absolute timer for the first due microsecond.
-- `Due(demand)`: work is outstanding; hardware admission is still required.
-
-Observation does not update source timestamps, temperature references or
-calibration validity. Repeated observations after deferral retain the same
-`due_since_micros`; they do not create additional execution obligations. This
-instant reflects the source interval, not a measured maximum safe deferral.
-BT and IEEE 802.15.4 share one tracking class but remain distinct clients.
-
-Demand is copyable observation, not an ownership token. Re-observe the current
-client set after waiting for admission: a client may have stopped while the
-request was deferred. Do not execute an old copied demand as an RF grant.
-The consuming `evaluate_immediate_tracking` transition retains its original
-sample order and timestamp updates. It runs only when the caller commits to
-execution; it must not be used merely to ask whether work is due. Its pending
-owner remains pending until the selected target children complete.
-
-The radio-system actor runs periodic tracking on P2 while tracked membership
-exists. After draining requests it waits on its doorbell versus the backend's
-tracking deadline; a timer win calls `track_concurrent_phy`, which evaluates
-demand and runs due maintenance. The default period is 1 s, with eligibility
-at `previous + period + 1 µs`. Initial client tracking also settles pending
-work in this actor. Protocols are not paused; the tracking graph brackets
-RF-sensitive regions with the grant-protect request.
+`target_port::owner::track` runs one pass of `phy_param_track_tot` and
+records its instant in the state when it ends. Protocols are not paused; the
+tracking graph brackets RF-sensitive regions with the grant-protect request.
 
 CPU admission and RF admission are separate. The shared transport and RX-gain
 drivers query cooperative CPU admission between complete atoms, using the
@@ -68,13 +46,13 @@ the outer owner's lease.
 
 | Operation | Selection and effects | Commit / restoration boundary |
 | --- | --- | --- |
-| [Outer parameter tracking](parameters.rs) | Registered policy selects RFPLL, BT/154 power and calibration, Wi-Fi I2C/power/calibration, and temperature children. Inhibited policy skips hardware children. | Critical-section actions bracket the graph. The current target port acknowledges them logically; the caller supplies actual exclusion. Inhibited completion does not mean calibration data was refreshed. |
-| [Power compensation](power.rs) | Computes a temperature decision; changed enabled gain publishes the selected class's gain through BBPLL calibration enable/disable edges. | Gain/temperature outcome follows the child and BBPLL tail. An unchanged decision does not publish gain. Live gain publication atomicity is not qualified. |
+| [Outer parameter tracking](parameters.rs) | Registered policy selects RFPLL, Wi-Fi I2C, power and calibration, and temperature children. Inhibited policy skips hardware children. | Critical-section actions bracket the graph. The current target port acknowledges them logically; the caller supplies actual exclusion. Inhibited completion does not mean calibration data was refreshed. |
+| [Power compensation](power.rs) | Computes a temperature decision; changed enabled gain publishes Wi-Fi's gain through BBPLL calibration enable/disable edges. | Gain/temperature outcome follows the child and BBPLL tail. An unchanged decision does not publish gain. Live gain publication atomicity is not qualified. |
 | [Wi-Fi I2C tracking](i2c.rs) | A temperature-band change executes two bounded masked analog-I2C writes. | The new band is committed only after both writes. No band change means no writes. The analog bus must have one transaction owner. Safe overlap with active TX/RX is not established. |
 | [Temperature sampling](../analog/temperature.rs) | Reads PHY-I2C range and sensor code; may also write a new range. This is not an unconditional read-only operation. | The sensor transition carries matching completions. Concurrent sensor/range access is not qualified. |
 | [Current measured RFPLL correction](rfpll/README.md) | Bounded capacitor search, signed correction of the installed frequency-memory table, and current baseband-mode entry/restoration. Production runs it as the RFPLL child of the parameter-tracking graph. | Registered tracking selects the thermal predicate. Compiled comparisons cover command/memory effects and vendor-policy boundaries; timing and physical range limits remain unqualified. |
-| [Common calibration](calibration.rs) | A temperature threshold selects DCODE, RX-gain calibration and channel restoration. | The branch restores MAC baseband and TX gain compensation before committing the common reference or entering class calibration. |
-| [Shared TX calibration](calibration.rs) | A shared TX threshold selects software frequency control, forced gain/TX-RX state, TXDC/PWDET and class gain publication. | The graph restores its baseband/control and gain-compensation state. This is not proof that every protocol's MAC, key, TSF or DMA context is unchanged. No selected branch means no hardware actions in this child. |
+| [Common calibration](calibration.rs) | A temperature threshold selects DCODE, RX-gain calibration and channel restoration. | The branch restores MAC baseband and TX gain compensation before committing the common reference or entering the transmit branch. |
+| [Shared TX calibration](calibration.rs) | A shared TX threshold selects software frequency control, forced gain/TX-RX state, TXDC/PWDET and Wi-Fi's gain publication. | The graph restores its baseband/control and gain-compensation state. This is not proof that every protocol's MAC, key, TSF or DMA context is unchanged. No selected branch means no hardware actions in this child. |
 
 T2/T4 power tracking owns its child and `EngineTiming` inside the shared P2
 driver. A safe enum separates timer/borrowed-transport storage from the
@@ -89,17 +67,17 @@ seed/output32 concatenation. The whole-image builders share the same arithmetic;
 stream tests compare every encoded entry with the canonical packed image.
 Clock-free preparation and acknowledgement stay outside the clock/accounting
 shell. The shared driver decodes the action once per atom. Only after all 32
-Wi-Fi or 16 shared records does the gain child acknowledge publication.
+Wi-Fi records does the gain child acknowledge publication.
 Terminal completion commits the semantic result after BBPLL-off.
 In power-family engine observations, `ready_edges` and `maximum_ready_micros`
 count and time gain setup and individual records; `maximum_micros` covers
 the whole driver poll. Separate maxima cover lower/setup, one record's
-arithmetic/encoding and its complete publication. Diagnostic holds force the
-selected class's gain update and report family2 (BT/154) or4 (Wi-Fi).
+arithmetic/encoding and its complete publication. Diagnostic holds force
+Wi-Fi's gain update and report family 4.
 
 Full cold registration and cache replay belong to
 [calibration/registration](../calibration/registration.rs), not the periodic
-scheduler. A serializable calibration snapshot does not certify hardware
+pass. A serializable calibration snapshot does not certify hardware
 restoration.
 
 `PhyCalibrationTrackingParameters::decision()` is the single read-only
@@ -120,7 +98,7 @@ flowchart TD
     restore --> cleanup[Restore baseband and gain compensation]
     cleanup --> tx{Reevaluate shared TX demand}
     common -- no --> tx
-    tx -- yes --> transmit[Wi-Fi then BT/154 TXDC and gain publication, then one cleanup]
+    tx -- yes --> transmit[Wi-Fi TXDC and gain publication, then one cleanup]
     tx -- no --> outcome[Return typed calibration outcome]
     transmit --> outcome
     outcome --> owner[Parent accepts completion and commits references]
@@ -133,8 +111,7 @@ The outer graph follows `phy_param_track_tot` in the pinned esp-phy-lib:
 ```mermaid
 flowchart LR
     owner[Exclusive physical owner] --> pll[Optional RFPLL]
-    pll --> bt[Requested BT/154 power]
-    bt --> wifi[Requested Wi-Fi I2C and power]
+    pll --> wifi[Wi-Fi I2C and power]
     wifi --> cal[One RX/TX calibration call]
     cal --> temp[Temperature acquisition]
     temp --> restore[Checked radio restoration]
@@ -142,11 +119,9 @@ flowchart LR
 
 The combined calibration call keeps one RX reference and one shared TX
 reference. When RX channel restoration replaces the sample, TX demand is
-reevaluated against that sample. Selected Wi-Fi and BT/154 TX results remain
-distinct; both complete inside one frequency/forced-gain envelope. Failure of
-any requested child prevents terminal publication of the combined outcome.
-Even a direct call with neither class selected can run the due TX envelope;
-the normal scheduler admits work only for active clients. Each measurement
+reevaluated against that sample. Wi-Fi's TX result completes inside one
+frequency/forced-gain envelope. Failure of any child prevents terminal
+publication of the combined outcome. Each measurement
 branch explicitly disables Wi-Fi baseband: after DCODE and before RX gain
 calibration, or after TX PBus clearing and before calibration bandwidth setup.
 This register operation is not a substitute for physical maintenance admission.
@@ -226,7 +201,7 @@ A grant-protect interval is the time the request was programmed. It is not
 an observation of RF exclusion. The debug-control class (`cfg(oer_debug_control)`)
 lets a diagnostic image force branches through the vendor's
 temperature-tracking debug policy
-(`ConcurrentPhy::set_temperature_tracking_debug`), used by the forced
+(`PhyState::set_temperature_tracking_debug`), used by the forced
 tracking-hold diagnostics.
 
 Production RX gain retains one `RxProgram` cursor in cold registration and
@@ -274,14 +249,14 @@ its required postcondition after execution before publishing descriptor or
 interrupt ownership. Existing `RxRingHalted` teardown rebuilds a new descriptor
 epoch; it is not a transparent pause for outstanding upper-layer RX leases.
 
-Source timestamps record the scheduler's execution request. They are not
+Source timestamps record the pass's execution. They are not
 independent evidence of RF quality, completed calibration branches or an
 externally granted radio interval. Temperature-reference commits and typed
 child outcomes remain the algorithm's completion authority.
 
 `PhyParamTrackingOutcome::calibration` reports only committed common and
-RX and requested TX calibration branches. Invoking a calibration child below its thermal
-threshold leaves the corresponding flag false. Wrong-class or incomplete child
+RX and TX calibration branches. Invoking a calibration child below its thermal
+threshold leaves the corresponding flag false. Wrong or incomplete child
 completions cannot publish this progress. `wifi_i2c_changed` reports a
 Wi-Fi PHY-I2C band change whose two masked writes completed. These flags do
 not measure RF quality.
@@ -348,8 +323,8 @@ The independent signed Wi-Fi gain adjustment survives runtime tracking and
 snapshot replay. It is not a TXCAL result or a lifetime-zero invariant; RF-test
 MAC power selection stays outside the tracking graph.
 
-The TX-DC/PWDET child uses the current archive's Wi-Fi and BT/154 forms through
-one bounded target executor. Its initial TX-on prefix includes the final
+The tracking pass's TX-DC/PWDET child uses the current archive's Wi-Fi form
+(registration also runs its BT/154 form) through one bounded target executor. Its initial TX-on prefix includes the final
 selector-five PBus command before SAR configuration, followed by separate
 per-row path and baseband-gain settings. The child restores its retained
 power-detector fields before publishing measured DC rows. These measurements

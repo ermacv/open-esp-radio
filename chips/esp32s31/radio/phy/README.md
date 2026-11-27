@@ -66,20 +66,17 @@ reset or retained-sleep wakeup replay.
 | --- | --- | --- |
 | [Calibration](src/calibration/registration.rs), [analog](src/analog.rs), [RX](src/rx.rs), [TX](src/tx.rs) | Finite measurements, searches, ordered hardware actions and their results | No network sockets or protocol scheduling policy |
 | [PHY state](src/state.rs) | Configuration, calibration results, temperature references and cache values | Values do not grant register access |
-| [Client state](src/state/client.rs) and [tracking schedule](src/tracking/schedule.rs) | Active clients, source intervals and read-only demand | Wi-Fi and BT/154 are scheduling classes; BT and 154 remain distinct clients |
-| [Registered domain](src/domain.rs) | One `PhyDomain` per registration: calibration state and the shared client set | A domain cannot be cloned, rebuilt or paired with another epoch; operations check the registration epoch before hardware access |
-| [Concurrent domain](src/concurrent.rs) and its [target port](src/target_port/concurrent.rs) | The shared domain in the HAL radio domain; Wi-Fi joins it as a client | Lifecycle and tracking consume the radio domain and return it with their typed result |
+| [The one owner](src/owner.rs) and its [target operations](src/target_port/owner.rs) | The state's place, the registered handle, the proofs of RF open and closed, and when a tracking pass is due | The registered state has its own type; RF open and closed are proofs the operations take and give |
 | [Tracking graphs](src/tracking.rs) and [executor](src/executor.rs) | Execute selected children and validate their completions | No independent RF arbitration |
 | [Target port](src/target_port.rs), [family PHY](../../../family/radio/phy/README.md) and [HAL PHY](../../hal/src/radio/phy.rs) | Driver sequences over owned HAL register atoms | Hardware access is borrowed from the admitted owner |
 | [Analog register bus](../../../family/drivers/regi2c/README.md) | Field, configuration and parallel transitions of the vendor analog-I2C leaves | The transitions touch no bus; the target port and HAL drive them |
-| [Radio system](../system/README.md) (outside the build) | The radio domain, platform resources, first-join registration and deadline-driven periodic tracking | The P2 actor transfers an owned PHY transaction for tracking with grant-protect brackets; it pauses no protocol |
 | [Hardware coex control](../../../family/radio/coex/README.md) | Recovered timer requests, PTI, clock conversion and withdrawal accounting | Programmed timer identity is not an RF grant |
 
 ```mermaid
 flowchart TD
-    W[Wi-Fi client] --> L[Radio domain, owned by the radio system]
-    T[Tracking timer of the shared radio's owner] --> L
-    P[PHY demand and calibration state] --> T
+    W[Its owner: the PHY's place and the radio domain] --> L[Radio domain]
+    T[The owner's tracking timer] --> L
+    P[tracking_due over the PHY state] --> T
     L --> E[PHY finite executor]
     E --> H[HAL / semantic PAC]
     H --> RF[Shared RF / PLL / analog buses / baseband]
@@ -87,166 +84,135 @@ flowchart TD
     G --> C[Hardware coex timer bank]
 ```
 
-PHY supplies the algorithms, demand and the concurrent domain. The radio
-system owns that domain and runs registration and tracking in its P2 actor;
-coex supplies the hardware arbitration mechanism. Exclusive ownership of the
-PHY transaction serializes its register access. Tracking brackets RF-sensitive regions with a
-grant-protect request instead of pausing protocols. `admit_maintenance` checks
-pending tracking state, without a hard-window calendar or grant acknowledgement.
-A coex timer reply, client bit or PTI is never an ownership proof for the shared
-PHY, and the request bracket does not prove exclusive RF access.
+PHY supplies the algorithms and the state; its one owner runs registration,
+close, wake, the channel and tracking; coex supplies the hardware arbitration
+mechanism. Exclusive ownership of the PHY transaction serializes its register
+access. Tracking brackets RF-sensitive regions with a grant-protect request
+instead of pausing protocols. A coex timer reply or PTI is never an ownership
+proof for the shared PHY, and the request bracket does not prove exclusive RF
+access.
 
 The Wi-Fi airtime scheduler selects packet service within a MAC epoch. It does
 not own the shared RF resource and cannot independently admit PHY maintenance.
 
 ## Power lifecycle boundary
 
-Client bookkeeping and physical RF power are separate state transitions. The
-last client leaving keeps RF, analog state and shared clocks physically
-powered until the radio system closes RF; a closed domain admits no client
-until it is woken.
+RF's power follows the owner's proofs: `RfOpen` while RF is open, `RfClosed`
+while it is closed and the registration stays.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Registered: register_concurrent_phy (first client)
-    Registered --> Registered: clients join and leave
-    Registered --> RfClosed: close_concurrent_rf (no client)
-    RfClosed --> Registered: wake_concurrent_rf
-    Registered --> Poisoned: started failure
-    RfClosed --> Poisoned: started wake failure
-    Poisoned --> [*]: reset required
+    [*] --> Open: register (the place filled)
+    Open --> Closed: close (RfOpen taken, RfClosed given)
+    Closed --> Open: wake (RfClosed taken, RfOpen given)
+    Open --> Empty: a failed operation, then vacate
+    Closed --> Empty: a failed wake, then vacate
+    Empty --> Empty: register ends in RegistrationCause::Clock
 ```
+
+After a failed close, wake, channel or pass the PHY's clock modules stay
+held as the failure left them: a registration into the emptied place finds
+them enabled (`AlreadyEnabled`) and ends in `RegistrationCause::Clock`.
 
 RF close runs the current-vendor pre-close temperature observation and the
 complete finite `phy_close_rf` graph: it disables hardware frequency control
 and AGC, closes the RF and frontend/baseband domains
 and publishes both retained analog close images. A preparation failure keeps
-RF open; failure after close begins poisons the domain.
+RF open and gives `RfOpen` back; a failure after close begins consumes the
+proof.
 
 Retained wake executes the complete current-vendor wake parent in recovered
 order without retiring the registration epoch: frontend/baseband and
 analog-I2C power, retained frequency publication, channel and TX-cap state,
 PBUS boundaries, PHY and AGC register updates, CKGEN reset, then restoration
 of hardware frequency control, BBPLL, force-TX/RX and baseband mode. Every
-started failure poisons the domain.
+started failure consumes the proof.
 
 
-### Concurrent clients
+### The one owner
 
-For concurrently running protocols the registered domain lives beside the
-shared registers in `RadioDomain<B, ConcurrentPhy>`. Registration, tracking,
-RF close and retained wake consume that domain and return `(domain, result)`.
-`RadioDomain::detach(operation)` produces one owned `RadioTransaction`; its explicit
-reunion preserves registration epochs and pending restore obligations. The
-transaction can split into an inert return owner and a movable
-`PhyTransaction` carrying the hardware and grant-protect state. A split
-reunion rejects another domain's transaction without consuming either
-payload. The domain identity is affine and permanently claimed: equal
-registration epochs do not authorize a foreign return. Successful reunion
-consumes both halves, so a stale return token cannot remain live.
+The PHY's state has one owner, which holds its place (`owner::PhyPlace`):
+the one right the radio's split hands out (`PhyStateRight`, which the
+reunion takes back) and the owner's memory for the state. The radio domain beside it,
+`RadioDomain<B>`, holds the shared registers and the power and clock
+obligations; it carries no PHY state. `RadioDomain::detach(operation)`
+produces one owned `RadioTransaction`; its explicit reunion preserves
+registration epochs and pending restore obligations. The transaction can
+split into an inert return owner and a movable `PhyTransaction` carrying the
+hardware and grant-protect state. A split reunion rejects another domain's
+transaction without consuming either payload. The domain identity is affine
+and permanently claimed: equal registration epochs do not authorize a
+foreign return. Successful reunion consumes both halves, so a stale return
+token cannot remain live.
+
+The operations (`target_port::owner`) take the domain by value and give it
+back with their typed result:
+
+- `register` takes the place, fills it with `PhyState::new` once
+  (`Occupied::fill`) and lends the state to the registration's transitions.
+  As ESP-IDF's calibrating first `esp_phy_enable`, it enables the `PHY` and
+  `PHY_CALIBRATION` modem clock modules and releases `PHY_CALIBRATION`
+  after calibration. Its result is `Registered`: `RegisteredPhy`, the
+  handle of the filled place, and `RfOpen`. A failed registration empties
+  the place and returns it with its leaf cause;
+- `close` takes `RfOpen` and gives `RfClosed`: `phy_close_rf` runs, the
+  temperature sensor powers down and `PHY` is released, as the last
+  `esp_phy_disable` does. The registration stays;
+- `wake` takes `RfClosed` and gives `RfOpen`: `PHY` and `PHY_CALIBRATION`
+  are taken again, `phy_wakeup_init` restores the retained registration
+  without calibration and `PHY_CALIBRATION` is released;
+- `select_channel` and `switch_channel` take `RfOpen` and give it back,
+  through the HAL Wi-Fi client's channel HAL; the switch stops and restarts
+  the Wi-Fi MAC around the retune;
+- `track` takes `RfOpen` and gives it back: one pass of
+  `phy_param_track_tot`, Wi-Fi's only. As the vendor's periodic timer, it
+  runs under the PHY lock alone (the owned transaction) and brackets its
+  RF-sensitive regions with the grant-protect request. The pass's instant
+  is recorded in the state;
+- `enable_wifi_rx` and `disable_wifi_rx` need `RfOpen`.
+
+Neither proof is `Copy` nor `Clone`, and only the operations' ends make them.
+A failed operation returns its leaf cause and has consumed its proof; its
+value carries `Vacate`, the one right `RegisteredPhy::vacate` takes, and the
+place is empty again and nothing more: the clock modules stay held, so a
+registration into it ends in `RegistrationCause::Clock`. A registered place
+has no way back but a failure; an empty place gives its right back for the
+reunion (`PhyPlace::into_right`). A registration that does not complete
+releases both modules (`RegistrationCause::Failed { clocks, .. }`) and
+gives its place back empty.
+
+`owner::tracking_due(&PhyState, now)` answers whether a pass is due: at once
+after a registration, and otherwise once more than `TRACKING_PERIOD`
+(1 s, ESP-IDF's `PHY_TRACK_PLL_PERIOD_IN_US`) has passed since the last
+pass. The owner asks after every registration and every wake, as the vendor
+asks at every enable, and keeps its own timer for the next instant.
 
 Registration, RF wake and RF close construct their async state directly in
-their enclosing place and use the same `executor::boundary::Boundary` as
-the radio actor. Registration transfers typed `Placed` custody between retained fields;
-its constructor detaches the owned transaction before the first poll.
-Owned lifecycle futures pin their borrowed PHY children in their retained
-state and await pinned references. The radio backend pins the owned
-operations in the same way. Completed child results remain in placed fields
-of that retained state; only their exclusive `Placed` loans cross the poll
-boundary. Reunion and backend return handling consume those loans in separate
-non-inlined functions, keeping whole result temporaries out of poll frames.
+their enclosing place and use `executor::boundary::Boundary`. Owned
+lifecycle futures pin their borrowed PHY children in their retained state
+and await pinned references. Completed child results remain in placed
+fields of that retained state; only their exclusive `Placed` loans cross
+the poll boundary.
 
-Dropping either half, or a pending lifecycle/tracking future even before
-its first poll, quarantines all payloads without dropping their owners or
-restoring registers. Its named fault retains the cancelled operation
-and registration observation. Both halves report the same operation,
-independently of drop order. Firmware binds the fault directly at link
-time through the HAL's `phy_fault_reporter!` macro to the chip composition's
-`phy_fault::reset` (`oer-chips-esp32s31-platform-runtime`), which calls `fatal::reset_recording`;
-a 16-byte record naming the operation and epoch is printed on the next
-boot and cleared only after successful output. Host tests use an independent
-seat and catch their own never-returning reporter. There is no lock, unsafe
-borrow extension or automatic rollback.
-
-Client membership uses short exclusive borrows. Channel capabilities borrow
-from an owned transaction: selection and retune retain its cancellation guard
-across every await.
-
-The production operations are:
-
-- `register_concurrent_phy` registers the domain once through the domain's
-  owned PHY transaction. As ESP-IDF's calibrating first `esp_phy_enable`, it
-  enables the `PHY` and `PHY_CALIBRATION` modem clock modules through the
-  domain and releases `PHY_CALIBRATION` after calibration;
-- `close_concurrent_rf` runs `phy_close_rf` after the last client left and
-  releases `PHY`, as the last `esp_phy_disable` does. `wake_concurrent_rf`
-  takes `PHY` and `PHY_CALIBRATION` again, restores the retained
-  registration by `phy_wakeup_init` without calibration and releases
-  `PHY_CALIBRATION`. A closed domain admits no client;
-- `acquire_client` and `release_client` enter and leave Wi-Fi, Bluetooth and
-  IEEE 802.15.4 as clients of the one client set;
-  `wifi_client::join_wifi` and `leave_wifi` do this for Wi-Fi on the HAL's
-  clocked Wi-Fi owner (`esp_phy_enable`/`esp_phy_disable(PHY_MODEM_WIFI)`);
-- `select_concurrent_wifi_channel` and `switch_concurrent_wifi_channel` tune
-  the shared domain for Wi-Fi through the HAL Wi-Fi client's channel HAL,
-  which it lends together with the domain's attachment; the switch stops and
-  restarts the Wi-Fi MAC around the retune;
-- `evaluate_periodic_tracking` and an acquisition that needs initial tracking
-  leave the domain pending, and no client operation proceeds until it settles;
-- `admit_maintenance` checks, without register access, that tracking is
-  pending, and `maintain_concurrent_phy` then runs the tracking transaction;
-  a started failure poisons the domain. The one admission follows ESP-IDF's
-  `phy_common.c`: the periodic timer runs `phy_param_track_tot` under the PHY
-  lock alone, without pausing any protocol. The owned PHY transaction is that lock,
-  and the tracking graph brackets its RF-sensitive regions with the
-  grant-protect request. A protocol operation that loses RF to it ends with
-  its ordinary outcome.
-- `track_concurrent_phy` is one tick of the vendor `phy_track_pll`: it
-  evaluates the clients' tracking period and runs due tracking at once. The
-  radio-system actor calls it when its deadline timer wins against its
-  request doorbell, while tracked membership exists.
-
-### First and last PHY client
-
-The owner of the shared radio chooses the PHY transition for a joining
-client as the vendor `esp_phy_enable` does, on the radio domain:
-
-- RF closed: `wake_concurrent_rf` (the retained registration is restored
-  without calibration);
-- a client set already exists: nothing, the domain is already open;
-- otherwise: `register_concurrent_phy` with the retained calibration cache
-  when one was handed over (`PhyRegisterConfig::with_calibration_cache`), else
-  a calibrating registration; a registration refused as
-  `ConcurrentPhyError::AlreadyRegistered` counts as already open.
-
-A client then proves the domain ready (`phy_ready`) on the radio domain it joins
-with. Wi-Fi prepares the domain before it enters power, which a cold RF
-restart requires. The last client's half of `esp_phy_disable` closes
-RF (`close_concurrent_rf`) only when the domain is open and its client set is
-empty; a `ConcurrentRfError::Recoverable` failure keeps RF open, any other
-started failure requires reset.
-
-IEEE 802.15.4 stays a PHY client while it sleeps. On the ESP32-S31 the
-vendor `ieee802154_rf_disable` closes RF only together with the REGDMA PHY
-retention (`esp_hw_support/lowpower/port/esp32s31/sleep_phy.c`), whose I2C
-burst the pinned `libphy.a` does not provide
-(`phy_ana_i2c_master_burst_rf_onoff`); without it the vendor keeps RF open
-for the client's lifetime. RF closes only when the last client leaves.
-
-Protocol runtimes must first return their real TX, RX DMA, IRQ, MAC/LL and
-per-protocol receive-enable owners to the radio system. Consequently neither
-`PhyClientState::release`, a zero client mask nor a coex request can call the
-physical close transaction on its own. Failure after close begins poisons
-the domain; the radio then requires reset.
+Dropping either half of a transaction, or a pending lifecycle or tracking
+future even before its first poll, quarantines all payloads without
+dropping their owners or restoring registers. Its named fault retains the
+cancelled operation and registration observation. Firmware binds the fault
+directly at link time through the HAL's `phy_fault_reporter!` macro to the
+chip composition's `phy_fault::reset` (`oer-chips-esp32s31-platform-runtime`),
+which calls `fatal::reset_recording`; a 16-byte record naming the operation
+and epoch is printed on the next boot and cleared only after successful
+output. Host tests use an independent seat and catch their own
+never-returning reporter.
 
 ## Conditions and cadence
 
-[Registered-policy inspection](src/tracking/inspection/README.md) reports
-scheduling demand separately from the current RFPLL, power, analog-I2C and
-common/class calibration conditions. It makes no MMIO calls. Runtime sensor acquisitions have monotonic
-start/end provenance; undated replacements invalidate that provenance. A due evaluation is not an instruction
-to perform all heavy calibration. No hourly/daily calibration schedule or
-qualified maximum thermal deferral is implemented.
+The tracking pass reports what it committed (`PhyParamTrackingOutcome`).
+Runtime sensor acquisitions have monotonic start/end provenance; undated
+replacements invalidate that provenance. A due pass is not an instruction to
+perform all heavy calibration: each child decides from its own references.
+No hourly/daily calibration schedule or qualified maximum thermal deferral
+is implemented.
 
 ## Runtime sequence and timing
 
@@ -259,43 +225,28 @@ their last correction. These vendor-compatible outcomes complete the transaction
 but do not mean every search converged. Completion flags describe lifecycle;
 quality remains a separate result. A skipped DC branch has no new quality.
 
-The source-derived tracking graph contains optional RFPLL work, BT/154 power
-and class calibration, Wi-Fi analog-I2C/power and class calibration, followed
-by temperature sampling. Decisions in this graph use retained temperature;
+The source-derived tracking graph contains optional RFPLL work, Wi-Fi's
+analog-I2C, power and calibration, followed by temperature sampling. Decisions in this graph use retained temperature;
 the final sample must not be interpreted as the input to every preceding
 decision. Temperature sampling can itself adjust the sensor's analog range.
 
-Read-only demand neither advances timestamps nor refreshes calibration results.
-`Schedule::At` supports an absolute timer; `Schedule::Inactive` requires none.
-Deferral retains the outstanding due instant. The execution path re-observes
-the active clients, and only matching child completion commits branch results.
-The source interval is not a measured maximum thermally safe deferral.
+`tracking_due` changes nothing while it answers. A pass records its instant
+in the state when it ends; a pass that does not end records none, so the
+next answer is still due. The period is the vendor's source interval, not a
+measured maximum thermally safe deferral.
 
-Constructing the [radio-system actor](../system/src/lib.rs) does not
-calibrate. Its first client `join` calls [backend `prepare`](../system/src/esp32s31.rs)
-→ `register_concurrent_phy` → `PhyDomain::register` →
-[`run_phy_register`](src/executor/run.rs) after the P2 executor starts.
-Registration runs the cold graph or its admitted cache path. A later join
-after RF close restores the retained registration through `wake_concurrent_rf`. Initial client `track`
-settles pending maintenance before operational use.
-
-Periodic tracking runs in that same actor: after draining client requests,
-it waits on the request doorbell versus `tracking_deadline` while a tracked
-member exists. A timer win calls `track_concurrent_phy`, evaluates demand and
-runs due work. The [client scheduler](src/state/client.rs) defaults to
-1,000,000 µs; the strict due predicate selects `previous + period + 1 µs`.
-Requests can postpone the tick; no one-period maximum deferral or shift counter
-is enforced. The actor serializes
-its own retunes but checks no granted hard-window calendar. `EmbassyClock`
-uses the executor's SYSTIMER timer service: Alarm0 at P3 acknowledges and pends
-P2, which dispatches timers and polls tasks. The direct maintenance
-TXDC/PWDET path has a separate SAR/PWDET timer handler at P2. Wi-Fi images declare an actor task; the PHY diagnostic image drives concurrent PHY calls
-directly from P2.
+Nothing calibrates before the owner's `register`, which runs
+[`run_phy_register`](src/executor/run.rs) over the state it lent: the cold
+graph or its admitted cache path. A wake after RF close restores the
+retained registration without calibration. `EmbassyClock` uses the
+executor's SYSTIMER timer service: Alarm0 at P3 acknowledges and pends P2,
+which dispatches timers and polls tasks. The direct maintenance TXDC/PWDET
+path has a separate SAR/PWDET timer handler at P2.
 
 The parameter-tracking graph selects individual operations internally; no
-protocol selects them as independent maintenance transactions. Joint
-Wi-Fi/Bluetooth/154 maintenance and active-traffic publication of individual
-compensation classes are not qualified execution modes.
+protocol selects them as independent maintenance transactions. Active-traffic
+publication of individual compensation classes is not a qualified execution
+mode.
 
 The RX-gain path retains one [`RxProgram`](src/rx/program.rs) in both cold
 registration and common tracking. Borrowed typed step tokens carry each
@@ -368,7 +319,7 @@ settle. T7's named answer window is our 100 µs budget from completed command
 publication. The bus is sampled before judging the deadline: a completed
 answer is accepted even after a late resume; only a still-busy bus times out.
 The existing temperature graph owns conversion, range writes and dated commit.
-Cancellation leaves the admitted PHY poisoned until reset.
+Cancellation quarantines the owned transaction until reset.
 At `Runnable`, the driver continues while CPU admission allows; otherwise it
 self-wakes and returns `Pending` without a timer. A future `WaitAt` constructs
 and polls the timer; an already reached `WaitAt` still yields once before
@@ -477,8 +428,8 @@ epoch. Release checks and the exact RX/IRQ handoff establish that boundary.
 
 A pending demand wait is cancellable without starting hardware work. An
 abandoned consuming execution quarantines its owners and records a named
-fault before reset. A failed execution returns its poisoned domain and
-typed failure, without automatic rollback. Restoration failure also requires reset. Holding
+fault before reset. A failed execution returns its typed failure and has
+consumed its proof, without automatic rollback. Restoration failure also requires reset. Holding
 a CPU critical section across async waits is not the exclusion model.
 
 Calibration completion, restoration completion and measured RF quality are

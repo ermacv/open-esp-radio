@@ -5,14 +5,10 @@
 //! a client takes part at most once and `coex_enable` and `coex_disable`
 //! cannot be unbalanced. A client leaves common power only while it shows
 //! its [`CoexAbsent`]: it cannot leave power while it takes part. External
-//! coexistence takes part with its own [`ExternalCoexistence`]. The
-//! domain's participant set follows these states; the coexistence policy
-//! acts on it in the shared radio's owner (the `oer-chips-family-radio-coex` README
-//! records the participant policy).
+//! coexistence takes part with its own [`ExternalCoexistence`].
 //!
 //! Coexistence does not depend on the client's common power: Wi-Fi enables
-//! it before entering power, Bluetooth after its PHY engine and IEEE 802.15.4
-//! on request.
+//! it before entering power.
 
 use core::marker::PhantomData;
 
@@ -100,43 +96,29 @@ pub struct ExternalCoexistence {
     _private: (),
 }
 
-/// The radios that enabled coexistence (`coex_core_enable`).
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct CoexParticipants(oer_chips_family_radio_power::membership::Participants);
+impl<K: RadioClientKind> CoexAbsent<K> {
+    /// Enter coexistence.
+    pub(crate) const fn enter(self) -> Coexisting<K> {
+        let Self { _client } = self;
+        Coexisting { _client }
+    }
+}
 
-impl CoexParticipants {
-    pub(crate) const fn count(self) -> u32 {
-        self.0.count()
+impl<K: RadioClientKind> Coexisting<K> {
+    /// Leave coexistence.
+    pub(crate) const fn leave(self) -> CoexAbsent<K> {
+        let Self { _client } = self;
+        CoexAbsent { _client }
+    }
+}
+
+impl ExternalCoexistence {
+    pub(crate) const fn started() -> Self {
+        Self { _private: () }
     }
 
-    /// Enter client `K`; returns how many take part.
-    pub(crate) fn enter_client<K: RadioClientKind>(
-        &mut self,
-        absent: CoexAbsent<K>,
-    ) -> (Coexisting<K>, u32) {
-        let CoexAbsent { _client } = absent;
-        let count = self.0.enter(K::CLIENT);
-        (Coexisting { _client }, count)
-    }
-
-    /// Leave client `K`; returns how many still take part.
-    pub(crate) fn leave_client<K: RadioClientKind>(
-        &mut self,
-        coexisting: Coexisting<K>,
-    ) -> (CoexAbsent<K>, u32) {
-        let Coexisting { _client } = coexisting;
-        let count = self.0.leave(K::CLIENT);
-        (CoexAbsent { _client }, count)
-    }
-
-    pub(crate) fn enter_external(&mut self) -> (ExternalCoexistence, u32) {
-        let count = self.0.enter_external();
-        (ExternalCoexistence { _private: () }, count)
-    }
-
-    pub(crate) fn leave_external(&mut self, external: ExternalCoexistence) -> u32 {
-        let ExternalCoexistence { _private: () } = external;
-        self.0.leave_external()
+    pub(crate) const fn stop(self) {
+        let Self { _private: () } = self;
     }
 }
 

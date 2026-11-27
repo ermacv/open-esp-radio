@@ -1,13 +1,12 @@
 //! Runtime RX calibration followed by one shared TX calibration transaction.
 //!
 //! The current S31 vendor graph has one RX reference and one shared TX
-//! reference. Wi-Fi and BT/154 TX children run in that order inside the same
-//! frequency/gain envelope. References are published only after terminal
+//! reference. Wi-Fi's TX child runs inside the shared frequency/gain
+//! envelope. References are published only after terminal
 //! restoration. Each measurement branch is bracketed by a grant-protect
 //! request, as `phy_cal_param_track` does; the request is a coexistence
 //! priority, and physical admission remains the radio owner's job.
 
-use crate::tracking::parameters::PhyCalibrationTrackClass;
 use oer_chips_esp32s31_hal::types::BasebandMode;
 use oer_chips_esp32s31_hal::types::PhyForcedDigitalGain;
 
@@ -25,13 +24,7 @@ pub struct PhyCalibrationTrackingParameters {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PhyCalibrationTrackingRequest {
-    pub clients: super::parameters::PhyParamTrackRequest,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyCalibrationTrackingOutcome {
-    pub clients: super::parameters::PhyParamTrackRequest,
     pub threshold: u8,
     pub common_reference_temperature: i16,
     pub transmit_reference_temperature: i16,
@@ -41,7 +34,6 @@ pub struct PhyCalibrationTrackingOutcome {
     pub rx_gain: Option<crate::rx::gain::PhyRxGainInitOutcome>,
     pub channel: Option<crate::channel::PhyChipChannelOutcome>,
     pub wifi_tx_dc_pwdet: Option<crate::tx::dc_power_detector::PhyTxDcPwdetOutcome>,
-    pub bluetooth_ieee802154_tx_dc_pwdet: Option<crate::tx::dc_power_detector::PhyTxDcPwdetOutcome>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,13 +58,10 @@ pub enum PhyCalibrationTrackingAction {
     ConfigureBasebandChannel {
         cbw: u8,
     },
-    CalibrateTxDcPwdet {
-        class: PhyCalibrationTrackClass,
-    },
+    CalibrateTxDcPwdet,
     PublishWifiTxGain {
         channel: u16,
     },
-    PublishBluetoothIeee802154TxGain,
     DisableWifiBaseband,
     EnableMacBaseband,
     RestoreTxGainCompensation,
@@ -211,17 +200,15 @@ pub struct PhyCalibrationChannelCompletion {
     result: Result<crate::channel::PhyChipChannelOutcome, crate::channel::PhyChipChannelFailure>,
 }
 
-/// Opaque terminal result of the complete class-specific TXDC/PWDET child.
+/// Opaque terminal result of the complete Wi-Fi TXDC/PWDET child.
 ///
 /// ```compile_fail
 /// use oer_chips_esp32s31_radio_phy::tracking::calibration::{
 ///     PhyCalibrationTrackingCompletion, PhyCalibrationTxDcPwdetCompletion,
 /// };
-/// use oer_chips_esp32s31_radio_phy::tracking::parameters::PhyCalibrationTrackClass;
 ///
 /// let forged = PhyCalibrationTrackingCompletion::TxDcPwdetCalibrated(
 ///     PhyCalibrationTxDcPwdetCompletion {
-///         class: PhyCalibrationTrackClass::Wifi,
 ///         result: Ok(oer_chips_esp32s31_radio_phy::tx::dc_power_detector::PhyTxDcPwdetOutcome {
 ///             dco: [[0; 4]; 3],
 ///             total_measurements: 0,
@@ -231,34 +218,30 @@ pub struct PhyCalibrationChannelCompletion {
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyCalibrationTxDcPwdetCompletion {
-    class: PhyCalibrationTrackClass,
     result: Result<
         crate::tx::dc_power_detector::PhyTxDcPwdetOutcome,
         crate::tx::dc_power_detector::PhyTxDcPwdetFailure,
     >,
 }
 
-/// Opaque proof that the class-specific gain image derived from the pending
+/// Opaque proof that the Wi-Fi gain image derived from the pending
 /// TXDC/PWDET result reached its PAC-backed publication edge.
 ///
 /// ```compile_fail
 /// use oer_chips_esp32s31_radio_phy::tracking::calibration::{
 ///     PhyCalibrationTrackingCompletion, PhyCalibrationTxGainCompletion,
 /// };
-/// use oer_chips_esp32s31_radio_phy::tracking::parameters::PhyCalibrationTrackClass;
 ///
 /// let forged = PhyCalibrationTrackingCompletion::TxGainPublished(
 ///     PhyCalibrationTxGainCompletion {
-///         class: PhyCalibrationTrackClass::Wifi,
-///         channel: Some(11),
+///         channel: 11,
 ///         published: true,
 ///     },
 /// );
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyCalibrationTxGainCompletion {
-    class: PhyCalibrationTrackClass,
-    channel: Option<u16>,
+    channel: u16,
     /// The gain child reached its force-TX/RX pair: Wi-Fi returns before
     /// that pair when vendor `tx_gain_skip_publication` is set.
     published: bool,
@@ -321,30 +304,28 @@ enum Step {
 pub enum PhyCalibrationTrackingBranch {
     /// DCODE and RX gain calibration with the channel restoration.
     Common,
-    /// TXDC/PWDET of the requested classes and their gain publication.
+    /// Wi-Fi's TXDC/PWDET and its gain publication.
     Transmit,
 }
 
 /// Actions of the longest calibration-tracking path, its terminal action
-/// included: the common branch and the transmit branch with both classes,
-/// each bracketed by a grant-protect request. A driver that observes this
-/// many actions without a terminal one has left the finite graph.
-pub(crate) const CALIBRATION_TRACKING_ACTION_LIMIT: u8 = 33;
+/// included: the common branch and Wi-Fi's transmit branch, each bracketed
+/// by a grant-protect request. A driver that observes this many actions
+/// without a terminal one has left the finite graph.
+pub(crate) const CALIBRATION_TRACKING_ACTION_LIMIT: u8 = 30;
 
 /// Finite RX/TX parent for the current three-argument vendor child.
 /// The shared TX reference advances once after all requested classes restore.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyCalibrationTrackingTransition {
-    request: PhyCalibrationTrackingRequest,
     parameters: PhyCalibrationTrackingParameters,
     threshold: u8,
     common_updated: bool,
     transmit_updated: bool,
-    active_class: PhyCalibrationTrackClass,
     dcode: Option<crate::analog::dcode::PhyDcodeOutcome>,
     rx_gain: Option<crate::rx::gain::PhyRxGainInitOutcome>,
     channel: Option<crate::channel::PhyChipChannelOutcome>,
-    tx_dc_pwdet: [Option<crate::tx::dc_power_detector::PhyTxDcPwdetOutcome>; 2],
+    tx_dc_pwdet: Option<crate::tx::dc_power_detector::PhyTxDcPwdetOutcome>,
     failure: Option<PhyCalibrationTrackingFailure>,
     /// The branch whose grant-protect bracket is open or last opened: the
     /// shared tail that restores gain and releases the request belongs to
@@ -356,17 +337,11 @@ pub struct PhyCalibrationTrackingTransition {
 
 impl PhyCalibrationTrackingTransition {
     #[cfg(test)]
-    pub const fn new(
-        request: PhyCalibrationTrackingRequest,
-        parameters: PhyCalibrationTrackingParameters,
-    ) -> Self {
-        Self::start(request, parameters)
+    pub const fn new(parameters: PhyCalibrationTrackingParameters) -> Self {
+        Self::start(parameters)
     }
 
-    pub(crate) const fn start(
-        request: PhyCalibrationTrackingRequest,
-        parameters: PhyCalibrationTrackingParameters,
-    ) -> Self {
+    pub(crate) const fn start(parameters: PhyCalibrationTrackingParameters) -> Self {
         let decision = parameters.decision();
         let threshold = decision.common.threshold;
         let step = if decision.common.is_due() {
@@ -377,20 +352,14 @@ impl PhyCalibrationTrackingTransition {
             Step::Complete
         };
         Self {
-            request,
             parameters,
             threshold,
             common_updated: false,
             transmit_updated: false,
-            active_class: if request.clients.wifi() {
-                PhyCalibrationTrackClass::Wifi
-            } else {
-                PhyCalibrationTrackClass::BluetoothIeee802154
-            },
             dcode: None,
             rx_gain: None,
             channel: None,
-            tx_dc_pwdet: [None; 2],
+            tx_dc_pwdet: None,
             failure: None,
             grant_branch: match step {
                 Step::TxAcquireGrant => PhyCalibrationTrackingBranch::Transmit,
@@ -470,16 +439,9 @@ impl PhyCalibrationTrackingTransition {
             Step::TxConfigureBasebandZero => {
                 PhyCalibrationTrackingAction::ConfigureBasebandChannel { cbw: 0 }
             }
-            Step::TxCalibrateTxDcPwdet => PhyCalibrationTrackingAction::CalibrateTxDcPwdet {
-                class: self.active_class,
-            },
-            Step::TxPublishTxGain => match self.active_class {
-                PhyCalibrationTrackClass::Wifi => PhyCalibrationTrackingAction::PublishWifiTxGain {
-                    channel: self.parameters.current_channel,
-                },
-                PhyCalibrationTrackClass::BluetoothIeee802154 => {
-                    PhyCalibrationTrackingAction::PublishBluetoothIeee802154TxGain
-                }
+            Step::TxCalibrateTxDcPwdet => PhyCalibrationTrackingAction::CalibrateTxDcPwdet,
+            Step::TxPublishTxGain => PhyCalibrationTrackingAction::PublishWifiTxGain {
+                channel: self.parameters.current_channel,
             },
             Step::TxRestoreBaseband => PhyCalibrationTrackingAction::ConfigureBasebandChannel {
                 cbw: self.parameters.channel_bandwidth,
@@ -651,19 +613,13 @@ impl PhyCalibrationTrackingTransition {
             (
                 Step::TxConfigureBasebandZero,
                 PhyCalibrationTrackingCompletion::BasebandChannelConfigured { cbw: 0 },
-            ) => {
-                if self.request.clients.wifi() || self.request.clients.bluetooth_ieee802154() {
-                    Step::TxCalibrateTxDcPwdet
-                } else {
-                    Step::TxRestoreBaseband
-                }
-            }
+            ) => Step::TxCalibrateTxDcPwdet,
             (
                 Step::TxCalibrateTxDcPwdet,
                 PhyCalibrationTrackingCompletion::TxDcPwdetCalibrated(completion),
-            ) if completion.class == self.active_class => match completion.result {
+            ) => match completion.result {
                 Ok(outcome) => {
-                    self.tx_dc_pwdet[self.active_class.selector() as usize] = Some(outcome);
+                    self.tx_dc_pwdet = Some(outcome);
                     Step::TxPublishTxGain
                 }
                 Err(failure) => {
@@ -674,23 +630,17 @@ impl PhyCalibrationTrackingTransition {
             (
                 Step::TxPublishTxGain,
                 PhyCalibrationTrackingCompletion::TxGainPublished(completion),
-            ) if completion.class == self.active_class
-                && completion.channel
-                    == match self.active_class {
-                        PhyCalibrationTrackClass::Wifi => Some(self.parameters.current_channel),
-                        PhyCalibrationTrackClass::BluetoothIeee802154 => None,
-                    } =>
-            {
+            ) if completion.channel == self.parameters.current_channel => {
                 if completion.published {
                     Step::TxReassertTxRxOff
                 } else {
-                    self.after_tx_gain()
+                    Step::TxRestoreBaseband
                 }
             }
             (
                 Step::TxReassertTxRxOff,
                 PhyCalibrationTrackingCompletion::ForceTxRxCompleted(completion),
-            ) if completion.enabled => self.after_tx_gain(),
+            ) if completion.enabled => Step::TxRestoreBaseband,
             (
                 Step::TxRestoreBaseband,
                 PhyCalibrationTrackingCompletion::BasebandChannelConfigured { cbw },
@@ -782,43 +732,25 @@ impl PhyCalibrationTrackingTransition {
         PhyCalibrationChannelTransition::lower(self.action(), parameters)
     }
 
-    /// Select the exact Wi-Fi or shared Bluetooth/IEEE 802.15.4 form of the
-    /// complete `phy_txdc_cal_pwdet_init` hardware graph.
+    /// The Wi-Fi form of the complete `phy_txdc_cal_pwdet_init` hardware
+    /// graph.
     pub fn begin_tx_dc_pwdet(
         &self,
         wifi_parameters: crate::tx::dc_power_detector::PhyTxDcPwdetParameters,
-        bluetooth_ieee802154: crate::calibration::bluetooth::PhyBluetoothTxDcPwdetTransition,
     ) -> Result<PhyCalibrationTxDcPwdetTransition, PhyCalibrationTrackingChildError> {
-        PhyCalibrationTxDcPwdetTransition::lower(
-            self.action(),
-            wifi_parameters,
-            bluetooth_ieee802154,
-        )
+        PhyCalibrationTxDcPwdetTransition::lower(self.action(), wifi_parameters)
     }
 
-    /// Capture the exact Wi-Fi or shared Bluetooth/IEEE 802.15.4 gain image
-    /// from live calibration state and the pending TXDC result.
+    /// Capture the Wi-Fi gain image from live calibration state and the
+    /// pending TXDC result.
     pub fn begin_tx_gain_publication(
         &self,
         state: &crate::state::PhyState,
     ) -> Result<PhyCalibrationTxGainBinding, PhyCalibrationTrackingChildError> {
-        let Some(tx_dc_pwdet) = self.tx_dc_pwdet[self.active_class.selector() as usize] else {
+        let Some(tx_dc_pwdet) = self.tx_dc_pwdet else {
             return Err(PhyCalibrationTrackingChildError::IncompleteChildOutcome);
         };
         PhyCalibrationTxGainBinding::lower(self.action(), state, tx_dc_pwdet)
-    }
-
-    /// Continue after one class's gain child: the next class, or baseband
-    /// restoration.
-    fn after_tx_gain(&mut self) -> Step {
-        if self.active_class == PhyCalibrationTrackClass::Wifi
-            && self.request.clients.bluetooth_ieee802154()
-        {
-            self.active_class = PhyCalibrationTrackClass::BluetoothIeee802154;
-            Step::TxCalibrateTxDcPwdet
-        } else {
-            Step::TxRestoreBaseband
-        }
     }
 
     const fn first_transmit_step(self) -> Step {
@@ -832,7 +764,6 @@ impl PhyCalibrationTrackingTransition {
     const fn outcome(self) -> PhyCalibrationTrackingOutcome {
         let current = self.parameters.current_temperature;
         PhyCalibrationTrackingOutcome {
-            clients: self.request.clients,
             threshold: self.threshold,
             common_reference_temperature: if self.common_updated {
                 current
@@ -862,12 +793,7 @@ impl PhyCalibrationTrackingTransition {
                 None
             },
             wifi_tx_dc_pwdet: if self.transmit_updated {
-                self.tx_dc_pwdet[0]
-            } else {
-                None
-            },
-            bluetooth_ieee802154_tx_dc_pwdet: if self.transmit_updated {
-                self.tx_dc_pwdet[1]
+                self.tx_dc_pwdet
             } else {
                 None
             },
@@ -912,28 +838,16 @@ pub struct PhyCalibrationChannelTransition {
     child: crate::channel::PhyChipChannelTransition,
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum PhyCalibrationTxDcPwdetChild {
-    Wifi(crate::tx::dc_power_detector::PhyTxDcPwdetTransition),
-    BluetoothIeee802154(crate::calibration::bluetooth::PhyBluetoothTxDcPwdetTransition),
-}
-
-/// Non-cloneable owner of the selected complete class TXDC/PWDET graph.
+/// Non-cloneable owner of the complete Wi-Fi TXDC/PWDET graph.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyCalibrationTxDcPwdetTransition {
-    class: PhyCalibrationTrackClass,
-    child: PhyCalibrationTxDcPwdetChild,
+    child: crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum PhyCalibrationTxGainPublication {
-    Wifi {
-        channel: u16,
-        image: Option<crate::channel::PhyWifiTxGainImage>,
-    },
-    BluetoothIeee802154 {
-        image: crate::calibration::bluetooth::PhyBluetoothTxGainImage,
-    },
+struct PhyCalibrationTxGainPublication {
+    channel: u16,
+    image: Option<crate::channel::PhyWifiTxGainImage>,
 }
 
 /// Non-cloneable owner of the selected direct gain-memory publication edge.
@@ -952,32 +866,20 @@ impl PhyCalibrationTxGainBinding {
         state: &crate::state::PhyState,
         tx_dc_pwdet: crate::tx::dc_power_detector::PhyTxDcPwdetOutcome,
     ) -> Result<Self, PhyCalibrationTrackingChildError> {
-        let publication = match parent_action {
-            PhyCalibrationTrackingAction::PublishWifiTxGain { channel } => {
-                PhyCalibrationTxGainPublication::Wifi {
-                    channel,
-                    image: state.wifi_calibration_gain_image(channel, tx_dc_pwdet),
-                }
-            }
-            PhyCalibrationTrackingAction::PublishBluetoothIeee802154TxGain => {
-                PhyCalibrationTxGainPublication::BluetoothIeee802154 {
-                    image: state.bluetooth_ieee802154_calibration_gain_image(tx_dc_pwdet),
-                }
-            }
-            _ => return Err(PhyCalibrationTrackingChildError::UnsupportedAction),
+        let PhyCalibrationTrackingAction::PublishWifiTxGain { channel } = parent_action else {
+            return Err(PhyCalibrationTrackingChildError::UnsupportedAction);
+        };
+        let publication = PhyCalibrationTxGainPublication {
+            channel,
+            image: state.wifi_calibration_gain_image(channel, tx_dc_pwdet),
         };
         Ok(Self { publication })
     }
 
     #[cfg(test)]
     pub const fn action(&self) -> PhyCalibrationTrackingAction {
-        match self.publication {
-            PhyCalibrationTxGainPublication::Wifi { channel, .. } => {
-                PhyCalibrationTrackingAction::PublishWifiTxGain { channel }
-            }
-            PhyCalibrationTxGainPublication::BluetoothIeee802154 { .. } => {
-                PhyCalibrationTrackingAction::PublishBluetoothIeee802154TxGain
-            }
+        PhyCalibrationTrackingAction::PublishWifiTxGain {
+            channel: self.publication.channel,
         }
     }
 
@@ -986,25 +888,13 @@ impl PhyCalibrationTxGainBinding {
         self,
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     ) -> PhyCalibrationTrackingCompletion {
-        let completion = match &self.publication {
-            PhyCalibrationTxGainPublication::Wifi { channel, image } => {
-                if let Some(image) = image {
-                    crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
-                }
-                PhyCalibrationTxGainCompletion {
-                    class: PhyCalibrationTrackClass::Wifi,
-                    channel: Some(*channel),
-                    published: image.is_some(),
-                }
-            }
-            PhyCalibrationTxGainPublication::BluetoothIeee802154 { image } => {
-                crate::hardware::publish_bluetooth_tx_gain_memory(registers, image);
-                PhyCalibrationTxGainCompletion {
-                    class: PhyCalibrationTrackClass::BluetoothIeee802154,
-                    channel: None,
-                    published: true,
-                }
-            }
+        let PhyCalibrationTxGainPublication { channel, image } = &self.publication;
+        if let Some(image) = image {
+            crate::hardware::publish_phy_tx_gain_memory(registers, false, image);
+        }
+        let completion = PhyCalibrationTxGainCompletion {
+            channel: *channel,
+            published: image.is_some(),
         };
         PhyCalibrationTrackingCompletion::TxGainPublished(completion)
     }
@@ -1015,41 +905,23 @@ impl PhyCalibrationTxDcPwdetTransition {
     pub(crate) fn transition_mut(
         &mut self,
     ) -> &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition {
-        match &mut self.child {
-            PhyCalibrationTxDcPwdetChild::Wifi(child) => child,
-            PhyCalibrationTxDcPwdetChild::BluetoothIeee802154(child) => child.transition_mut(),
-        }
+        &mut self.child
     }
 
     fn lower(
         parent_action: PhyCalibrationTrackingAction,
         wifi_parameters: crate::tx::dc_power_detector::PhyTxDcPwdetParameters,
-        bluetooth_ieee802154: crate::calibration::bluetooth::PhyBluetoothTxDcPwdetTransition,
     ) -> Result<Self, PhyCalibrationTrackingChildError> {
-        let PhyCalibrationTrackingAction::CalibrateTxDcPwdet { class } = parent_action else {
+        let PhyCalibrationTrackingAction::CalibrateTxDcPwdet = parent_action else {
             return Err(PhyCalibrationTrackingChildError::UnsupportedAction);
         };
-        let child = match class {
-            PhyCalibrationTrackClass::Wifi => PhyCalibrationTxDcPwdetChild::Wifi(
-                crate::tx::dc_power_detector::PhyTxDcPwdetTransition::new(wifi_parameters),
-            ),
-            PhyCalibrationTrackClass::BluetoothIeee802154 => {
-                PhyCalibrationTxDcPwdetChild::BluetoothIeee802154(bluetooth_ieee802154)
-            }
-        };
-        Ok(Self { class, child })
-    }
-
-    #[cfg(test)]
-    pub const fn class(&self) -> PhyCalibrationTrackClass {
-        self.class
+        Ok(Self {
+            child: crate::tx::dc_power_detector::PhyTxDcPwdetTransition::new(wifi_parameters),
+        })
     }
 
     pub const fn action(&self) -> crate::tx::dc_power_detector::PhyTxDcPwdetAction {
-        match &self.child {
-            PhyCalibrationTxDcPwdetChild::Wifi(child) => child.action(),
-            PhyCalibrationTxDcPwdetChild::BluetoothIeee802154(child) => child.action(),
-        }
+        self.child.action()
     }
 
     #[cfg(test)]
@@ -1057,10 +929,7 @@ impl PhyCalibrationTxDcPwdetTransition {
         &mut self,
         completion: crate::tx::dc_power_detector::PhyTxDcPwdetCompletion,
     ) -> Result<(), crate::tx::dc_power_detector::PhyTxDcPwdetTransitionError> {
-        match &mut self.child {
-            PhyCalibrationTxDcPwdetChild::Wifi(child) => child.advance(completion),
-            PhyCalibrationTxDcPwdetChild::BluetoothIeee802154(child) => child.advance(completion),
-        }
+        self.child.advance(completion)
     }
 
     #[cfg(test)]
@@ -1084,10 +953,7 @@ impl PhyCalibrationTxDcPwdetTransition {
             _ => return Err(self),
         };
         Ok(PhyCalibrationTrackingCompletion::TxDcPwdetCalibrated(
-            PhyCalibrationTxDcPwdetCompletion {
-                class: self.class,
-                result,
-            },
+            PhyCalibrationTxDcPwdetCompletion { result },
         ))
     }
 }

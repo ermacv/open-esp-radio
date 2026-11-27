@@ -28,8 +28,8 @@ use std::{
 use oer_hil_services_radio_pair::{
     self as service, BringUp, BroughtUp, Counters, Expect, Expecting, HandOver, HandedOver,
     ReceiveCounters, ReceiverRequest, Record, Round, SenderRequest, Sent, SnapshotCold,
-    SnapshotPage, SnapshotUp, Stall, Stood, Stop, Stopped, Target, Targeted, Turn, Turned, Window,
-    Windowed,
+    SnapshotPage, SnapshotUp, Stall, Stood, Stop, Stopped, Target, Targeted, Turn, TurnKind,
+    Turned, TurnedRf, Window, Windowed,
 };
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{Case, Cx, Failure, Role, Scenario, check};
@@ -82,9 +82,9 @@ const STEP: Duration = Duration::from_secs(5);
 /// The bring-up: the PHY's registration and calibration, the MAC's cold
 /// start, the channel.
 const BRING_UP: Duration = Duration::from_secs(30);
-/// Case C's rounds, and how long they may take: about 45 s, past R4's end
-/// (about 30 s); R1 to R4 take their counts inside their own windows.
-const ROUNDS: u32 = 6_000;
+/// Case C's rounds, and how long they may take: about 75 s, past R5's end
+/// (about 60 s); R1 to R5 take their counts inside their own windows.
+const ROUNDS: u32 = 10_000;
 const ROUNDS_TIMEOUT: Duration = Duration::from_secs(300);
 /// The receiver's windows (`tasks/277`, `281`).
 const WINDOW_MS: u32 = 2_000;
@@ -198,7 +198,14 @@ fn bring_up(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let mut stations = [[0_u8; 6]; 2];
     for (role, station) in [RECEIVER, SENDER].into_iter().zip(&mut stations) {
         match cx.device(role)?.call(BringUp, BRING_UP)? {
-            BroughtUp::Up { station: up, .. } => *station = up,
+            BroughtUp::Up {
+                station: up,
+                register_micros,
+                ..
+            } => {
+                *station = up;
+                keep(cx, role, "register-micros", &register_micros);
+            }
             other => return Err(Failure::Fail(format!("{role}: bring-up: {other:?}"))),
         }
     }
@@ -291,7 +298,63 @@ const fn anomalies(counts: &service::Counts) -> u32 {
         .saturating_add(counts.doorbell_anomalies)
 }
 
-/// Case C's rounds on the sender while the receiver serves R1 to R4; each
+/// `TURNS` turns of `kind` on the receiver, kept as `<name>-turns`, then the
+/// receiver's counters as `counters-<name>`. Each turn passes R4's
+/// thresholds, whatever its kind.
+fn turns(
+    cx: &mut Cx<'_>,
+    timeline: &mut Timeline,
+    failed: &mut Vec<String>,
+    kind: TurnKind,
+    name: &str,
+) -> Result<(), Failure> {
+    let mut turns = Vec::new();
+    for turn in 0..TURNS {
+        let began = timeline.now();
+        let turned = cx.device(RECEIVER)?.call(
+            Turn {
+                millis: TURN_MS,
+                kind,
+            },
+            within(TURN_MS).saturating_add(Duration::from_millis(u64::from(TURN_MS))),
+        )?;
+        timeline.step(&format!("{name}-turn-{turn}"), began);
+        let pass = match &turned {
+            Turned::Turned {
+                before,
+                after,
+                handles,
+                rf,
+                ..
+            } => {
+                after.sender >= R4_UNITS
+                    && before.sender > 0
+                    && *handles == BUFFERS
+                    && after.mismatched == 0
+                    && anomalies(before) == 0
+                    && anomalies(after) == 0
+                    && matches!(
+                        (kind, rf),
+                        (TurnKind::Restart, TurnedRf::Kept)
+                            | (TurnKind::CloseAndWake, TurnedRf::ClosedAndWoken { .. })
+                    )
+            }
+            _ => false,
+        };
+        if !pass {
+            failed.push(format!("{} turn {turn}: {turned:?}", name.to_uppercase()));
+        }
+        let ended = !matches!(turned, Turned::Turned { .. });
+        turns.push(turned);
+        if ended {
+            break;
+        }
+    }
+    keep(cx, RECEIVER, &format!("{name}-turns"), &turns);
+    counters(cx, RECEIVER, &format!("counters-{name}"))
+}
+
+/// Case C's rounds on the sender while the receiver serves R1 to R5; each
 /// R's verdict is recorded, and the case fails naming every R that did.
 fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let rounds = cx.device(SENDER)?.post(Round { rounds: ROUNDS })?;
@@ -376,42 +439,9 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
         }
         (stood, exit) => failed.push(format!("R3: {stood:?}, {exit:?}")),
     }
-    // R4: the turns.
-    let mut turns = Vec::new();
-    for turn in 0..TURNS {
-        let began = timeline.now();
-        let turned = cx.device(RECEIVER)?.call(
-            Turn { millis: TURN_MS },
-            within(TURN_MS).saturating_add(Duration::from_millis(u64::from(TURN_MS))),
-        )?;
-        timeline.step(&format!("r4-turn-{turn}"), began);
-        let pass = match &turned {
-            Turned::Turned {
-                before,
-                after,
-                handles,
-                ..
-            } => {
-                after.sender >= R4_UNITS
-                    && before.sender > 0
-                    && *handles == BUFFERS
-                    && after.mismatched == 0
-                    && anomalies(before) == 0
-                    && anomalies(after) == 0
-            }
-            _ => false,
-        };
-        if !pass {
-            failed.push(format!("R4 turn {turn}: {turned:?}"));
-        }
-        let ended = !matches!(turned, Turned::Turned { .. });
-        turns.push(turned);
-        if ended {
-            break;
-        }
-    }
-    keep(cx, RECEIVER, "r4-turns", &turns);
-    counters(cx, RECEIVER, "counters-r4")?;
+    // R4: the turns, RF kept open; R5: the turns with RF closed and woken.
+    turns(cx, &mut timeline, &mut failed, TurnKind::Restart, "r4")?;
+    turns(cx, &mut timeline, &mut failed, TurnKind::CloseAndWake, "r5")?;
     // The sender's rounds.
     let sent = cx.device(SENDER)?.wait(rounds, ROUNDS_TIMEOUT)?;
     keep(cx, SENDER, "rounds", &sent);

@@ -182,9 +182,9 @@ impl WifiCold {
     ///
     /// The client already holds power, or the first client's sequence failed
     /// a read-back checkpoint; the unchanged owner is returned.
-    pub fn power_up<B: PlatformClockBackend, T>(
+    pub fn power_up<B: PlatformClockBackend>(
         self,
-        radio: &mut RadioDomain<B, T>,
+        radio: &mut RadioDomain<B>,
         clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<
         (WifiPowered, CommonPower<WifiClient>),
@@ -214,9 +214,9 @@ impl WifiPowered {
         clippy::type_complexity,
         reason = "the failure returns the owner beside its power proof"
     )]
-    pub fn power_down<B: PlatformClockBackend, T>(
+    pub fn power_down<B: PlatformClockBackend>(
         self,
-        radio: &mut RadioDomain<B, T>,
+        radio: &mut RadioDomain<B>,
         power: CommonPower<WifiClient>,
         coex: &CoexAbsent<WifiClient>,
     ) -> Result<
@@ -242,9 +242,9 @@ impl WifiPowered {
     ///
     /// The planner rejected the request before any access, or a platform
     /// request failed and poisoned the modem clocks.
-    pub fn enable_clocks<B: PlatformClockBackend, T>(
+    pub fn enable_clocks<B: PlatformClockBackend>(
         self,
-        radio: &mut RadioDomain<B, T>,
+        radio: &mut RadioDomain<B>,
         platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(WifiClocked, MacFirstReset), WifiTransitionFailure<Self, ModemClockError>> {
         match radio.enable_modem_clocks(&self.registers.mac, platform) {
@@ -270,9 +270,9 @@ impl WifiClocked {
     /// # Errors
     ///
     /// The modem clocks are poisoned.
-    pub fn set_initialized<B: PlatformClockBackend, T>(
+    pub fn set_initialized<B: PlatformClockBackend>(
         &mut self,
-        radio: &mut RadioDomain<B, T>,
+        radio: &mut RadioDomain<B>,
         initialized: WifiInitialization,
     ) -> Result<(), ModemClockError> {
         radio.set_wifi_initialized(&self.registers.mac, initialized)?;
@@ -322,21 +322,21 @@ impl WifiClocked {
     /// Borrow the channel HAL for one channel transaction, with the shared
     /// PHY borrowed from the radio domain.
     #[cfg(test)]
-    pub fn channel_hal<'hal, B: PlatformClockBackend, P, T>(
+    pub fn channel_hal<'hal, B: PlatformClockBackend, P>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<B, T>,
+        radio: &'hal mut RadioDomain<B>,
     ) -> RadioChannelHal<'hal, P> {
         let (phy, restore) = radio.phy_parts_mut();
         RadioChannelHal::from_leased(platform, &mut self.registers.mac, phy, restore)
     }
 
     /// Consume PHY custody for one channel operation, borrowing its MAC and platform.
-    pub fn channel_transaction<'hal, B: PlatformClockBackend, P, T>(
+    pub fn channel_transaction<'hal, B: PlatformClockBackend, P>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: crate::radio::domain::transaction::RadioTransaction<B, T>,
-    ) -> crate::radio::ieee80211::channel::ChannelTransaction<'hal, B, P, T> {
+        radio: crate::radio::domain::transaction::RadioTransaction<B>,
+    ) -> crate::radio::ieee80211::channel::ChannelTransaction<'hal, B, P> {
         crate::radio::ieee80211::channel::ChannelTransaction::new(
             radio,
             &mut self.registers.mac,
@@ -386,9 +386,9 @@ impl WifiClocked {
         clippy::result_large_err,
         reason = "failure must retain both stopped registers and the clock obligation"
     )]
-    pub fn release_clocks<B: PlatformClockBackend, T>(
+    pub fn release_clocks<B: PlatformClockBackend>(
         mut self,
-        radio: &mut RadioDomain<B, T>,
+        radio: &mut RadioDomain<B>,
     ) -> Result<ClockReleased, (StoppedInstallation, ClockPoisoned)> {
         let release = self
             .set_initialized(radio, WifiInitialization::Uninitialized)

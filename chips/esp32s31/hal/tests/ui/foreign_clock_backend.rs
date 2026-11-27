@@ -4,8 +4,8 @@ use oer_chips_esp32s31_hal::{
     power::{PlatformClockBackend, PlatformClockProvider},
 };
 
-pub fn enable<B1: PlatformClockBackend, B2: PlatformClockBackend, T>(
-    radio: &mut RadioDomain<B1, T>,
+pub fn enable<B1: PlatformClockBackend, B2: PlatformClockBackend>(
+    radio: &mut RadioDomain<B1>,
     own: &impl PlatformClockProvider<Backend = B1>,
     foreign: &impl PlatformClockProvider<Backend = B2>,
 ) {

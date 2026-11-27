@@ -1166,9 +1166,9 @@ register atoms, the permanent PSRAM MPLL owner and PHY custody. S31 modem clock
 tables live in `knowledge::modem_clock`, with a HAL newtype implementing the
 family dependency contract. `oer-chips-family-radio-modem-clock::execution` orders the
 upstream-source and device edges; failed edges retain the poisoned planner and
-its leases. The radio family also owns common-power and coexistence membership,
-registration epoch policy, BTBB gain-generation admission, module lease slots,
-and the low-power/external-coexistence edge order. The S31 HAL binding retains
+its leases. The radio family also owns common-power membership, registration
+epoch policy, module lease slots, and the low-power/external-coexistence edge
+order. The S31 HAL binding retains
 affine public proofs and clock guards and lends its register atoms to those
 drivers. PHY transactions retain the complete family state with their exact
 seat and both cancellation guards. Neither family depends on a chip or protocol
@@ -1185,35 +1185,25 @@ transaction custody, including the existing fault ABI.
 
 ## Radio system
 
-No built image owns the radio but probes, each holding the HAL's radio
-domain itself. The radio system and its client contract
-(`chips/esp32s31/radio/{system, client}`) are sources outside the build,
-awaiting deletion at their successor; the rest of this section describes
-those sources.
+No built image owns the radio but probes. A probe holds the HAL's radio
+domain (`RadioDomain<B>`) and the PHY's one owner: the place of the PHY's
+state and the proofs of RF open and closed (the
+[PHY architecture](../chips/esp32s31/radio/phy/README.md), "The one owner").
+The radio system and its client contract (`chips/esp32s31/radio/{system,
+client}`) are sources outside the build, awaiting deletion at their
+successor; this section describes what the build holds.
 
-One actor on the P2 executor owns the shared RF front-end: PHY registration,
-calibration and tracking, channel retune, modem clocks, coexistence timers
-and sleep. Clients reach it through per-client cells; PHY membership is a
-typestate (`Untracked`, `Tracked`, `Suspended`). It owns the HAL's
-`RadioDomain` by value.
-
-The radio system depends on client contracts, never on protocol drivers,
-including through optional, target-specific or transitive normal dependencies.
-
-- **PHY.** Constructing the actor does not calibrate. After the executor
-  starts, the first client join calls `prepare` → `register_concurrent_phy`
-  → `run_phy_register` in the P2 actor, including cold calibration or the
-  admitted cache path. Initial client tracking settles pending work before
-  operational use. While a tracked member exists, the actor drains requests,
-  then waits on its doorbell versus the PHY tracking deadline. A timer win
-  calls `track_concurrent_phy`, which evaluates demand and runs due work.
-  The default period is 1 s, with eligibility at `previous + period + 1 µs`.
-  SYSTIMER Alarm0 at P4 (`radio`) acknowledges and pends P2; the P2 executor dispatches
-  timers and polls the actor. A failed tick, or a tracking deadline the
-  clock cannot hold, ends the actor's run with a `TrackingFault`: the actor
-  keeps every owner, and the image records the fault's class and variant
-  path (`oer-chips-esp32s31-platform-runtime::radio_fault`) and resets. The direct
-  maintenance TXDC/PWDET path submits
+- **PHY.** Nothing calibrates before the owner's `register`, which fills the
+  state's place and runs `run_phy_register` over it: cold calibration or the
+  admitted cache path. Its result is the registered handle and `RfOpen`.
+  `close` takes `RfOpen` and gives `RfClosed`, `wake` the reverse; the
+  channel and a tracking pass take `RfOpen` and give it back. The owner asks
+  `tracking_due(&PhyState, now)` after every registration and every wake and
+  runs `track` when a pass is due; the period is 1 s, the vendor's
+  `PHY_TRACK_PLL_PERIOD_IN_US`. A failed operation returns its leaf cause
+  and has consumed its proof. SYSTIMER Alarm0 at P4 (`radio`) acknowledges
+  and pends P2; the P2 executor dispatches timers and polls the owner's
+  task. The direct maintenance TXDC/PWDET path submits
   each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
   performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
   2 µs wait and timer-driven readiness samples. Edge steps return fixed relative
@@ -1222,7 +1212,7 @@ including through optional, target-specific or transitive normal dependencies.
   interrupt latency and programming overhead can lengthen it. It judges ready before checking
   the 40 µs not-ready limit. It never polls a future. Other PHY leaves and the
   registration graph remain async.
-  The actor arms before depositing an affine bundle into an `oer-portable-memory`
+  The task arms before depositing an affine bundle into an `oer-portable-memory`
   one-slot request cell. The bundle holds `PhyTransaction` (registers, restore
   slots, epoch and grant-protect state), `Timg0AlarmProgram`, its binding proof
   and the machine. The waiting future keeps `DetachedRadioDomain`; its drop
@@ -1246,11 +1236,11 @@ including through optional, target-specific or transitive normal dependencies.
   pending executor round runs first; there is no bound on starvation under
   continuously pending P2 executor work. Handler latency and RF quality with
   these event gaps are not measured.
-  Registration, tracking, RF close and retained wake consume the domain and
-  return it with their typed result. `RadioDomain::detach` owns a PHY
+  Registration, tracking, RF close and retained wake take the domain by value
+  and return it with their typed result. `RadioDomain::detach` owns a PHY
   transaction containing the registers, restore slots, registration epoch
-  and grant-protect state. Its return owner retains the attachment and
-  common power/clock obligations, without register access. Splitting that
+  and grant-protect state. Its return owner retains the common
+  power/clock obligations, without register access. Splitting that
   pair permits transfer; reunion accepts only the exact affine domain
   identity, independently of registration-epoch equality. Cancellation,
   including before the first poll, retains both payloads in quarantine and
@@ -1258,13 +1248,10 @@ including through optional, target-specific or transitive normal dependencies.
   Channel selection and retune also hold an owned transaction across every
   wait; their future owns `ChannelTransaction`, whose channel HAL lends
   its registers within that custody. The retained
-  cancellation payload names the operation and epoch in the common fault envelope. The
-  actor cannot retune while its domain is transferred. `admit_maintenance` checks pending tracking state; it has no hard
-  RF-window calendar. The actor enforces no one-period maximum deferral or
-  shift counter, and queued requests can postpone a tick. Grant-protect
-  requests bracket RF-sensitive work without proving an exclusive RF grant.
-  A retune is one transaction; a failure after the first RF write poisons the
-  PHY domain. Calibration
+  cancellation payload names the operation and epoch in the common fault
+  envelope. A pass runs under the owned transaction alone; there is no
+  RF-window calendar. Grant-protect requests bracket RF-sensitive work
+  without proving an exclusive RF grant. Calibration
   matches the vendor when each field stays within the vendor's spread for
   that field, measured in the same run on the same board; the comparison
   runs when the calibration sources change. A change to how a calibration
@@ -1272,10 +1259,9 @@ including through optional, target-specific or transitive normal dependencies.
   record of another revision is never replayed.
 - **Power and reset.** Common radio power enables the shared domain without
   resetting the Wi-Fi MAC; Wi-Fi's power entry pulses its baseband and MAC
-  once per boot. `track` is the PHY's alone: the initial tracking, the RX
-  enable and the initial channel. A tracked Wi-Fi member's `reset_mac`
-  request has the actor reset the MAC's block (`RST_WIFIMAC`, in the shared
-  reset word only the actor writes) and write back, in the same step, what
+  once per boot. The radio domain's owner resets the MAC's block
+  (`RST_WIFIMAC`, in the shared reset word only it writes) and writes back,
+  in the same step, what
   the domain keeps inside that block: the PHY's channel field of the tuned
   channel and Wi-Fi's constants of the same words, so that each word has one
   writing context. The answer is the reset's proof (`MacBlockReset`) and the

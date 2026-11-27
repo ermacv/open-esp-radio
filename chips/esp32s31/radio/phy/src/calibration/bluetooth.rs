@@ -715,13 +715,6 @@ impl PhyBluetoothTxDcTransition {
 }
 
 impl PhyBluetoothTxDcPwdetTransition {
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) fn transition_mut(
-        &mut self,
-    ) -> &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition {
-        &mut self.inner
-    }
-
     pub const fn new(
         parameters: crate::tx::dc_power_detector::PhyTxDcPwdetParameters,
         tx_path_value: u8,

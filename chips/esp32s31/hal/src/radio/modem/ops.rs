@@ -596,61 +596,6 @@ pub(crate) fn initialize_shared_modem_power_state_map<P: Placement>(
     });
 }
 
-// SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
-pub(crate) fn deselect_bluetooth_low_power_timer_slow_oscillator<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
-) {
-    registers.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_osc_slow(false);
-    });
-}
-
-// SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
-pub(crate) fn deselect_bluetooth_low_power_timer_fast_oscillator<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
-) {
-    registers.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_osc_fast(false);
-    });
-}
-
-// SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
-pub(crate) fn deselect_bluetooth_low_power_timer_crystal_32khz<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
-) {
-    registers.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_xtal32k(false);
-    });
-}
-
-// SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
-pub(crate) fn deselect_bluetooth_low_power_timer_crystal<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
-) {
-    registers.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_xtal(false);
-    });
-}
-
-// SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
-pub(crate) fn select_bluetooth_low_power_timer_crystal<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
-) {
-    registers.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_sel_xtal(true);
-    });
-}
-
-// SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_7B9CC1AC_S31_MODEM_LPCON_LL.
-pub(crate) fn set_bluetooth_low_power_timer_divider<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_lpcon::BluetoothLpTimerClock<P>,
-    value: ModemLowPowerClockDivider,
-) {
-    registers.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_div_num(value.field());
-    });
-}
-
 // SOURCE: S31_MODEM_LPCON_STRUCT, ESP_IDF_4D59230D_S31_WIFI_LOW_POWER_CLOCK.
 pub(crate) fn deselect_wifi_low_power_clock_slow_oscillator<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,

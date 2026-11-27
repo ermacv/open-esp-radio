@@ -827,7 +827,6 @@ pub enum PhyBbInitLocalStep {
 /// executor as one action. The type has no allocator, waker, retry loop,
 /// pointer to `phy_param`, or ROM callback table.
 pub struct PhyBbInitTransition {
-    state: crate::state::PhyState,
     channel_or_frequency: u16,
     step: PhyBbInitStep,
     calibration_performed: bool,
@@ -842,28 +841,19 @@ impl PhyBbInitTransition {
     }
 
     #[cfg(test)]
-    pub const fn new(state: crate::state::PhyState) -> Self {
-        Self::new_on_channel(state, 11)
+    pub const fn new() -> Self {
+        Self::new_on_channel(11)
     }
 
     // Return-place construction avoids an 812-byte child temporary in the
     // enclosing registration step.
     #[inline(never)]
-    pub const fn new_on_channel(state: crate::state::PhyState, channel_or_frequency: u16) -> Self {
+    pub const fn new_on_channel(channel_or_frequency: u16) -> Self {
         Self {
-            state,
             channel_or_frequency,
             step: PhyBbInitStep::EnableInitialization,
             calibration_performed: false,
         }
-    }
-
-    pub const fn state(&self) -> &crate::state::PhyState {
-        &self.state
-    }
-
-    pub fn into_state(self) -> crate::state::PhyState {
-        self.state
     }
 
     fn begin_failure(&mut self, failure: PhyBbInitFailure) {
@@ -872,12 +862,15 @@ impl PhyBbInitTransition {
 
     /// `phy_bb_init` runs inside the registration's force-TX/RX pair, so its
     /// channel programming is nested one level deep.
-    fn channel_transition(&self) -> crate::channel::PhyChipChannelTransition {
+    fn channel_transition(
+        &self,
+        state: &crate::state::PhyState,
+    ) -> crate::channel::PhyChipChannelTransition {
         crate::channel::PhyChipChannelTransition::at_depth(
             crate::channel::PhyChipChannelRequest {
                 channel_or_frequency: self.channel_or_frequency,
                 cbw: 0,
-                parameters: self.state.channel_parameters(),
+                parameters: state.channel_parameters(),
             },
             crate::analog::pbus::PhyForceTxRxDepth::OUTERMOST.nested(),
         )
@@ -885,17 +878,20 @@ impl PhyBbInitTransition {
 
     // Retain this child's temporary slots in its own bounded model step.
     #[inline(never)]
-    pub fn step_local(&mut self) -> Result<PhyBbInitLocalStep, PhyBbInitTransitionError> {
+    pub fn step_local(
+        &mut self,
+        state: &mut crate::state::PhyState,
+    ) -> Result<PhyBbInitLocalStep, PhyBbInitTransitionError> {
         const fn mmio(action: PhyBbMmioAction) -> PhyBbInitLocalStep {
             PhyBbInitLocalStep::External(PhyBbInitAction::Mmio(action))
         }
         let local = match &mut self.step {
             PhyBbInitStep::TxDc(transition) => match transition.action() {
                 crate::tx::dc_offset::PhyTxDcAction::Complete(outcome) => {
-                    self.state.apply_tx_dc_outcome(outcome);
+                    state.apply_tx_dc_outcome(outcome);
                     self.step =
                         PhyBbInitStep::Pwdet(crate::tx::power_detector::PhyPwdetTransition::new(
-                            self.state.pwdet_parameters(),
+                            state.pwdet_parameters(),
                         ));
                     PhyBbInitLocalStep::StateAdvanced
                 }
@@ -907,11 +903,10 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::Pwdet(transition) => match transition.action() {
                 crate::tx::power_detector::PhyPwdetAction::Complete(outcome) => {
-                    self.state.apply_pwdet_outcome(outcome);
-                    self.step =
-                        PhyBbInitStep::TxCap(crate::tx::calibration::PhyTxCapTransition::new(
-                            self.state.tx_cap_parameters(),
-                        ));
+                    state.apply_pwdet_outcome(outcome);
+                    self.step = PhyBbInitStep::TxCap(
+                        crate::tx::calibration::PhyTxCapTransition::new(state.tx_cap_parameters()),
+                    );
                     PhyBbInitLocalStep::StateAdvanced
                 }
                 crate::tx::power_detector::PhyPwdetAction::Failed(failure) => {
@@ -922,7 +917,7 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::TxCap(transition) => match transition.action() {
                 crate::tx::calibration::PhyTxCapAction::Complete(outcome) => {
-                    self.state.apply_tx_cap_outcome(outcome);
+                    state.apply_tx_cap_outcome(outcome);
                     self.step = PhyBbInitStep::TemperatureFirst(
                         crate::analog::temperature::PhyTemperatureTransition::new(),
                     );
@@ -936,11 +931,10 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::TemperatureFirst(transition) => match transition.action() {
                 crate::analog::temperature::PhyTemperatureAction::Complete(outcome) => {
-                    self.state.apply_temperature_outcome(outcome);
-                    self.step =
-                        PhyBbInitStep::TxPower(crate::tx::power::PhyTxPowerTransition::new(
-                            self.state.tx_power_parameters(),
-                        ));
+                    state.apply_temperature_outcome(outcome);
+                    self.step = PhyBbInitStep::TxPower(
+                        crate::tx::power::PhyTxPowerTransition::new(state.tx_power_parameters()),
+                    );
                     PhyBbInitLocalStep::StateAdvanced
                 }
                 crate::analog::temperature::PhyTemperatureAction::Failed(failure) => {
@@ -951,10 +945,10 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::TxPower(transition) => match transition.action() {
                 crate::tx::power::PhyTxPowerAction::Complete(outcome) => {
-                    self.state.apply_tx_power_outcome(outcome);
+                    state.apply_tx_power_outcome(outcome);
                     self.step = PhyBbInitStep::TxDcPwdet(
                         crate::tx::dc_power_detector::PhyTxDcPwdetTransition::new(
-                            self.state.tx_dc_pwdet_parameters(),
+                            state.tx_dc_pwdet_parameters(),
                         ),
                     );
                     PhyBbInitLocalStep::StateAdvanced
@@ -967,11 +961,10 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::TxDcPwdet(transition) => match transition.action() {
                 crate::tx::dc_power_detector::PhyTxDcPwdetAction::Complete(outcome) => {
-                    self.state.apply_tx_dc_pwdet_outcome(outcome);
-                    self.step =
-                        PhyBbInitStep::Dcode(crate::analog::dcode::PhyDcodeTransition::new(
-                            self.state.dcode_parameters(),
-                        ));
+                    state.apply_tx_dc_pwdet_outcome(outcome);
+                    self.step = PhyBbInitStep::Dcode(
+                        crate::analog::dcode::PhyDcodeTransition::new(state.dcode_parameters()),
+                    );
                     PhyBbInitLocalStep::StateAdvanced
                 }
                 crate::tx::dc_power_detector::PhyTxDcPwdetAction::Failed(failure) => {
@@ -982,9 +975,9 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::Dcode(transition) => match transition.action() {
                 crate::analog::dcode::PhyDcodeAction::Complete(outcome) => {
-                    self.state.apply_dcode_outcome(outcome);
+                    state.apply_dcode_outcome(outcome);
                     self.step = PhyBbInitStep::TxIq(crate::tx::iq::PhyTxIqInitTransition::new(
-                        self.state.tx_iq_parameters(),
+                        state.tx_iq_parameters(),
                     ));
                     PhyBbInitLocalStep::StateAdvanced
                 }
@@ -996,8 +989,8 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::TxIq(transition) => match transition.action() {
                 crate::tx::iq::PhyTxIqInitAction::Complete(outcome) => {
-                    self.state.apply_tx_iq_outcome(outcome);
-                    self.state.mark_baseband_calibration_complete();
+                    state.apply_tx_iq_outcome(outcome);
+                    state.mark_baseband_calibration_complete();
                     self.calibration_performed = true;
                     self.step = PhyBbInitStep::TxCfr(PhyTxCfrTransition::new());
                     PhyBbInitLocalStep::StateAdvanced
@@ -1012,7 +1005,7 @@ impl PhyBbInitTransition {
                 PhyTxCfrAction::Complete(_) => {
                     self.step = PhyBbInitStep::BluetoothTxGain(
                         // Nested in the registration's force-TX/RX pair.
-                        self.state.bluetooth_tx_gain_init_transition(
+                        state.bluetooth_tx_gain_init_transition(
                             crate::analog::pbus::PhyForceTxRxDepth::OUTERMOST.nested(),
                         ),
                     );
@@ -1037,10 +1030,10 @@ impl PhyBbInitTransition {
                 crate::calibration::bluetooth::PhyBluetoothTxGainInitLocalStep::Complete(
                     outcome,
                 ) => {
-                    self.state.apply_bluetooth_tx_gain_init_outcome(outcome);
+                    state.apply_bluetooth_tx_gain_init_outcome(outcome);
                     self.step = PhyBbInitStep::PbusMemory(
                         crate::analog::pbus::memory::PhyPbusMemoryTransition::new(
-                            self.state.pbus_memory_parameters(),
+                            state.pbus_memory_parameters(),
                         ),
                     );
                     PhyBbInitLocalStep::StateAdvanced
@@ -1059,9 +1052,9 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::TemperatureSecond(transition) => match transition.action() {
                 crate::analog::temperature::PhyTemperatureAction::Complete(outcome) => {
-                    self.state.apply_temperature_outcome(outcome);
+                    state.apply_temperature_outcome(outcome);
                     self.step = PhyBbInitStep::RxIq(crate::rx::iq::PhyRxIqInitTransition::new(
-                        self.state.rx_iq_parameters(),
+                        state.rx_iq_parameters(),
                     ));
                     PhyBbInitLocalStep::StateAdvanced
                 }
@@ -1073,8 +1066,8 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::RxIq(transition) => match transition.action() {
                 crate::rx::iq::PhyRxIqInitAction::Complete(outcome) => {
-                    self.state.apply_rx_iq_outcome(outcome);
-                    let parameters = self.state.prepare_rx_table_init();
+                    state.apply_rx_iq_outcome(outcome);
+                    let parameters = state.prepare_rx_table_init();
                     self.step = PhyBbInitStep::RxTable(parameters);
                     PhyBbInitLocalStep::StateAdvanced
                 }
@@ -1086,9 +1079,9 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::RxSaturation(transition) => match transition.action() {
                 crate::rx::saturation::PhyRxSaturationAction::Complete(outcome) => {
-                    if self.state.apply_rx_saturation_outcome(outcome).is_ok() {
+                    if state.apply_rx_saturation_outcome(outcome).is_ok() {
                         self.step = PhyBbInitStep::RxGain(crate::rx::gain::RxProgram::new(
-                            self.state.rx_gain_init_parameters(),
+                            state.rx_gain_init_parameters(),
                         ));
                     } else {
                         self.begin_failure(PhyBbInitFailure::RxSaturation(outcome));
@@ -1099,7 +1092,7 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::RxGain(program) => match program.terminal() {
                 Some(Ok(outcome)) => {
-                    self.state.apply_rx_gain_init_outcome(outcome);
+                    state.apply_rx_gain_init_outcome(outcome);
                     self.step = PhyBbInitStep::RxSaturationFinalize;
                     PhyBbInitLocalStep::StateAdvanced
                 }
@@ -1111,7 +1104,7 @@ impl PhyBbInitTransition {
             },
             PhyBbInitStep::Channel(transition) => match transition.action() {
                 crate::channel::PhyChipChannelAction::Complete(outcome) => {
-                    self.state.apply_channel_outcome(outcome);
+                    state.apply_channel_outcome(outcome);
                     self.step = PhyBbInitStep::SetIdleMode;
                     PhyBbInitLocalStep::StateAdvanced
                 }
@@ -1176,6 +1169,7 @@ impl PhyBbInitTransition {
     #[inline(never)]
     pub fn advance_external(
         &mut self,
+        state: &mut crate::state::PhyState,
         completion: PhyBbInitCompletion,
     ) -> Result<(), PhyBbInitTransitionError> {
         let step = match (&mut self.step, completion) {
@@ -1198,11 +1192,11 @@ impl PhyBbInitTransition {
                         gain: PhyForcedDigitalGain::Enabled,
                     }) =>
             {
-                if self.state.baseband_calibration_complete() {
+                if state.baseband_calibration_complete() {
                     PhyBbInitStep::TxCfr(PhyTxCfrTransition::new())
                 } else {
                     PhyBbInitStep::TxDc(crate::tx::dc_offset::PhyTxDcTransition::new(
-                        self.state.tx_dc_parameters(),
+                        state.tx_dc_parameters(),
                     ))
                 }
             }
@@ -1308,7 +1302,7 @@ impl PhyBbInitTransition {
                     }) =>
             {
                 PhyBbInitStep::RxSaturation(crate::rx::saturation::PhyRxSaturationTransition::new(
-                    self.state.rx_saturation_parameter_002(),
+                    state.rx_saturation_parameter_002(),
                 ))
             }
             (
@@ -1326,7 +1320,7 @@ impl PhyBbInitTransition {
                         phase: PhyRfRxSaturationPhase::Finalize,
                     }) =>
             {
-                PhyBbInitStep::RegisterInit(self.state.register_init_parameters())
+                PhyBbInitStep::RegisterInit(state.register_init_parameters())
             }
             (PhyBbInitStep::RegisterInit(parameters), PhyBbInitCompletion::Mmio(completed))
                 if completed.action
@@ -1349,7 +1343,7 @@ impl PhyBbInitTransition {
             (PhyBbInitStep::EnableAgc, PhyBbInitCompletion::Mmio(completed))
                 if completed.action == PhyBbMmioAction::EnableAgc =>
             {
-                PhyBbInitStep::Channel(self.channel_transition())
+                PhyBbInitStep::Channel(self.channel_transition(state))
             }
             (PhyBbInitStep::Channel(transition), PhyBbInitCompletion::Channel(completed)) => {
                 transition
@@ -1363,7 +1357,7 @@ impl PhyBbInitTransition {
                         mode: BasebandMode::Idle,
                     }) =>
             {
-                if self.state.disable_wifi_after_baseband_init() {
+                if state.disable_wifi_after_baseband_init() {
                     PhyBbInitStep::DisableWifi
                 } else {
                     PhyBbInitStep::ConfigureI2cTxRate

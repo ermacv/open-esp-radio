@@ -12,10 +12,6 @@
     reason = "the PHY's procedures as programs"
 )]
 #![expect(clippy::cast_sign_loss, reason = "the PHY's procedures as programs")]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "the PHY's procedures as programs"
-)]
 #![no_std]
 #![forbid(unsafe_code)]
 // A forgotten owner never releases what it holds, such as a modem clock lease,
@@ -53,27 +49,24 @@
 //! Source-only ESP32-S31 shared RF/PHY ownership frontier.
 //!
 //! This crate turns a cold radio owner into a registered calibration epoch,
-//! admits protocol clients, performs client-specific maintenance, and closes
-//! or retains the shared RF domain. It deliberately has no dependency on
+//! tracks it, and closes RF while the registration stays. It deliberately has no dependency on
 //! `esp-wifi-sys`, vendor archives, or a radio/Wi-Fi ROM ABI. PAC ownership and
 //! semantic register access come from the HAL; protocol roles and executors
 //! live above this layer.
 //!
-//! Start with [`PhyConfig`] and the registration state machine. Every
-//! protocol shares one PHY domain through the radio domain:
-//! [`register_concurrent_phy`] registers it for the first client, and
-//! [`wifi_client`], [`bluetooth_client`] and [`ieee802154_client`] join and
-//! leave it. Releasing a non-final client keeps the domain powered; only the
-//! final-client close path closes RF.
+//! Start with [`PhyConfig`] and the registration state machine. The PHY has
+//! one owner ([`owner`]): it holds the place of the PHY's
+//! state, which a registration fills, and the proof of RF open or closed.
 //!
 //! # Ownership and cancellation
 //!
 //! Registration, tracking, RF close, and retained wake are hardware
-//! transactions. Preparation errors that expose an owner are retryable only
-//! through that returned owner. Failures after a physical transition retain a
-//! poisoned/fail-stop owner instead of claiming recovery. Concurrent lifecycle
-//! and tracking futures consume the radio domain and return it with their
-//! typed result. Dropping them, including before the first poll, quarantines
+//! transactions. A failure returns its leaf cause and has consumed its proof
+//! of RF; the owner can vacate the place, and the PHY's clock modules stay
+//! held as the failure left them, so a registration into it ends in its
+//! clock's refusal. The lifecycle and
+//! tracking futures consume the radio domain and return it with their typed
+//! result. Dropping them, including before the first poll, quarantines
 //! the owned transaction and records a named fault before reset.
 //!
 //! Timing types identify raw ticks, microseconds, or absolute deadlines at
@@ -118,12 +111,10 @@ pub mod state;
 pub mod tracking;
 mod tx;
 
-pub mod concurrent;
 mod diagnostic_path;
-pub mod domain;
+pub mod owner;
 
 mod size_limits;
-pub mod wifi_client;
 
 /// Vendor RF-calibration version stamped into calibration caches.
 pub use analog::rfpll::phy_get_rf_cal_version;
@@ -136,7 +127,7 @@ pub use calibration::registration::{
 };
 pub use calibration::registration::{
     PhyCalibrationIdentity, PhyCalibrationPath, PhyRegisterBindingError, PhyRegisterFailure,
-    PhyRegisterOutcome, PhyRegisterStage, RegisteredPhyState,
+    PhyRegisterOutcome, PhyRegisterStage,
 };
 pub use executor::{PhyCalibrationTrackingRunError, PhyParamTrackingRunError, PhyRegisterRunError};
 pub use state::{
@@ -168,16 +159,15 @@ pub use target_executor::PhyTargetPortError;
 pub use target_executor::RomShortDelay;
 #[cfg(target_arch = "riscv32")]
 pub use target_port::{
-    ConcurrentPhyRegisterFailure, ConcurrentPhyRegistration, ConcurrentPhyTrackingError,
-    ConcurrentRfError, ConcurrentTrackingTick, ConcurrentWifiChannelError, close_concurrent_rf,
-    maintain_concurrent_phy, register_concurrent_phy, select_concurrent_wifi_channel,
-    switch_concurrent_wifi_channel, track_concurrent_phy, wake_concurrent_rf,
+    ChannelFailure, CloseFailure, Registered, RegistrationCause, RegistrationFailure,
+    TrackingFailure, WakeFailure, close, disable_wifi_rx, enable_wifi_rx, register, select_channel,
+    switch_channel, track, wake,
 };
 #[cfg(target_arch = "riscv32")]
 pub use target_port::{
-    NoopPhyTargetObserver, PhyDomainRegisterFailure, PhyDomainRegistered, PhyGrantProtectPort,
-    PhyParamTrackingPortError, PhyRegisterConfig, PhyRfBoundary, PhyTargetObserver,
-    PhyTargetPortCounters, TargetPhyParamTrackingError, TargetPhyRegisterError,
+    NoopPhyTargetObserver, PhyGrantProtectPort, PhyParamTrackingPortError, PhyRegisterConfig,
+    PhyRegisterFailed, PhyRfBoundary, PhyTargetObserver, PhyTargetPortCounters,
+    TargetPhyParamTrackingError, TargetPhyRegisterError,
 };
 
 #[cfg(test)]

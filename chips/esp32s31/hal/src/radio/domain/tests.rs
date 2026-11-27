@@ -8,7 +8,6 @@ fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
     RadioDomain::new(
         shared,
         PhyRouteState::new(PhyRegistration::new()),
-        (),
         crate::radio::domain::transaction::PhyIdentity::for_host_test(),
         crate::power::clock::ModemClockPlannerIdentity::new().expect("identity capacity"),
     )
@@ -118,7 +117,7 @@ fn registration_epoch_persists_in_the_domain() {
     let domain = &mut radio;
     assert_eq!(domain.registration_epoch(), Some(epoch));
     drop(domain);
-    let (_registers, phy, ()) = radio
+    let (_registers, phy) = radio
         .into_parts()
         .unwrap_or_else(|_| panic!("an idle domain gives its parts back"));
     assert_eq!(phy.registration_epoch(), Some(epoch));

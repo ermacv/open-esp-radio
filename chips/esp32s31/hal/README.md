@@ -297,11 +297,12 @@ local timer0 pending. These stand facts do not qualify TBTT, beacon or opaque
 lanes, nor simultaneous set/clear priority.
 SOURCE: `HW8_S31_WIFI_TSF_MASK_20261026`.
 
-`RadioHardware::split` consumes a permanently claimed `PhyIdentity` beside
-its attachment. `RadioDomain::detach(operation)` returns an owned `RadioTransaction`:
+`RadioHardware::split` consumes a permanently claimed `PhyIdentity`. The
+radio domain carries no state of an upper layer: the PHY's state has its own
+owner. `RadioDomain::detach(operation)` returns an owned `RadioTransaction`:
 the movable PHY half owns its register partition, restore state, registration
 and grant-protect words; the inert return half retains common-power/clock
-obligations and the attachment. A paired transaction reunites infallibly;
+obligations. A paired transaction reunites infallibly;
 reuniting split halves checks their exact identity and returns both unchanged
 on foreign input. Affine successful reunion leaves no stale return token.
 Both payloads use `ManuallyDrop` until explicit reunion. Cancellation retains

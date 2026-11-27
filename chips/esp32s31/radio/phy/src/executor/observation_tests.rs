@@ -2,8 +2,8 @@ use super::*;
 use crate::tracking::{
     observation::{Event, Operation},
     parameters::{
-        PhyParamTrackRequest, PhyParamTrackingAction, PhyParamTrackingCompletion,
-        PhyParamTrackingPolicy, PhyTrackingDiagnostics,
+        PhyParamTrackingAction, PhyParamTrackingCompletion, PhyParamTrackingPolicy,
+        PhyTrackingDiagnostics,
     },
 };
 use core::task::{Context, Poll, Waker};
@@ -22,7 +22,7 @@ impl PhyParamTrackingPort for Port {
 
     async fn complete<'port>(
         &'port mut self,
-        pending: &'port mut crate::state::client::PhyPendingTracking,
+        pending: &'port mut crate::tracking::parameters::PhyParamTrackingTransition,
         _: &'port mut crate::PhyState,
     ) -> Result<PhyParamTrackingCompletion, ()> {
         if pending.action() == PhyParamTrackingAction::EnterCritical {
@@ -41,18 +41,16 @@ impl PhyParamTrackingPort for Port {
 #[test]
 fn executor_observes_rejected_completions_and_preserves_cancelled_attempts() {
     for wait in [false, true] {
-        let request = PhyParamTrackRequest::new(false, true);
         let policy = PhyParamTrackingPolicy {
             tracking_inhibited: false,
             rfpll_cap_tracking_enabled: false,
             rfpll_cap_tracking_threshold: None,
             calibration_tracking_threshold: None,
             diagnostics: PhyTrackingDiagnostics::Disabled,
-            bluetooth_ieee802154_power_tracking_enabled: true,
             calibration_tracking_enabled: false,
             relaxed_power_tracking_threshold: false,
         };
-        let mut pending = crate::state::client::PhyPendingTracking::for_test(request, policy);
+        let mut pending = crate::tracking::parameters::PhyParamTrackingTransition::new(policy);
         let mut state = crate::PhyState::new(crate::PhyConfig::production());
         let mut port = Port {
             wait,
@@ -71,7 +69,7 @@ fn executor_observes_rejected_completions_and_preserves_cancelled_attempts() {
                 ));
             }
         }
-        let operation = Operation::BluetoothIeee802154Power;
+        let operation = Operation::WifiI2c;
         let expected = if wait {
             std::vec![
                 (Operation::Tracking, Event::Started),
@@ -86,6 +84,10 @@ fn executor_observes_rejected_completions_and_preserves_cancelled_attempts() {
             ]
         };
         assert_eq!(port.events, expected);
-        assert!(pending.into_owner().is_err());
+        assert_eq!(
+            pending.action(),
+            PhyParamTrackingAction::WifiI2cTrack,
+            "a rejected completion leaves the transition where it was"
+        );
     }
 }

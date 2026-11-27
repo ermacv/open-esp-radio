@@ -5,8 +5,7 @@ use crate::system::root::RadioHardware;
 #[test]
 fn a_cold_client_returns_its_partition() {
     let (_radio, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend, _>(
-            (),
+        .split::<crate::power::test_clocks::CountingBackend>(
             crate::radio::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
@@ -19,8 +18,7 @@ fn a_cold_client_returns_its_partition() {
 #[test]
 fn a_running_epoch_reunites_with_its_clocked_client() {
     let (_radio, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend, _>(
-            (),
+        .split::<crate::power::test_clocks::CountingBackend>(
             crate::radio::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
@@ -38,8 +36,7 @@ fn a_running_epoch_reunites_with_its_clocked_client() {
 #[test]
 fn the_runtime_channel_capability_borrows_the_lease() {
     let (mut radio, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend, _>(
-            (),
+        .split::<crate::power::test_clocks::CountingBackend>(
             crate::radio::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
@@ -55,8 +52,7 @@ fn the_runtime_channel_capability_borrows_the_lease() {
 #[test]
 fn clock_release_consumes_the_obligation_only_on_success() {
     let (_radio, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend, _>(
-            (),
+        .split::<crate::power::test_clocks::CountingBackend>(
             crate::radio::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
@@ -77,8 +73,7 @@ fn every_clock_release_failure_retains_stopped_custody_and_exact_obligation() {
         super::ModemClockError::Poisoned,
     ] {
         let (_radio, partitions) = RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend, _>(
-                (),
+            .split::<crate::power::test_clocks::CountingBackend>(
                 crate::radio::domain::transaction::PhyIdentity::for_host_test(),
             )
             .expect("identity capacity");

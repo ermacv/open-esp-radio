@@ -10,8 +10,7 @@ use crate::{
 #[test]
 fn moving_the_radio_owner_preserves_its_runtime_state_through_handoff() {
     let (_domain, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend, _>(
-            (),
+        .split::<crate::power::test_clocks::CountingBackend>(
             crate::radio::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");

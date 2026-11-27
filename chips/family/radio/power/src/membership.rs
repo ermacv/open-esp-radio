@@ -172,28 +172,3 @@ impl<S: Copy> PowerMembership<S> {
         self.clients.enter(client);
     }
 }
-
-/// Client and external coexistence participant accounting.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Participants(u8);
-impl Participants {
-    pub const fn count(&self) -> u32 {
-        self.0.count_ones()
-    }
-    pub fn enter(&mut self, client: RadioClient) -> u32 {
-        self.0 |= Clients::bit(client);
-        self.count()
-    }
-    pub fn leave(&mut self, client: RadioClient) -> u32 {
-        self.0 &= !Clients::bit(client);
-        self.count()
-    }
-    pub fn enter_external(&mut self) -> u32 {
-        self.0 |= 8;
-        self.count()
-    }
-    pub fn leave_external(&mut self) -> u32 {
-        self.0 &= !8;
-        self.count()
-    }
-}

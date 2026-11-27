@@ -2222,58 +2222,53 @@ impl From<PhyRfInitPrefixTransitionError> for PhyColdTransitionError {
     }
 }
 
-/// `phy_rf_init` transition and its only mutable software-state owner.
+/// `phy_rf_init` transition over the PHY state each step is lent.
 ///
 /// [`step_local`](Self::step_local) performs at most one finite state action.
 /// It never loops, polls hardware, creates a waker, or retries a busy
 /// transaction.  All non-local actions are returned verbatim to the target
 /// executor and require one identity-bound external completion.
 pub struct PhyRfColdInit {
-    state: PhyState,
     transition: PhyRfInitPrefixTransition,
 }
 
 impl PhyRfColdInit {
-    pub const fn new(state: PhyState) -> Self {
+    pub const fn new() -> Self {
         Self {
-            state,
             transition: PhyRfInitPrefixTransition::new(),
         }
     }
 
-    pub const fn state(&self) -> &PhyState {
-        &self.state
-    }
-
-    pub fn step_local(&mut self) -> Result<PhyColdLocalStep, PhyColdTransitionError> {
+    pub fn step_local(
+        &mut self,
+        state: &mut PhyState,
+    ) -> Result<PhyColdLocalStep, PhyColdTransitionError> {
         let action = self.transition.action();
         let completion = match action {
             PhyRfInitPrefixAction::InspectRcCalibrationState => {
                 PhyRfInitPrefixCompletion::RcCalibrationStateInspected {
-                    already_complete: self.state.rc_calibration_complete(),
+                    already_complete: state.rc_calibration_complete(),
                 }
             }
             PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::ApplyResult(result)) => {
-                self.state.apply_rc_calibration(result);
+                state.apply_rc_calibration(result);
                 PhyRfInitPrefixCompletion::RcCalibration(RcCalibrationCompletion::Applied)
             }
             PhyRfInitPrefixAction::CaptureFilterDcapParameters => {
                 PhyRfInitPrefixCompletion::FilterDcapParametersCaptured(
-                    self.state.filter_dcap_parameters(),
+                    state.filter_dcap_parameters(),
                 )
             }
             PhyRfInitPrefixAction::CaptureXtalDutyParameters => {
-                PhyRfInitPrefixCompletion::XtalDutyParametersCaptured(
-                    self.state.xtal_duty_parameters(),
-                )
+                PhyRfInitPrefixCompletion::XtalDutyParametersCaptured(state.xtal_duty_parameters())
             }
             PhyRfInitPrefixAction::CaptureChannelFrequencyControl => {
                 PhyRfInitPrefixCompletion::ChannelFrequencyControlCaptured(
-                    self.state.channel_frequency_control(),
+                    state.channel_frequency_control(),
                 )
             }
             PhyRfInitPrefixAction::Complete(outcome) => {
-                self.state.synchronize_success(outcome);
+                state.synchronize_success(outcome);
                 return Ok(PhyColdLocalStep::Complete(outcome));
             }
             external => return Ok(PhyColdLocalStep::External(external)),
@@ -2285,17 +2280,14 @@ impl PhyRfColdInit {
 
     pub fn advance_external(
         &mut self,
+        state: &mut PhyState,
         completion: PhyRfInitPrefixCompletion,
     ) -> Result<(), PhyColdTransitionError> {
         self.transition.advance(completion)?;
         if let PhyRfInitPrefixAction::Complete(outcome) = self.transition.action() {
-            self.state.synchronize_success(outcome);
+            state.synchronize_success(outcome);
         }
         Ok(())
-    }
-
-    pub fn into_state(self) -> PhyState {
-        self.state
     }
 }
 

@@ -244,10 +244,12 @@ pub struct BringUp;
 /// The answer to [`BringUp`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum BroughtUp {
-    /// Up and receiving: the station's and the access point's addresses.
+    /// Up and receiving: the station's and the access point's addresses,
+    /// and the PHY's registration's time in microseconds.
     Up {
         station: [u8; 6],
         ap: [u8; 6],
+        register_micros: u32,
     },
     Failed(Failure),
     Refused(Refusal),
@@ -624,11 +626,30 @@ pub enum Stood {
     Refused(Refusal),
 }
 
-/// One turn: a window of `millis`, the stop, the cold start, a window of
-/// `millis`.
+/// One turn: a window of `millis`, the stop, what `kind` names, the cold
+/// start with the channel tuned again, a window of `millis`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Turn {
     pub millis: u32,
+    pub kind: TurnKind,
+}
+
+/// What a turn does between the stop and the cold start.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum TurnKind {
+    /// Nothing: RF stays open.
+    Restart,
+    /// The PHY closes RF and wakes it, with the tracking pass when one is due.
+    CloseAndWake,
+}
+
+/// What became of RF in a turn.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum TurnedRf {
+    /// RF stayed open.
+    Kept,
+    /// RF was closed and woken, in these microseconds each.
+    ClosedAndWoken { close_micros: u32, wake_micros: u32 },
 }
 
 /// The answer to [`Turn`].
@@ -639,6 +660,7 @@ pub enum Turned {
         after: Counts,
         handles: u8,
         stop_micros: u32,
+        rf: TurnedRf,
         start_micros: u32,
     },
     Failed(Failure),

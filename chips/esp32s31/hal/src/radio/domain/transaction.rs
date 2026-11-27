@@ -318,47 +318,35 @@ impl PhyTransaction {
     }
 }
 
-struct ReturnPayload<B: PlatformClockBackend, T> {
+struct ReturnPayload<B: PlatformClockBackend> {
     power: CommonRadioPower<B>,
     clocks: ModemClocks,
     modem_platform_clocks: ModemPlatformClocks<B>,
     external_coex: Option<crate::radio::coex::ExternalCoexConfig>,
-    coex_participants: CoexParticipants,
-    attachment: T,
     identity: PhyIdentity,
 }
 
 /// The rest of one domain while its PHY is detached. It grants no MMIO.
 #[must_use = "the detached domain must consume its own PHY transaction"]
-pub struct DetachedRadioDomain<B: PlatformClockBackend, T> {
+pub struct DetachedRadioDomain<B: PlatformClockBackend> {
     guard: Guard,
-    payload: ManuallyDrop<ReturnPayload<B, T>>,
+    payload: ManuallyDrop<ReturnPayload<B>>,
 }
 
 /// Refused foreign reunion, retaining both unchanged owners for exact reunion.
 #[must_use = "refused reunion retains both owners"]
-pub struct ReuniteFailure<B: PlatformClockBackend, T> {
+pub struct ReuniteFailure<B: PlatformClockBackend> {
     pub expected_owner: usize,
     pub received_owner: usize,
-    pub domain: DetachedRadioDomain<B, T>,
+    pub domain: DetachedRadioDomain<B>,
     pub transaction: PhyTransaction,
 }
-impl<B: PlatformClockBackend, T> DetachedRadioDomain<B, T> {
-    pub fn attachment(&self) -> &T {
-        &self.payload.attachment
-    }
-    pub fn attachment_mut(&mut self) -> &mut T {
-        &mut self.payload.attachment
-    }
-
+impl<B: PlatformClockBackend> DetachedRadioDomain<B> {
     #[allow(
         clippy::result_large_err,
         reason = "refusal retains the exact affine inputs"
     )]
-    pub fn reunite(
-        self,
-        transaction: PhyTransaction,
-    ) -> Result<RadioDomain<B, T>, ReuniteFailure<B, T>> {
+    pub fn reunite(self, transaction: PhyTransaction) -> Result<RadioDomain<B>, ReuniteFailure<B>> {
         if !core::ptr::eq(self.guard.seat, transaction.guard.seat) {
             return Err(ReuniteFailure {
                 expected_owner: core::ptr::from_ref(self.guard.seat).addr(),
@@ -374,15 +362,15 @@ impl<B: PlatformClockBackend, T> DetachedRadioDomain<B, T> {
 /// One exact domain/PHY pair, owned across an async operation. Splitting it
 /// permits transfer; reuniting a split pair checks the original identity.
 #[must_use = "finish the owned radio transaction explicitly"]
-pub struct RadioTransaction<B: PlatformClockBackend, T> {
-    domain: DetachedRadioDomain<B, T>,
+pub struct RadioTransaction<B: PlatformClockBackend> {
+    domain: DetachedRadioDomain<B>,
     phy: PhyTransaction,
 }
-impl<B: PlatformClockBackend, T> RadioTransaction<B, T> {
-    pub fn split(self) -> (DetachedRadioDomain<B, T>, PhyTransaction) {
+impl<B: PlatformClockBackend> RadioTransaction<B> {
+    pub fn split(self) -> (DetachedRadioDomain<B>, PhyTransaction) {
         (self.domain, self.phy)
     }
-    pub fn reunite(self) -> RadioDomain<B, T> {
+    pub fn reunite(self) -> RadioDomain<B> {
         combine(self.domain, self.phy)
     }
     pub fn hardware_mut(&mut self) -> &mut PhyHardware {
@@ -391,27 +379,15 @@ impl<B: PlatformClockBackend, T> RadioTransaction<B, T> {
     pub fn hardware(&self) -> &PhyHardware {
         self.phy.hardware()
     }
-    pub fn attachment(&self) -> &T {
-        self.domain.attachment()
-    }
-    pub fn attachment_mut(&mut self) -> &mut T {
-        self.domain.attachment_mut()
-    }
-    pub fn hardware_with_attachment(&mut self) -> (&mut PhyHardware, &mut T) {
-        (self.phy.hardware_mut(), self.domain.attachment_mut())
-    }
-    pub fn hardware_with_attachment_and_grant(
-        &mut self,
-    ) -> (&mut PhyHardware, &mut T, PhyGrantProtect<'_>) {
-        let (hardware, grant) = self.phy.hardware_and_grant();
-        (hardware, self.domain.attachment_mut(), grant)
+    pub fn hardware_and_grant(&mut self) -> (&mut PhyHardware, PhyGrantProtect<'_>) {
+        self.phy.hardware_and_grant()
     }
 }
 
-fn combine<B: PlatformClockBackend, T>(
-    domain: DetachedRadioDomain<B, T>,
+fn combine<B: PlatformClockBackend>(
+    domain: DetachedRadioDomain<B>,
     transaction: PhyTransaction,
-) -> RadioDomain<B, T> {
+) -> RadioDomain<B> {
     let DetachedRadioDomain { guard, payload } = domain;
     let PhyTransaction {
         guard: phy_guard,
@@ -424,8 +400,6 @@ fn combine<B: PlatformClockBackend, T>(
         clocks,
         modem_platform_clocks,
         external_coex,
-        coex_participants,
-        attachment,
         identity,
     } = ManuallyDrop::into_inner(payload);
     let Payload {
@@ -452,13 +426,11 @@ fn combine<B: PlatformClockBackend, T>(
         coex_pti,
         phy_grant_protected,
         external_coex,
-        coex_participants,
-        attachment,
         identity,
     })
 }
 
-impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
+impl<B: PlatformClockBackend> RadioDomain<B> {
     /// Observe or report faults without register or reunion authority.
     pub fn fault_handle(&self) -> FaultHandle {
         FaultHandle {
@@ -469,7 +441,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 
     /// Consume the domain without MMIO; an affine return owner serializes it
     /// with the movable PHY transaction. Registration and restore stay intact.
-    pub fn detach(self, operation: Operation) -> RadioTransaction<B, T> {
+    pub fn detach(self, operation: Operation) -> RadioTransaction<B> {
         let SharedRadioState {
             registers:
                 SharedRadioRegisters {
@@ -484,8 +456,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             coex_pti,
             phy_grant_protected,
             external_coex,
-            coex_participants,
-            attachment,
             identity,
         } = self.state;
         let registration = phy.registration_epoch();
@@ -499,8 +469,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                     clocks,
                     modem_platform_clocks,
                     external_coex,
-                    coex_participants,
-                    attachment,
                     identity,
                 }),
             },
