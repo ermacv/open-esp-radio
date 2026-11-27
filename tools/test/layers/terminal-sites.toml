@@ -278,39 +278,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/esp32s31/platform/bootstrap/src/entry.rs:crate::bootstrap_main:terminal-entry:bootstrap_main:1" = { owner = "chips/esp32s31/platform/bootstrap", classes = ["configuration-boot"] }
 "chips/esp32s31/platform/bootstrap/src/entry.rs:crate:terminal-binding:panic_handler:1" = { owner = "chips/esp32s31/platform/bootstrap", classes = ["rust-panic"] }
 
-# hil/probes/esp32s31-radio/src/hardware_image.rs
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:4" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::sheets:terminal-reference:reset:1" = { owner = "hil/probes/esp32s31-radio", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image:terminal-binding:phy_fault_reporter:1" = { owner = "hil/probes/esp32s31-radio", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image:terminal-reference:reset:1" = { owner = "hil/probes/esp32s31-radio", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image:terminal-binding:entry:1" = { owner = "hil/probes/esp32s31-radio", classes = ["rust-panic"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:terminal-entry:main:1" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:1" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:2" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:3" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot"] }
-
-# hil/probes/esp32s31-radio/src/lib.rs
-"hil/probes/esp32s31-radio/src/lib.rs:crate::probe_halt:terminal-entry:probe_halt:1" = { owner = "hil/probes/esp32s31-radio", classes = ["rust-panic"] }
-"hil/probes/esp32s31-radio/src/lib.rs:crate::panic:panic-handler:panic:1" = { owner = "hil/probes/esp32s31-radio", classes = ["rust-panic"] }
-"hil/probes/esp32s31-radio/src/lib.rs:crate::panic:terminal-entry:panic:1" = { owner = "hil/probes/esp32s31-radio", classes = ["rust-panic"] }
-"hil/probes/esp32s31-radio/src/lib.rs:crate::report_phy_fault:terminal-entry:report_phy_fault:1" = { owner = "hil/probes/esp32s31-radio", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"hil/probes/esp32s31-radio/src/lib.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "hil/probes/esp32s31-radio", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-
-# hil/probes/esp32s31-radio/src/main.rs
-"hil/probes/esp32s31-radio/src/main.rs:crate::_start:terminal-entry:_start:1" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot"] }
-
-# hil/probes/esp32s31-register/src/lib.rs
-"hil/probes/esp32s31-register/src/lib.rs:crate::probe_halt:terminal-entry:probe_halt:1" = { owner = "hil/probes/esp32s31-register", classes = ["rust-panic"] }
-"hil/probes/esp32s31-register/src/lib.rs:crate::panic:panic-handler:panic:1" = { owner = "hil/probes/esp32s31-register", classes = ["rust-panic"] }
-"hil/probes/esp32s31-register/src/lib.rs:crate::panic:terminal-entry:panic:1" = { owner = "hil/probes/esp32s31-register", classes = ["rust-panic"] }
-"hil/probes/esp32s31-register/src/lib.rs:crate::report_phy_fault:terminal-entry:report_phy_fault:1" = { owner = "hil/probes/esp32s31-register", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-"hil/probes/esp32s31-register/src/lib.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "hil/probes/esp32s31-register", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
-
-# hil/probes/esp32s31-register/src/main.rs
-"hil/probes/esp32s31-register/src/main.rs:crate::_start:terminal-entry:_start:1" = { owner = "hil/probes/esp32s31-register", classes = ["configuration-boot"] }
-
 # hil/probes/esp32s31-case-c-sender/src/diagnostic.rs
 "hil/probes/esp32s31-case-c-sender/src/diagnostic.rs:crate::diagnostic:retained-slot:retained_static:1" = { owner = "hil/probes/esp32s31-case-c-sender", classes = ["configuration-boot", "cpu-exception", "rust-panic"] }
 "hil/probes/esp32s31-case-c-sender/src/diagnostic.rs:crate::diagnostic::report_previous:terminal-reference:fatal_halt:1" = { owner = "hil/probes/esp32s31-case-c-sender", classes = ["cpu-exception", "rust-panic"] }

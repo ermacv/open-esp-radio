@@ -1845,36 +1845,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-probes-esp32s31-radio"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-platform-board",
- "oer-chips-esp32s31-platform-layout",
- "oer-chips-esp32s31-platform-runtime",
- "oer-chips-esp32s31-radio-phy",
- "oer-chips-family-boot",
- "oer-chips-family-platform-executor",
- "oer-chips-family-platform-runtime",
- "oer-chips-family-radio-coex",
- "oer-chips-family-radio-phy",
- "oer-portable-clock",
- "oer-portable-cooperate",
- "oer-portable-diagnostics",
- "oer-portable-embassy-time",
- "oer-portable-memory",
- "oer-portable-riscv",
- "oer-portable-settle",
- "oer-portable-time",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-core-upper-mac",
- "oer-protocols-ieee80211-wire",
- "oer-tools-probe-codegen",
- "oer-tools-probe-macros",
- "static_cell",
-]
-
-[[package]]
 name = "oer-hil-probes-esp32s31-radio-root"
 version = "0.1.0"
 dependencies = [
@@ -1887,17 +1857,6 @@ dependencies = [
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-time",
-]
-
-[[package]]
-name = "oer-hil-probes-esp32s31-register"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-family-boot",
- "oer-portable-memory",
- "oer-tools-probe-codegen",
- "oer-tools-probe-macros",
 ]
 
 [[package]]
