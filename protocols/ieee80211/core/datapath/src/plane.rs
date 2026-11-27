@@ -462,29 +462,6 @@ pub enum ArenaSide {
     Second,
 }
 
-/// Where a chain is: what the plane reads of its place.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Phase {
-    /// Inside a transition of the plane, which puts the places back
-    /// before it returns, and after [`DataPlane::idle_rights`].
-    Moving,
-    /// It holds nothing.
-    Idle,
-    /// It takes or keeps frames.
-    Open,
-    /// It is on the air.
-    Air,
-}
-
-/// Where the long chain of `place` is.
-const fn phase_of<M, const SLOTS: usize>(place: &LongPlace<'_, M, SLOTS>) -> Phase {
-    match place.now() {
-        LongIs::Idle => Phase::Idle,
-        LongIs::Open(_) => Phase::Open,
-        LongIs::OnAir(..) => Phase::Air,
-    }
-}
-
 /// What the plane knows of the frames one arena holds. Frames are named by
 /// their original position, the order intake took them in: position `o`
 /// carries the sequence number `first + o`. The arena holds the positions
@@ -672,9 +649,17 @@ pub struct DataPlane<'id, K, const SLOTS: usize> {
     first: ArenaBook<'id, K>,
     second: ArenaBook<'id, K>,
     /// The two long chains' places, each beside its book, and the queues'.
-    /// `None` only after [`DataPlane::idle_rights`], which the plane does
-    /// not outlive.
-    rights: Option<Rights<'id, SLOTS>>,
+    places: Places<'id, SLOTS>,
+}
+
+/// Where the plane's two long chains are while one is not idle: what the
+/// data's stop waits for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Holding {
+    /// The first long chain.
+    pub first: LongIs,
+    /// The second.
+    pub second: LongIs,
 }
 
 /// The radio's two long chains, idle, as its bundle names them.
@@ -695,7 +680,7 @@ type EndOf<'id, P> = (
 
 /// The plane's places: its two long chains', each of its marker's type,
 /// and the four queues'.
-struct Rights<'id, const SLOTS: usize> {
+struct Places<'id, const SLOTS: usize> {
     first: LongPlace<'id, First, SLOTS>,
     second: LongPlace<'id, Second, SLOTS>,
     queues: QueuePlaces<'id>,
@@ -703,28 +688,23 @@ struct Rights<'id, const SLOTS: usize> {
 
 /// The place of the long chain of `side`, lent as `$right`, and the
 /// queues' as `$queues`, to `$body`: each side's is of its own marker's
-/// type, so `$body` is checked for both. `$none` while the plane holds no
-/// places.
+/// type, so `$body` is checked for both.
 macro_rules! on_side {
-    ($plane:expr, $side:expr, $none:expr, |$right:ident, $queues:ident| $body:expr) => {{
-        match (&mut $plane.rights, $side) {
-            (
-                Some(Rights {
-                    first: $right,
-                    queues: $queues,
-                    ..
-                }),
-                ArenaSide::First,
-            ) => $body,
-            (
-                Some(Rights {
-                    second: $right,
-                    queues: $queues,
-                    ..
-                }),
-                ArenaSide::Second,
-            ) => $body,
-            (None, _) => $none,
+    ($plane:expr, $side:expr, |$right:ident, $queues:ident| $body:expr) => {{
+        let Places {
+            first,
+            second,
+            queues: $queues,
+        } = &mut $plane.places;
+        match $side {
+            ArenaSide::First => {
+                let $right = first;
+                $body
+            }
+            ArenaSide::Second => {
+                let $right = second;
+                $body
+            }
         }
     }};
 }
@@ -745,38 +725,37 @@ impl<'id, K, const SLOTS: usize> DataPlane<'id, K, SLOTS> {
             next: [None; 8],
             first: ArenaBook::new(),
             second: ArenaBook::new(),
-            rights: Some(Rights {
+            places: Places {
                 first: LongPlace::new(first),
                 second: LongPlace::new(second),
                 queues: QueuePlaces::new(queues),
-            }),
+            },
         }
     }
 
-    /// Where the right of the chain of `side` is.
-    const fn phase(&self, side: ArenaSide) -> Phase {
-        match (&self.rights, side) {
-            (None, _) => Phase::Moving,
-            (Some(rights), ArenaSide::First) => phase_of(&rights.first),
-            (Some(rights), ArenaSide::Second) => phase_of(&rights.second),
+    /// Where the long chain of `side` is: its place answers.
+    const fn now(&self, side: ArenaSide) -> LongIs {
+        match side {
+            ArenaSide::First => self.places.first.now(),
+            ArenaSide::Second => self.places.second.now(),
         }
     }
 
     /// Whether the chain of `side` is on the air.
-    fn side_on_air(&self, side: ArenaSide) -> bool {
-        self.phase(side) == Phase::Air
+    const fn side_on_air(&self, side: ArenaSide) -> bool {
+        matches!(self.now(side), LongIs::OnAir(..))
     }
 
     /// The chain of `side` is the standby: it is not on the air and takes
     /// frames.
-    fn takes(&self, side: ArenaSide) -> bool {
-        matches!(self.phase(side), Phase::Idle | Phase::Open) && !self.side_book(side).retained
+    const fn takes(&self, side: ArenaSide) -> bool {
+        !self.side_on_air(side) && !self.side_book(side).retained
     }
 
     /// Whether the chain of `side` holds frames the next publication may
     /// put on the air.
-    fn side_publishable(&self, side: ArenaSide) -> bool {
-        self.phase(side) == Phase::Open && self.side_book(side).pending != 0
+    const fn side_publishable(&self, side: ArenaSide) -> bool {
+        matches!(self.now(side), LongIs::Open(_)) && self.side_book(side).pending != 0
     }
 
     /// The book of the chain of `side`.
@@ -835,51 +814,56 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
             self.rate,
             self.limits,
             self.next,
-            book(
-                &self.first,
-                held_key(self.rights.as_ref().map(|rights| &rights.first))
-            ),
-            book(
-                &self.second,
-                held_key(self.rights.as_ref().map(|rights| &rights.second))
-            )
+            book(&self.first, held_key(&self.places.first)),
+            book(&self.second, held_key(&self.places.second))
         )
     }
 
-    /// Whether both chains are idle: the data may stop. A chain idle has
-    /// given its queue's right back.
-    pub fn is_idle(&self) -> bool {
-        self.phase(ArenaSide::First) == Phase::Idle && self.phase(ArenaSide::Second) == Phase::Idle
+    /// Whether the plane may give its places back: both long chains idle,
+    /// so that no queue is carried. `Err` names where each chain is.
+    pub const fn givable(&self) -> Result<(), Holding> {
+        match (self.places.first.now(), self.places.second.now()) {
+            (LongIs::Idle, LongIs::Idle) => Ok(()),
+            (first, second) => Err(Holding { first, second }),
+        }
     }
 
     /// The two long chains and the four queues back, when both chains are
-    /// idle: the data stops, and the plane goes with it (its caller drops
-    /// it). `None` while one holds frames or is on the air; the plane keeps
-    /// them.
-    pub fn idle_rights(&mut self) -> Option<(LongPair<'id, SLOTS>, [Queue<'id>; 4])> {
-        if !self.is_idle() {
-            return None;
-        }
-        let Rights {
+    /// idle: the data stops, and the plane with it. `Err` gives the plane
+    /// back whole while a chain holds frames or is on the air; its caller
+    /// asks [`DataPlane::givable`] first, so that a "not yet" moves nothing.
+    pub fn into_rights(self) -> Result<(LongPair<'id, SLOTS>, [Queue<'id>; 4]), Self> {
+        let Self {
+            linkage,
+            epoch,
+            rate,
+            limits,
+            next,
+            first: first_book,
+            second: second_book,
+            places,
+        } = self;
+        let Places {
             first,
             second,
             queues,
-        } = self.rights.take()?;
+        } = places;
         match (first.into_idle(), second.into_idle(), queues.into_queues()) {
-            (Ok(first), Ok(second), Ok(queues)) => Some(((first, second), queues)),
-            (first, second, queues) => {
-                // Both chains idle hold no queue: every place is free. Should
-                // one not be, the plane keeps what it held.
-                self.rights = Some(Rights {
+            (Ok(first), Ok(second), Ok(queues)) => Ok(((first, second), queues)),
+            (first, second, queues) => Err(Self {
+                linkage,
+                epoch,
+                rate,
+                limits,
+                next,
+                first: first_book,
+                second: second_book,
+                places: Places {
                     first: first.map_or_else(|place| place, LongPlace::new),
                     second: second.map_or_else(|place| place, LongPlace::new),
-                    queues: match queues {
-                        Ok(queues) => QueuePlaces::new(queues),
-                        Err(queues) => queues,
-                    },
-                });
-                None
-            }
+                    queues: queues.map_or_else(|queues| queues, QueuePlaces::new),
+                },
+            }),
         }
     }
 
@@ -970,7 +954,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         let mut transmitted = [false; 8];
         for side in [ArenaSide::First, ArenaSide::Second] {
             let book = self.book(side);
-            if book.epoch == self.epoch && self.phase(side) == Phase::Open {
+            if book.epoch == self.epoch && matches!(self.now(side), LongIs::Open(_)) {
                 let tid = book.tid;
                 let first = book.first;
                 for (position, frame) in book.held() {
@@ -1045,7 +1029,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
             report(events, || DataEvent::DataLost(DataLoss::LeftBehind));
             returned(memory);
         };
-        if on_side!(self, side, false, |right, _queues| withdraw_held(
+        if on_side!(self, side, |right, _queues| withdraw_held(
             right, port, &mut leave
         )) {
             self.book_mut(side).clear();
@@ -1213,9 +1197,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         // An empty arena opens for the frame's TID: one that is open and
         // holds nothing goes idle first, since it was opened for another.
         if count == 0 {
-            on_side!(self, side, (), |right, _queues| reopen(
-                right, port, link, tid
-            ));
+            on_side!(self, side, |right, _queues| reopen(right, port, link, tid));
         }
         // A book names 64 positions: a book that took them all takes no
         // more until the arena empties, as a full arena.
@@ -1243,7 +1225,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
                 write_front(headroom, &header, tid, sequence_number, ccmp)
             })
         };
-        match on_side!(self, side, Written::Full(msdu.memory), |right, _queues| {
+        match on_side!(self, side, |right, _queues| {
             write_in(right, port, length, msdu.memory, front)
         }) {
             Written::Written => {}
@@ -1359,7 +1341,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         // The chain goes on its TID's queue, which it takes; while the queue
         // carries a chain, the chain waits.
         let category = self.book(side).tid.access_category();
-        let sent = on_side!(self, side, None, |right, queues| publish_held(
+        let sent = on_side!(self, side, |right, queues| publish_held(
             right, queues, category, port, ppdu, gate, now
         ))?;
         let book = self.book_mut(side);
@@ -1496,10 +1478,9 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         let side = [ArenaSide::First, ArenaSide::Second]
             .into_iter()
             .find(|side| self.side_on_air(*side))?;
-        let (outcome, sent, acknowledged) =
-            on_side!(self, side, None, |right, _queues| ended_held(
-                right, port, facts, now
-            ))?;
+        let (outcome, sent, acknowledged) = on_side!(self, side, |right, _queues| ended_held(
+            right, port, facts, now
+        ))?;
         let book = self.book(side);
         let published = book.published?;
         let tid = book.tid;
@@ -1520,7 +1501,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         self.book_mut(side).published = None;
         if !current {
             // An ended link's frames neither retry nor move its windows.
-            on_side!(self, side, None, |right, queues| settle_held(
+            on_side!(self, side, |right, queues| settle_held(
                 right,
                 queues,
                 port,
@@ -1605,7 +1586,7 @@ impl<'id, K: Ieee80211Capabilities, const SLOTS: usize> DataPlane<'id, K, SLOTS>
         }
         let retried = ones(decision.pending);
         let keep = decision.keep;
-        on_side!(self, side, None, |right, queues| settle_held(
+        on_side!(self, side, |right, queues| settle_held(
             right,
             queues,
             port,
@@ -1758,12 +1739,11 @@ enum Afterward {
 
 /// A long chain's place's key for the engine's search.
 #[cfg(test)]
-fn held_key<M, const SLOTS: usize>(place: Option<&LongPlace<'_, M, SLOTS>>) -> std::string::String {
-    match place.map(LongPlace::now) {
-        None => std::string::String::from("moving"),
-        Some(LongIs::Idle) => std::string::String::from("idle"),
-        Some(LongIs::Open(frames)) => std::format!("open{frames}"),
-        Some(LongIs::OnAir(sent, _)) => std::format!("air{}", FrameSet::prefix(sent).bits()),
+fn held_key<M, const SLOTS: usize>(place: &LongPlace<'_, M, SLOTS>) -> std::string::String {
+    match place.now() {
+        LongIs::Idle => std::string::String::from("idle"),
+        LongIs::Open(frames) => std::format!("open{frames}"),
+        LongIs::OnAir(sent, _) => std::format!("air{}", FrameSet::prefix(sent).bits()),
     }
 }
 

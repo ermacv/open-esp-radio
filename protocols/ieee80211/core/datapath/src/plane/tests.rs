@@ -356,6 +356,8 @@ cases! {
     an_attempt_whose_end_is_unknown_is_charged_unknown => cost_unknown,
     a_prefix_the_rate_admits_goes_and_the_rest_stays_with_no_attempt_spent => prefix,
     an_aggregate_that_reached_no_receiver_spends_no_attempt_of_its_frames => unreached,
+    the_places_come_back_once_both_chains_are_idle => give_back,
+    a_plane_holding_frames_keeps_its_places_until_its_stop => give_back_refused,
 }
 
 /// The PSDU of an open QoS data MPDU of [`PAYLOAD`] octets: its front, its
@@ -1319,4 +1321,64 @@ fn withdrawn_numbers_rewind_the_counter_only_when_they_are_its_last_draws() {
         transmitted: true,
     };
     assert_eq!(none.rewind_to(number(6)), None);
+}
+
+/// Whether the plane's places go back follows its chains' places: not
+/// while a chain is open or on the air, at once when both are idle.
+fn give_back(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
+    assert_eq!(world.plane.givable(), Ok(()), "a new plane holds nothing");
+    world.agree(BE, 64);
+    world.taken(0, BE);
+    assert!(
+        matches!(
+            world.plane.givable(),
+            Err(Holding {
+                first: LongIs::Open(1),
+                second: LongIs::Idle
+            })
+        ),
+        "an open chain holds its frame"
+    );
+    let _ = world.publish();
+    assert!(
+        matches!(
+            world.plane.givable(),
+            Err(Holding {
+                first: LongIs::OnAir(..),
+                ..
+            })
+        ),
+        "a chain on the air holds its queue"
+    );
+    world.answer(Air::Ack);
+    world.block_ack(positions(&[0]));
+    let _ = world.settle();
+    assert_eq!(world.plane.givable(), Ok(()), "settled, both are idle");
+    let World { plane, .. } = world;
+    let Ok((_chains, queues)) = plane.into_rights() else {
+        panic!("both chains are idle");
+    };
+    assert_eq!(queues.len(), 4, "the four queues come back");
+}
+
+/// A plane asked for its places while a chain holds frames gives itself
+/// back whole; once its stop returned the frames, its places go.
+fn give_back_refused(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    world.taken(0, BE);
+    let World {
+        plane,
+        mut port,
+        mut returned,
+        ..
+    } = world;
+    let Err(mut plane) = plane.into_rights() else {
+        panic!("an open chain keeps the places");
+    };
+    assert!(plane.givable().is_err(), "it still holds its frame");
+    plane.stop(&mut port, |memory| returned.push(memory), &mut ());
+    assert_eq!(returned.len(), 1, "the frame came home at the stop");
+    assert!(plane.into_rights().is_ok(), "then its places go");
 }

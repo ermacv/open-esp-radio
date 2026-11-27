@@ -8537,10 +8537,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/datapath/src/plane.rs::DataPlane.rights",
-        BY_CONTROLLER,
-    ),
-    (
         "protocols/ieee80211/core/datapath/src/plane.rs::DataPlane.rate",
         BY_CONTROLLER,
     ),
