@@ -2,9 +2,6 @@ use super::*;
 
 const CAPABILITIES: MacServiceCapabilities = MacServiceCapabilities {
     interfaces: MacInterfaceCapabilities {
-        station_interfaces: 1,
-        access_point_interfaces: 0,
-        simultaneous_station_access_point: crate::Support::Unsupported,
         standalone_monitor: crate::Support::Unsupported,
         monitor_with_interfaces: crate::Support::Unsupported,
         raw_monitor_tap: crate::Support::Unsupported,
