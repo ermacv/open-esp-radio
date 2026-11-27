@@ -40,9 +40,6 @@ const fn capabilities(interfaces: MacInterfaceCapabilities) -> MacServiceCapabil
 }
 
 const ALL_INTERFACES: MacInterfaceCapabilities = MacInterfaceCapabilities {
-    station_interfaces: 1,
-    access_point_interfaces: 1,
-    simultaneous_station_access_point: oer_protocols_ieee80211_contracts_port::Support::Supported,
     standalone_monitor: oer_protocols_ieee80211_contracts_port::Support::Supported,
     monitor_with_interfaces: oer_protocols_ieee80211_contracts_port::Support::Supported,
     raw_monitor_tap: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
@@ -114,12 +111,8 @@ fn standalone_monitor_plan_proves_exclusive_rx_ownership() {
 }
 
 #[test]
-fn rejects_roles_and_taps_not_owned_by_the_complete_service() {
-    let station_only = MacInterfaceCapabilities {
-        station_interfaces: 1,
-        access_point_interfaces: 0,
-        simultaneous_station_access_point:
-            oer_protocols_ieee80211_contracts_port::Support::Unsupported,
+fn rejects_taps_not_owned_by_the_complete_service() {
+    let without_taps = MacInterfaceCapabilities {
         standalone_monitor: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
         monitor_with_interfaces: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
         raw_monitor_tap: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
@@ -128,14 +121,9 @@ fn rejects_roles_and_taps_not_owned_by_the_complete_service() {
             oer_protocols_ieee80211_contracts_port::Support::Unsupported,
     };
     assert_eq!(
-        WifiConfig::access_point(WifiAccessPointConfig::new(address(2)))
-            .validate(capabilities(station_only)),
-        Err(WifiConfigError::UnsupportedAccessPoint)
-    );
-    assert_eq!(
         WifiConfig::station(WifiStationConfig::new(address(1)))
             .with_monitor(WifiMonitorConfig::normalized())
-            .validate(capabilities(station_only)),
+            .validate(capabilities(without_taps)),
         Err(WifiConfigError::UnsupportedMonitorTap(
             MonitorTapPoint::Normalized
         ))
@@ -158,10 +146,6 @@ fn rejects_duplicate_station_and_ap_addresses() {
 #[test]
 fn distinguishes_standalone_monitor_from_concurrent_interface_tap() {
     let standalone_only = MacInterfaceCapabilities {
-        station_interfaces: 1,
-        access_point_interfaces: 0,
-        simultaneous_station_access_point:
-            oer_protocols_ieee80211_contracts_port::Support::Unsupported,
         standalone_monitor: oer_protocols_ieee80211_contracts_port::Support::Supported,
         monitor_with_interfaces: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
         raw_monitor_tap: oer_protocols_ieee80211_contracts_port::Support::Unsupported,

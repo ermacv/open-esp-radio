@@ -64,6 +64,10 @@ pub trait Harness<'id, L: Layout> {
     type Record: Eq + core::fmt::Debug;
     /// What the hardware holds that a stop takes down.
     type State: Eq + core::fmt::Debug;
+    /// One step the hardware was asked to program for an interface.
+    type Programmed: Clone + Eq + core::fmt::Debug;
+    /// What the hardware holds of one interface: what its take-down clears.
+    type InterfaceState: Eq + core::fmt::Debug;
 
     /// The port.
     fn port(&mut self) -> &mut Self::Port;
@@ -95,6 +99,11 @@ pub trait Harness<'id, L: Layout> {
     fn record(&self) -> Self::Record;
     /// What the hardware holds.
     fn state(&self) -> Self::State;
+    /// What the hardware was asked to program for the interface `I` since
+    /// the last start, in order.
+    fn interface_record<I: InterfaceRole>(&self) -> Vec<Self::Programmed>;
+    /// What the hardware holds of the interface `I`.
+    fn interface_state<I: InterfaceRole>(&self) -> Self::InterfaceState;
     /// The port's own octets of its transmit slots (in front of the
     /// headroom, behind a body and its MIC's room), as the port checked
     /// them after each write and at each publication.
@@ -133,6 +142,24 @@ pub type AccessPointLayout<
     (First, Second),
     SLOTS,
     (InterfaceLayout<AccessPoint, PAIRWISE, GROUPS, AGREEMENTS>,),
+>;
+
+/// The layout of the suite's station and access point together: two long
+/// chains of `SLOTS`; the station with one pairwise key place, the access
+/// point with `PAIRWISE`, a client each; each with `GROUPS` group key slots
+/// and `AGREEMENTS` agreements' slots.
+pub type StationAccessPointLayout<
+    const SLOTS: usize,
+    const PAIRWISE: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> = RadioLayout<
+    (First, Second),
+    SLOTS,
+    (
+        InterfaceLayout<Station, 1, GROUPS, AGREEMENTS>,
+        InterfaceLayout<AccessPoint, PAIRWISE, GROUPS, AGREEMENTS>,
+    ),
 >;
 
 /// The rights the suite runs an installation of the layout `L` with.
@@ -686,6 +713,443 @@ pub fn a_clients_key_goes_alone<
     retire_whole(harness, rights);
 }
 
+/// The station's and the access point's settings of the case below: their
+/// addresses, receive rules and keys' peers.
+pub struct TwoInterfaces<K> {
+    /// The station's own address.
+    pub station: oer_protocols_ieee802_wire::IndividualAddress,
+    /// The station's receive rule.
+    pub station_rule: StationReceive<K>,
+    /// The access point's own address: the station's key's peer.
+    pub access_point: oer_protocols_ieee802_wire::IndividualAddress,
+    /// The access point's receive rule.
+    pub access_point_rule: oer_protocols_ieee80211_contracts_port::AccessPointReceive<K>,
+    /// The access point's client: its key's peer.
+    pub client: oer_protocols_ieee802_wire::IndividualAddress,
+}
+
+/// A pairwise key's installation for `peer` in `slot`.
+fn install_for<'id, I: InterfaceRole>(
+    slot: oer_protocols_ieee80211_contracts_port::PairwiseSlot<'id, I>,
+    peer: oer_protocols_ieee802_wire::IndividualAddress,
+    byte: u8,
+) -> PairwiseCommand<'id, I> {
+    PairwiseCommand::Install {
+        slot,
+        peer,
+        key: oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[byte; 16]),
+        spp: oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+    }
+}
+
+/// An agreement command.
+fn agreement_command<'id, H, L: Layout, I: InterfaceRole>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    command: oer_protocols_ieee80211_contracts_port::AgreementCommand<
+        'id,
+        I,
+        <H::Port as RadioPort<'id>>::Caps,
+    >,
+) -> (
+    CommandPlace<'id>,
+    oer_protocols_ieee80211_contracts_port::AgreementEnd<'id, I>,
+)
+where
+    H: Harness<'id, L>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    run_command(
+        harness,
+        place,
+        command,
+        |port, place, command| port.begin_agreement(place, command, NOW),
+        |port, flight, ends| port.poll_agreement(flight, NOW, ends),
+    )
+}
+
+/// Begin a receive agreement with `peer` on TID 0 in `slot`.
+fn agree<'id, H, L: Layout, I: InterfaceRole>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    slot: oer_protocols_ieee80211_contracts_port::AgreementSlot<'id, I>,
+    peer: oer_protocols_ieee802_wire::IndividualAddress,
+) -> (
+    CommandPlace<'id>,
+    oer_protocols_ieee80211_contracts_port::Agreement<'id, I>,
+)
+where
+    H: Harness<'id, L>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let agreement = oer_protocols_ieee80211_contracts_port::SupportedBlockAck::new(
+        peer,
+        oer_protocols_ieee80211_wire::qos::Tid::constant::<0>(),
+        oer_protocols_ieee80211_wire::sequence::SequenceNumber::new(0).expect("a sequence number"),
+        oer_protocols_ieee80211_wire::block_ack::frame::BlockAckWindow::new(16).expect("a window"),
+    )
+    .expect("the port acknowledges TID 0 with a window of 16");
+    let (place, oer_protocols_ieee80211_contracts_port::AgreementEnd::Added(added)) =
+        agreement_command(
+            harness,
+            place,
+            oer_protocols_ieee80211_contracts_port::AgreementCommand::Add { slot, agreement },
+        )
+    else {
+        panic!("the agreement begins");
+    };
+    (place, added)
+}
+
+/// End `agreement`: its slot comes back.
+fn disagree<'id, H, L: Layout, I: InterfaceRole>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    agreement: oer_protocols_ieee80211_contracts_port::Agreement<'id, I>,
+) -> (
+    CommandPlace<'id>,
+    oer_protocols_ieee80211_contracts_port::AgreementSlot<'id, I>,
+)
+where
+    H: Harness<'id, L>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let (place, oer_protocols_ieee80211_contracts_port::AgreementEnd::Empty(slot)) =
+        agreement_command(
+            harness,
+            place,
+            oer_protocols_ieee80211_contracts_port::AgreementCommand::End(agreement),
+        )
+    else {
+        panic!("the agreement ends");
+    };
+    (place, slot)
+}
+
+/// The station's places the case sets up: its pairwise place, a group key
+/// slot, an agreement's slot and its rule, off.
+struct StationPlaces<'id> {
+    pairwise: oer_protocols_ieee80211_contracts_port::PairwiseSlot<'id, Station>,
+    group: oer_protocols_ieee80211_contracts_port::GroupSlot<'id, Station>,
+    agreement: oer_protocols_ieee80211_contracts_port::AgreementSlot<'id, Station>,
+    receive: oer_protocols_ieee80211_contracts_port::ReceiveOff<'id, Station>,
+}
+
+/// The station set up: its pairwise key, and the rest.
+struct StationSetUp<'id> {
+    pairwise: oer_protocols_ieee80211_contracts_port::InstalledPairwise<'id, Station>,
+    rest: StationRest<'id>,
+}
+
+/// The station set up but its pairwise key: its group key, its agreement
+/// and its rule.
+struct StationRest<'id> {
+    group: oer_protocols_ieee80211_contracts_port::InstalledGroup<'id, Station>,
+    agreement: oer_protocols_ieee80211_contracts_port::Agreement<'id, Station>,
+    receiving: oer_protocols_ieee80211_contracts_port::Receiving<'id, Station>,
+}
+
+/// Set the station up: its pairwise key, its group key, an agreement with
+/// its access point and its receive rule.
+fn station_up<'id, H, const N: usize, const P: usize, const G: usize, const A: usize>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    places: StationPlaces<'id>,
+    settings: &TwoInterfaces<<H::Port as RadioPort<'id>>::Caps>,
+) -> (CommandPlace<'id>, StationSetUp<'id>)
+where
+    H: Harness<'id, StationAccessPointLayout<N, P, G, A>>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    // Each step changes what the hardware holds of the station: a setting
+    // up that does nothing fails here.
+    let changed = |harness: &H, before: &H::InterfaceState, what: &str| {
+        assert_ne!(
+            &harness.interface_state::<Station>(),
+            before,
+            "the station's {what} is the hardware's"
+        );
+    };
+    let before = harness.interface_state::<Station>();
+    let (place, PairwiseEnd::Installed(pairwise)) = pairwise_command(
+        harness,
+        place,
+        install_for(places.pairwise, settings.access_point, 1),
+    ) else {
+        panic!("the station's key installs");
+    };
+    changed(harness, &before, "pairwise key");
+    let before = harness.interface_state::<Station>();
+    let (place, GroupEnd::Installed(group)) = group_command(
+        harness,
+        place,
+        GroupCommand::Install {
+            slot: places.group,
+            key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+            key: oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[3; 16]),
+        },
+    ) else {
+        panic!("the station's group key installs");
+    };
+    changed(harness, &before, "group key");
+    let before = harness.interface_state::<Station>();
+    let (place, agreement) = agree(harness, place, places.agreement, settings.access_point);
+    changed(harness, &before, "agreement");
+    let before = harness.interface_state::<Station>();
+    let (place, ReceiveEnd::Receiving(receiving)) = receive_command(
+        harness,
+        place,
+        ReceiveCommand::Set {
+            off: places.receive,
+            address: settings.station,
+            rule: settings.station_rule,
+        },
+    ) else {
+        panic!("the station's rule is set");
+    };
+    changed(harness, &before, "receive rule");
+    (
+        place,
+        StationSetUp {
+            pairwise,
+            rest: StationRest {
+                group,
+                agreement,
+                receiving,
+            },
+        },
+    )
+}
+
+/// Take down what [`station_up`] set up but its pairwise key, which the
+/// caller removed: its group key, its agreement and its rule; its places
+/// come back with the pairwise place given.
+fn station_rest_down<'id, H, const N: usize, const P: usize, const G: usize, const A: usize>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    up: StationRest<'id>,
+    pairwise: oer_protocols_ieee80211_contracts_port::PairwiseSlot<'id, Station>,
+) -> (CommandPlace<'id>, StationPlaces<'id>)
+where
+    H: Harness<'id, StationAccessPointLayout<N, P, G, A>>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let (place, GroupEnd::Empty(group)) =
+        group_command(harness, place, GroupCommand::Remove(up.group))
+    else {
+        panic!("the station's group key is removed");
+    };
+    let (place, agreement) = disagree(harness, place, up.agreement);
+    let (place, ReceiveEnd::Off(receive)) =
+        receive_command(harness, place, ReceiveCommand::End(up.receiving))
+    else {
+        panic!("the station's rule ends off");
+    };
+    (
+        place,
+        StationPlaces {
+            pairwise,
+            group,
+            agreement,
+            receive,
+        },
+    )
+}
+
+/// Take the station down to its places: its pairwise key, then the rest.
+fn station_down<'id, H, const N: usize, const P: usize, const G: usize, const A: usize>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    up: StationSetUp<'id>,
+) -> (CommandPlace<'id>, StationPlaces<'id>)
+where
+    H: Harness<'id, StationAccessPointLayout<N, P, G, A>>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let (place, PairwiseEnd::Empty(pairwise)) =
+        pairwise_command(harness, place, PairwiseCommand::Remove(up.pairwise))
+    else {
+        panic!("the station's key is removed");
+    };
+    station_rest_down::<H, N, P, G, A>(harness, place, up.rest, pairwise)
+}
+
+/// **One stops while the other runs**: a station and an access point on
+/// one radio. The access point is set up with a client's key, an agreement
+/// with it and its rule; the station with its pairwise key, a group key, an
+/// agreement and its rule. The station is taken down to its whole bundle
+/// while the access point runs: between its key's removal and the rest,
+/// the access point's waiting frame goes on the air in a chain of one for
+/// the access point's link and ends as asked, its memory home. The station
+/// then holds nothing in the hardware, and the access point holds what it
+/// held, its agreement included. The station set up again asks the
+/// hardware for what its first setting up asked. Both are taken down and
+/// every bundle is retired whole.
+pub fn one_stops_while_the_other_runs<
+    'id,
+    H,
+    const N: usize,
+    const P: usize,
+    const G: usize,
+    const A: usize,
+>(
+    harness: &mut H,
+    mut rights: Rights<'id, StationAccessPointLayout<N, P, G, A>>,
+    settings: TwoInterfaces<<H::Port as RadioPort<'id>>::Caps>,
+) where
+    H: Harness<'id, StationAccessPointLayout<N, P, G, A>>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    use oer_protocols_ieee80211_wire::qos::WmmAccessCategory as Ac;
+    const {
+        if P < 1 || G < 1 || A < 1 {
+            panic!("each interface needs a pairwise place, a group slot and an agreement's slot");
+        }
+    }
+    let running = run(harness, &mut rights);
+    let gate = rights.gate.take().expect("the gate is closed");
+    let open = harness.port().open_gate(gate);
+    let (radio, (station, access_point)) = rights.data.take().expect("the rights are home");
+    let InterfaceRights {
+        pairwise: [pairwise],
+        groups,
+        agreements,
+        receive,
+    } = station;
+    let mut groups: Vec<_> = groups.into_iter().collect();
+    let mut agreements: Vec<_> = agreements.into_iter().collect();
+    let places = StationPlaces {
+        pairwise,
+        group: groups.remove(0),
+        agreement: agreements.remove(0),
+        receive,
+    };
+    let mut queues = QueuePlaces::<'id>::new(radio.queues);
+    let station_empty = harness.interface_state::<Station>();
+    // The access point is set up first: its client's key, an agreement
+    // with the client, its rule.
+    let mut ap_slots: Vec<_> = access_point.pairwise.into_iter().collect();
+    let mut ap_agreements: Vec<_> = access_point.agreements.into_iter().collect();
+    let (place, PairwiseEnd::Installed(ap_key)) = pairwise_command(
+        harness,
+        radio.command,
+        install_for(ap_slots.remove(0), settings.client, 2),
+    ) else {
+        panic!("the client's key installs");
+    };
+    let (place, ap_agreement) = agree(harness, place, ap_agreements.remove(0), settings.client);
+    let (place, ReceiveEnd::Receiving(ap_receiving)) = receive_command(
+        harness,
+        place,
+        ReceiveCommand::Set {
+            off: access_point.receive,
+            address: settings.access_point,
+            rule: settings.access_point_rule,
+        },
+    ) else {
+        panic!("the access point's rule is set");
+    };
+    let before = harness.interface_record::<Station>().len();
+    let (place, up) = station_up::<H, N, P, G, A>(harness, place, places, &settings);
+    let first: Vec<_> = harness.interface_record::<Station>()[before..].to_vec();
+    assert!(
+        !first.is_empty(),
+        "the station's setting up asked the hardware"
+    );
+    let ap_up = harness.interface_state::<AccessPoint>();
+    // The station goes down while the access point's frame goes and ends.
+    let (place, PairwiseEnd::Empty(pairwise)) =
+        pairwise_command(harness, place, PairwiseCommand::Remove(up.pairwise))
+    else {
+        panic!("the station's key is removed");
+    };
+    let how = OnePpdu::Acked(alone(harness.port()));
+    let _ = send_as::<AccessPoint, H, _>(harness, &mut queues, Ac::Voice, &QOS_DATA, how, &open);
+    let mut went_home = 0;
+    {
+        let QueueNow::One(one) = queues.at_mut(Ac::Voice).state() else {
+            panic!("the access point's frame is on the air");
+        };
+        let ended = one
+            .ended(harness.port(), TxFacts::DUE, NOW)
+            .expect("the access point's frame ends");
+        assert_eq!(
+            answer(&ended.outcome),
+            Some(Answer::Ack),
+            "it ends as it asked: acknowledged"
+        );
+        let _ = one.settle(harness.port(), &mut |_memory| went_home += 1);
+    }
+    assert_eq!(went_home, 1, "its memory came home");
+    let (place, places) = station_rest_down::<H, N, P, G, A>(harness, place, up.rest, pairwise);
+    assert_eq!(
+        harness.interface_state::<Station>(),
+        station_empty,
+        "the station taken down holds nothing in the hardware"
+    );
+    assert_eq!(
+        harness.interface_state::<AccessPoint>(),
+        ap_up,
+        "the access point holds what it held: its key, its agreement and its rule"
+    );
+    // The station's places are home: set up again, it asks what it asked.
+    let again = harness.interface_record::<Station>().len();
+    let (place, up) = station_up::<H, N, P, G, A>(harness, place, places, &settings);
+    assert_eq!(
+        harness.interface_record::<Station>()[again..],
+        first[..],
+        "a second setting up asks the hardware what the first asked"
+    );
+    let (place, places) = station_down::<H, N, P, G, A>(harness, place, up);
+    // The access point goes down in its turn.
+    let (place, PairwiseEnd::Empty(ap_slot)) =
+        pairwise_command(harness, place, PairwiseCommand::Remove(ap_key))
+    else {
+        panic!("the client's key is removed");
+    };
+    let (place, ap_agreement) = disagree(harness, place, ap_agreement);
+    let (place, ReceiveEnd::Off(ap_off)) =
+        receive_command(harness, place, ReceiveCommand::End(ap_receiving))
+    else {
+        panic!("the access point's rule ends off");
+    };
+    ap_slots.insert(0, ap_slot);
+    ap_agreements.insert(0, ap_agreement);
+    groups.insert(0, places.group);
+    agreements.insert(0, places.agreement);
+    let (command, closed) = close_gate(harness, place, open);
+    rights.gate = Some(closed);
+    rights.data = Some((
+        RadioRights {
+            queues: back(queues),
+            command,
+            ..radio
+        },
+        (
+            InterfaceRights {
+                pairwise: [places.pairwise],
+                groups: home(groups, "every group slot of the station's is back"),
+                agreements: home(
+                    agreements,
+                    "every agreement's slot of the station's is back",
+                ),
+                receive: places.receive,
+            },
+            InterfaceRights {
+                pairwise: home(ap_slots, "every client's place is back"),
+                agreements: home(
+                    ap_agreements,
+                    "every agreement's slot of the access point's is back",
+                ),
+                receive: ap_off,
+                ..access_point
+            },
+        ),
+    ));
+    stop(harness, &mut rights, running);
+    retire_whole(harness, rights);
+}
+
 /// **3. A second run is as the first**: what the hardware programs in a run
 /// after a stop equals what it programmed in the first, and its state after
 /// each stop equals its state before the first start; also after a run in
@@ -834,13 +1298,29 @@ where
     H: Harness<'id, L>,
     H::Port: DataPort<'id>,
 {
-    let link = harness.link::<Station>();
+    send_as::<Station, H, L>(harness, queues, category, bytes, how, open)
+}
+
+/// [`send`] for a link of the interface `I`.
+fn send_as<'id, I: InterfaceRole, H, L: Layout>(
+    harness: &mut H,
+    queues: &mut QueuePlaces<'id>,
+    category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
+    bytes: &'static [u8],
+    how: OnePpdu<'id, <H::Port as RadioPort<'id>>::Caps>,
+    open: &GateOpen<'id>,
+) -> oer_protocols_ieee80211_wire::qos::WmmAccessCategory
+where
+    H: Harness<'id, L>,
+    H::Port: DataPort<'id>,
+{
+    let link = harness.link::<I>();
     let tid = oer_protocols_ieee80211_wire::qos::Tid::constant::<0>();
     let memory = harness.memory(4);
     let QueueNow::Free(free) = queues.at_mut(category).state() else {
         panic!("the queue is free");
     };
-    free.send(
+    free.send::<I, _, _>(
         harness.port(),
         OneFrame {
             link: &link,

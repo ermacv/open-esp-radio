@@ -211,7 +211,6 @@ impl Ieee80211Capabilities for NonHtNoAck {
             spatial_streams: 1,
         },
         services: crate::HardwareServices::FCS,
-        vifs: 2,
         tx_queues: 4,
         max_mpdu_length: 2304,
         tx_power_ceiling_min_dbm: Some(oer_protocols_ieee80211_wire::power::Dbm::new(0)),

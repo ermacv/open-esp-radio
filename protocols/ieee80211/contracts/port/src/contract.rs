@@ -80,16 +80,12 @@ pub struct MacResourceLimits {
     pub access_point_encrypted_clients: u8,
 }
 
-/// Virtual-interface roles implemented by the complete driver today.
+/// The monitor taps the complete driver implements today. The interfaces a
+/// port serves are its layouts' types, not a value here.
 ///
-/// This advertises source-owned service, not latent hardware ability. For
-/// example, a chip with several address filters still reports zero AP VIFs
-/// until the AP owner graph and lifecycle exist.
+/// This advertises source-owned service, not latent hardware ability.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacInterfaceCapabilities {
-    pub station_interfaces: u8,
-    pub access_point_interfaces: u8,
-    pub simultaneous_station_access_point: crate::Support,
     /// A monitor tap can own the radio without a protocol VIF.
     pub standalone_monitor: crate::Support,
     /// A monitor tap can remain active while a protocol VIF runs.
@@ -100,13 +96,6 @@ pub struct MacInterfaceCapabilities {
 }
 
 impl MacInterfaceCapabilities {
-    pub const fn supports_role(self, role: crate::VifRole) -> bool {
-        match role {
-            crate::VifRole::Station => self.station_interfaces != 0,
-            crate::VifRole::AccessPoint => self.access_point_interfaces != 0,
-        }
-    }
-
     pub const fn supports_monitor_tap(self, point: crate::MonitorTapPoint) -> bool {
         match point {
             crate::MonitorTapPoint::Raw => self.raw_monitor_tap.is_supported(),

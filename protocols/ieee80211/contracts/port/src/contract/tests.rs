@@ -2,9 +2,6 @@ use super::*;
 
 const CAPABILITIES: MacServiceCapabilities = MacServiceCapabilities {
     interfaces: MacInterfaceCapabilities {
-        station_interfaces: 1,
-        access_point_interfaces: 0,
-        simultaneous_station_access_point: crate::Support::Unsupported,
         standalone_monitor: crate::Support::Unsupported,
         monitor_with_interfaces: crate::Support::Unsupported,
         raw_monitor_tap: crate::Support::Unsupported,
@@ -52,17 +49,7 @@ fn zero_and_oversized_block_ack_windows_are_not_supported() {
 }
 
 #[test]
-fn implemented_roles_and_monitor_taps_are_explicit() {
-    assert!(
-        CAPABILITIES
-            .interfaces
-            .supports_role(crate::VifRole::Station)
-    );
-    assert!(
-        !CAPABILITIES
-            .interfaces
-            .supports_role(crate::VifRole::AccessPoint)
-    );
+fn implemented_monitor_taps_are_explicit() {
     assert!(
         !CAPABILITIES
             .interfaces

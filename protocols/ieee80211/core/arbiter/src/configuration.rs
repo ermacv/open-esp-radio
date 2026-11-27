@@ -177,21 +177,6 @@ impl WifiConfig {
         if capabilities.resources.channel_contexts == 0 {
             return Err(WifiConfigError::NoChannelContext);
         }
-        if self.station.is_some() && capabilities.interfaces.station_interfaces == 0 {
-            return Err(WifiConfigError::UnsupportedStation);
-        }
-        if self.access_point.is_some() && capabilities.interfaces.access_point_interfaces == 0 {
-            return Err(WifiConfigError::UnsupportedAccessPoint);
-        }
-        if self.station.is_some()
-            && self.access_point.is_some()
-            && !capabilities
-                .interfaces
-                .simultaneous_station_access_point
-                .is_supported()
-        {
-            return Err(WifiConfigError::UnsupportedStationAccessPoint);
-        }
         if let Some(monitor) = self.monitor
             && !capabilities.interfaces.supports_monitor_tap(monitor.tap)
         {
@@ -315,9 +300,6 @@ impl WifiPlan {
 pub enum WifiConfigError {
     UnspecifiedInterfaceAddress,
     NoChannelContext,
-    UnsupportedStation,
-    UnsupportedAccessPoint,
-    UnsupportedStationAccessPoint,
     UnsupportedMonitorTap(MonitorTapPoint),
     UnsupportedStandaloneMonitor,
     UnsupportedMonitorWithInterfaces,
@@ -333,14 +315,6 @@ impl fmt::Display for WifiConfigError {
             Self::NoChannelContext => {
                 formatter.write_str("the Wi-Fi service exposes no channel context")
             }
-            Self::UnsupportedStation => {
-                formatter.write_str("the Wi-Fi service does not implement a station interface")
-            }
-            Self::UnsupportedAccessPoint => formatter
-                .write_str("the Wi-Fi service does not implement an access-point interface"),
-            Self::UnsupportedStationAccessPoint => formatter.write_str(
-                "the Wi-Fi service cannot run station and access-point interfaces together",
-            ),
             Self::UnsupportedMonitorTap(tap) => {
                 write!(
                     formatter,
