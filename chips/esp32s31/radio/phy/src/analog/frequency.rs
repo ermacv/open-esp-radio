@@ -445,13 +445,12 @@ enum PhyFrequencyCapMemoryStep {
 /// One RF frequency-memory word corrected as rev0 ROM
 /// `phy_pll_cap_mem_update` corrects it, built only from a capacitor code of
 /// 0 to 511: the word with the corrected code's low byte and its bit 8 in
-/// place, every other bit of the read word kept; `None` when the corrected
-/// code leaves the range.
+/// place and bits 15 and 13:8 of the read word kept; `None` when the
+/// corrected code leaves the range, and the entry is then not written.
 ///
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING (the word's lanes). The ROM writes
 /// a code outside nine bits unguarded, its sign spilling above the payload
-/// into the write mode; the owner's decision of 2026-11-23
-/// (`research/r2-phy-frequency-memory-2026-11-23.md`) refuses it.
+/// into the write mode; this word is never built from one.
 pub fn phy_frequency_cap_adjusted_word(
     read: PhyFrequencyMemoryRecordCapAndSdm,
     correction: PhyFrequencyCapCorrection,
@@ -551,8 +550,8 @@ impl PhyFrequencyCapMemoryTransition {
                         entry: *entry,
                         value,
                     },
-                    // The owner's decision, 2026-11-23: a code outside nine
-                    // bits is not written; the entry keeps its tuning.
+                    // A code outside nine bits is not written; the entry
+                    // keeps its tuning.
                     None => {
                         self.out_of_range = self.out_of_range.saturating_add(1);
                         match entry.next() {
