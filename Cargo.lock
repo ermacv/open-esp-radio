@@ -1943,7 +1943,9 @@ version = "0.1.0"
 dependencies = [
  "oer-hil-services-radio-pair",
  "oer-protocols-hil-agent",
+ "oer-tools-analysis-elf",
  "oer-tools-hil-harness",
+ "oer-tools-image-checks",
  "serde",
  "serde_json",
 ]
