@@ -103,7 +103,6 @@ mod tests {
     fn every_image_declares_a_budget_that_parses() -> Result<()> {
         for text in [
             include_str!("../../../../hil/probes/esp32s31-boot-smoke/Cargo.toml"),
-            include_str!("../../../../hil/probes/esp32s31-radio-root/Cargo.toml"),
             include_str!("../../../../hil/images/aes/Cargo.toml"),
             include_str!("../../../../hil/images/wifi-station/Cargo.toml"),
         ] {

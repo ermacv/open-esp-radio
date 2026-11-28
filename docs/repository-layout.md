@@ -69,7 +69,7 @@ chips/family/radio/ieee80211/policy/
 oer/
 hil/agent/
 hil/images/aes/
-hil/probes/{esp32s31-boot-smoke, esp32s31-light-sleep, esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio-root,
+hil/probes/{esp32s31-boot-smoke, esp32s31-light-sleep, esp32s31-mcycle, esp32s31-peer-overdue,
     esp32s31-rx-ring, esp32s31-timer-facts}/
 hil/scenarios/{aes, radio-pair, timer-facts}/
 hil/services/{aes, radio-pair, timer-facts}/

@@ -203,8 +203,8 @@ fn line_frames_remain_byte_identical_to_the_saved_stand_records() {
     for fixture in [
         include_str!("fixtures/boot-smoke-static.txt"),
         include_str!("fixtures/boot-smoke-formatted-irq.txt"),
-        include_str!("fixtures/radio-root-static.txt"),
-        include_str!("fixtures/radio-root-formatted-irq.txt"),
+        include_str!("fixtures/platform-event-static.txt"),
+        include_str!("fixtures/platform-event-formatted-irq.txt"),
     ] {
         let mut bytes = Vec::new();
         let mut console = Console::new(|part: &[u8]| {

@@ -27,7 +27,6 @@ pub mod fifo;
 pub mod line;
 pub mod note;
 pub mod path;
-pub mod radio_root;
 pub mod record;
 #[cfg(feature = "render")]
 pub mod render;

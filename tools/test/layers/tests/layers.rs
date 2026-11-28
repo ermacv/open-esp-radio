@@ -9760,12 +9760,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         BY_PROBE,
     ),
     (
-        "hil/probes/esp32s31-radio-root/src/main.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        BY_PROBE,
-    ),
-    (
         "hil/probes/esp32s31-rx-ring/src/../../esp32s31-case-c-sender/src/radio.rs",
         "clippy::too_many_arguments",
         2,

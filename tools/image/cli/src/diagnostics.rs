@@ -3,7 +3,6 @@
 
 use std::borrow::Cow;
 
-use oer_portable_diagnostics::radio_root::RadioRoot;
 use oer_portable_diagnostics::render::{Gap, Next};
 use oer_portable_diagnostics::{
     BootSmokePassed, HartAes, HartExchange, HartLiveness, MAX_PAYLOAD, Record, SecondaryReady,
@@ -110,20 +109,7 @@ impl Decoder {
                         "OER-HART liveness hart={hart} rounds={rounds}"
                     )));
                 }
-                let event = (kind == RadioRoot::KIND)
-                    .then(|| RadioRoot::decode(words))
-                    .flatten()
-                    .ok_or_else(|| format!("unknown boot diagnostic event: {kind:?} {words:?}"))?;
-                match event {
-                    RadioRoot::ClockReleased(clock) => {
-                        format!("OER radio-root clock={clock:?} acquired released")
-                    }
-                    RadioRoot::ClockRefused(clock) => {
-                        format!("OER radio-root clock={clock:?} refused=PlatformClockError")
-                    }
-                    RadioRoot::Passed => "OER-RESULT: pass radio-root".into(),
-                    RadioRoot::ClockFailed => "OER-RESULT: fail radio-root clock".into(),
-                }
+                return Err(format!("unknown boot diagnostic event: {kind:?} {words:?}").into());
             }
         });
         Ok(text)

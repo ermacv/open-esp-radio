@@ -1,0 +1,61 @@
+--- chips/family/radio/power/src/power.rs
++++ replace execute_owned -> Result<(), PowerError> with Ok(())
+@@ -70,57 +70,17 @@
+     /// Observed semantic state.
+     pub observed: bool,
+ }
+ 
+ pub fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), PowerError> {
+     // Wi-Fi's combined BB+MAC reset belongs to its client entry. The BB-only
+     // pulse below is the PHY clock-enable prerequisite, repeated by the
+     // vendor modem clock manager; it preserves the MAC calibration window.
+-    registers.publish_modem_power_state();
+-    registers.enable_modem_register_bus_clock();
+-    registers.configure_wifi_power_clock_map();
+-    registers.prepare_shared_modem_clock_map();
+-    // The radio owner counts the 160 MHz gate; its reference replaces the
+-    // gate write that ESP-IDF's modem clock performs first for this source.
+-    registers.acquire_platform_clock(PowerClock::Pll160m);
+-    registers.configure_modem_source_clocks();
+-    registers.set_wifi_baseband_reset(true);
+-    registers.set_wifi_baseband_reset(false);
+-    registers.enable_phy_calibration_clocks();
+-    registers.select_phy_i2c_160mhz_source();
+-    registers.acquire_platform_clock(PowerClock::AnalogI2cMaster);
+-
+-    let readback = registers.power_readback();
+-    verify_state(PowerCheckpoint::ResetReleased, readback.reset_released)?;
+-    verify_state(
+-        PowerCheckpoint::HpActiveIcg,
+-        readback.hp_active_icg_selected,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::ModemBusClock,
+-        readback.modem_bus_clock_enabled,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::HpActiveClockMap,
+-        readback.hp_active_clock_map_configured,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::SharedClockMap,
+-        readback.shared_clock_map_configured,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::ModemClockSource,
+-        readback.modem_source_clocks_configured,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::PhyClocks,
+-        readback.phy_calibration_clocks_enabled,
+-    )?;
+-    verify_state(PowerCheckpoint::I2cSource, readback.phy_i2c_160mhz_selected)
++    Ok(()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ fn verify_state(checkpoint: PowerCheckpoint, observed: bool) -> Result<(), PowerError> {
+     if observed {
+         Ok(())
+     } else {
+         Err(PowerError {
+             checkpoint,

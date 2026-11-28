@@ -71,59 +71,6 @@ fn human_panic_text_preserves_static_formatted_empty_and_interrupt_fields() {
 }
 
 #[test]
-fn radio_root_round_trip_renders_every_clock_and_failure_as_before() {
-    use oer_portable_diagnostics::radio_root::RadioRoot;
-    use oer_portable_diagnostics::radio_root::RadioRoot::*;
-    use oer_portable_trace::Event;
-    // The same explicit wire ids must decode as the original semantic event.
-    let mut events = Vec::new();
-    for clock in 0..5 {
-        events.push(RadioRoot::decode([2, clock]).unwrap());
-        events.push(RadioRoot::decode([3, clock]).unwrap());
-    }
-    events.extend([Passed, ClockFailed]);
-    let mut bytes = Vec::new();
-    {
-        let mut console = Console::new(write(&mut bytes));
-        for event in &events {
-            assert_eq!(RadioRoot::decode(event.encode()), Some(*event));
-            console.event(event).unwrap();
-        }
-    }
-    let text = rendered(&bytes).unwrap();
-    let lines = text
-        .lines()
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
-    for (i, clock) in [
-        "Pll160m",
-        "AnalogI2cMaster",
-        "Mpll",
-        "ModemCoexistence",
-        "ModemLowPowerTimer",
-    ]
-    .iter()
-    .enumerate()
-    {
-        assert_eq!(
-            lines[i * 2],
-            format!("OER radio-root clock={clock} acquired released")
-        );
-        assert_eq!(
-            lines[1 + i * 2],
-            format!("OER radio-root clock={clock} refused=PlatformClockError")
-        );
-    }
-    assert_eq!(lines[10], "OER-RESULT: pass radio-root");
-    assert_eq!(lines[11], "OER-RESULT: fail radio-root clock");
-    assert_eq!(RadioRoot::decode([0, 0]), None);
-    assert_eq!(RadioRoot::decode([99, 0]), None);
-    assert_eq!(RadioRoot::decode([1, 0]), None);
-    assert_eq!(RadioRoot::decode([2, 5]), None);
-    assert_eq!(RadioRoot::decode([0, 1]), None);
-}
-
-#[test]
 fn boot_verdict_cannot_hide_lost_panic_or_partial_tail() {
     let mut bytes = Vec::new();
     {

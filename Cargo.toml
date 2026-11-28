@@ -150,7 +150,6 @@ members = [
     "chips/esp32s31/platform/bootstrap",
     "chips/esp32s31/platform/layout",
     "hil/probes/esp32s31-boot-smoke",
-    "hil/probes/esp32s31-radio-root",
 ]
 # Host builds and tests: every member but the chip-only firmware packages.
 # Not built. Awaiting deletion at their successor: the old Wi-Fi path (its backend, the

@@ -52,9 +52,8 @@ static message is the retained prefix (up to 64 bytes). `None` distinguishes
 a formatted message that was not kept from an empty static message. Platform
 accessors preserve their existing handling of UTF-8 boundaries.
 
-Event payload: `oer_portable_trace::Kind` u16 and two u32 words. Platform event 1,
-channel 0, is the radio adapter's `RadioRoot`; platform event 2, channel 0,
-is `BootSmokePassed` with words `[0, 0]`. No retained trace ring is required.
+Event payload: `oer_portable_trace::Kind` u16 and two u32 words. Platform event 2,
+channel 0, is `BootSmokePassed` with words `[0, 0]`. No retained trace ring is required.
 
 HIL's `oer-protocols-hil-agent` console puts the **same `record::encode` bytes** into its
 own envelope and framing, and the host uses `record::decode` on that payload.

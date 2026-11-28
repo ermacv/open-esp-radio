@@ -1,0 +1,162 @@
+
+*** chips/family/radio/power/src/membership.rs:147:9: replace PowerMembership<S>::exit -> Result<(), PowerError<P::RestoreError>> with Ok(())
+
+*** mutation diff:
+--- chips/family/radio/power/src/membership.rs
++++ replace PowerMembership<S>::exit -> Result<(), PowerError<P::RestoreError>> with Ok(())
+@@ -139,26 +139,17 @@
+         self.wifi_reset_completed = true;
+         Ok(())
+     }
+     pub fn exit<P: PowerPort<Baseline = S>>(
+         &mut self,
+         client: RadioClient,
+         port: &mut P,
+     ) -> Result<(), PowerError<P::RestoreError>> {
+-        if self.clients.only(client) {
+-            port.release(Clock::AnalogI2c);
+-            if let Some(baseline) = self.baseline {
+-                port.restore(baseline).map_err(PowerError::Restore)?;
+-                self.baseline = None;
+-            }
+-            port.release(Clock::Pll160m);
+-        }
+-        self.clients.leave(client);
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+     /// Seed only software accounting in a native ownership model.
+     #[doc(hidden)]
+     #[cfg(any(test, feature = "test-support"))]
+     pub fn hold_for_test(&mut self, client: RadioClient) {
+         self.clients.enter(client);
+     }
+ }
+
+
+*** /home/ermacv/.rustup/toolchains/1.97.1-x86_64-unknown-linux-gnu/bin/cargo test --no-run --verbose --package=oer-chips-family-radio-power@0.1.0
+       Fresh oer-portable-time v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/time)
+       Fresh oer-portable-settle v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/settle)
+       Fresh oer-portable-clock v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/clock)
+       Fresh oer-protocols-radio-coex v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/protocols/radio/coex)
+       Fresh oer-chips-family-radio-modem-clock v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/modem-clock)
+       Fresh oer-portable-time-virtual v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/time-virtual)
+       Dirty oer-chips-family-radio-power v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/power): the file `chips/family/radio/power/src/membership.rs` has changed (1795871242.758575946s, 402858258ns after last build at 1795871242.355717688s)
+   Compiling oer-chips-family-radio-power v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/power)
+     Running `/usr/bin/sccache /home/ermacv/.rustup/toolchains/1.97.1-x86_64-unknown-linux-gnu/bin/rustc --crate-name oer_chips_family_radio_power --edition=2024 chips/family/radio/power/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=line-tables-only '--deny=clippy::unwrap_used' --deny=unsafe_op_in_unsafe_fn '--deny=clippy::unreachable' '--deny=clippy::unimplemented' --warn=unexpected_cfgs '--deny=clippy::todo' '--deny=clippy::struct_excessive_bools' '--deny=clippy::panic' '--deny=clippy::let_underscore_must_use' '--deny=clippy::indexing_slicing' '--deny=clippy::fn_params_excessive_bools' '--deny=clippy::expect_used' '--deny=clippy::disallowed_methods' '--deny=clippy::disallowed_macros' '--deny=clippy::debug_assert_with_mut_call' '--deny=clippy::cast_sign_loss' '--deny=clippy::cast_possible_wrap' '--deny=clippy::cast_possible_truncation' '--deny=clippy::arithmetic_side_effects' --check-cfg 'cfg(oer_probe)' --check-cfg 'cfg(oer_trace)' --check-cfg 'cfg(oer_debug_control)' --check-cfg 'cfg(oer_fault_injection)' --check-cfg 'cfg(oer_cpu_load)' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("test-support"))' -C metadata=d0d8da410bd1a57c -C extra-filename=-d8dc5ab4f6af15dd --out-dir /mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps -C incremental=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/incremental -L dependency=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps --extern oer_chips_family_radio_modem_clock=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_chips_family_radio_modem_clock-ef0327271be4f0e5.rmeta --extern oer_protocols_radio_coex=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_protocols_radio_coex-0a90f1f277f62925.rmeta`
+     Running `/usr/bin/sccache /home/ermacv/.rustup/toolchains/1.97.1-x86_64-unknown-linux-gnu/bin/rustc --crate-name oer_chips_family_radio_power --edition=2024 chips/family/radio/power/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=line-tables-only '--deny=clippy::unwrap_used' --deny=unsafe_op_in_unsafe_fn '--deny=clippy::unreachable' '--deny=clippy::unimplemented' --warn=unexpected_cfgs '--deny=clippy::todo' '--deny=clippy::struct_excessive_bools' '--deny=clippy::panic' '--deny=clippy::let_underscore_must_use' '--deny=clippy::indexing_slicing' '--deny=clippy::fn_params_excessive_bools' '--deny=clippy::expect_used' '--deny=clippy::disallowed_methods' '--deny=clippy::disallowed_macros' '--deny=clippy::debug_assert_with_mut_call' '--deny=clippy::cast_sign_loss' '--deny=clippy::cast_possible_wrap' '--deny=clippy::cast_possible_truncation' '--deny=clippy::arithmetic_side_effects' --check-cfg 'cfg(oer_probe)' --check-cfg 'cfg(oer_trace)' --check-cfg 'cfg(oer_debug_control)' --check-cfg 'cfg(oer_fault_injection)' --check-cfg 'cfg(oer_cpu_load)' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("test-support"))' -C metadata=64f4ed5bb040c5a5 -C extra-filename=-9765ca6508244daf --out-dir /mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps -C incremental=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/incremental -L dependency=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps --extern oer_chips_family_radio_modem_clock=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_chips_family_radio_modem_clock-ef0327271be4f0e5.rlib --extern oer_portable_clock=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_portable_clock-7a3dbe5891e70441.rlib --extern oer_portable_time=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_portable_time-ced74ff8f07ef8cf.rlib --extern oer_portable_time_virtual=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_portable_time_virtual-94e6cd23a741fa11.rlib --extern oer_protocols_radio_coex=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_protocols_radio_coex-0a90f1f277f62925.rlib`
+warning: unused variable: `client`
+   --> chips/family/radio/power/src/membership.rs:144:9
+    |
+144 |         client: RadioClient,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_client`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `port`
+   --> chips/family/radio/power/src/membership.rs:145:9
+    |
+145 |         port: &mut P,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_port`
+
+warning: methods `only` and `leave` are never used
+  --> chips/family/radio/power/src/membership.rs:55:18
+   |
+41 | impl Clients {
+   | ------------ methods in this implementation
+...
+55 |     pub const fn only(&self, client: RadioClient) -> bool {
+   |                  ^^^^
+...
+61 |     pub fn leave(&mut self, client: RadioClient) {
+   |            ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `oer-chips-family-radio-power` (lib) generated 3 warnings (run `cargo fix --lib -p oer-chips-family-radio-power` to apply 2 suggestions)
+warning: `oer-chips-family-radio-power` (lib test) generated 3 warnings (3 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+  Executable `/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/oer_chips_family_radio_power-9765ca6508244daf`
+
+*** result: Success
+
+*** /home/ermacv/.rustup/toolchains/1.97.1-x86_64-unknown-linux-gnu/bin/cargo test --verbose --package=oer-chips-family-radio-power@0.1.0 --lib -- --skip tests::search
+       Fresh oer-portable-time v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/time)
+       Fresh oer-portable-clock v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/clock)
+       Fresh oer-portable-settle v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/settle)
+       Fresh oer-portable-time-virtual v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/time-virtual)
+       Fresh oer-chips-family-radio-modem-clock v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/modem-clock)
+       Fresh oer-protocols-radio-coex v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/protocols/radio/coex)
+       Fresh oer-chips-family-radio-power v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/power)
+warning: unused variable: `client`
+   --> chips/family/radio/power/src/membership.rs:144:9
+    |
+144 |         client: RadioClient,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_client`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `port`
+   --> chips/family/radio/power/src/membership.rs:145:9
+    |
+145 |         port: &mut P,
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_port`
+
+warning: methods `only` and `leave` are never used
+  --> chips/family/radio/power/src/membership.rs:55:18
+   |
+41 | impl Clients {
+   | ------------ methods in this implementation
+...
+55 |     pub const fn only(&self, client: RadioClient) -> bool {
+   |                  ^^^^
+...
+61 |     pub fn leave(&mut self, client: RadioClient) {
+   |            ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `oer-chips-family-radio-power` (lib test) generated 3 warnings (run `cargo fix --lib -p oer-chips-family-radio-power --tests` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running `/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/oer_chips_family_radio_power-9765ca6508244daf --skip 'tests::search'`
+
+running 11 tests
+test baseline::tests::each_readback_precedes_the_next_write_and_failure_retains_the_suffix ... ok
+test epoch::tests::retirement_preserves_the_counter_and_wrap_skips_zero ... ok
+test power::tests::failed_semantic_readback_names_the_exact_checkpoint ... ok
+test power::tests::power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure ... ok
+test tests::last_leave_retains_membership_baseline_and_only_unreleased_references ... FAILED
+test power::tests::exact_semantic_sequence_is_finite_and_ordered ... ok
+test clocks::tests::only_the_rtc_crystal_selector_chooses_wifi_xtal32k ... ok
+test tests::failed_entry_retries_original_baseline_and_commits_reset_only_on_success ... FAILED
+test tests::low_power_refusals_preserve_selector_order_and_the_exact_guard ... ok
+test tests::acquire_and_release_poison_keep_the_failed_owner_and_refuse_every_later_change ... ok
+test tests::module_slots_hold_shared_edges_and_reject_duplicate_or_missing_leases_without_writes ... ok
+
+failures:
+
+---- tests::last_leave_retains_membership_baseline_and_only_unreleased_references stdout ----
+
+thread 'tests::last_leave_retains_membership_baseline_and_only_unreleased_references' (204413) panicked at chips/family/radio/power/src/tests.rs:136:5:
+assertion `left == right` failed
+  left: Ok(())
+ right: Err(Restore(9))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tests::failed_entry_retries_original_baseline_and_commits_reset_only_on_success stdout ----
+
+thread 'tests::failed_entry_retries_original_baseline_and_commits_reset_only_on_success' (204412) panicked at chips/family/radio/power/src/tests.rs:108:5:
+assertion `left == right` failed
+  left: [Select, Reset, Power, Select, Reset, Power]
+ right: [Select, Reset, Power, Select, Reset, Power, Release(AnalogI2c), Restore(7), Release(Pll160m)]
+
+
+failures:
+    tests::failed_entry_retries_original_baseline_and_commits_reset_only_on_success
+    tests::last_leave_retains_membership_baseline_and_only_unreleased_references
+
+test result: FAILED. 9 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p oer-chips-family-radio-power --lib`
+
+*** result: Failure(101)

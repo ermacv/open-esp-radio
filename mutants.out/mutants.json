@@ -1,0 +1,66 @@
+[
+  {
+    "diff": "--- chips/family/radio/power/src/membership.rs\n+++ replace PowerMembership<S>::exit -> Result<(), PowerError<P::RestoreError>> with Ok(())\n@@ -139,26 +139,17 @@\n         self.wifi_reset_completed = true;\n         Ok(())\n     }\n     pub fn exit<P: PowerPort<Baseline = S>>(\n         &mut self,\n         client: RadioClient,\n         port: &mut P,\n     ) -> Result<(), PowerError<P::RestoreError>> {\n-        if self.clients.only(client) {\n-            port.release(Clock::AnalogI2c);\n-            if let Some(baseline) = self.baseline {\n-                port.restore(baseline).map_err(PowerError::Restore)?;\n-                self.baseline = None;\n-            }\n-            port.release(Clock::Pll160m);\n-        }\n-        self.clients.leave(client);\n-        Ok(())\n+        Ok(()) /* ~ changed by cargo-mutants ~ */\n     }\n     /// Seed only software accounting in a native ownership model.\n     #[doc(hidden)]\n     #[cfg(any(test, feature = \"test-support\"))]\n     pub fn hold_for_test(&mut self, client: RadioClient) {\n         self.clients.enter(client);\n     }\n }\n",
+    "file": "chips/family/radio/power/src/membership.rs",
+    "function": {
+      "function_name": "PowerMembership<S>::exit",
+      "return_type": "-> Result<(), PowerError<P::RestoreError>>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 157
+        },
+        "start": {
+          "column": 5,
+          "line": 142
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "chips/family/radio/power/src/membership.rs:147:9: replace PowerMembership<S>::exit -> Result<(), PowerError<P::RestoreError>> with Ok(())",
+    "package": "oer-chips-family-radio-power",
+    "replacement": "Ok(())",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 156
+      },
+      "start": {
+        "column": 9,
+        "line": 147
+      }
+    }
+  },
+  {
+    "diff": "--- chips/family/radio/power/src/power.rs\n+++ replace execute_owned -> Result<(), PowerError> with Ok(())\n@@ -70,57 +70,17 @@\n     /// Observed semantic state.\n     pub observed: bool,\n }\n \n pub fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), PowerError> {\n     // Wi-Fi's combined BB+MAC reset belongs to its client entry. The BB-only\n     // pulse below is the PHY clock-enable prerequisite, repeated by the\n     // vendor modem clock manager; it preserves the MAC calibration window.\n-    registers.publish_modem_power_state();\n-    registers.enable_modem_register_bus_clock();\n-    registers.configure_wifi_power_clock_map();\n-    registers.prepare_shared_modem_clock_map();\n-    // The radio owner counts the 160 MHz gate; its reference replaces the\n-    // gate write that ESP-IDF's modem clock performs first for this source.\n-    registers.acquire_platform_clock(PowerClock::Pll160m);\n-    registers.configure_modem_source_clocks();\n-    registers.set_wifi_baseband_reset(true);\n-    registers.set_wifi_baseband_reset(false);\n-    registers.enable_phy_calibration_clocks();\n-    registers.select_phy_i2c_160mhz_source();\n-    registers.acquire_platform_clock(PowerClock::AnalogI2cMaster);\n-\n-    let readback = registers.power_readback();\n-    verify_state(PowerCheckpoint::ResetReleased, readback.reset_released)?;\n-    verify_state(\n-        PowerCheckpoint::HpActiveIcg,\n-        readback.hp_active_icg_selected,\n-    )?;\n-    verify_state(\n-        PowerCheckpoint::ModemBusClock,\n-        readback.modem_bus_clock_enabled,\n-    )?;\n-    verify_state(\n-        PowerCheckpoint::HpActiveClockMap,\n-        readback.hp_active_clock_map_configured,\n-    )?;\n-    verify_state(\n-        PowerCheckpoint::SharedClockMap,\n-        readback.shared_clock_map_configured,\n-    )?;\n-    verify_state(\n-        PowerCheckpoint::ModemClockSource,\n-        readback.modem_source_clocks_configured,\n-    )?;\n-    verify_state(\n-        PowerCheckpoint::PhyClocks,\n-        readback.phy_calibration_clocks_enabled,\n-    )?;\n-    verify_state(PowerCheckpoint::I2cSource, readback.phy_i2c_160mhz_selected)\n+    Ok(()) /* ~ changed by cargo-mutants ~ */\n }\n \n fn verify_state(checkpoint: PowerCheckpoint, observed: bool) -> Result<(), PowerError> {\n     if observed {\n         Ok(())\n     } else {\n         Err(PowerError {\n             checkpoint,\n",
+    "file": "chips/family/radio/power/src/power.rs",
+    "function": {
+      "function_name": "execute_owned",
+      "return_type": "-> Result<(), PowerError>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 119
+        },
+        "start": {
+          "column": 1,
+          "line": 74
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "chips/family/radio/power/src/power.rs:78:5: replace execute_owned -> Result<(), PowerError> with Ok(())",
+    "package": "oer-chips-family-radio-power",
+    "replacement": "Ok(())",
+    "span": {
+      "end": {
+        "column": 79,
+        "line": 118
+      },
+      "start": {
+        "column": 5,
+        "line": 78
+      }
+    }
+  }
+]
