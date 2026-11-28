@@ -49,7 +49,6 @@ pub const fn wifi_power_limits(
 ///     root.into_runtime(),
 ///     InterruptTable,
 ///     BootstrapPsram,
-///     || {},
 ///     core::convert::identity,
 /// ) {
 ///     Ok(adopted) => adopted,

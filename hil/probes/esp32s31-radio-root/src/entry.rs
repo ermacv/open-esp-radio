@@ -54,7 +54,6 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<oer_chips_esp32s31_h
         root.into_runtime(),
         InterruptTable,
         board::BootstrapPsram,
-        || {},
         |hardware| {
             let _reset_causes = oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
             // The executor is not running yet: the early writer waits for room

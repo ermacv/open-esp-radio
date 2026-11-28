@@ -233,9 +233,7 @@ impl<P: oer_chips_family_platform_port::EarlyText> Handoff<P> {
     /// source is routed only by binding its entry.
     ///
     /// Before the mapping is adopted, the previous boot's named fault and
-    /// invalid-hart records are reported through `P`'s early writer, then
-    /// `previous_records` reports the image's own retained records (the chip
-    /// composition's, e.g. the PHY transaction record).
+    /// invalid-hart records are reported through `P`'s early writer.
     ///
     /// # Errors
     ///
@@ -253,10 +251,8 @@ impl<P: oer_chips_family_platform_port::EarlyText> Handoff<P> {
         interrupts: I,
         controller: impl FnOnce(I) -> Result<C, oer_chips_family_platform_port::ForeignHart>,
         board: B,
-        previous_records: impl FnOnce(),
     ) -> Result<(B::Mapping, Adopted<C, T>), BootError> {
         panic::report_previous_fault::<P>();
-        previous_records();
         let mapping = oer_chips_family_boot::adoption::adopt_mapping(board, &self.proof);
         let controller = controller(interrupts).map_err(BootError::from)?;
         let actual = usize::from(controller.hart());

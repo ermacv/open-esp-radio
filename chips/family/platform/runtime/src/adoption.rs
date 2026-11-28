@@ -57,11 +57,10 @@ impl<B: Binding> Prepared<B> {
         handoff: crate::Handoff<B::Platform>,
         table: T,
         board: Board,
-        previous_records: impl FnOnce(),
         before_adoption: impl FnOnce(B::Hardware) -> H,
     ) -> Result<Runtime<H, B::Controller, T, Board::Mapping>, BootError> {
         self.finish(before_adoption, |interrupts| {
-            handoff.adopt(table, interrupts, B::controller, board, previous_records)
+            handoff.adopt(table, interrupts, B::controller, board)
         })
     }
 
@@ -126,7 +125,7 @@ impl Error {
     }
 }
 
-/// Adopt hardware, then report retained records, accept the existing PSRAM
+/// Adopt hardware, then report the previous boot's fault, accept the existing PSRAM
 /// mapping and install the image's interrupt context. Interrupts stay disabled.
 #[cfg(target_arch = "riscv32")]
 pub fn run<
@@ -139,11 +138,10 @@ pub fn run<
     owners: driver::Owners<B::Driver>,
     table: T,
     board: Board,
-    previous_records: impl FnOnce(),
     before_adoption: impl FnOnce(B::Hardware) -> H,
 ) -> Result<Runtime<H, B::Controller, T, Board::Mapping>, Error> {
     complete::<B, _, _, _>(owners, before_adoption, |interrupts| {
-        handoff.adopt(table, interrupts, B::controller, board, previous_records)
+        handoff.adopt(table, interrupts, B::controller, board)
     })
 }
 
