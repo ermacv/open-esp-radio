@@ -269,5 +269,5 @@ fn both_images_share_the_radio_s_endpoints_and_keep_their_own_apart() {
     // Each side's own: the sender four endpoints and four answers, the
     // receiver five and five (the hand-over's among them).
     assert_eq!(sender.len(), 9 + 8);
-    assert_eq!(receiver.len(), 9 + 10);
+    assert_eq!(receiver.len(), 9 + 11);
 }

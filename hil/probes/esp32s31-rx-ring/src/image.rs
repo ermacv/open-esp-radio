@@ -924,6 +924,96 @@ fn first_of<T, const N: usize>(items: impl Iterator<Item = T>) -> Option<[T; N]>
 const CLOSE: u32 = 13;
 /// A turn's failure to wake RF: the phase it names.
 const WAKE: u32 = 14;
+/// A power turn's failure (`tasks/450`): the phase it names, its step the
+/// index.
+const POWER_TURN: u32 = 15;
+
+/// What a power turn gives back: RF open again, the turn's times, the
+/// clocked client with its first reset done, and the words read with
+/// common power left and again.
+struct PowerTurned {
+    open: RfOpen,
+    rf: service::TurnedRf,
+    clocked: WifiClocked,
+    reset: oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset,
+    down: pair::Readings,
+    up: pair::Readings,
+}
+
+/// A turn of power (`tasks/450`): RF closed, Wi-Fi's clocks released,
+/// coexistence and common power left, the words read; common power, the
+/// clocks and coexistence again, the words read; RF woken with its
+/// registration kept, the tracking pass when due, the MAC's first reset.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "each is one owner the turn borrows"
+)]
+async fn power_turn(
+    radio: &mut Radio,
+    phy: &mut Phy<'_>,
+    held: &mut crate::radio::Held,
+    open: RfOpen,
+    access: oer_chips_esp32s31_hal::system::owner::RadioAccess,
+    clocks_on: WifiClocksOn,
+    timer: &CooperativeTimer<'_>,
+    platform: &mut (),
+) -> Result<PowerTurned, Failure> {
+    use oer_chips_esp32s31_hal::radio::ieee80211::client::WifiInitialization;
+    let began = timer.now();
+    let closed = apart!(oer_chips_esp32s31_radio_phy::close::<_, (), RomShortDelay>(
+        timer, radio, phy, open, platform
+    ))
+    .map_err(|_| (POWER_TURN, 0))?;
+    let close_micros = crate::radio::micros_between(began, timer.now());
+    let began = timer.now();
+    let powered = WifiClocked::from_running(access, clocks_on)
+        .release_clocks(radio)
+        .map_err(|_| (POWER_TURN, 1))?
+        .into_powered();
+    let absent = radio.leave_coex(held.coex.take().ok_or((POWER_TURN, 2))?);
+    let power = held.power.take().ok_or((POWER_TURN, 3))?;
+    let cold = powered
+        .power_down(radio, power, &absent)
+        .map_err(|_| (POWER_TURN, 4))?;
+    let down = pair::power_words(radio.observe_power(), held.clocks());
+    let (powered, power) = cold
+        .power_up(radio, held.clocks())
+        .map_err(|_| (POWER_TURN, 5))?;
+    let (mut clocked, first) = powered
+        .enable_clocks(radio, held.clocks())
+        .map_err(|_| (POWER_TURN, 6))?;
+    clocked
+        .set_initialized(radio, WifiInitialization::Initialized)
+        .map_err(|_| (POWER_TURN, 7))?;
+    held.power = Some(power);
+    held.coex = Some(radio.enter_coex(absent));
+    let up = pair::power_words(radio.observe_power(), held.clocks());
+    let power_micros = crate::radio::micros_between(began, timer.now());
+    let began = timer.now();
+    let open = apart!(oer_chips_esp32s31_radio_phy::wake::<_, RomShortDelay>(
+        timer,
+        radio,
+        phy,
+        closed,
+        held.clocks()
+    ))
+    .map_err(|_| (POWER_TURN, 8))?;
+    let wake_micros = crate::radio::micros_between(began, timer.now());
+    let open = apart!(track_if_due(radio, phy, open, timer, platform))?;
+    let reset = radio.reset_wifi_mac_block(clocked.clocks_on(), first, crate::radio::CBW);
+    Ok(PowerTurned {
+        open,
+        rf: service::TurnedRf::PowerTurned {
+            close_micros,
+            power_micros,
+            wake_micros,
+        },
+        clocked,
+        reset,
+        down,
+        up,
+    })
+}
 
 /// RF closed and woken again over the radio in `slot`, as the vendor's last
 /// `esp_phy_disable` and next `esp_phy_enable`: RF's proof again and the
@@ -1044,6 +1134,9 @@ fn refuse(identity: Reply<'_>, request: ReceiverCommand, refusal: Refusal) {
         ReceiverCommand::Stall(_) => answer(identity, service::Stood::Refused(refusal)),
         ReceiverCommand::Turn(_) => answer(identity, service::Turned::Refused(refusal)),
         ReceiverCommand::HandOver(_) => answer(identity, service::HandedOver::Refused(refusal)),
+        ReceiverCommand::PowerWords(_) => {
+            answer(identity, service::SnapshotPage::Refused(refusal));
+        }
     }
 }
 
@@ -1181,7 +1274,7 @@ async fn worker(
         mut mac_irq,
         mut power_irq,
         station,
-        held,
+        mut held,
     ) = match up.await {
         Ok(up) => up,
         Err((phase, index)) => {
@@ -1213,6 +1306,8 @@ async fn worker(
         channel,
     };
     let mut sender = None;
+    // The last power turn's words (`tasks/450`).
+    let mut power_words: Option<(pair::Readings, pair::Readings)> = None;
     let mut receiving = Receiving::Up {
         ring,
         enabled,
@@ -1230,6 +1325,18 @@ async fn worker(
                 id.answer(Outcome::Marks(Marks { taken, answering }));
             }
             ReceiverCommand::SnapshotUp(request) => answer(id, pair::page(&up, request.page)),
+            ReceiverCommand::PowerWords(request) => {
+                let words = match (request.which, &power_words) {
+                    (service::PowerPoint::BroughtPowered, _) => Some(&held.powered),
+                    (service::PowerPoint::TurnDown, Some((down, _))) => Some(down),
+                    (service::PowerPoint::TurnUp, Some((_, up))) => Some(up),
+                    _ => None,
+                };
+                match words {
+                    Some(words) => answer(id, pair::page(words, request.page)),
+                    None => answer(id, service::SnapshotPage::Refused(Refusal::NoSuchPage)),
+                }
+            }
             ReceiverCommand::BringUp(_) => {
                 answer(id, service::BroughtUp::Refused(Refusal::AlreadyUp));
             }
@@ -1348,73 +1455,100 @@ async fn worker(
                 let handles = parts.ring.len() + spares.len();
                 // RF closed and woken, with the tracking pass when one is due,
                 // when the turn's kind asks for it.
-                let rf = match request.kind {
-                    service::TurnKind::Restart => Ok((open, service::TurnedRf::Kept)),
-                    service::TurnKind::CloseAndWake => match apart!(close_and_wake(
+                let (open, rf, mut clocked, reset) = if request.kind == service::TurnKind::PowerTurn
+                {
+                    match apart!(power_turn(
                         turns.radio,
                         turns.phy,
+                        &mut held,
                         open,
+                        access,
+                        clocks_on,
                         &timer,
-                        &mut platform,
-                        held.clocks()
+                        &mut platform
                     )) {
-                        Ok((open, close_micros, wake_micros)) => apart!(track_if_due(
-                            turns.radio,
-                            turns.phy,
-                            open,
-                            &timer,
-                            &mut platform
-                        ))
-                        .map(|open| {
-                            (
-                                open,
-                                service::TurnedRf::ClosedAndWoken {
-                                    close_micros,
-                                    wake_micros,
-                                },
-                            )
-                        }),
-                        Err(failure) => Err(failure),
-                    },
-                    service::TurnKind::CloseWakeAndTrack => match apart!(close_and_wake(
-                        turns.radio,
-                        turns.phy,
-                        open,
-                        &timer,
-                        &mut platform,
-                        held.clocks()
-                    )) {
-                        Ok((open, close_micros, wake_micros)) => apart!(track_now(
-                            turns.radio,
-                            turns.phy,
-                            open,
-                            &timer,
-                            &mut platform
-                        ))
-                        .map(|(open, track_micros, conversions)| {
-                            (
-                                open,
-                                service::TurnedRf::Tracked {
-                                    close_micros,
-                                    wake_micros,
-                                    track_micros,
-                                    conversions,
-                                },
-                            )
-                        }),
-                        Err(failure) => Err(failure),
-                    },
-                };
-                let (open, rf) = match rf {
-                    Ok(rf) => rf,
-                    Err((phase, index)) => {
-                        turns.access = Some((access, clocks_on));
-                        failed!(Receiving::Stopped, phase, index)
+                        Ok(turned) => {
+                            drop(reset);
+                            power_words = Some((turned.down, turned.up));
+                            (turned.open, turned.rf, turned.clocked, turned.reset)
+                        }
+                        Err((phase, index)) => failed!(Receiving::Stopped, phase, index),
                     }
+                } else {
+                    let rf = match request.kind {
+                        service::TurnKind::PowerTurn => Err((POWER_TURN, 0x7f)),
+                        service::TurnKind::Restart => Ok((open, service::TurnedRf::Kept)),
+                        service::TurnKind::CloseAndWake => match apart!(close_and_wake(
+                            turns.radio,
+                            turns.phy,
+                            open,
+                            &timer,
+                            &mut platform,
+                            held.clocks()
+                        )) {
+                            Ok((open, close_micros, wake_micros)) => apart!(track_if_due(
+                                turns.radio,
+                                turns.phy,
+                                open,
+                                &timer,
+                                &mut platform
+                            ))
+                            .map(|open| {
+                                (
+                                    open,
+                                    service::TurnedRf::ClosedAndWoken {
+                                        close_micros,
+                                        wake_micros,
+                                    },
+                                )
+                            }),
+                            Err(failure) => Err(failure),
+                        },
+                        service::TurnKind::CloseWakeAndTrack => match apart!(close_and_wake(
+                            turns.radio,
+                            turns.phy,
+                            open,
+                            &timer,
+                            &mut platform,
+                            held.clocks()
+                        )) {
+                            Ok((open, close_micros, wake_micros)) => apart!(track_now(
+                                turns.radio,
+                                turns.phy,
+                                open,
+                                &timer,
+                                &mut platform
+                            ))
+                            .map(|(open, track_micros, conversions)| {
+                                (
+                                    open,
+                                    service::TurnedRf::Tracked {
+                                        close_micros,
+                                        wake_micros,
+                                        track_micros,
+                                        conversions,
+                                    },
+                                )
+                            }),
+                            Err(failure) => Err(failure),
+                        },
+                    };
+                    let (open, rf) = match rf {
+                        Ok(rf) => rf,
+                        Err((phase, index)) => {
+                            turns.access = Some((access, clocks_on));
+                            failed!(Receiving::Stopped, phase, index)
+                        }
+                    };
+                    (
+                        open,
+                        rf,
+                        WifiClocked::from_running(access, clocks_on),
+                        reset,
+                    )
                 };
                 // T5: the next start from the cold preparation.
                 let began = EmbassyClock.now();
-                let mut clocked = WifiClocked::from_running(access, clocks_on);
                 let mut walker = parts.walker;
                 let prepared = apart!(prepare(
                     turns.radio,
@@ -1594,7 +1728,8 @@ async fn worker(
                     | ReceiverCommand::ReceiveCounters(_)
                     | ReceiverCommand::Stop(_)
                     | ReceiverCommand::Turn(_)
-                    | ReceiverCommand::HandOver(_) => {}
+                    | ReceiverCommand::HandOver(_)
+                    | ReceiverCommand::PowerWords(_) => {}
                 }
             }
         }

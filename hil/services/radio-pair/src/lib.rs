@@ -65,6 +65,25 @@ oer_protocols_hil_protocol::messages! {
     topic Bursted = "radio-pair/bursted";
     endpoint HandOver = "radio-pair/hand-over" => HandedOver;
     topic HandedOver = "radio-pair/handed-over";
+    endpoint PowerWords = "radio-pair/power-words" => SnapshotPage;
+}
+
+/// A page of the power and clock words the receiver kept (`tasks/450`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct PowerWords {
+    pub which: PowerPoint,
+    pub page: u8,
+}
+
+/// Where the power and clock words were read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum PowerPoint {
+    /// In the bring-up, right after the first power-up and clocks.
+    BroughtPowered,
+    /// In the last power turn, after common power was left.
+    TurnDown,
+    /// In the last power turn, after common power and the clocks again.
+    TurnUp,
 }
 
 /// Why an endpoint answered without acting: the step it needs is not the
@@ -749,6 +768,10 @@ pub enum TurnKind {
     /// calibration threshold at zero, so that the common and the transmit
     /// branches are due; then the vendor's threshold again.
     CloseWakeAndTrack,
+    /// A turn of power (`tasks/450`): RF closed, Wi-Fi's clocks released,
+    /// common power left; then common power, the clocks, RF woken with the
+    /// registration kept.
+    PowerTurn,
 }
 
 /// What became of RF in a turn.
@@ -758,6 +781,13 @@ pub enum TurnedRf {
     Kept,
     /// RF was closed and woken, in these microseconds each.
     ClosedAndWoken { close_micros: u32, wake_micros: u32 },
+    /// RF was closed, the power turned and RF woken (`TurnKind::PowerTurn`),
+    /// in these microseconds each.
+    PowerTurned {
+        close_micros: u32,
+        power_micros: u32,
+        wake_micros: u32,
+    },
     /// RF was closed, woken and tracked, in these microseconds each, with
     /// the pass's conversions.
     Tracked {
@@ -813,6 +843,7 @@ oer_protocols_hil_agent::service! {
         Stall(Stall) => command stall,
         Turn(Turn) => command turn,
         HandOver(HandOver) => command hand_over,
+        PowerWords(PowerWords) => command power_words,
     }
 }
 

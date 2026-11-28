@@ -303,16 +303,21 @@ async fn tune(
 
 /// What stays held for the run beside the radio: coexistence, power and the
 /// platform's clocks.
+#[allow(dead_code, reason = "the receiver's power turn takes them")]
 pub(crate) struct Held {
-    _coex: Option<
+    pub(crate) coex: Option<
         oer_chips_esp32s31_hal::radio::domain::Coexisting<
             oer_chips_esp32s31_hal::radio::domain::WifiClient,
         >,
     >,
-    _power: oer_chips_esp32s31_hal::radio::domain::CommonPower<
-        oer_chips_esp32s31_hal::radio::domain::WifiClient,
+    pub(crate) power: Option<
+        oer_chips_esp32s31_hal::radio::domain::CommonPower<
+            oer_chips_esp32s31_hal::radio::domain::WifiClient,
+        >,
     >,
     clocks: ChipClocks,
+    /// The power and clock words right after the first power-up and clocks.
+    pub(crate) powered: crate::pair::Readings,
 }
 
 impl Held {
@@ -397,6 +402,7 @@ pub(crate) async fn bring_up<'p>(
     clocked
         .set_initialized(&mut radio, WifiInitialization::Initialized)
         .map_err(|_| (phase::INITIALIZED, 0))?;
+    let powered = crate::pair::power_words(radio.observe_power(), &clocks);
     let open = track_if_due(&mut radio, &mut phy, open, timer, platform).await?;
     enable_wifi_rx(&mut radio, &open);
     let channel =
@@ -461,9 +467,10 @@ pub(crate) async fn bring_up<'p>(
         power_irq,
         station,
         held: Held {
-            _coex: Some(coexisting),
-            _power: power,
+            coex: Some(coexisting),
+            power: Some(power),
             clocks,
+            powered,
         },
     })
 }

@@ -111,6 +111,45 @@ const BUFFERS: u8 = 32;
 /// Case C's long cases: 700 and 1 500 octets (`case_c::Case::tag`).
 const LONG_TAGS: [u32; 2] = [5, 6];
 
+/// R7's turns of power.
+const POWER_TURNS: u32 = 3;
+
+/// The last power turn's words: with common power left against the cold
+/// snapshot, and with it again against the bring-up's powered words; each
+/// kept, with the readings that differ by item and index.
+fn power_words(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    let cold = snapshot(cx, RECEIVER, Snapshot::Cold)?;
+    let down = snapshot(cx, RECEIVER, Snapshot::Power(service::PowerPoint::TurnDown))?;
+    let up = snapshot(cx, RECEIVER, Snapshot::Power(service::PowerPoint::TurnUp))?;
+    let powered = snapshot(
+        cx,
+        RECEIVER,
+        Snapshot::Power(service::PowerPoint::BroughtPowered),
+    )?;
+    let differ = |of: &[service::Reading], against: &[service::Reading]| {
+        of.iter()
+            .filter_map(|reading| {
+                let other = against
+                    .iter()
+                    .find(|other| other.item == reading.item && other.index == reading.index);
+                (other.map(|other| other.value) != Some(reading.value))
+                    .then(|| serde_json::json!({ "reading": reading, "against": other }))
+            })
+            .collect::<Vec<_>>()
+    };
+    keep(cx, RECEIVER, "r7-down", &down);
+    keep(cx, RECEIVER, "r7-up", &up);
+    keep(cx, RECEIVER, "r7-powered", &powered);
+    keep(cx, RECEIVER, "r7-down-against-cold", &differ(&down, &cold));
+    keep(
+        cx,
+        RECEIVER,
+        "r7-up-against-powered",
+        &differ(&up, &powered),
+    );
+    Ok(())
+}
+
 /// The addresses the bring-up gave, which the later cases use.
 #[derive(Clone, Copy)]
 struct Addresses {
@@ -134,6 +173,8 @@ enum Snapshot {
     Cold,
     /// After it.
     Up,
+    /// The receiver's power and clock words at a point (`tasks/450`).
+    Power(service::PowerPoint),
 }
 
 /// `role`'s whole `snapshot`, page by page.
@@ -149,6 +190,9 @@ fn snapshot(
         let answer = match snapshot {
             Snapshot::Cold => device.call(SnapshotCold { page: next }, STEP)?,
             Snapshot::Up => device.call(SnapshotUp { page: next }, STEP)?,
+            Snapshot::Power(which) => {
+                device.call(service::PowerWords { which, page: next }, STEP)?
+            }
         };
         match answer {
             SnapshotPage::Readings {
@@ -349,6 +393,7 @@ fn turns(
                     && match (kind, rf) {
                         (TurnKind::Restart, TurnedRf::Kept)
                         | (TurnKind::CloseAndWake, TurnedRf::ClosedAndWoken { .. }) => true,
+                        (TurnKind::PowerTurn, TurnedRf::PowerTurned { .. }) => true,
                         (TurnKind::CloseWakeAndTrack, TurnedRf::Tracked { conversions, .. }) => {
                             conversions.ready > 0 && conversions.not_ready == 0
                         }
@@ -491,6 +536,17 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
         TRACKED_TURNS,
         "r6",
     )?;
+    // R7 (`tasks/450`): turns of power with RF woken, then the words of
+    // the last against the cold and the powered snapshots.
+    turns(
+        cx,
+        &mut timeline,
+        &mut failed,
+        TurnKind::PowerTurn,
+        POWER_TURNS,
+        "r7",
+    )?;
+    power_words(cx)?;
     // The sender's rounds.
     let sent = cx.device(SENDER)?.wait(rounds, ROUNDS_TIMEOUT)?;
     keep(cx, SENDER, "rounds", &sent);

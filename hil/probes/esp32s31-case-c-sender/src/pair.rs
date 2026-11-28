@@ -54,6 +54,18 @@ pub(crate) fn cold(
     readings
 }
 
+/// The power, clock and reset words alone, as [`cold`] reads them
+/// (`tasks/450`'s power turn).
+#[allow(dead_code, reason = "the receiver's power turn")]
+pub(crate) fn power_words(
+    observed: (RadioPowerWords, ModemBus<'_>),
+    clocks: &ChipClocks,
+) -> Readings {
+    let mut readings = Readings::new();
+    power(&mut readings, observed, clocks);
+    readings
+}
+
 /// The radio's power, clock and reset words ([`Radio::observe_power`]) and
 /// the platform clocks' ([`ChipClocks::observe`]): a modem block's word
 /// unreadable while its register bus is closed, the platform clocks' while
