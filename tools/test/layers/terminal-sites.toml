@@ -11,8 +11,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 # chips/esp32s31/platform/runtime/src/exception.rs
 "chips/esp32s31/platform/runtime/src/exception.rs:crate::exception:retained-slot:retained_static:1" = { owner = "chips/esp32s31/platform/runtime", classes = ["cpu-exception"] }
 
-# chips/esp32s31/platform/runtime/src/phy_fault.rs
-
 # chips/esp32s31/platform/runtime/src/radio_fault.rs
 "chips/esp32s31/platform/runtime/src/radio_fault.rs:crate::radio_fault::impl Failure::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/platform/runtime", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
 "chips/esp32s31/platform/runtime/src/radio_fault.rs:crate::radio_fault::impl Failure::reset:terminal-reference:reset_recording:1" = { owner = "chips/esp32s31/platform/runtime", classes = ["unexpected-hardware", "software-invariant", "exhaustion"] }
@@ -31,11 +29,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/esp32s31/hal/src/system/cores.rs:crate::system::cores::fatal_with:terminal-entry:fatal_with:1" = { owner = "chips/esp32s31/hal", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/esp32s31/hal/src/system/cores.rs:crate::system::cores::reset_with:reset-trigger:request_system_reset:1" = { owner = "chips/esp32s31/hal", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
 "chips/esp32s31/hal/src/system/cores.rs:crate::system::cores::reset_quarantined_with:reset-trigger:request_system_reset:1" = { owner = "chips/esp32s31/hal", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }
-
-# chips/esp32s31/hal/src/radio/domain/transaction.rs
-
-# chips/esp32s31/hal/src/radio/domain/transaction/record.rs
-
 
 # chips/esp32s31/hal/src/system/platform/core_control.rs
 "chips/esp32s31/hal/src/system/platform/core_control.rs:crate::system::platform::core_control::impl CoreControlRegisters < P , Q , R , S , T >::request_system_reset:reset-trigger:trigger_sys_ctrl_sys_sw_rst:1" = { owner = "chips/esp32s31/hal", classes = ["hardware-impossible", "unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation", "cpu-exception", "requested-reset", "rust-panic"], proof = "invalid-hart" }

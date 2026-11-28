@@ -178,7 +178,7 @@ const fn phy_module(module: PhyClockModule) -> ModemClockModule {
 /// let _forged = PhyStateRight::<ChipPhy> { _sealed: core::marker::PhantomData };
 /// ```
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<oer_chips_esp32s31_hal::radio::domain::PhyStateRight<oer_chips_esp32s31_hal::radio::domain::ChipPhy>>();
 /// ```
@@ -209,7 +209,7 @@ impl PhyStateRight<ChipPhy> {
 /// The shared radio domain: the shared radio registers, the shared PHY
 /// software state and common radio power, owned by value.
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// use oer_chips_esp32s31_hal::{radio::domain::RadioDomain, power::PlatformClockBackend};
 /// fn requires_clone<T: Clone>() {}
 /// fn cannot_clone<B: PlatformClockBackend>() {

@@ -188,7 +188,7 @@ asks at every enable, and keeps its own timer for the next instant.
 An operation is a plain `async fn`. Letting its future go, even before its
 first poll, ends its borrows: the domain and the handle are the owner's at
 once, the proof it took is gone with it, and the hardware is as far as the
-last atom left it; the owner has nothing to call until the take-down. A
+last atom left it; the owner has nothing to call. A
 proof let go is the same; the handle let go loses the place. No function of
 the PHY's path fails to return. The chip UI cases
 (`tests/chip-ui`) show that an operation cannot keep the registers past its
@@ -396,7 +396,7 @@ epoch. Release checks and the exact RX/IRQ handoff establish that boundary.
 
 A pending demand wait is cancellable without starting hardware work. An
 abandoned execution ends its borrows and loses the proof it took; the owner
-has nothing to call until the take-down. A failed execution returns its
+has nothing to call. A failed execution returns its
 typed failure and has consumed its proof, without automatic rollback. Holding
 a CPU critical section across async waits is not the exclusion model.
 

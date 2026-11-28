@@ -15,12 +15,12 @@
 //! Every right, place, handle and proof carries the PHY's brand `P`, so a
 //! proof of one PHY cannot serve another's handle.
 //!
-//! ```compile_fail
+//! ```compile_fail,E0277
 //! fn requires_clone<T: Clone>() {}
 //! requires_clone::<oer_chips_esp32s31_radio_phy::owner::RfOpen<oer_chips_esp32s31_hal::radio::domain::ChipPhy>>();
 //! ```
 //!
-//! ```compile_fail
+//! ```compile_fail,E0277
 //! fn requires_clone<T: Clone>() {}
 //! requires_clone::<oer_chips_esp32s31_radio_phy::owner::RfClosed<oer_chips_esp32s31_hal::radio::domain::ChipPhy>>();
 //! ```
@@ -68,9 +68,9 @@
 //! let _forged = oer_chips_esp32s31_radio_phy::owner::Vacate::<ChipPhy> { brand: core::marker::PhantomData };
 //! ```
 //!
-//! A proof let go leaves the handle and nothing to call until the place is
-//! vacated by a later step; the handle let go loses the place: Rust has no
-//! type that cannot be dropped, and `#[must_use]` only warns.
+//! A proof let go leaves the handle and nothing to call; the handle let go
+//! loses the place: Rust has no type that cannot be dropped, and
+//! `#[must_use]` only warns.
 
 use core::{marker::PhantomData, mem::MaybeUninit};
 
@@ -120,7 +120,7 @@ impl<'s, P> PhyPlace<'s, P> {
 /// The handle of the PHY's filled place, with the right to it: made once by
 /// the fill and held by the owner; an operation is lent it.
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<oer_chips_esp32s31_radio_phy::owner::PhyHandle<'static, oer_chips_esp32s31_hal::radio::domain::ChipPhy>>();
 /// ```

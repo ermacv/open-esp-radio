@@ -408,12 +408,14 @@ impl RadioPartitions {
 /// every partition and the domain have been reunited. Protocol-specific
 /// cached state is deliberately not retained in this neutral owner.
 ///
-/// ```compile_fail
-/// use oer_chips_esp32s31_hal::system::root::RadioHardware;
+/// ```compile_fail,E0382
+/// use core::mem::MaybeUninit;
+/// use oer_chips_esp32s31_hal::{power::PlatformClockBackend, radio::domain::RadioDomain, system::root::RadioHardware};
 ///
-/// # fn split_twice<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(hardware: RadioHardware, identity: oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity) {
-/// let _first = hardware.split::<B>(identity);
-/// let _second = hardware.split::<B>(identity);
+/// # fn split_twice<B: PlatformClockBackend>(hardware: RadioHardware) {
+/// let (mut first, mut second) = (MaybeUninit::<RadioDomain<B>>::uninit(), MaybeUninit::<RadioDomain<B>>::uninit());
+/// let _first = hardware.split::<B>(&mut first);
+/// let _second = hardware.split::<B>(&mut second);
 /// # }
 /// ```
 #[must_use = "dropping the radio root permanently loses the unique hardware capability"]

@@ -1220,8 +1220,8 @@ successor; this section describes what the build holds.
   its proof back; a failure gives its leaf cause and `Vacate`. The right,
   the place, the handle and every proof carry the PHY's brand. Letting an
   operation's future go ends its borrows: the domain and the handle are the
-  owner's, and the proof it took is gone, so the owner has nothing to call
-  until the take-down. The domain is built once in the place its owner
+  owner's, and the proof it took is gone, so the owner has nothing to call.
+  The domain is built once in the place its owner
   gives (`RadioHardware::split`) and the reunion empties that place. No
   function of the PHY's path fails to return. The channel's registers are
   the client's `RadioChannelHal`, a borrow of the domain and the MAC. There

@@ -112,7 +112,7 @@ pub struct MacFirstReset {
 /// therefore proves its clocks to the shared PHY while its registers belong
 /// to its datapath.
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// use oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn;
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<WifiClocksOn>();
