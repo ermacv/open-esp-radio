@@ -105,28 +105,6 @@ pub enum FrequencyMemoryPayload {
     I2cCommand(PhyFrequencyI2cCommandCommand),
 }
 
-/// The corrected capacitor word of `phy_pll_cap_mem_update`, exact: `read`
-/// with its capacitor replaced by `adjusted`, and the bits the ROM's signed
-/// spill sets above the payload, which the write ORs into the mode.
-///
-/// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING. The word keeps bits 15 and 13:8
-/// of the read word, takes the adjusted code's low byte, and places the
-/// adjusted code sign-extended and shifted right by eight at bit 14 and up.
-/// The ROM's capacitor update stays exact on the whole word here; its typed
-/// form waits for the owner's decision on a code outside nine bits (D2).
-pub const fn frequency_cap_correction(
-    read: PhyFrequencyMemoryRecordCapAndSdm,
-    adjusted: u16,
-) -> (PhyFrequencyMemoryRecordCapAndSdm, u8) {
-    let signed_code = adjusted as i16 as i32 as u32;
-    let word = (read.bits() & 0x0000_bf00) | (adjusted as u8 as u32) | ((signed_code >> 8) << 14);
-    let [low, middle, high, spill] = word.to_le_bytes();
-    (
-        PhyFrequencyMemoryRecordCapAndSdm::from_bits(u32::from_le_bytes([low, middle, high, 0])),
-        spill,
-    )
-}
-
 /// Semantic PHY-I2C number-address sequence consumed by
 /// `phy_freq_i2c_num_addr`.
 ///

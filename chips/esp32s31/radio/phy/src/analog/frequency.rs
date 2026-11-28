@@ -30,7 +30,6 @@ use oer_chips_esp32s31_hal::{
     },
     radio::phy::frequency::{
         FrequencyMemoryAddress, FrequencyMemoryPayload, PhyFrequencyI2cNumberAddresses,
-        frequency_cap_correction,
     },
 };
 
@@ -379,7 +378,11 @@ pub struct PhyFrequencyCapMemoryRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyFrequencyCapMemoryOutcome {
+    /// Entries whose corrected capacitor code was written.
     pub entries_updated: u8,
+    /// Entries whose corrected code left 0 to 511 and were not written: their
+    /// tuning is the one they had, lost to this correction.
+    pub entries_out_of_range: u8,
     pub correction: PhyFrequencyCapCorrection,
     pub restored_frequency_index: u8,
 }
@@ -430,31 +433,41 @@ enum PhyFrequencyCapMemoryStep {
     Read {
         entry: TableEntry,
     },
-    /// The corrected word and the mode it is written with.
+    /// The corrected word, written with the memory's write mode.
     Write {
         entry: TableEntry,
         value: PhyFrequencyMemoryRecordCapAndSdm,
-        mode: u8,
     },
     RestoreChannelIndex,
     Complete,
 }
 
-/// Exact arithmetic used by complete rev0 ROM `phy_pll_cap_mem_update` for
-/// one RF frequency-memory word: the corrected word and its write mode.
-/// The full signed result is retained: ROM ORs its bits above the payload
-/// with the write-mode byte, which changes the operation on underflow.
-pub const fn phy_frequency_cap_adjusted_word(
+/// One RF frequency-memory word corrected as rev0 ROM
+/// `phy_pll_cap_mem_update` corrects it, built only from a capacitor code of
+/// 0 to 511: the word with the corrected code's low byte and its bit 8 in
+/// place and bits 15 and 13:8 of the read word kept; `None` when the
+/// corrected code leaves the range, and the entry is then not written.
+///
+/// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING (the word's lanes). The ROM writes
+/// a code outside nine bits unguarded, its sign spilling above the payload
+/// into the write mode; this word is never built from one.
+pub fn phy_frequency_cap_adjusted_word(
     read: PhyFrequencyMemoryRecordCapAndSdm,
     correction: PhyFrequencyCapCorrection,
-) -> (PhyFrequencyMemoryRecordCapAndSdm, u8) {
+) -> Option<PhyFrequencyMemoryRecordCapAndSdm> {
     let cap = u16::from_le_bytes([
         read.cap_low(),
         analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH.extract(read.cap_high_byte()),
     ]);
-    let adjusted = cap.wrapping_add(correction.delta() as u16);
-    let (word, spill) = frequency_cap_correction(read, adjusted);
-    (word, PHY_RF_FREQUENCY_MEMORY_WRITE_MODE | spill)
+    let adjusted = i32::from(cap) + i32::from(correction.delta());
+    let code = crate::analog::rfpll::RfpllCapacitorCode::new(u16::try_from(adjusted).ok()?)?;
+    // The ROM keeps bits 15 and 13:8 of the read word, the capacitor's high
+    // byte without its bit 8, and clears the SDM byte.
+    Some(
+        PhyFrequencyMemoryRecordCapAndSdm::ZERO
+            .with_cap_low(code.low_byte())
+            .with_cap_high_byte(code.high_field().apply(read.cap_high_byte())),
+    )
 }
 
 /// Exact low-byte channel image restored by `phy_pll_cap_mem_update`.
@@ -467,6 +480,8 @@ pub const fn phy_frequency_channel_index(channel: u16) -> u8 {
 pub struct PhyFrequencyCapMemoryTransition {
     request: PhyFrequencyCapMemoryRequest,
     step: PhyFrequencyCapMemoryStep,
+    /// Entries read so far whose corrected code left the range.
+    out_of_range: u8,
 }
 
 impl PhyFrequencyCapMemoryTransition {
@@ -476,6 +491,7 @@ impl PhyFrequencyCapMemoryTransition {
             step: PhyFrequencyCapMemoryStep::Read {
                 entry: TableEntry::FIRST,
             },
+            out_of_range: 0,
         }
     }
 
@@ -486,12 +502,12 @@ impl PhyFrequencyCapMemoryTransition {
                 entry_index: entry.index(),
                 address: record_address(entry, RecordWord::CapAndSdm),
             },
-            PhyFrequencyCapMemoryStep::Write { entry, value, mode } => {
+            PhyFrequencyCapMemoryStep::Write { entry, value } => {
                 PhyFrequencyCapMemoryAction::WriteMemory {
                     entry_index: entry.index(),
                     address: record_address(entry, RecordWord::CapAndSdm),
                     value: FrequencyMemoryPayload::CapAndSdm(value),
-                    mode,
+                    mode: PHY_RF_FREQUENCY_MEMORY_WRITE_MODE,
                 }
             }
             PhyFrequencyCapMemoryStep::RestoreChannelIndex => {
@@ -501,7 +517,9 @@ impl PhyFrequencyCapMemoryTransition {
             }
             PhyFrequencyCapMemoryStep::Complete => {
                 PhyFrequencyCapMemoryAction::Complete(PhyFrequencyCapMemoryOutcome {
-                    entries_updated: PHY_FREQUENCY_TABLE_ENTRY_COUNT,
+                    entries_updated: PHY_FREQUENCY_TABLE_ENTRY_COUNT
+                        .saturating_sub(self.out_of_range),
+                    entries_out_of_range: self.out_of_range,
                     correction: self.request.correction,
                     restored_frequency_index: phy_frequency_channel_index(
                         self.request.current_channel,
@@ -527,19 +545,24 @@ impl PhyFrequencyCapMemoryTransition {
             ) if completed_entry == entry.index()
                 && address == record_address(*entry, RecordWord::CapAndSdm) =>
             {
-                let (value, mode) = phy_frequency_cap_adjusted_word(value, self.request.correction);
-                PhyFrequencyCapMemoryStep::Write {
-                    entry: *entry,
-                    value,
-                    mode,
+                match phy_frequency_cap_adjusted_word(value, self.request.correction) {
+                    Some(value) => PhyFrequencyCapMemoryStep::Write {
+                        entry: *entry,
+                        value,
+                    },
+                    // A code outside nine bits is not written; the entry
+                    // keeps its tuning.
+                    None => {
+                        self.out_of_range = self.out_of_range.saturating_add(1);
+                        match entry.next() {
+                            Some(entry) => PhyFrequencyCapMemoryStep::Read { entry },
+                            None => PhyFrequencyCapMemoryStep::RestoreChannelIndex,
+                        }
+                    }
                 }
             }
             (
-                PhyFrequencyCapMemoryStep::Write {
-                    entry,
-                    mode: written_mode,
-                    ..
-                },
+                PhyFrequencyCapMemoryStep::Write { entry, .. },
                 PhyFrequencyCapMemoryCompletion::MemoryWritten {
                     entry_index: completed_entry,
                     address,
@@ -547,7 +570,7 @@ impl PhyFrequencyCapMemoryTransition {
                 },
             ) if completed_entry == entry.index()
                 && address == record_address(*entry, RecordWord::CapAndSdm)
-                && mode == *written_mode =>
+                && mode == PHY_RF_FREQUENCY_MEMORY_WRITE_MODE =>
             {
                 match entry.next() {
                     Some(entry) => PhyFrequencyCapMemoryStep::Read { entry },

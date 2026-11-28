@@ -463,11 +463,13 @@ impl Io<'_> {
                 let started = observed.then(|| super::rfpll::clock_now(clock));
                 let mut done = self.rfpll_memory(memory)?;
                 run.cursor.advance(Completion::Memory(done))?;
-                if matches!(memory, Memory::ReadMemory { .. }) {
-                    let Action::Memory(next @ Memory::WriteMemory { .. }) = run.cursor.action()
-                    else {
-                        return Err(Failure::Binding);
-                    };
+                // A read entry is written in the same atom, unless its
+                // corrected code left the range and the walk went on.
+                if let (
+                    Memory::ReadMemory { .. },
+                    Action::Memory(next @ Memory::WriteMemory { .. }),
+                ) = (memory, run.cursor.action())
+                {
                     done = self.rfpll_memory(next)?;
                     run.cursor.advance(Completion::Memory(done))?;
                 }

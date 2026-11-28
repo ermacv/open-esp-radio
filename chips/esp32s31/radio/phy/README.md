@@ -167,7 +167,9 @@ by `&mut`; each takes the proof its life is in and gives the next:
   `phy_param_track_tot`, Wi-Fi's only. As the vendor's periodic timer, it
   runs under the PHY lock alone (the lent domain) and brackets its
   RF-sensitive regions with the grant-protect request. The pass's instant
-  is recorded in the state;
+  is recorded in the state. A frequency-memory entry whose corrected capacitor code leaves 0
+  to 511 is not written, and the pass's RFPLL outcome counts it
+  (`entries_out_of_range`): that entry keeps the tuning it had;
 - `enable_wifi_rx` and `disable_wifi_rx` need `RfOpen`.
 
 No proof is `Copy` nor `Clone`, and only the fill and the operations' ends

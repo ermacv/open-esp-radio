@@ -6990,11 +6990,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_TRANSMIT,
     ),
     (
-        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        2,
-        BY_PHY_OWNER,
-    ),
-    (
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
         3,
         BY_LEVEL_TASK,
