@@ -131,8 +131,9 @@ pub use calibration::registration::{
 };
 pub use executor::{PhyCalibrationTrackingRunError, PhyParamTrackingRunError, PhyRegisterRunError};
 pub use state::{
-    PHY_CALIBRATION_SNAPSHOT_SCHEMA, PhyBluetoothCalibration, PhyCalibrationCache,
-    PhyCalibrationSnapshot, PhyCommonCalibration, PhyConfig, PhyState, PhyWifiCalibration,
+    CalibrationThreshold, PHY_CALIBRATION_SNAPSHOT_SCHEMA, PhyBluetoothCalibration,
+    PhyCalibrationCache, PhyCalibrationSnapshot, PhyCommonCalibration, PhyConfig, PhyState,
+    PhyWifiCalibration,
 };
 pub use tx::power::{PhyTxTargetPowerPair, PhyTxTargetPowerProfile};
 pub use {

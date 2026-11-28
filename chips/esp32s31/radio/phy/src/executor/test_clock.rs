@@ -58,6 +58,11 @@ pub(crate) fn sample_at(now: Instant) -> u32 {
     let [a, b, c, d, ..] = now.as_micros().to_le_bytes();
     u32::from_le_bytes([a, b, c, d])
 }
+/// A test counts no wait unless it says so.
+impl<const N: usize> crate::executor::wait::WaitTally for VirtualClock<N> {
+    const COUNTS: bool = false;
+    fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+}
 impl<const N: usize> oer_portable_cooperate::CooperativeTimer for VirtualClock<N> {
     fn should_yield(&self) -> bool {
         self.peers.get() || self.peer_at.get().is_some_and(|at| self.clock.now() >= at)

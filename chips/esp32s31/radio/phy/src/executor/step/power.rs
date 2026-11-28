@@ -39,7 +39,7 @@ pub(crate) fn run_param_tx_power<
     'a,
     D: crate::executor::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
 >(
     timer: &'a T,
     child: PhyParamTrackingTxPowerTransition<'a>,

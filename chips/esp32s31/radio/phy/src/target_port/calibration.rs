@@ -102,7 +102,9 @@ pub fn dcode<
     'a,
     D: PhyShortDelay + 'a,
     P,
-    T: oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter,
+    T: oer_portable_cooperate::CooperativeTimer
+        + oer_portable_settle::SettleCounter
+        + crate::executor::wait::WaitTally,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationDcodeTransition,
@@ -131,7 +133,9 @@ fn dcode_poll<
     'a,
     D: PhyShortDelay + 'a,
     R: crate::executor::step::Registers,
-    T: oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter,
+    T: oer_portable_cooperate::CooperativeTimer
+        + oer_portable_settle::SettleCounter
+        + crate::executor::wait::WaitTally,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationDcodeTransition,
@@ -162,7 +166,9 @@ fn dcode_poll<
 /// Advance the retained coefficient owner; only its caller publishes the result.
 pub async fn rx_gain_init<
     D: PhyShortDelay,
-    T: oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter,
+    T: oer_portable_cooperate::CooperativeTimer
+        + oer_portable_settle::SettleCounter
+        + crate::executor::wait::WaitTally,
 >(
     clock: &T,
     child: &mut crate::rx::gain::RxProgram,
@@ -215,7 +221,11 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
     physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
     observer: &super::ObserverSlot<'_, O>,
-    clock: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
+    clock: &(
+         impl oer_portable_cooperate::CooperativeTimer
+         + oer_portable_settle::SettleCounter
+         + crate::executor::wait::WaitTally
+     ),
 ) -> Result<(), PhyTargetPortError> {
     child
         .execute_target_direct(
@@ -287,7 +297,9 @@ pub fn channel<
     D: PhyShortDelay + 'a,
     P: 'a,
     O: PhyTargetObserver + 'a,
-    T: oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter,
+    T: oer_portable_cooperate::CooperativeTimer
+        + oer_portable_settle::SettleCounter
+        + crate::executor::wait::WaitTally,
 >(
     clock: &'a T,
     child: &'a mut PhyCalibrationChannelTransition,

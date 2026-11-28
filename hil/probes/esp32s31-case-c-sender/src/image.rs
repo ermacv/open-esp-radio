@@ -609,7 +609,8 @@ async fn worker(
         }
     };
     let cooperative = Cooperative::new(EmbassyClock);
-    let timer = CooperativeTimer::new(&cooperative, cycles);
+    let book = crate::radio::WaitBook::default();
+    let timer = CooperativeTimer::counted(&cooperative, cycles, &book);
     let mut platform = ();
     let mut phy_memory = MaybeUninit::uninit();
     let up = async {
@@ -628,6 +629,7 @@ async fn worker(
             mut phy,
             open,
             register_micros,
+            waits,
             // The sender runs no pass after its bring-up.
             power_detector: _power_detector,
             mut clocked,
@@ -679,7 +681,7 @@ async fn worker(
         let (frames, ordinary) = transmit::prepare(&sources)?;
         Ok((
             slot,
-            (phy, open, register_micros),
+            (phy, open, register_micros, waits),
             access,
             clocks_on,
             ring,
@@ -695,7 +697,7 @@ async fn worker(
     let (
         mut slot,
         // The registered PHY with RF open stays held for the run.
-        (phy, _open, register_micros),
+        (phy, _open, register_micros, waits),
         mut access,
         clocks_on,
         mut ring,
@@ -722,6 +724,7 @@ async fn worker(
             station,
             ap,
             register_micros,
+            waits,
         },
     );
     let up = match pair::up(&mut slot, held.clocks(), reset, &phy, identity) {

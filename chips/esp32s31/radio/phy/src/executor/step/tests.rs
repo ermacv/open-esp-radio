@@ -713,6 +713,10 @@ fn pbus_clear_preserves_all_commands_and_the_conditional_settle_tail() {
 #[test]
 fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
     struct AsyncTimer(VirtualClock<1>);
+    impl crate::executor::wait::WaitTally for AsyncTimer {
+        const COUNTS: bool = false;
+        fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+    }
     impl oer_portable_settle::SettleCounter for AsyncTimer {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
             limit.micros()
@@ -753,6 +757,74 @@ fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
     assert_eq!(atoms.get(), 2);
     assert!(future.as_mut().poll(&mut cx).is_ready());
     assert_eq!(atoms.get(), 2);
+}
+
+/// A tally that keeps every wait it is told of.
+#[derive(Default)]
+struct Kept(core::cell::RefCell<std::vec::Vec<(crate::executor::wait::Waited, u64, u64)>>);
+
+impl crate::executor::wait::WaitTally for Kept {
+    const COUNTS: bool = true;
+    fn waited(&self, kind: crate::executor::wait::Waited, asked: u64, taken: u64) {
+        self.0.borrow_mut().push((kind, asked, taken));
+    }
+}
+
+#[test]
+fn a_counting_timer_is_told_of_each_yield_and_its_time() {
+    use crate::executor::wait::Waited;
+    let clock = VirtualClock::<1>::new();
+    let kept = Kept::default();
+    let timer = crate::executor::wait::PhyTimer::counted(&clock, &clock, &kept);
+    let mut io = Io::default();
+    let mut transaction = read();
+    let mut job =
+        Job::i2c(&mut transaction, clock.now(), I2cTiming::Direct).expect("deadline fits");
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
+        &mut job, &mut io, &timer, None, None, None
+    ));
+    assert!(future.as_mut().poll(&mut cx).is_pending());
+    clock.advance(Duration::from_micros(3)).expect("time fits");
+    assert!(future.as_mut().poll(&mut cx).is_pending());
+    clock.advance(Duration::from_micros(5)).expect("time fits");
+    assert!(future.as_mut().poll(&mut cx).is_ready());
+    assert_eq!(
+        *kept.0.borrow(),
+        [(Waited::Yield, 0, 3), (Waited::Yield, 0, 5)]
+    );
+}
+
+#[test]
+fn a_counting_timer_is_told_of_each_retry_with_what_it_asked_and_took() {
+    use crate::executor::wait::Waited;
+    let clock = VirtualClock::<1>::new();
+    clock.set_ready_peers(false);
+    let kept = Kept::default();
+    let timer = crate::executor::wait::PhyTimer::counted(&clock, &clock, &kept);
+    let mut io = Io::default();
+    let busy = io.busy.clone();
+    let mut transaction = read();
+    let mut job =
+        Job::i2c(&mut transaction, clock.now(), I2cTiming::Temperature).expect("deadline fits");
+    let (waker, _) = context();
+    let mut cx = Context::from_waker(&waker);
+    let mut future = core::pin::pin!(drive::<TestDelay, _, _>(
+        &mut job, &mut io, &timer, None, None, None
+    ));
+    busy.set(true);
+    assert!(future.as_mut().poll(&mut cx).is_pending());
+    let asked = kept.0.borrow().len();
+    clock.advance(Duration::from_micros(7)).expect("time fits");
+    busy.set(false);
+    let _resumed = future.as_mut().poll(&mut cx);
+    let kept = kept.0.borrow();
+    assert_eq!(asked, 0, "a wait is counted when it ends");
+    let (kind, asked, taken) = kept[0];
+    assert_eq!(kind, Waited::EngineRetry);
+    assert!(asked > 0 && asked <= 7, "asked {asked}");
+    assert_eq!(taken, 7);
 }
 
 #[test]
@@ -835,6 +907,10 @@ fn runnable_yields_without_constructing_or_polling_a_timer() {
         clock: &'a VirtualClock<1>,
         constructed: Cell<u32>,
         polled: Cell<u32>,
+    }
+    impl crate::executor::wait::WaitTally for Probe<'_> {
+        const COUNTS: bool = false;
+        fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
     }
     impl oer_portable_settle::SettleCounter for Probe<'_> {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
@@ -1356,6 +1432,10 @@ fn rfpll_rmw_keeps_the_captured_byte_and_model_owner_across_the_checkpoint() {
 #[test]
 fn rfpll_busy_command_times_out_without_consuming_a_partial_helper() {
     struct Progress<'a>(&'a VirtualClock<1>);
+    impl crate::executor::wait::WaitTally for Progress<'_> {
+        const COUNTS: bool = false;
+        fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+    }
     impl oer_portable_settle::SettleCounter for Progress<'_> {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
             limit.micros()
@@ -1518,6 +1598,10 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
     struct NoWait<'a> {
         clock: &'a VirtualClock<1>,
         constructed: Cell<usize>,
+    }
+    impl crate::executor::wait::WaitTally for NoWait<'_> {
+        const COUNTS: bool = false;
+        fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
     }
     impl oer_portable_settle::SettleCounter for NoWait<'_> {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {

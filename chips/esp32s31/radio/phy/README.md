@@ -256,6 +256,11 @@ poll, while an incomplete DC/IQ observation waits on the caller's timer.
 Other required 1–20 us hardware settles are `oer_portable_settle` holds on
 the settle counter the caller gives beside its timer (`executor::wait::PhyTimer`):
 on the chip, the HAL's `CycleCounter` at the CPU rate the runtime handover adopted.
+A timer made with `PhyTimer::counted` tells its tally (`executor::wait::WaitTally`)
+of every wait as it ends, by kind (`Waited`: a spun or a timed settle, a
+completion or bus-busy wait, a step engine's retry, a cooperative yield),
+with the microseconds asked and taken; `PhyTimer::new`'s tally counts nothing
+and reads no clock for it.
 PBus/I2C leaves retain their bounded direct observation policy.
 TXDC/PWDET retains its direct search/root interpreter inside the owned PHY
 transaction, without CPU-admission queries between its direct operations. Each runtime SAR/PWDET conversion uses the explicit [step machine](src/tx/sar.rs)

@@ -322,9 +322,54 @@ fn false_ready_registers_a_real_timer_and_preserves_the_atomic_capture_tail() {
     assert!(program.terminal().is_none());
 }
 
+/// A tally that keeps every wait it is told of.
+#[derive(Default)]
+struct Kept(core::cell::RefCell<std::vec::Vec<(crate::executor::wait::Waited, u64, u64)>>);
+
+impl crate::executor::wait::WaitTally for Kept {
+    const COUNTS: bool = true;
+    fn waited(&self, kind: crate::executor::wait::Waited, asked: u64, taken: u64) {
+        self.0.borrow_mut().push((kind, asked, taken));
+    }
+}
+
+#[test]
+fn a_counting_timer_is_told_of_the_readiness_retry_and_the_yield() {
+    use crate::executor::wait::Waited;
+    let clock = VirtualClock::<2>::new();
+    let kept = Kept::default();
+    let timer = crate::executor::wait::PhyTimer::counted(&clock, &clock, &kept);
+    let mut io = Fake::new(&clock);
+    io.pending = 1;
+    let mut program = at_estimator();
+    let mut execution = RxGainExecution::default();
+    let mut future = core::pin::pin!(drive::<Delay, _, _, _>(
+        &mut program,
+        &mut io,
+        &timer,
+        &mut execution,
+        None,
+        |_, _| {}
+    ));
+    let mut cx = Context::from_waker(core::task::Waker::noop());
+    assert!(future.as_mut().poll(&mut cx).is_pending());
+    assert!(kept.0.borrow().is_empty(), "a wait is counted when it ends");
+    clock.advance(Duration::from_micros(3)).expect("timer fits");
+    assert!(future.as_mut().poll(&mut cx).is_pending());
+    clock.advance(Duration::from_micros(2)).expect("timer fits");
+    let _resumed = future.as_mut().poll(&mut cx);
+    let kept = kept.0.borrow();
+    assert_eq!(kept[0], (Waited::EngineRetry, 1, 3));
+    assert_eq!(kept[1], (Waited::Yield, 0, 2));
+}
+
 #[test]
 fn an_immediately_ready_timer_is_consumed_once_and_resumes_in_a_later_poll() {
     struct Immediate<'a>(&'a VirtualClock<2>);
+    impl crate::executor::wait::WaitTally for Immediate<'_> {
+        const COUNTS: bool = false;
+        fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+    }
     impl oer_portable_settle::SettleCounter for Immediate<'_> {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
             limit.micros()

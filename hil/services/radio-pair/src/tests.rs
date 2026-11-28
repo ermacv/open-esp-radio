@@ -127,6 +127,43 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         },
         start_micros: u32::MAX,
     };
+    let tracked = Turned::Turned {
+        before: counts,
+        after: counts,
+        handles: u8::MAX,
+        stop_micros: u32::MAX,
+        rf: TurnedRf::Tracked {
+            close_micros: u32::MAX,
+            wake_micros: u32::MAX,
+            track_micros: u32::MAX,
+            conversions: Conversions {
+                ready: u32::MAX,
+                not_ready: u32::MAX,
+                earliest_micros: u32::MAX,
+                latest_micros: u32::MAX,
+                most_observations: u16::MAX,
+            },
+        },
+        start_micros: u32::MAX,
+    };
+    let wait = Wait {
+        count: u32::MAX,
+        asked_micros: u32::MAX,
+        taken_micros: u32::MAX,
+    };
+    let up = BroughtUp::Up {
+        station: [u8::MAX; 6],
+        ap: [u8::MAX; 6],
+        register_micros: u32::MAX,
+        waits: Waits {
+            settle_spun: wait,
+            settle_timed: wait,
+            completion: wait,
+            bus_busy: wait,
+            engine_retry: wait,
+            yields: wait,
+        },
+    };
     let hang = HangCounters {
         rx: u8::MAX,
         tx: u8::MAX,
@@ -162,6 +199,8 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         ("failed rounds", encoded_length(&failed)),
         ("windowed", encoded_length(&windowed)),
         ("turned", encoded_length(&turned)),
+        ("tracked", encoded_length(&tracked)),
+        ("brought up", encoded_length(&up)),
         (
             "bursted",
             encoded_length(&Bursted::Sent {
