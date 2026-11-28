@@ -543,7 +543,6 @@ pub fn start<S: Started, H: GroupStarted>(
             root.into_runtime(),
             InterruptTable,
             oer_chips_esp32s31_platform_board::BootstrapPsram,
-            || {},
             |hardware| {
                 let causes =
                     oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);

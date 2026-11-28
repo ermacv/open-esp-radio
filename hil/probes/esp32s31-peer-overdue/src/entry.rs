@@ -215,7 +215,6 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
             root.into_runtime(),
             InterruptTable,
             board::BootstrapPsram,
-            || {},
             |hardware| {
                 let reset_causes = oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
                 (

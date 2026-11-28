@@ -170,7 +170,6 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
             root.into_runtime(),
             InterruptTable,
             board::BootstrapPsram,
-            || {},
             |hardware| {
                 (
                     hardware.system_timer,
