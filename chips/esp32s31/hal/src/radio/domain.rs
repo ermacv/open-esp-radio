@@ -46,8 +46,8 @@ use crate::{
     system::owner::PhyRegistrationEpoch,
 };
 
-pub mod transaction;
-use transaction::PhyIdentity;
+mod lent;
+pub use lent::{PhyHardware, PhyLoan};
 
 mod sealed {
     pub trait RadioClientOwner {}
@@ -78,7 +78,6 @@ struct SharedRadioState<B: PlatformClockBackend> {
     /// dependencies; a poisoned planner keeps them held.
     modem_platform_clocks: ModemPlatformClocks<B>,
     phy_grant_protected: bool,
-    identity: PhyIdentity,
 }
 
 impl<B: PlatformClockBackend> SharedRadioState<B> {
@@ -175,26 +174,35 @@ const fn phy_module(module: PhyClockModule) -> ModemClockModule {
 /// one place.
 ///
 /// ```compile_fail,E0451
-/// let _forged = oer_chips_esp32s31_hal::radio::domain::PhyStateRight { _sealed: () };
+/// use oer_chips_esp32s31_hal::radio::domain::{ChipPhy, PhyStateRight};
+/// let _forged = PhyStateRight::<ChipPhy> { _sealed: core::marker::PhantomData };
 /// ```
 ///
 /// ```compile_fail
 /// fn requires_clone<T: Clone>() {}
-/// requires_clone::<oer_chips_esp32s31_hal::radio::domain::PhyStateRight>();
+/// requires_clone::<oer_chips_esp32s31_hal::radio::domain::PhyStateRight<oer_chips_esp32s31_hal::radio::domain::ChipPhy>>();
 /// ```
 #[must_use = "the PHY's place is made from this right, and the reunion takes it back"]
 #[derive(Debug)]
-pub struct PhyStateRight {
-    _sealed: (),
+pub struct PhyStateRight<P> {
+    _sealed: core::marker::PhantomData<P>,
 }
 
-impl PhyStateRight {
+/// The brand of this chip's one PHY: its right, its place, its handle and
+/// every proof of its RF carry it, so that a proof of one PHY cannot serve
+/// another's handle.
+#[derive(Debug)]
+pub enum ChipPhy {}
+
+impl PhyStateRight<ChipPhy> {
     pub(crate) const fn issued() -> Self {
-        Self { _sealed: () }
+        Self {
+            _sealed: core::marker::PhantomData,
+        }
     }
 
     pub(crate) const fn returned(self) {
-        let Self { _sealed: () } = self;
+        let Self { _sealed: _ } = self;
     }
 }
 
@@ -225,7 +233,6 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
     pub(crate) fn new(
         registers: SharedRadioRegisters,
         phy: PhyRouteState,
-        identity: PhyIdentity,
         clock_identity: ModemClockPlannerIdentity,
     ) -> Self {
         Self {
@@ -236,61 +243,57 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
                 clocks: ModemClocks::new(clock_identity),
                 modem_platform_clocks: ModemPlatformClocks::default(),
                 phy_grant_protected: false,
-                identity,
             },
         }
     }
 
-    /// Give the parts back, once nothing holds them.
+    /// What keeps the domain from giving its parts back, or nothing. This
+    /// changes nothing.
     ///
     /// # Errors
     ///
-    /// Returns the unchanged domain while a client still holds common power
-    /// or a PHY calibration still owns a restore obligation.
+    /// A client still holds common power, modem or platform clocks or the
+    /// grant-protect request, or a PHY calibration still owns a restore
+    /// obligation.
+    pub(crate) fn releasable(&self) -> Result<(), RadioDomainReleaseError> {
+        let state = &self.state;
+        if state.power.any_client() {
+            return Err(RadioDomainReleaseError::CommonPowerHeld);
+        }
+        if state.clocks.any_held() {
+            return Err(RadioDomainReleaseError::ModemClocksHeld);
+        }
+        if state.phy_grant_protected {
+            return Err(RadioDomainReleaseError::PhyGrantProtectHeld);
+        }
+        if let Err(error) = crate::system::root::check_phy_restore_complete(&state.phy) {
+            return Err(RadioDomainReleaseError::Restore(error));
+        }
+        if !state.platform_clock_holds().is_empty() {
+            return Err(RadioDomainReleaseError::PlatformClocksHeld);
+        }
+        Ok(())
+    }
+
+    /// The parts, from a domain [`Self::releasable`] found holding nothing.
+    pub(crate) fn into_released_parts(self) -> (SharedRadioRegisters, PhyRouteState) {
+        (self.state.registers, self.state.phy)
+    }
+
+    /// The parts, or the unchanged domain with what keeps it.
+    #[cfg(test)]
     #[allow(
         clippy::type_complexity,
         clippy::result_large_err,
-        reason = "the parts, or the unchanged domain, are returned exactly as held"
+        reason = "a test's view of the release and its refusal"
     )]
     pub(crate) fn into_parts(
         self,
     ) -> Result<(SharedRadioRegisters, PhyRouteState), (Self, RadioDomainReleaseError)> {
-        let state = self.state;
-        if state.power.any_client() {
-            return Err((
-                Self::from_state(state),
-                RadioDomainReleaseError::CommonPowerHeld,
-            ));
+        match self.releasable() {
+            Ok(()) => Ok(self.into_released_parts()),
+            Err(error) => Err((self, error)),
         }
-        if state.clocks.any_held() {
-            return Err((
-                Self::from_state(state),
-                RadioDomainReleaseError::ModemClocksHeld,
-            ));
-        }
-        if state.phy_grant_protected {
-            return Err((
-                Self::from_state(state),
-                RadioDomainReleaseError::PhyGrantProtectHeld,
-            ));
-        }
-        if let Err(error) = crate::system::root::check_phy_restore_complete(&state.phy) {
-            return Err((
-                Self::from_state(state),
-                RadioDomainReleaseError::Restore(error),
-            ));
-        }
-        if !state.platform_clock_holds().is_empty() {
-            return Err((
-                Self::from_state(state),
-                RadioDomainReleaseError::PlatformClocksHeld,
-            ));
-        }
-        Ok((state.registers, state.phy))
-    }
-
-    fn from_state(state: SharedRadioState<B>) -> Self {
-        Self { state }
     }
 
     #[cfg(test)]
@@ -473,8 +476,7 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
     }
 
     /// Borrow the shared PHY registers with the route restore state, for a
-    /// test that also borrows a protocol's own registers.
-    #[cfg(test)]
+    /// operation that also borrows a protocol's own registers.
     pub(crate) fn phy_parts_mut(
         &mut self,
     ) -> (

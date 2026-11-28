@@ -170,7 +170,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
             root.into_runtime(),
             InterruptTable,
             board::BootstrapPsram,
-            oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
+            || {},
             |hardware| {
                 (
                     hardware.system_timer,

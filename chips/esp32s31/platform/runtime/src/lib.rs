@@ -31,9 +31,6 @@
 //! HAL's types and the runtime's retained memory and fatal path, so neither
 //! of them can hold them:
 //!
-//! - [`phy_fault`]: the PHY transaction seat, its retained fault record, the
-//!   reset the HAL's `phy_fault_reporter!` names and the next boot's report,
-//!   which the image passes to `adoption::run`;
 //! - `wifi_fault` (feature `wifi-fault`): the Wi-Fi MAC's fatal assertion
 //!   record, its reset and the next boot's report;
 //! - `radio_fault` (feature `radio-fault`): the shared RF actor's failed
@@ -54,7 +51,6 @@
 pub mod crypto;
 pub mod diagnostic_text;
 pub mod exception;
-pub mod phy_fault;
 
 /// The ESP32-S31's executor binding over the HAL's platform port; the
 /// executor runs on the chip target only.

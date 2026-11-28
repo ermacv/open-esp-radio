@@ -8,7 +8,6 @@ fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
     RadioDomain::new(
         shared,
         PhyRouteState::new(PhyRegistration::new()),
-        crate::radio::domain::transaction::PhyIdentity::for_host_test(),
         crate::power::clock::ModemClockPlannerIdentity::new().expect("identity capacity"),
     )
 }
@@ -61,7 +60,6 @@ fn poisoned_acquire_keeps_its_failed_edge_through_refused_changes_and_release() 
     assert_eq!(poisoned.completed_edges(), 1);
     radio.state_mut().clocks = ModemClocks::AcquirePoisoned { owner: poisoned };
 
-    let radio = radio.detach(transaction::Operation::Maintain).reunite();
     let radio = refuse_poisoned_clock_changes(radio);
     let ModemClocks::AcquirePoisoned { owner: retained } = &radio.state().clocks else {
         panic!("the failed acquire owner must remain quarantined")
@@ -94,7 +92,6 @@ fn poisoned_release_keeps_its_failed_edge_through_refused_changes_and_release() 
     assert_eq!(poisoned.completed_edges(), 1);
     radio.state_mut().clocks = ModemClocks::ReleasePoisoned { owner: poisoned };
 
-    let radio = radio.detach(transaction::Operation::Maintain).reunite();
     let radio = refuse_poisoned_clock_changes(radio);
     let ModemClocks::ReleasePoisoned { owner: retained } = &radio.state().clocks else {
         panic!("the failed release owner must remain quarantined")
@@ -105,7 +102,6 @@ fn poisoned_release_keeps_its_failed_edge_through_refused_changes_and_release() 
 
 #[test]
 fn registration_epoch_persists_in_the_domain() {
-    use crate::system::owner::PhyInitializationAccess;
     let mut radio = radio_domain();
     let epoch = {
         let domain = &mut radio;

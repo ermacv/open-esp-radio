@@ -159,9 +159,8 @@ pub use target_executor::PhyTargetPortError;
 pub use target_executor::RomShortDelay;
 #[cfg(target_arch = "riscv32")]
 pub use target_port::{
-    ChannelFailure, CloseFailure, Registered, RegistrationCause, RegistrationFailure,
-    TrackingFailure, WakeFailure, close, disable_wifi_rx, enable_wifi_rx, register, select_channel,
-    switch_channel, track, wake,
+    ChannelFailure, CloseFailure, Registered, RegistrationFailure, TrackingFailure, WakeFailure,
+    close, disable_wifi_rx, enable_wifi_rx, register, select_channel, switch_channel, track, wake,
 };
 #[cfg(target_arch = "riscv32")]
 pub use target_port::{

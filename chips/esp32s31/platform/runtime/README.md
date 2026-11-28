@@ -7,8 +7,6 @@ Images choose their interrupt table, task set, credentials and terminal policy.
 entropy owner, paired P2/P1 timer installation, interrupt part types, the trace
 clock and the unanswered-request reset binding. Its methods consume the actual
 owned partitions; they do not claim replacement hardware or hide a fallback.
-`phy_fault::Failure` carries a copied failure observation to an image-selected
-retained reset, without exposing the HAL's fault type in the Wi-Fi API.
 `radio_fault::Failure` (feature `radio-fault`) carries the shared RF actor's
 failed periodic tracking, its fault class and variant path, to the same kind
 of retained reset; the next boot prints it once its whole line was written.
