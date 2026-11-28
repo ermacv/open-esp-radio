@@ -7,7 +7,7 @@
 //! an optional observer; they must not reconstruct the recovered hardware
 //! contract.
 
-use crate::executor::wait::{Kind, PhyShortDelay, delay, delay_observed};
+use crate::executor::wait::{Kind, PhyShortDelay, Polled, delay, delay_observed, polled};
 use oer_portable_cooperate::CooperativeTimer as Timer;
 
 use core::marker::PhantomData;
@@ -530,7 +530,15 @@ impl<
         mut delay: impl FnMut(crate::tx::calibration::PhyToneSarDelayPhase, u64) -> F,
     ) -> Result<PhyToneSarCompletion, PhyTargetPortError> {
         match binding {
-            PhyToneSarExternalBinding::Mmio(binding) => Ok(binding.execute_target(registers)),
+            PhyToneSarExternalBinding::Mmio(binding) => Ok(polled(
+                self.timer,
+                Polled::ToneSarReady,
+                || binding.execute_target(registers),
+                |completion| match completion {
+                    PhyToneSarCompletion::ReadySampled { ready, .. } => Some((1, *ready)),
+                    _ => None,
+                },
+            )),
             PhyToneSarExternalBinding::Timer(binding) => {
                 let micros = binding.micros();
                 let phase = binding.phase();
@@ -1021,10 +1029,21 @@ impl<
                 delay::<D, _>(self.timer, Kind::Settle, u64::from(binding.micros())).await?;
                 Ok(binding.into_completion())
             }
-            PhyDcIqExternalBinding::Readiness(binding) => Ok(binding
-                .observe_with(HARDWARE_EDGE_LIMIT, || {
-                    crate::calibration::estimator::sample_readiness_target(registers)
-                })),
+            PhyDcIqExternalBinding::Readiness(binding) => Ok(polled(
+                self.timer,
+                Polled::DcIqReadiness,
+                || {
+                    binding.observe_with(HARDWARE_EDGE_LIMIT, || {
+                        crate::calibration::estimator::sample_readiness_target(registers)
+                    })
+                },
+                |completion| match completion {
+                    PhyDcIqCompletion::ReadinessObserved { snapshot, .. } => {
+                        Some((1, snapshot.ready))
+                    }
+                    _ => None,
+                },
+            )),
         }
     }
 
@@ -1447,7 +1466,18 @@ impl<
                 Ok(completion)
             }
             PhyPwdetExternalBinding::Ready(binding) => {
-                let completion = binding.execute_target(registers, self.timer);
+                let completion = polled(
+                    self.timer,
+                    Polled::PwdetReady,
+                    || binding.execute_target(registers, self.timer),
+                    |completion| match completion {
+                        PhyPwdetCompletion::SarReadyObserved {
+                            not_ready_samples, ..
+                        } => Some((u32::from(*not_ready_samples).saturating_add(1), true)),
+                        PhyPwdetCompletion::SarReadyDeadlineElapsed { .. } => Some((0, false)),
+                        _ => None,
+                    },
+                );
                 #[cfg(feature = "radio-health")]
                 self.observe_pwdet(observer, health_start, completion);
                 Ok(completion)

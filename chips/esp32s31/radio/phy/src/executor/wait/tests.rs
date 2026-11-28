@@ -283,12 +283,18 @@ mod delays {
 
     /// A tally that keeps every wait it is told of.
     #[derive(Default)]
-    struct Kept(core::cell::RefCell<Vec<(super::super::Waited, u64, u64)>>);
+    struct Kept(
+        core::cell::RefCell<Vec<(super::super::Waited, u64, u64)>>,
+        core::cell::RefCell<Vec<(super::super::Polled, u32, bool, u64)>>,
+    );
 
     impl super::super::WaitTally for Kept {
         const COUNTS: bool = true;
         fn waited(&self, kind: super::super::Waited, asked: u64, taken: u64) {
             self.0.borrow_mut().push((kind, asked, taken));
+        }
+        fn polled(&self, kind: super::super::Polled, reads: u32, ready: bool, taken: u64) {
+            self.1.borrow_mut().push((kind, reads, ready, taken));
         }
     }
 
@@ -333,5 +339,70 @@ mod delays {
             Poll::Ready(Err(super::super::PhyWaitRefused::Deadline))
         );
         assert!(kept.0.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_counted_poll_names_its_kind_reads_readiness_and_time() {
+        use super::super::{PhyTimer, Polled, polled};
+        let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(100));
+        let kept = Kept::default();
+        let timer = PhyTimer::counted(&clock, &clock, &kept);
+        let result = polled(
+            &timer,
+            Polled::PwdetReady,
+            || {
+                clock.advance(Duration::from_micros(7)).unwrap();
+                5_u32
+            },
+            |reads| Some((*reads, true)),
+        );
+        assert_eq!(result, 5, "the poll's own result comes back unchanged");
+        let unnamed = polled(&timer, Polled::DcIqReadiness, || 9_u32, |_| None);
+        assert_eq!(unnamed, 9);
+        polled(&timer, Polled::ToneSarReady, || (), |()| Some((1, false)));
+        assert_eq!(
+            *kept.1.borrow(),
+            [
+                (Polled::PwdetReady, 5, true, 7),
+                (Polled::ToneSarReady, 1, false, 0),
+            ],
+            "a poll whose result names no reads is not counted"
+        );
+        assert!(kept.0.borrow().is_empty(), "a poll is not a wait");
+    }
+
+    /// A clock whose every read is counted, under a tally that does not count.
+    struct Watched(Cell<u32>);
+
+    impl Clock for Watched {
+        fn now(&self) -> Instant {
+            self.0.set(self.0.get() + 1);
+            Instant::EPOCH
+        }
+    }
+
+    impl super::super::WaitTally for Watched {
+        const COUNTS: bool = false;
+        fn waited(&self, _: super::super::Waited, _: u64, _: u64) {}
+        fn polled(&self, _: super::super::Polled, _: u32, _: bool, _: u64) {}
+    }
+
+    #[test]
+    fn an_uncounted_poll_reads_no_clock() {
+        use super::super::{Polled, polled};
+        let clock = Watched(Cell::new(0));
+        let mut seen = false;
+        let result = polled(
+            &clock,
+            Polled::DcIqReadiness,
+            || 3_u8,
+            |_| {
+                seen = true;
+                Some((1, true))
+            },
+        );
+        assert_eq!(result, 3);
+        assert_eq!(clock.0.get(), 0);
+        assert!(!seen, "an uncounted poll does not ask what it read");
     }
 }

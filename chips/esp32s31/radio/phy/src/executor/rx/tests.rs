@@ -331,6 +331,8 @@ impl crate::executor::wait::WaitTally for Kept {
     fn waited(&self, kind: crate::executor::wait::Waited, asked: u64, taken: u64) {
         self.0.borrow_mut().push((kind, asked, taken));
     }
+    fn polled(&self, _kind: crate::executor::wait::Polled, _reads: u32, _ready: bool, _taken: u64) {
+    }
 }
 
 #[test]
@@ -369,6 +371,14 @@ fn an_immediately_ready_timer_is_consumed_once_and_resumes_in_a_later_poll() {
     impl crate::executor::wait::WaitTally for Immediate<'_> {
         const COUNTS: bool = false;
         fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+        fn polled(
+            &self,
+            _kind: crate::executor::wait::Polled,
+            _reads: u32,
+            _ready: bool,
+            _taken: u64,
+        ) {
+        }
     }
     impl oer_portable_settle::SettleCounter for Immediate<'_> {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {

@@ -267,7 +267,31 @@ pub struct Wait {
     pub taken_micros: u32,
 }
 
-/// An operation's waits by kind (the PHY's `executor::wait::Waited`).
+/// One kind of an operation's polls of readiness made with no wait before
+/// them: how many polls, the reads they made, how many ended ready, and
+/// the time they took in microseconds. Each sum saturates.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct ReadinessPoll {
+    pub count: u32,
+    pub reads: u32,
+    pub ready: u32,
+    pub taken_micros: u32,
+}
+
+/// An operation's polls of readiness by kind (the PHY's
+/// `executor::wait::Polled`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct ReadinessPolls {
+    /// The DC/IQ estimator's ready word.
+    pub dc_iq_readiness: ReadinessPoll,
+    /// A tone conversion's SAR ready word.
+    pub tone_sar_ready: ReadinessPoll,
+    /// The power detector's SAR ready word, inside one short settle.
+    pub pwdet_ready: ReadinessPoll,
+}
+
+/// An operation's waits by kind (the PHY's `executor::wait::Waited`), and
+/// its polls of readiness, which are no waits.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Waits {
     /// Short settles, spun.
@@ -282,6 +306,8 @@ pub struct Waits {
     pub engine_retry: Wait,
     /// Cooperative yields: none asks time.
     pub yields: Wait,
+    /// The polls of readiness made with no wait.
+    pub polls: ReadinessPolls,
 }
 
 /// The power detector's conversions of a tracking pass, each read from the

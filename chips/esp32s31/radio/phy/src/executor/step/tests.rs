@@ -716,6 +716,14 @@ fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
     impl crate::executor::wait::WaitTally for AsyncTimer {
         const COUNTS: bool = false;
         fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+        fn polled(
+            &self,
+            _kind: crate::executor::wait::Polled,
+            _reads: u32,
+            _ready: bool,
+            _taken: u64,
+        ) {
+        }
     }
     impl oer_portable_settle::SettleCounter for AsyncTimer {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
@@ -767,6 +775,8 @@ impl crate::executor::wait::WaitTally for Kept {
     const COUNTS: bool = true;
     fn waited(&self, kind: crate::executor::wait::Waited, asked: u64, taken: u64) {
         self.0.borrow_mut().push((kind, asked, taken));
+    }
+    fn polled(&self, _kind: crate::executor::wait::Polled, _reads: u32, _ready: bool, _taken: u64) {
     }
 }
 
@@ -911,6 +921,14 @@ fn runnable_yields_without_constructing_or_polling_a_timer() {
     impl crate::executor::wait::WaitTally for Probe<'_> {
         const COUNTS: bool = false;
         fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+        fn polled(
+            &self,
+            _kind: crate::executor::wait::Polled,
+            _reads: u32,
+            _ready: bool,
+            _taken: u64,
+        ) {
+        }
     }
     impl oer_portable_settle::SettleCounter for Probe<'_> {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
@@ -1455,6 +1473,14 @@ fn rfpll_busy_command_times_out_without_consuming_a_partial_helper() {
     impl crate::executor::wait::WaitTally for Progress<'_> {
         const COUNTS: bool = false;
         fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+        fn polled(
+            &self,
+            _kind: crate::executor::wait::Polled,
+            _reads: u32,
+            _ready: bool,
+            _taken: u64,
+        ) {
+        }
     }
     impl oer_portable_settle::SettleCounter for Progress<'_> {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
@@ -1622,6 +1648,14 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
     impl crate::executor::wait::WaitTally for NoWait<'_> {
         const COUNTS: bool = false;
         fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+        fn polled(
+            &self,
+            _kind: crate::executor::wait::Polled,
+            _reads: u32,
+            _ready: bool,
+            _taken: u64,
+        ) {
+        }
     }
     impl oer_portable_settle::SettleCounter for NoWait<'_> {
         fn cycles(&self, limit: oer_portable_settle::SettleLimit) -> u32 {
