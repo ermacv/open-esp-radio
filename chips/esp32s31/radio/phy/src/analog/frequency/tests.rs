@@ -72,21 +72,21 @@ fn cap_adjustment_preserves_the_rom_mask_and_reencodes_bit_eight() {
             read_word(0x00aa_bffe),
             PhyFrequencyCapCorrection::from_delta(2),
         ),
-        (read_word(0x0000_ff00), 3)
+        Some(read_word(0x0000_ff00))
     );
     assert_eq!(
         phy_frequency_cap_adjusted_word(
             read_word(0x00aa_ff01),
             PhyFrequencyCapCorrection::from_delta(-2),
         ),
-        (read_word(0x0000_bfff), 3)
+        Some(read_word(0x0000_bfff))
     );
     assert_eq!(phy_frequency_channel_index(11), 62);
     assert_eq!(phy_frequency_channel_index(2_462), 62);
 }
 
 #[test]
-fn cap_memory_underflow_retains_signed_mode_and_requires_its_completion() {
+fn an_entry_whose_corrected_code_leaves_nine_bits_is_not_written() {
     let mut transition = PhyFrequencyCapMemoryTransition::new(PhyFrequencyCapMemoryRequest {
         correction: PhyFrequencyCapCorrection::from_delta(-5),
         current_channel: 13,
@@ -98,6 +98,8 @@ fn cap_memory_underflow_retains_signed_mode_and_requires_its_completion() {
     else {
         panic!("must read before adjusting");
     };
+    // Capacitor 0 corrected by -5 leaves the range: the next entry is read,
+    // nothing is written.
     transition
         .advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
             entry_index,
@@ -105,11 +107,10 @@ fn cap_memory_underflow_retains_signed_mode_and_requires_its_completion() {
             value: read_word(0x00aa_bf00),
         })
         .unwrap();
-    let PhyFrequencyCapMemoryAction::WriteMemory { value, mode, .. } = transition.action() else {
-        panic!("must publish the adjusted entry");
-    };
-    assert_eq!(payload_bits(value), 0x00ff_fffb);
-    assert_eq!(mode, 0xff);
+    assert!(matches!(
+        transition.action(),
+        PhyFrequencyCapMemoryAction::ReadMemory { entry_index: 1, .. }
+    ));
     assert_eq!(
         transition.advance(PhyFrequencyCapMemoryCompletion::MemoryWritten {
             entry_index,
@@ -118,17 +119,56 @@ fn cap_memory_underflow_retains_signed_mode_and_requires_its_completion() {
         }),
         Err(PhyFrequencyCapMemoryTransitionError::WrongCompletion)
     );
-    transition
-        .advance(PhyFrequencyCapMemoryCompletion::MemoryWritten {
-            entry_index,
-            address,
-            mode,
-        })
-        .unwrap();
-    assert!(matches!(
-        transition.action(),
-        PhyFrequencyCapMemoryAction::ReadMemory { entry_index: 1, .. }
-    ));
+}
+
+#[test]
+fn the_outcome_counts_the_entries_left_unwritten() {
+    let mut transition = PhyFrequencyCapMemoryTransition::new(PhyFrequencyCapMemoryRequest {
+        correction: PhyFrequencyCapCorrection::from_delta(-2),
+        current_channel: 11,
+    });
+    loop {
+        match transition.action() {
+            PhyFrequencyCapMemoryAction::ReadMemory {
+                entry_index,
+                address,
+            } => {
+                // Every third entry holds capacitor 1, which -2 takes out.
+                let raw = if entry_index % 3 == 0 {
+                    0x0000_0001
+                } else {
+                    0x0000_0010
+                };
+                transition
+                    .advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
+                        entry_index,
+                        address,
+                        value: read_word(raw),
+                    })
+                    .unwrap();
+            }
+            PhyFrequencyCapMemoryAction::WriteMemory {
+                entry_index,
+                address,
+                mode,
+                ..
+            } => transition
+                .advance(PhyFrequencyCapMemoryCompletion::MemoryWritten {
+                    entry_index,
+                    address,
+                    mode,
+                })
+                .unwrap(),
+            PhyFrequencyCapMemoryAction::RestoreChannelIndex { frequency_index } => transition
+                .advance(PhyFrequencyCapMemoryCompletion::ChannelIndexRestored { frequency_index })
+                .unwrap(),
+            PhyFrequencyCapMemoryAction::Complete(outcome) => {
+                assert_eq!(outcome.entries_out_of_range, 29);
+                assert_eq!(outcome.entries_updated, 85 - 29);
+                break;
+            }
+        }
+    }
 }
 
 #[test]
@@ -226,6 +266,7 @@ fn cap_memory_transition_and_binding_reject_foreign_or_terminal_edges() {
         PhyFrequencyCapMemoryExternalBinding::lower(PhyFrequencyCapMemoryAction::Complete(
             super::PhyFrequencyCapMemoryOutcome {
                 entries_updated: 85,
+                entries_out_of_range: 0,
                 correction: PhyFrequencyCapCorrection::from_delta(-2),
                 restored_frequency_index: 12,
             }
@@ -755,19 +796,22 @@ fn modeled_frequency_records_match_the_old_packing() {
 }
 
 #[test]
-fn modeled_cap_correction_preserves_signed_spill_and_publication_mode() {
+fn modeled_cap_correction_writes_only_nine_bit_codes_as_the_rom_does() {
     for raw in [0, 1, 0x00aa_bf00, 0x00aa_bfff, 0x00aa_ffff, u32::MAX] {
-        for delta in [i16::MIN, -512, -5, -1, 0, 1, 512, i16::MAX] {
+        for delta in [i16::MIN, -512, -5, -1, 0, 1, 2, 512, i16::MAX] {
             let correction = PhyFrequencyCapCorrection::from_delta(delta);
-            let cap = ((raw & 0xff) | ((raw >> 6) & 0x100)) as u16;
-            let adjusted = cap.wrapping_add(delta as u16);
-            let old = (raw & 0xbf00)
-                | u32::from(adjusted as u8)
-                | (((adjusted as i16 as i32) >> 8) as u32).wrapping_shl(14);
-            let (word, mode) = phy_frequency_cap_adjusted_word(read_word(raw), correction);
-            // The payload is the word's 24 bits; its bits above go into the mode.
-            assert_eq!(word.bits(), old & 0xff_ffff);
-            assert_eq!(mode, 3 | (old >> 24) as u8);
+            let cap = i32::try_from((raw & 0xff) | ((raw >> 6) & 0x100)).unwrap();
+            let adjusted = cap + i32::from(delta);
+            let word = phy_frequency_cap_adjusted_word(read_word(raw), correction);
+            if (0..=0x1ff).contains(&adjusted) {
+                // The ROM's word for a code in range: bits 15 and 13:8 kept,
+                // the low byte and bit 8 at bit 14 placed, nothing spilled.
+                let adjusted = u32::try_from(adjusted).unwrap();
+                let rom = (raw & 0xbf00) | (adjusted & 0xff) | ((adjusted >> 8) << 14);
+                assert_eq!(word.map(|word| word.bits()), Some(rom), "{raw:#x} {delta}");
+            } else {
+                assert_eq!(word, None, "{raw:#x} {delta}");
+            }
         }
     }
 }

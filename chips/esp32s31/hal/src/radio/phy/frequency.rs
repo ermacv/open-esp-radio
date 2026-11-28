@@ -75,7 +75,7 @@ pub fn observe(registers: &mut impl SharedPhyAccess) -> Option<Observation> {
     ops::observe(&phy_blocks_mut(registers).phy_frequency_channel_oracle)
 }
 
-pub use ops::{FrequencyMemoryPayload, PhyFrequencyI2cNumberAddresses, frequency_cap_correction};
+pub use ops::{FrequencyMemoryPayload, PhyFrequencyI2cNumberAddresses};
 
 /// Clear the shared Wi-Fi control state at the start of common PHY init.
 ///

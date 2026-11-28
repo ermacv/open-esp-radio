@@ -1243,9 +1243,15 @@ fn rfpll_preserves_signed_search_and_all_memory_effects_at_bounded_checkpoints()
                             ));
                         }
                         Action::Memory(Memory::ReadMemory { entry_index, .. }) => {
-                            assert!(
-                                matches!(actions, [_, Action::Memory(Memory::WriteMemory { entry_index: written, .. })] if *written == entry_index)
+                            // A read entry is written in the same atom, or
+                            // left unwritten when its code leaves the range.
+                            let unwritten = actions.len() == 1;
+                            let written_here = matches!(
+                                actions,
+                                [_, Action::Memory(Memory::WriteMemory { entry_index: w, .. })]
+                                    if *w == entry_index
                             );
+                            assert!(unwritten || written_here);
                         }
                         _ => assert_eq!(actions.len(), 1),
                     }
@@ -1267,18 +1273,32 @@ fn rfpll_preserves_signed_search_and_all_memory_effects_at_bounded_checkpoints()
                     })
                     .collect::<Vec<_>>()
             };
+            let native_written = old
+                .rfpll_actions
+                .iter()
+                .filter(|a| matches!(a, Action::Memory(Memory::WriteMemory { .. })))
+                .count();
             assert_eq!(
                 effects(io.rfpll_actions.clone()),
                 effects(old.rfpll_actions)
             );
             assert_eq!(correction.action(), Action::Complete(expected));
-            assert_eq!(
-                io.rfpll_actions
+            let writes = |actions: &[Action]| {
+                actions
                     .iter()
                     .filter(|a| matches!(a, Action::Memory(Memory::WriteMemory { .. })))
-                    .count(),
-                if expected.search.delta() == 0 { 0 } else { 85 }
-            );
+                    .count()
+            };
+            let written = writes(&io.rfpll_actions);
+            assert_eq!(written, native_written);
+            match (expected.search.delta(), expected.memory) {
+                (0, _) => assert_eq!(written, 0),
+                (_, Some(memory)) => {
+                    assert_eq!(written, usize::from(memory.entries_updated));
+                    assert_eq!(memory.entries_updated + memory.entries_out_of_range, 85);
+                }
+                (_, None) => panic!("a correction updates the memory"),
+            }
         }
     }
 }
