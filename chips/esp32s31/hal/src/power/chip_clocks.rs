@@ -90,6 +90,10 @@ pub(crate) struct ClockWords<
 > {
     lpcon: ModemLpconChipClocks<P>,
     pll_f160m: HpSysClkrstPll160<Q>,
+    /// The gates the boot left open (`tasks/450`'s experiment): a last
+    /// release keeps them open, as the start found them.
+    boot_pll_f160m: bool,
+    boot_analog_i2c: bool,
 }
 
 impl ClockWords {
@@ -98,9 +102,15 @@ impl ClockWords {
             modem_lpcon_chip_clocks,
             hp_sys_clkrst_pll160,
         } = parts;
+        let boot_pll_f160m = hp_sys_clkrst_pll160
+            .read_ref_160m_ctrl0()
+            .reg_ref_160m_clk_en();
+        let boot_analog_i2c = modem_lpcon_chip_clocks.read_clk_conf().clk_i2c_mst_en();
         Self {
             lpcon: modem_lpcon_chip_clocks,
             pll_f160m: hp_sys_clkrst_pll160,
+            boot_pll_f160m,
+            boot_analog_i2c,
         }
     }
 }
@@ -115,6 +125,8 @@ impl<'a, 'b> ClockWords<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>
         Ok(Self {
             lpcon: ModemLpconChipClocks::host(modem_lpcon)?,
             pll_f160m: HpSysClkrstPll160::host(hp_sys_clkrst)?,
+            boot_pll_f160m: false,
+            boot_analog_i2c: false,
         })
     }
 }
@@ -148,10 +160,15 @@ impl<P: Placement, Q: Placement> ClockGates for ClockWords<P, Q> {
     fn set_clock(&mut self, clock: PlatformClock, on: bool) {
         match clock {
             // SOURCE: ESP-IDF 4d80c1b2 `components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h:321-327`.
-            PlatformClock::Pll160m => self.pll_f160m.modify_ref_160m_ctrl0(|w| {
-                w.set_reg_ref_160m_clk_en(on);
-            }),
-            PlatformClock::AnalogI2cMaster => self.lpcon.set_i2c_ana_mst_master_clock(on),
+            PlatformClock::Pll160m => {
+                let on = on || self.boot_pll_f160m;
+                self.pll_f160m.modify_ref_160m_ctrl0(|w| {
+                    w.set_reg_ref_160m_clk_en(on);
+                });
+            }
+            PlatformClock::AnalogI2cMaster => self
+                .lpcon
+                .set_i2c_ana_mst_master_clock(on || self.boot_analog_i2c),
             PlatformClock::ModemCoexistence => self.lpcon.set_coex_function_clock(on),
             PlatformClock::ModemLowPowerTimer => self.lpcon.set_modem_pwr_lp_timer_clock(on),
             // The permanent PSRAM reference remains below every radio reference.
