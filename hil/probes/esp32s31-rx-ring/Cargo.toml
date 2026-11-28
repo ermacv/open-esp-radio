@@ -52,6 +52,9 @@ workspace = true
 [package.metadata.open-radio]
 # The console speaks the HIL protocol: the verdict is `cargo hil run radio-pair`'s.
 console = "hil"
+# The registration's second boot (`tasks/448`): the trace build records
+# the interrupted `ra` a copy's caller is named by.
+instrumentation = ["trace"]
 critical-section-hart = "boot"
 # The PHY engine's poll (`#[hot(1)]`) runs from SRAM.
 hot = 1
