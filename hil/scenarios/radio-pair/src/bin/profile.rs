@@ -3,7 +3,7 @@
 //! pair, named with the image's ELF. It prints one JSON object: the
 //! registration's time, waits and polls, the cache's counts, the sampler's
 //! own share, and the samples split by level, by function (outermost and
-//! innermost inlined), by memory (flash, SRAM, ROM by the chip's map) and
+//! innermost inlined), by memory (internal SRAM, PSRAM, flash, ROM by the chip's map) and
 //! the share inside memory copy entries. Exit 0, or 2 when an input cannot
 //! be read.
 #![forbid(unsafe_code)]
@@ -26,11 +26,15 @@ use serde_json::{Value, json};
 
 /// The most names each table prints.
 const TOP: usize = 40;
-/// The chip's map (`chips/esp32s31/facts/chip.toml` `[memory]`): flash
-/// XIP from `0x4000_0000`, 64 MiB; the ROM from `0x2f80_0000` to
-/// `0x2f85_0000`; the rest the image runs from is SRAM.
-const FLASH: core::ops::Range<u32> = 0x4000_0000..0x4400_0000;
+/// The chip's map (`chips/esp32s31/facts/chip.toml` `[memory]`): the
+/// internal SRAM from `0x2f00_0000`, 512 KiB; the ROM from `0x2f80_0000`
+/// to `0x2f85_0000`; flash XIP from `0x4000_0000`, 64 MiB; PSRAM from
+/// `psram-origin` `0x5000_0000`. The facts give PSRAM's origin only: its
+/// end here is the aperture's next 256 MiB, past any module's PSRAM.
+const SRAM: core::ops::Range<u32> = 0x2f00_0000..0x2f08_0000;
 const ROM: core::ops::Range<u32> = 0x2f80_0000..0x2f85_0000;
+const FLASH: core::ops::Range<u32> = 0x4000_0000..0x4400_0000;
+const PSRAM: core::ops::Range<u32> = 0x5000_0000..0x6000_0000;
 
 fn main() -> ExitCode {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
@@ -157,12 +161,16 @@ fn bump(count: &mut u64) {
 
 /// The memory `pc` runs from.
 fn memory(pc: u32) -> &'static str {
-    if FLASH.contains(&pc) {
+    if SRAM.contains(&pc) {
+        "internal sram"
+    } else if PSRAM.contains(&pc) {
+        "psram"
+    } else if FLASH.contains(&pc) {
         "flash"
     } else if ROM.contains(&pc) {
         "rom"
     } else {
-        "sram"
+        "other"
     }
 }
 
@@ -310,10 +318,13 @@ mod tests {
 
     #[test]
     fn addresses_are_classed_by_the_chip_s_map() {
+        assert_eq!(memory(0x2f00_0000), "internal sram");
+        assert_eq!(memory(0x2f07_fffc), "internal sram");
+        assert_eq!(memory(0x2f80_0010), "rom");
         assert_eq!(memory(0x4000_0000), "flash");
         assert_eq!(memory(0x43ff_fffc), "flash");
-        assert_eq!(memory(0x2f80_0010), "rom");
-        assert_eq!(memory(0x2ff0_0000), "sram");
+        assert_eq!(memory(0x5001_cc00), "psram");
+        assert_eq!(memory(0x2f08_0000), "other");
     }
 
     #[test]
@@ -322,8 +333,8 @@ mod tests {
         let samples = [
             sample(0x4000_0010, 63, None),
             sample(0x4000_0010, 63, None),
-            sample(0x2ff0_0000, 63, Some(0x4000_0011)),
-            sample(0x2ff0_0000, 95, None),
+            sample(0x2f00_1000, 63, Some(0x4000_0011)),
+            sample(0x2f00_1000, 95, None),
         ];
         let places = HashMap::from([
             (
@@ -334,7 +345,7 @@ mod tests {
                 },
             ),
             (
-                0x2ff0_0000,
+                0x2f00_1000,
                 Place {
                     function: "memcpy".to_owned(),
                     inlined: "memcpy".to_owned(),
@@ -355,6 +366,8 @@ mod tests {
         assert_eq!(report["levels"][1]["name"], "radio alarm handler");
         assert_eq!(report["memory"][0]["memory"], "flash");
         assert_eq!(report["memory"][0]["samples"], 2);
+        assert_eq!(report["memory"][1]["memory"], "internal sram");
+        assert_eq!(report["memory"][1]["samples"], 2);
         assert_eq!(report["functions"][0]["name"], "memcpy");
         assert_eq!(report["functions"][0]["samples"], 2);
         assert_eq!(report["copies"]["samples"], 2);
