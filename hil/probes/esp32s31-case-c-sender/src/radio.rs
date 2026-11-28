@@ -30,7 +30,7 @@ use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig, PhyState,
     PhyTargetObserver, PhyTxTargetPowerProfile, RomShortDelay, enable_wifi_rx,
-    executor::wait::{WaitTally, Waited},
+    executor::wait::{Polled, WaitTally, Waited},
     owner::{ChipPhy, PhyHandle, PhyPlace, RfCold, Tracking, tracking_due},
 };
 use oer_hil_services_radio_pair as service;
@@ -64,7 +64,8 @@ pub(crate) type CooperativeTimer<'t> = oer_chips_esp32s31_radio_phy::executor::w
     &'t WaitBook,
 >;
 
-/// The session's waits since it was last read, by kind.
+/// The session's waits and polls of readiness since it was last read, by
+/// kind.
 #[derive(Default)]
 pub(crate) struct WaitBook(core::cell::Cell<service::Waits>);
 
@@ -90,6 +91,19 @@ impl WaitTally for WaitBook {
         wait.count = wait.count.saturating_add(1);
         wait.asked_micros = wait.asked_micros.saturating_add(saturated(asked_micros));
         wait.taken_micros = wait.taken_micros.saturating_add(saturated(taken_micros));
+        self.0.set(waits);
+    }
+    fn polled(&self, kind: Polled, reads: u32, ready: bool, taken_micros: u64) {
+        let mut waits = self.0.get();
+        let poll = match kind {
+            Polled::DcIqReadiness => &mut waits.polls.dc_iq_readiness,
+            Polled::ToneSarReady => &mut waits.polls.tone_sar_ready,
+            Polled::PwdetReady => &mut waits.polls.pwdet_ready,
+        };
+        poll.count = poll.count.saturating_add(1);
+        poll.reads = poll.reads.saturating_add(reads);
+        poll.ready = poll.ready.saturating_add(u32::from(ready));
+        poll.taken_micros = poll.taken_micros.saturating_add(saturated(taken_micros));
         self.0.set(waits);
     }
 }

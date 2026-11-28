@@ -221,6 +221,8 @@ impl WaitTally for Kept {
     fn waited(&self, kind: crate::executor::wait::Waited, asked: u64, taken: u64) {
         self.0.borrow_mut().push((kind, asked, taken));
     }
+    fn polled(&self, _kind: crate::executor::wait::Polled, _reads: u32, _ready: bool, _taken: u64) {
+    }
 }
 
 #[test]

@@ -151,6 +151,12 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         asked_micros: u32::MAX,
         taken_micros: u32::MAX,
     };
+    let poll = ReadinessPoll {
+        count: u32::MAX,
+        reads: u32::MAX,
+        ready: u32::MAX,
+        taken_micros: u32::MAX,
+    };
     let up = BroughtUp::Up {
         station: [u8::MAX; 6],
         ap: [u8::MAX; 6],
@@ -162,6 +168,11 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
             bus_busy: wait,
             engine_retry: wait,
             yields: wait,
+            polls: ReadinessPolls {
+                dc_iq_readiness: poll,
+                tone_sar_ready: poll,
+                pwdet_ready: poll,
+            },
         },
     };
     let hang = HangCounters {

@@ -208,27 +208,71 @@ pub enum Waited {
     Yield,
 }
 
+/// A read of readiness the PHY makes with no wait before it, by what it
+/// reads.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Polled {
+    /// The DC/IQ estimator's ready word.
+    DcIqReadiness,
+    /// A tone conversion's SAR ready word (`PollReady`).
+    ToneSarReady,
+    /// The power detector's SAR ready word, read inside one short settle.
+    PwdetReady,
+}
+
 /// Where a timer's waits are counted: each wait's kind, the time it asked
-/// and the time it took, both in microseconds.
+/// and the time it took, both in microseconds; and each poll of readiness
+/// made with no wait: its kind, how many reads it made, whether it ended
+/// ready, and the time it took.
 pub trait WaitTally {
     /// Whether this tally counts: one that does not reads no clock.
     const COUNTS: bool;
     fn waited(&self, kind: Waited, asked_micros: u64, taken_micros: u64);
+    fn polled(&self, kind: Polled, reads: u32, ready: bool, taken_micros: u64);
 }
 
 /// A tally that counts nothing.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Uncounted;
 
+/// Make one poll of readiness with no wait before it, and tell `timer`'s
+/// tally of it: the reads and readiness `seen` finds in its result, and
+/// the time it took. A poll whose result `seen` does not name is not
+/// counted; a tally that does not count reads no clock.
+pub fn polled<T, R>(
+    timer: &T,
+    kind: Polled,
+    poll: impl FnOnce() -> R,
+    seen: impl FnOnce(&R) -> Option<(u32, bool)>,
+) -> R
+where
+    T: oer_portable_clock::Clock + WaitTally + ?Sized,
+{
+    if !T::COUNTS {
+        return poll();
+    }
+    let start = timer.now();
+    let result = poll();
+    if let Some((reads, ready)) = seen(&result) {
+        let taken = timer.now().saturating_duration_since(start).as_micros();
+        timer.polled(kind, reads, ready, taken);
+    }
+    result
+}
+
 impl WaitTally for Uncounted {
     const COUNTS: bool = false;
     fn waited(&self, _kind: Waited, _asked_micros: u64, _taken_micros: u64) {}
+    fn polled(&self, _kind: Polled, _reads: u32, _ready: bool, _taken_micros: u64) {}
 }
 
 impl<W: WaitTally + ?Sized> WaitTally for &W {
     const COUNTS: bool = W::COUNTS;
     fn waited(&self, kind: Waited, asked_micros: u64, taken_micros: u64) {
         (**self).waited(kind, asked_micros, taken_micros);
+    }
+    fn polled(&self, kind: Polled, reads: u32, ready: bool, taken_micros: u64) {
+        (**self).polled(kind, reads, ready, taken_micros);
     }
 }
 
@@ -277,6 +321,9 @@ impl<T: ?Sized, K, W: WaitTally> WaitTally for PhyTimer<'_, T, K, W> {
     const COUNTS: bool = W::COUNTS;
     fn waited(&self, kind: Waited, asked_micros: u64, taken_micros: u64) {
         self.tally.waited(kind, asked_micros, taken_micros);
+    }
+    fn polled(&self, kind: Polled, reads: u32, ready: bool, taken_micros: u64) {
+        self.tally.polled(kind, reads, ready, taken_micros);
     }
 }
 

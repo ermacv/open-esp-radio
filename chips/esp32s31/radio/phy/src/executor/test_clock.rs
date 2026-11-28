@@ -62,6 +62,8 @@ pub(crate) fn sample_at(now: Instant) -> u32 {
 impl<const N: usize> crate::executor::wait::WaitTally for VirtualClock<N> {
     const COUNTS: bool = false;
     fn waited(&self, _kind: crate::executor::wait::Waited, _asked: u64, _taken: u64) {}
+    fn polled(&self, _kind: crate::executor::wait::Polled, _reads: u32, _ready: bool, _taken: u64) {
+    }
 }
 impl<const N: usize> oer_portable_cooperate::CooperativeTimer for VirtualClock<N> {
     fn should_yield(&self) -> bool {
