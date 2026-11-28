@@ -88,16 +88,11 @@ type Ring = RxRing<RingRx, BYTES, RING, WifiRxDmaRegisters>;
 type Parts = RxRingParts<RingRx, BYTES, RING, WifiRxDmaRegisters>;
 static RING_PLACE: static_cell::StaticCell<MaybeUninit<Ring>> = static_cell::StaticCell::new();
 
-use crate::phy_pilot;
-
 oer_chips_family_platform_interrupt_table::interrupt_table! {
     lines: oer_chips_family_platform_runtime::interrupts::LINES,
     handler_attributes: [];
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
     wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
-    // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:
-    // only P2 line17 before16 is measured on S31.
-    phy: PhyToken = oer_chips_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
     radio: RadioToken = FromCpu2Irq => oer_chips_family_platform_executor::Round<RadioTasks>, line 17, context radio_exec, hart 0, Executor;
     radio_alarm: RadioAlarm = SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
@@ -136,7 +131,6 @@ fn main(
             reset_cause,
             runtime_efuse,
             runtime_radio,
-            runtime_timg0_alarm,
             runtime_clocks,
             runtime_system_timer,
             runtime_wifi_interrupts,
@@ -166,7 +160,6 @@ fn main(
                 reset_causes.of(oer_chips_esp32s31_hal::system::platform::BOOT_HART),
                 hardware.efuse,
                 hardware.radio,
-                hardware.timg0_alarm,
                 hardware.clocks,
                 hardware.system_timer,
                 hardware.wifi_interrupts,
@@ -199,8 +192,6 @@ fn main(
             let _owners = failure;
             oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault)
         });
-    let power_detector =
-        crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
     let timer = runtime_system_timer;
     let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
@@ -239,7 +230,6 @@ fn main(
         clocks: runtime_clocks,
         wifi: partitions.wifi,
         coex: partitions.wifi_coex,
-        power_detector,
         phy: partitions.phy,
         identity,
         mac_irq: wifi_irqs.mac,
@@ -986,13 +976,11 @@ async fn track_now(
     open: RfOpen,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
-    power_detector: &mut phy_pilot::Client,
 ) -> Result<(RfOpen, u32, service::Conversions), Failure> {
     let mut tally = ConversionTally::default();
     phy.set_calibration_threshold(CalibrationThreshold::Diagnostic(0));
     let began = timer.now();
-    let tracked =
-        crate::radio::track(slot, phy, open, timer, platform, power_detector, &mut tally).await;
+    let tracked = crate::radio::track(slot, phy, open, timer, platform, &mut tally).await;
     let track_micros = crate::radio::micros_between(began, timer.now());
     phy.set_calibration_threshold(CalibrationThreshold::Vendor);
     Ok((tracked?, track_micros, tally.conversions()))
@@ -1145,7 +1133,6 @@ async fn worker(
             open,
             register_micros,
             waits,
-            power_detector,
             mut clocked,
             first,
             mut walker,
@@ -1192,7 +1179,7 @@ async fn worker(
         );
         Ok((
             slot,
-            (phy, open, register_micros, waits, power_detector),
+            (phy, open, register_micros, waits),
             access,
             clocks_on,
             ring,
@@ -1210,7 +1197,7 @@ async fn worker(
     };
     let (
         mut slot,
-        (mut phy, open, register_micros, waits, mut power_detector),
+        (mut phy, open, register_micros, waits),
         access,
         clocks_on,
         ring,
@@ -1434,8 +1421,7 @@ async fn worker(
                             turns.phy,
                             open,
                             &timer,
-                            &mut platform,
-                            &mut power_detector
+                            &mut platform
                         ))
                         .map(|open| {
                             (
@@ -1461,8 +1447,7 @@ async fn worker(
                             turns.phy,
                             open,
                             &timer,
-                            &mut platform,
-                            &mut power_detector
+                            &mut platform
                         ))
                         .map(|(open, track_micros, conversions)| {
                             (

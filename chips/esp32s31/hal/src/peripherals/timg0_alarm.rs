@@ -1,10 +1,9 @@
 //! TIMG0 T0's relative one-shot alarm with disjoint program and IRQ owners.
-//! The actor moves the program owner in its transaction bundle; the handler
-//! retains the interrupt owner for the image's lifetime. No state or lock is shared.
+//! No state or lock is shared between them.
 //!
 //! Runtime startup selects/enables XTAL through the watchdog's retained
 //! clock/reset word. Adopting these parts performs no hardware writes.
-//! The SAR/PWDET pilot and the host composition fixture select P2
+//! The host composition fixture selects P2
 //! `Exempt(ExecutorLevel)` and a lower line ID than FROM_CPU2. Its arbitration
 //! interpretation follows the family CLIC contract:
 //! SOURCE: chips/family/facts/layers/family.toml [interrupts], RISC-V CLIC

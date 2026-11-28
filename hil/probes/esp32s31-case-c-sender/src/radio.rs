@@ -41,8 +41,6 @@ use oer_portable_memory::arena::Brand;
 use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 
-use crate::phy_pilot;
-
 /// The stand's busy channel, 20 MHz.
 pub(crate) const CHANNEL: u8 = 13;
 /// The channel's lowered width: the PHY's channel-or-frequency argument by
@@ -123,7 +121,6 @@ pub(crate) struct SessionParts {
     pub(crate) coex: oer_chips_esp32s31_hal::radio::domain::CoexAbsent<
         oer_chips_esp32s31_hal::radio::domain::WifiClient,
     >,
-    pub(crate) power_detector: phy_pilot::Client,
     /// The right to the PHY's one state place.
     pub(crate) phy: PhyStateRight,
     pub(crate) identity: PhyCalibrationIdentity,
@@ -247,21 +244,11 @@ pub(crate) async fn track_if_due(
     open: RfOpen,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
-    power_detector: &mut phy_pilot::Client,
 ) -> Result<RfOpen, Failure> {
     if let Tracking::NotBefore(_) = tracking_due(phy.state(), timer.now()) {
         return Ok(open);
     }
-    track(
-        slot,
-        phy,
-        open,
-        timer,
-        platform,
-        power_detector,
-        NoopPhyTargetObserver,
-    )
-    .await
+    track(slot, phy, open, timer, platform, NoopPhyTargetObserver).await
 }
 
 /// The PHY's tracking pass over the radio in `slot`, observed by `observer`.
@@ -271,22 +258,15 @@ pub(crate) async fn track(
     open: RfOpen,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
-    power_detector: &mut phy_pilot::Client,
     observer: impl PhyTargetObserver,
 ) -> Result<RfOpen, Failure> {
     let radio = slot.take().ok_or((phase::MAINTAIN, 1))?;
-    let mut operation =
-        core::pin::pin!(
-            oer_chips_esp32s31_radio_phy::track::<_, (), RomShortDelay, _>(
-                timer,
-                radio,
-                phy,
-                open,
-                platform,
-                observer,
-                power_detector,
-            )
-        );
+    let mut operation = core::pin::pin!(oer_chips_esp32s31_radio_phy::track::<
+        _,
+        (),
+        RomShortDelay,
+        _,
+    >(timer, radio, phy, open, platform, observer,));
     let mut completion = MaybeUninit::uninit();
     let (returned, result) = oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
         .await
@@ -366,8 +346,6 @@ pub(crate) struct Brought<'p> {
     pub(crate) register_micros: u32,
     /// The registration's waits, by kind.
     pub(crate) waits: service::Waits,
-    /// The power detector's conversion, which a tracking pass takes.
-    pub(crate) power_detector: phy_pilot::Client,
     pub(crate) clocked: WifiClocked,
     pub(crate) first: MacFirstReset,
     pub(crate) walker: WifiRxDmaRegisters,
@@ -394,7 +372,6 @@ pub(crate) async fn bring_up<'p>(
         clocks,
         wifi,
         coex,
-        mut power_detector,
         phy: right,
         identity,
         mac_irq,
@@ -429,14 +406,7 @@ pub(crate) async fn bring_up<'p>(
     clocked
         .set_initialized(radio, WifiInitialization::Initialized)
         .map_err(|_| (phase::INITIALIZED, 0))?;
-    let open = apart!(track_if_due(
-        &mut slot,
-        &mut phy,
-        open,
-        timer,
-        platform,
-        &mut power_detector
-    ))?;
+    let open = apart!(track_if_due(&mut slot, &mut phy, open, timer, platform,))?;
     enable_wifi_rx(held(&mut slot)?, &open);
     let channel =
         Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20).map_err(|_| (phase::CHANNEL, 0))?;
@@ -491,7 +461,6 @@ pub(crate) async fn bring_up<'p>(
         open,
         register_micros,
         waits,
-        power_detector,
         clocked,
         first,
         walker,

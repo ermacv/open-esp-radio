@@ -4735,8 +4735,8 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/phy/restore.rs", 371, PHY_DRIVER),
     ("radio/phy/temperature.rs", 171, PHY_DRIVER),
     ("radio/phy/temperature/", 79, PHY_DRIVER),
-    ("radio/domain/transaction.rs", 490, PHY_DRIVER),
-    ("radio/domain/transaction/", 321, PHY_DRIVER),
+    ("radio/domain/transaction.rs", 414, PHY_DRIVER),
+    ("radio/domain/transaction/", 142, PHY_DRIVER),
 ];
 
 /// Directories below the HAL's sources whose every production file is an
@@ -6638,21 +6638,6 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
         BY_EXCEPTION_PATH,
     ),
     (
-        "chips/esp32s31/radio/phy/src/sar_pilot.rs::_new",
-        1,
-        BY_PHY_PROGRAMS,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/sar_pilot.rs::_stale",
-        1,
-        BY_PHY_PROGRAMS,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/target_port/owner.rs::_quarantined",
-        1,
-        BY_PHY_PROGRAMS,
-    ),
-    (
         "chips/family/drivers/usb-serial-jtag/src/ownership.rs::_dropped",
         1,
         BY_UNOWNED_ROWS,
@@ -6877,7 +6862,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/hal/src/radio/domain.rs", 4, BY_PHY_OWNER),
     (
         "chips/esp32s31/hal/src/radio/domain/transaction.rs",
-        9,
+        8,
         BY_PHY_OWNER,
     ),
     (
@@ -6889,11 +6874,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
         12,
         BY_TRANSMIT,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/target_port/owner.rs",
-        1,
-        BY_PHY_PROGRAMS,
     ),
     ("chips/family/platform/executor/src/executor.rs", 2, BY_PUMP),
     ("chips/family/platform/executor/src/fault.rs", 5, BY_PUMP),

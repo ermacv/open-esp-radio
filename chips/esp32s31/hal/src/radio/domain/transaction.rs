@@ -57,50 +57,6 @@ pub enum FaultReason {
     IdentityClaimed,
     ModemClockIdentityExhausted,
     OwnerUnavailable,
-    SarTransfer {
-        operation: Operation,
-        fault: SarTransferFault,
-    },
-    SarSetup(SarSetupFault),
-    SarAlarmWithoutBundle(SarAlarmWithoutBundle),
-}
-
-/// Failed SAR custody edge, retaining the source observation in session RAM.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SarTransferFault {
-    RequestOccupied {
-        queued: usize,
-    },
-    ProgramUnavailable,
-    InvalidDelay {
-        requested: oer_portable_time::Duration,
-    },
-    ReplyOccupied {
-        queued: usize,
-    },
-    ForeignSignal,
-    ForeignReunion {
-        expected_owner: usize,
-        received_owner: usize,
-    },
-}
-/// A sampled T0 event despite startup/completion having stopped delivery.
-/// The image retains all owners and records this terminal reason.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SarAlarmWithoutBundle {
-    pub observation: crate::peripherals::timg0_alarm::Observation,
-    pub requests: usize,
-    pub replies: usize,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SarSetupFault {
-    Storage(SarSetupStorage),
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SarSetupStorage {
-    Cells,
-    State,
-    Handler,
 }
 
 /// Original observations retained on cancellation. No register is reclaimed.
@@ -258,43 +214,7 @@ pub struct PhyTransaction {
     guard: Guard,
     payload: ManuallyDrop<Payload>,
 }
-/// Reporter confined to a SAR custody transfer; it grants no owner access.
-#[derive(Clone, Copy)]
-pub struct SarTransferReporter {
-    seat: &'static TransactionSeat,
-    operation: Operation,
-    registration: Option<PhyRegistrationEpoch>,
-}
-impl SarTransferReporter {
-    pub fn quarantine(self, fault: SarTransferFault) -> ! {
-        self.seat.quarantine(Fault {
-            reason: FaultReason::SarTransfer {
-                operation: self.operation,
-                fault,
-            },
-            registration: self.registration,
-        })
-    }
-}
 impl PhyTransaction {
-    pub fn sar_transfer_reporter(&self) -> SarTransferReporter {
-        SarTransferReporter {
-            seat: self.guard.seat,
-            operation: self.guard.operation,
-            registration: self.guard.registration,
-        }
-    }
-    /// Retain this transfer's owners and report the exact failed custody edge.
-    pub fn quarantine_sar_transfer(self, fault: SarTransferFault) -> ! {
-        let held = ManuallyDrop::new(self);
-        held.guard.seat.quarantine(Fault {
-            reason: FaultReason::SarTransfer {
-                operation: held.guard.operation,
-                fault,
-            },
-            registration: held.guard.registration,
-        })
-    }
     pub fn hardware_mut(&mut self) -> &mut PhyHardware {
         &mut self.payload.hardware
     }
@@ -379,6 +299,10 @@ impl<B: PlatformClockBackend> RadioTransaction<B> {
     }
     pub fn hardware_and_grant(&mut self) -> (&mut PhyHardware, PhyGrantProtect<'_>) {
         self.phy.hardware_and_grant()
+    }
+    /// The PHY's half, lent for the operation's length.
+    pub fn phy_mut(&mut self) -> &mut PhyTransaction {
+        &mut self.phy
     }
 }
 

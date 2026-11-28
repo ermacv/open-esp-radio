@@ -46,8 +46,6 @@ mod image;
 #[path = "../../esp32s31-case-c-sender/src/pair.rs"]
 mod pair;
 #[cfg(target_arch = "riscv32")]
-#[path = "../../esp32s31-case-c-sender/src/phy_pilot.rs"]
-mod phy_pilot;
 #[cfg(target_arch = "riscv32")]
 #[path = "../../esp32s31-case-c-sender/src/radio.rs"]
 mod radio;

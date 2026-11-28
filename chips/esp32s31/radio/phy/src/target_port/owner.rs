@@ -457,7 +457,6 @@ pub fn track<'a, B: PlatformClockBackend + 'a, P, D, O>(
     open: RfOpen,
     platform: &'a mut P,
     observer: O,
-    power_detector: &'a mut impl crate::sar_pilot::Service,
 ) -> impl core::future::Future<
     Output = (
         RadioDomain<B>,
@@ -468,20 +467,15 @@ where
     D: PhyShortDelay + 'a,
     O: PhyTargetObserver + 'a,
 {
-    let initial = radio.detach(Operation::Maintain);
+    let mut transaction = radio.detach(Operation::Maintain);
     async move {
-        let radio = initial.reunite();
-        let fault = radio.fault_handle();
-        let initial = radio.detach(Operation::Maintain);
         let mut tracking = PhyParamTrackingTransition::new(
             crate::tracking::parameters::PhyParamTrackingPolicy::for_registered_state(phy.state()),
         );
-        let (returned, registers) = initial.split();
-        let mut physical = crate::sar_pilot::Physical::new(registers, power_detector, fault);
         let result = {
-            let mut port = TargetPhyParamTrackingPort::<_, _, D, _, _>::new(
+            let mut port = TargetPhyParamTrackingPort::<_, D, _, _>::new(
                 platform,
-                &mut physical,
+                transaction.phy_mut(),
                 timer,
                 observer,
             );
@@ -493,20 +487,7 @@ where
             .await
             .map_err(TargetPhyParamTrackingError::Run)
         };
-        let registers = physical.finish();
-        let radio = match returned.reunite(registers) {
-            Ok(radio) => radio,
-            Err(refused) => {
-                let held = core::mem::ManuallyDrop::new(refused.domain);
-                let _quarantined = held;
-                refused.transaction.quarantine_sar_transfer(
-                    oer_chips_esp32s31_hal::radio::domain::transaction::SarTransferFault::ForeignReunion {
-                        expected_owner: refused.expected_owner,
-                        received_owner: refused.received_owner,
-                    },
-                );
-            }
-        };
+        let radio = transaction.reunite();
         let result = match result {
             Ok(outcome) => {
                 phy.state_mut()

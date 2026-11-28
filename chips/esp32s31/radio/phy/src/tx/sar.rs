@@ -1,12 +1,19 @@
-//! One SAR/PWDET conversion, advanced by timer events with short I/O loans.
-use oer_portable_clock::Clock;
-use oer_portable_time::{Duration, Instant};
+//! One SAR/PWDET conversion, in the task of its caller, lent the registers.
+use crate::executor::wait::{Kind, PhyShortDelay, WaitTally, delay};
+use oer_portable_clock::Timer;
+use oer_portable_settle::SettleCounter;
+use oer_portable_time::Duration;
 
 // MEASUREMENT: s31-a run 1792521908966-002e2465, 21,512 conversions,
 // 100 forced tracking ticks, post-2-us-settle ready observations <= 20 us.
 // Twice that maximum bounds only not-ready samples, never late ready samples.
 pub(crate) const READY_LIMIT: Duration = Duration::from_micros(40);
-const SAMPLE_INTERVAL: Duration = Duration::from_micros(1);
+const SAMPLE_INTERVAL_MICROS: u64 = 1;
+const ARM_SETTLE_MICROS: u64 = 1;
+const TRIGGER_SETTLE_MICROS: u64 = 2;
+/// The two settles and the readiness bound.
+const BOUND: Duration =
+    Duration::from_micros(ARM_SETTLE_MICROS + TRIGGER_SETTLE_MICROS + READY_LIMIT.as_micros());
 
 pub(crate) trait Io {
     fn arm_tone(&mut self);
@@ -32,140 +39,79 @@ pub enum Error {
     NotReady(Readiness),
     DeadlineOverflow,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum State {
-    Arm,
-    Trigger(Instant),
-    Observe {
-        at: Instant,
-        started: Instant,
-        deadline: Instant,
-    },
-    Complete(Result<Sample, Error>),
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Event {
-    Wait { at: Instant, delay: Duration },
-    Complete(Result<Sample, Error>),
+/// One conversion, lent the registers it reads and the timer of its task:
+/// the tone armed, a named settle of at least 1 µs, the SAR triggered, a
+/// named settle of at least 2 µs, then readiness read and, while it is not
+/// ready and the bound of [`READY_LIMIT`] from the second settle's end is
+/// not past, a wait of 1 µs on the timer before the next read. Each read is
+/// made before the bound is compared, so a late wake that finds the
+/// conversion finished succeeds; an unready end reads no result.
+///
+/// SOURCE: rev0 ROM `phy_pwdet_tone_start`: tone arm, minimum 1 µs, SAR
+/// trigger, minimum 2 µs, ready observation, optional clear, result read.
+/// HW17 (`research/hw-sar-hold.md`) qualifies retained ready/result
+/// through 100 µs, so a read later than readiness loses nothing.
+///
+/// # Errors
+///
+/// [`Error::NotReady`] at the bound, with what was observed;
+/// [`Error::DeadlineOverflow`] before any edge when the bound is past the
+/// timer's range.
+#[cfg(any(target_arch = "riscv32", test))]
+pub(crate) async fn convert<D: PhyShortDelay, T: Timer + SettleCounter + WaitTally + ?Sized>(
+    io: &mut impl Io,
+    timer: &T,
+    clear_tone: bool,
+) -> Result<Sample, Error> {
+    // The whole bound is checked before the first edge.
+    if timer.now().checked_add(BOUND).is_none() {
+        return Err(Error::DeadlineOverflow);
+    }
+    io.arm_tone();
+    settle::<D, T>(timer, ARM_SETTLE_MICROS).await?;
+    io.trigger();
+    settle::<D, T>(timer, TRIGGER_SETTLE_MICROS).await?;
+    let started = timer.now();
+    let deadline = started
+        .checked_add(READY_LIMIT)
+        .ok_or(Error::DeadlineOverflow)?;
+    let mut observations = 0_u16;
+    loop {
+        // `now` precedes this read: a wake after it must not expire a
+        // conversion the read had not yet seen finish.
+        let now = timer.now();
+        let ready = io.ready();
+        observations = observations.saturating_add(1);
+        let readiness = Readiness {
+            elapsed_micros: timer.now().saturating_duration_since(started).as_micros(),
+            observations,
+            ready,
+        };
+        if ready {
+            if clear_tone {
+                io.clear_tone();
+            }
+            let value = io.sample();
+            return Ok(Sample { value, readiness });
+        }
+        if now >= deadline {
+            return Err(Error::NotReady(readiness));
+        }
+        delay::<D, T>(timer, Kind::Completion, SAMPLE_INTERVAL_MICROS)
+            .await
+            .map_err(|_| Error::DeadlineOverflow)?;
+    }
 }
 
-/// SOURCE: rev0 ROM `phy_pwdet_tone_start`: tone arm, minimum 1 us,
-/// SAR trigger, minimum 2 us, ready observation, optional clear, result read.
-/// Each event executes at most one bounded atom. Edge events return a fresh
-/// relative minimum interval; the driver arms it without subtracting a clock.
-/// HW17 (`research/hw-sar-hold.md`) qualifies retained
-/// ready/result through 100 us. A ready sample succeeds even after the limit;
-/// an unready sample then fails without consuming invalid data.
-pub(crate) struct Engine {
-    state: State,
-    clear_tone: bool,
-    observations: u16,
-}
-impl Engine {
-    pub(crate) const fn new(clear_tone: bool) -> Self {
-        Self {
-            state: State::Arm,
-            clear_tone,
-            observations: 0,
-        }
-    }
-    pub(crate) fn advance(&mut self, clock: &impl Clock, io: &mut impl Io) -> Event {
-        let now = clock.now();
-        match self.state {
-            State::Arm => {
-                let Some(_) = now.checked_add(SAMPLE_INTERVAL) else {
-                    return self.complete(Err(Error::DeadlineOverflow));
-                };
-                io.arm_tone();
-                let Some(at) = clock.now().checked_add(SAMPLE_INTERVAL) else {
-                    return self.complete(Err(Error::DeadlineOverflow));
-                };
-                self.state = State::Trigger(at);
-                Event::Wait {
-                    at,
-                    delay: SAMPLE_INTERVAL,
-                }
-            }
-            State::Trigger(at) if now < at => Event::Wait {
-                at,
-                delay: Duration::from_micros(
-                    at.saturating_duration_since(now)
-                        .as_micros()
-                        .saturating_add(1),
-                ),
-            },
-            State::Trigger(_) => {
-                let Some(at) = now.checked_add(Duration::from_micros(2)) else {
-                    return self.complete(Err(Error::DeadlineOverflow));
-                };
-                let Some(_) = at.checked_add(READY_LIMIT) else {
-                    return self.complete(Err(Error::DeadlineOverflow));
-                };
-                io.trigger();
-                let Some(at) = clock.now().checked_add(Duration::from_micros(2)) else {
-                    return self.complete(Err(Error::DeadlineOverflow));
-                };
-                let Some(deadline) = at.checked_add(READY_LIMIT) else {
-                    return self.complete(Err(Error::DeadlineOverflow));
-                };
-                self.state = State::Observe {
-                    at,
-                    started: at,
-                    deadline,
-                };
-                Event::Wait {
-                    at,
-                    delay: Duration::from_micros(2),
-                }
-            }
-            State::Observe { at, .. } if now < at => Event::Wait {
-                at,
-                delay: Duration::from_micros(
-                    at.saturating_duration_since(now)
-                        .as_micros()
-                        .saturating_add(1),
-                ),
-            },
-            State::Observe {
-                started, deadline, ..
-            } => {
-                // `now` precedes this read: a handler running after it must
-                // not expire a conversion the read had not yet seen finish.
-                let ready = io.ready();
-                self.observations = self.observations.saturating_add(1);
-                let readiness = Readiness {
-                    elapsed_micros: clock.now().saturating_duration_since(started).as_micros(),
-                    observations: self.observations,
-                    ready,
-                };
-                if ready {
-                    if self.clear_tone {
-                        io.clear_tone();
-                    }
-                    let value = io.sample();
-                    self.complete(Ok(Sample { value, readiness }))
-                } else if now >= deadline {
-                    self.complete(Err(Error::NotReady(readiness)))
-                } else {
-                    let at = clock.now().saturating_add(SAMPLE_INTERVAL).min(deadline);
-                    self.state = State::Observe {
-                        at,
-                        started,
-                        deadline,
-                    };
-                    Event::Wait {
-                        at,
-                        delay: SAMPLE_INTERVAL,
-                    }
-                }
-            }
-            State::Complete(result) => Event::Complete(result),
-        }
-    }
-    fn complete(&mut self, result: Result<Sample, Error>) -> Event {
-        self.state = State::Complete(result);
-        Event::Complete(result)
-    }
+/// A named settle of `micros`, which `D` completes synchronously.
+#[cfg(any(target_arch = "riscv32", test))]
+async fn settle<D: PhyShortDelay, T: Timer + SettleCounter + WaitTally + ?Sized>(
+    timer: &T,
+    micros: u64,
+) -> Result<(), Error> {
+    delay::<D, T>(timer, Kind::Settle, micros)
+        .await
+        .map_err(|_| Error::DeadlineOverflow)
 }
 
 #[cfg(target_arch = "riscv32")]

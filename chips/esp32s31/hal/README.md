@@ -149,12 +149,7 @@ SOURCE: `HW23_S31_TIMG0_RELOAD_20261027`,
 `HW23_S31_TIMG0_COMPARATOR_20261027` and `HW7_S31_TIMG0_20261026` in
 `registers/evidence/`: LOAD strobes reset both counter halves; rearm retains
 pending. These facts do not establish exact comparator or IRQ latency.
-The SAR/PWDET composition uses a permanent P2 `Exempt(ExecutorLevel)`
-handler on line 16 below FROM_CPU2 line 17. Startup masks and clears stale
-RAW; the actor arms before transferring the bundle and the handler acknowledges
-before each step. Completion stops/masks before returning custody.
-SOURCE: `HW23_S31_P2_ARBITRATION_20261027` qualifies only hart0 P2
-line17-before16 pair; other pairs, levels and sustained fairness are unqualified.
+No image binds the alarm's interrupt today.
 
 ## Platform clocks
 
