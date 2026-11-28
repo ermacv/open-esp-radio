@@ -161,17 +161,17 @@ impl<P: Placement, Q: Placement> ClockGates for ClockWords<P, Q> {
         match clock {
             // SOURCE: ESP-IDF 4d80c1b2 `components/esp_hal_clock/esp32s31/include/hal/clk_gate_ll.h:321-327`.
             PlatformClock::Pll160m => {
-                // Run A (`tasks/450`): the 160 MHz gate closes at the last
-                // release; the analog-I2C master's clock stays as the boot
-                // left it.
-                let _ = self.boot_pll_f160m;
+                // Run B (`tasks/450`): the 160 MHz gate stays as the boot
+                // left it; the analog-I2C master's clock closes at the last
+                // release.
+                let on = on || self.boot_pll_f160m;
                 self.pll_f160m.modify_ref_160m_ctrl0(|w| {
                     w.set_reg_ref_160m_clk_en(on);
                 });
             }
             PlatformClock::AnalogI2cMaster => self
                 .lpcon
-                .set_i2c_ana_mst_master_clock(on || self.boot_analog_i2c),
+                .set_i2c_ana_mst_master_clock(on || (self.boot_analog_i2c && false)),
             PlatformClock::ModemCoexistence => self.lpcon.set_coex_function_clock(on),
             PlatformClock::ModemLowPowerTimer => self.lpcon.set_modem_pwr_lp_timer_clock(on),
             // The permanent PSRAM reference remains below every radio reference.
