@@ -42,12 +42,12 @@ pub(crate) trait Registers {
 }
 pub(super) enum Io<'a> {
     #[cfg(target_arch = "riscv32")]
-    Shared(&'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardware),
+    Shared(oer_chips_esp32s31_hal::radio::domain::PhyHardware<'a>),
     #[cfg(test)]
     Test(&'a mut super::tests::Io),
 }
 #[cfg(target_arch = "riscv32")]
-impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardware {
+impl Registers for oer_chips_esp32s31_hal::radio::domain::PhyHardware<'_> {
     fn advance<
         D: super::super::wait::PhyShortDelay,
         C: oer_portable_clock::Clock + oer_portable_settle::SettleCounter,
@@ -57,7 +57,7 @@ impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardwa
         clock: &C,
         now: Instant,
     ) -> Step {
-        job.advance_one::<D, _>(Io::Shared(self), clock, now)
+        job.advance_one::<D, _>(Io::Shared(self.reborrow()), clock, now)
     }
     fn advance_power<
         D: super::super::wait::PhyShortDelay,
@@ -70,8 +70,15 @@ impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardwa
         clock: &C,
         measured: bool,
     ) -> Step {
-        super::power::advance::<D, _>(&mut Io::Shared(self), child, gain, action, clock, measured)
-            .unwrap_or_else(Step::Failure)
+        super::power::advance::<D, _>(
+            &mut Io::Shared(self.reborrow()),
+            child,
+            gain,
+            action,
+            clock,
+            measured,
+        )
+        .unwrap_or_else(Step::Failure)
     }
     fn rfpll_atom<
         D: super::super::wait::PhyShortDelay,
@@ -81,10 +88,10 @@ impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardwa
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
     ) -> Result<crate::analog::rfpll::RfpllFrequencyCompletion, Failure> {
-        Io::Shared(self).rfpll_frequency::<D, _>(clock, binding)
+        Io::Shared(self.reborrow()).rfpll_frequency::<D, _>(clock, binding)
     }
     fn i2c_status(&mut self) -> u8 {
-        Io::Shared(self).i2c_status()
+        Io::Shared(self.reborrow()).i2c_status()
     }
 }
 
@@ -147,7 +154,7 @@ impl Io<'_> {
         let _ = (clock, binding);
         let result = match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => apply::<D, _>(clock, *registers, binding),
+            Self::Shared(registers) => apply::<D, _>(clock, registers, binding),
             #[cfg(test)]
             Self::Test(..) => Err(Failure::Binding),
         }?;
@@ -196,9 +203,7 @@ impl Io<'_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => Ok(
-                oer_chips_esp32s31_hal::radio::phy::memory::read_table_memory_base_index(
-                    *registers,
-                ),
+                oer_chips_esp32s31_hal::radio::phy::memory::read_table_memory_base_index(registers),
             ),
             #[cfg(test)]
             Self::Test(io) => io.power_gain_base(action),
@@ -209,9 +214,7 @@ impl Io<'_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => Ok(
-                oer_chips_esp32s31_hal::radio::phy::memory::read_table_memory_base_index(
-                    *registers,
-                ),
+                oer_chips_esp32s31_hal::radio::phy::memory::read_table_memory_base_index(registers),
             ),
             #[cfg(test)]
             Self::Test(io) => io.channel_gain_base(),
@@ -226,7 +229,7 @@ impl Io<'_> {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => {
                 oer_chips_esp32s31_hal::radio::phy::memory::program_gain_memory_entry(
-                    *registers, entry,
+                    registers, entry,
                 );
                 Ok(())
             }
@@ -241,7 +244,7 @@ impl Io<'_> {
     ) -> Result<crate::tracking::power::PhyTxPowerTrackingCompletion, Failure> {
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => Ok(binding.execute_target(*registers)),
+            Self::Shared(registers) => Ok(binding.execute_target(registers)),
             #[cfg(test)]
             Self::Test(io) => io.power(binding),
         }
@@ -287,7 +290,7 @@ impl Io<'_> {
                     return Ok(Completion::ChannelReadyTimedOut);
                 }
                 Ok(match self {
-                    Self::Shared(registers) => binding.execute_target(*registers),
+                    Self::Shared(registers) => binding.execute_target(registers),
                     #[cfg(test)]
                     Self::Test(..) => return Err(Failure::Binding),
                 })
@@ -498,7 +501,7 @@ impl Io<'_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => {
-                crate::target_port::rfpll::complete_memory(*registers, action)
+                crate::target_port::rfpll::complete_memory(registers, action)
                     .map_err(Failure::Target)
             }
             #[cfg(test)]
@@ -524,7 +527,7 @@ impl Io<'_> {
         }
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => sample(*registers),
+            Self::Shared(registers) => sample(registers),
             #[cfg(test)]
             Self::Test(io) => Registers::i2c_status(*io),
         }
@@ -555,7 +558,7 @@ impl Io<'_> {
         }
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => apply(*registers, transaction, start),
+            Self::Shared(registers) => apply(registers, transaction, start),
             #[cfg(test)]
             Self::Test(io) => {
                 if start {
@@ -596,7 +599,7 @@ impl Io<'_> {
         }
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => apply(*registers, binding, start),
+            Self::Shared(registers) => apply(registers, binding, start),
             #[cfg(test)]
             Self::Test(io) => {
                 if start {
@@ -612,7 +615,7 @@ impl Io<'_> {
         match self {
             #[cfg(target_arch = "riscv32")]
             Self::Shared(registers) => {
-                oer_chips_esp32s31_hal::radio::phy::temperature::read_code(*registers)
+                oer_chips_esp32s31_hal::radio::phy::temperature::read_code(registers)
             }
             #[cfg(test)]
             Self::Test(io) => io.temperature_code(),
@@ -650,7 +653,7 @@ impl Io<'_> {
         }
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => apply(*registers, counter, work_mode),
+            Self::Shared(registers) => apply(registers, counter, work_mode),
             #[cfg(test)]
             Self::Test(io) => {
                 let _ = counter;

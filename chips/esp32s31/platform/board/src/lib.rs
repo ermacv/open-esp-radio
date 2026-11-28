@@ -49,7 +49,7 @@ pub const fn wifi_power_limits(
 ///     root.into_runtime(),
 ///     InterruptTable,
 ///     BootstrapPsram,
-///     oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
+///     || {},
 ///     core::convert::identity,
 /// ) {
 ///     Ok(adopted) => adopted,

@@ -1,26 +1,33 @@
-//! The PHY's one owner: its state's place, the registered handle and the
-//! proofs of RF open and closed.
+//! The PHY's one owner: its state's place, the handle of the filled place
+//! and the proofs of RF.
 //!
 //! Its owner makes the place of the PHY's state ([`PhyPlace`]) from the one
 //! right the radio's split hands out ([`PhyStateRight`]) and memory of its
-//! own. A registration fills it and returns [`RegisteredPhy`], the handle of
-//! the filled place, with [`RfOpen`]. The close takes `RfOpen` and gives
-//! [`RfClosed`]; the wake takes `RfClosed` and gives `RfOpen`. The channel
-//! and a tracking pass take `RfOpen` and give it back. Neither proof is
-//! `Copy` nor `Clone`, and only the operations' ends make them.
+//! own, and fills it at once: [`PhyPlace::fill`] gives the handle
+//! ([`PhyHandle`]) and the proof that RF is cold ([`RfCold`]). The handle
+//! stays with the owner for good; what an operation takes is a proof. A
+//! registration is lent the handle and takes `RfCold`, and gives
+//! [`RfOpen`]; the close takes `RfOpen` and gives [`RfClosed`]; the wake
+//! takes `RfClosed` and gives `RfOpen`; the channel and a tracking pass take
+//! `RfOpen` and give it back. No proof is `Copy` nor `Clone`, and only the
+//! operations' ends and the fill make them.
 //!
-//! ```compile_fail
+//! Every right, place, handle and proof carries the PHY's brand `P`, so a
+//! proof of one PHY cannot serve another's handle.
+//!
+//! ```compile_fail,E0277
 //! fn requires_clone<T: Clone>() {}
-//! requires_clone::<oer_chips_esp32s31_radio_phy::owner::RfOpen>();
+//! requires_clone::<oer_chips_esp32s31_radio_phy::owner::RfOpen<oer_chips_esp32s31_hal::radio::domain::ChipPhy>>();
 //! ```
 //!
-//! ```compile_fail
+//! ```compile_fail,E0277
 //! fn requires_clone<T: Clone>() {}
-//! requires_clone::<oer_chips_esp32s31_radio_phy::owner::RfClosed>();
+//! requires_clone::<oer_chips_esp32s31_radio_phy::owner::RfClosed<oer_chips_esp32s31_hal::radio::domain::ChipPhy>>();
 //! ```
 //!
-//! ```compile_fail
-//! let _forged = oer_chips_esp32s31_radio_phy::owner::RfOpen { sealed: () };
+//! ```compile_fail,E0451
+//! use oer_chips_esp32s31_hal::radio::domain::ChipPhy;
+//! let _forged = oer_chips_esp32s31_radio_phy::owner::RfOpen::<ChipPhy> { brand: core::marker::PhantomData };
 //! ```
 //!
 //! One right makes one place: a second place needs a second right, and the
@@ -28,127 +35,124 @@
 //!
 //! ```compile_fail,E0382
 //! use core::mem::MaybeUninit;
+//! use oer_chips_esp32s31_hal::radio::domain::{ChipPhy, PhyStateRight};
 //! use oer_chips_esp32s31_radio_phy::owner::PhyPlace;
-//! fn two(right: oer_chips_esp32s31_hal::radio::domain::PhyStateRight) {
+//! fn two(right: PhyStateRight<ChipPhy>) {
 //!     let (mut first, mut second) = (MaybeUninit::uninit(), MaybeUninit::uninit());
 //!     let _first = PhyPlace::new(right, &mut first);
 //!     let _second = PhyPlace::new(right, &mut second);
 //! }
 //! ```
 //!
-//! A registered place becomes empty only through a failed operation: its
-//! value carries the one right [`RegisteredPhy::vacate`] takes ([`Vacate`]).
-//! A failed operation returns its leaf cause and has consumed its proof; the
-//! owner can vacate the place, and nothing more. The PHY's clock modules
-//! stay held as the failure left them, so a registration into the emptied
-//! place ends in `RegistrationCause::Clock`: this is the poison of the
-//! shared-domain owner it replaces, carried. A registered place has no way
-//! back but a failure.
+//! The handle's state is read only with a proof of a registration: a
+//! reference to `RfOpen` or `RfClosed`. A filled place not yet registered
+//! has a state nothing reads.
 //!
-//! ```compile_fail,E0061
-//! fn empty(phy: oer_chips_esp32s31_radio_phy::owner::RegisteredPhy<'_>) {
-//!     let _place = phy.vacate();
+//! ```compile_fail,E0277
+//! use oer_chips_esp32s31_hal::radio::domain::ChipPhy;
+//! use oer_chips_esp32s31_radio_phy::owner::{PhyHandle, RfCold};
+//! fn read(handle: &PhyHandle<'_, ChipPhy>, cold: &RfCold<ChipPhy>) {
+//!     let _state = handle.state(cold);
 //! }
 //! ```
 //!
+//! A filled place becomes empty again in two ways: before any register was
+//! written, with `RfCold` ([`PhyHandle::empty`]), and after a failed
+//! operation, with the one right it leaves ([`Vacate`],
+//! [`PhyHandle::vacate`]). A failed operation returns its leaf cause and has
+//! consumed its proof; the owner can vacate the place, and nothing more.
+//! The PHY's clock modules stay held as the failure left them.
+//!
 //! ```compile_fail,E0451
-//! let _forged = oer_chips_esp32s31_radio_phy::owner::Vacate { sealed: () };
+//! use oer_chips_esp32s31_hal::radio::domain::ChipPhy;
+//! let _forged = oer_chips_esp32s31_radio_phy::owner::Vacate::<ChipPhy> { brand: core::marker::PhantomData };
 //! ```
 //!
-//! ```compile_fail
-//! fn requires_clone<T: Clone>() {}
-//! requires_clone::<oer_chips_esp32s31_radio_phy::owner::Vacate>();
-//! ```
-//!
-//! A handle, a proof or a [`Vacate`] let go leaves the owner nothing to call
-//! until the next split: Rust has no type that cannot be dropped, and
+//! A proof let go leaves the handle and nothing to call; the handle let go
+//! loses the place: Rust has no type that cannot be dropped, and
 //! `#[must_use]` only warns.
 
-use core::mem::MaybeUninit;
+use core::{marker::PhantomData, mem::MaybeUninit};
 
 use oer_portable_memory::Occupied;
 use oer_portable_time::{Duration, Instant};
 
-pub use oer_chips_esp32s31_hal::radio::domain::PhyStateRight;
+pub use oer_chips_esp32s31_hal::radio::domain::{ChipPhy, PhyStateRight};
 
-use crate::PhyState;
+use crate::{PhyConfig, PhyState};
 
 /// The PHY's one place: the right the radio's split handed out and the
 /// memory it names. Only an empty place exists as a value; a filled one is
-/// inside its [`RegisteredPhy`].
-#[must_use = "the place is the owner's for a registration, or its right for the reunion"]
-pub struct PhyPlace<'s> {
+/// inside its [`PhyHandle`].
+#[must_use = "the place is the owner's to fill, or its right for the reunion"]
+pub struct PhyPlace<'s, P> {
     memory: &'s mut MaybeUninit<PhyState>,
-    right: PhyStateRight,
+    right: PhyStateRight<P>,
 }
 
-impl<'s> PhyPlace<'s> {
+impl<'s, P> PhyPlace<'s, P> {
     /// The place, from the split's one right and the owner's memory.
-    pub const fn new(right: PhyStateRight, memory: &'s mut MaybeUninit<PhyState>) -> Self {
+    pub const fn new(right: PhyStateRight<P>, memory: &'s mut MaybeUninit<PhyState>) -> Self {
         Self { memory, right }
     }
 
     /// The right back, for the radio's reunion. The memory is the owner's
     /// again.
-    pub fn into_right(self) -> PhyStateRight {
+    pub fn into_right(self) -> PhyStateRight<P> {
         let Self { memory: _, right } = self;
         right
     }
 
-    /// Fill the place with `state`.
-    #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) fn fill(self, state: PhyState) -> Filled<'s> {
+    /// Fill the place with a state nothing has registered: the handle and
+    /// the proof that RF is cold. This writes no register and cannot refuse.
+    pub fn fill(self) -> (PhyHandle<'s, P>, RfCold<P>) {
         let Self { memory, right } = self;
-        Filled {
-            state: Occupied::fill(memory, state),
-            right,
-        }
+        (
+            PhyHandle {
+                state: Occupied::fill(memory, PhyState::new(PhyConfig::esp32s31_default())),
+                right,
+            },
+            RfCold { brand: PhantomData },
+        )
     }
 }
 
-/// A place being registered: filled, and not yet the owner's handle.
-#[cfg(any(target_arch = "riscv32", test))]
-pub(crate) struct Filled<'s> {
-    pub(crate) state: Occupied<'s, PhyState>,
-    right: PhyStateRight,
+/// The handle of the PHY's filled place, with the right to it: made once by
+/// the fill and held by the owner; an operation is lent it.
+///
+/// ```compile_fail,E0277
+/// fn requires_clone<T: Clone>() {}
+/// requires_clone::<oer_chips_esp32s31_radio_phy::owner::PhyHandle<'static, oer_chips_esp32s31_hal::radio::domain::ChipPhy>>();
+/// ```
+#[must_use = "the place stays filled until the handle empties or vacates it"]
+pub struct PhyHandle<'s, P> {
+    state: Occupied<'s, PhyState>,
+    right: PhyStateRight<P>,
 }
 
-#[cfg(any(target_arch = "riscv32", test))]
-impl<'s> Filled<'s> {
-    /// A registration that did not complete empties the place again.
-    pub(crate) fn empty(self) -> PhyPlace<'s> {
+impl<'s, P> PhyHandle<'s, P> {
+    /// Empty the place, nothing having been written since the fill: the
+    /// inverse of [`PhyPlace::fill`].
+    pub fn empty(self, cold: RfCold<P>) -> PhyPlace<'s, P> {
+        let RfCold { brand: _ } = cold;
+        self.into_place()
+    }
+
+    /// Empty the place, with the right a failed operation left: the place
+    /// is the owner's for the next fill.
+    pub fn vacate(self, failed: Vacate<P>) -> PhyPlace<'s, P> {
+        let Vacate { brand: _ } = failed;
+        self.into_place()
+    }
+
+    fn into_place(self) -> PhyPlace<'s, P> {
         let Self { state, right } = self;
         let (_state, memory) = state.vacate();
         PhyPlace { memory, right }
     }
-}
 
-/// A registered PHY: the handle of the place a completed registration
-/// filled, with the right to it.
-///
-/// ```compile_fail
-/// fn requires_clone<T: Clone>() {}
-/// requires_clone::<oer_chips_esp32s31_radio_phy::owner::RegisteredPhy<'static>>();
-/// ```
-pub struct RegisteredPhy<'s> {
-    state: Occupied<'s, PhyState>,
-    right: PhyStateRight,
-}
-
-impl<'s> RegisteredPhy<'s> {
-    /// The handle of a place a target registration completed.
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) fn registered(
-        filled: Filled<'s>,
-        witness: crate::target_port::TargetRegistrationWitness,
-    ) -> Self {
-        witness.spend();
-        let Filled { state, right } = filled;
-        Self { state, right }
-    }
-
-    /// The registered state.
-    pub fn state(&self) -> &PhyState {
+    /// The registered state, read with a proof of the registration.
+    pub fn state(&self, _registered: &impl Registration<P>) -> &PhyState {
         &self.state
     }
 
@@ -157,97 +161,117 @@ impl<'s> RegisteredPhy<'s> {
     /// closed; the state stays registered in both.
     pub fn calibration_cache(
         &self,
+        registered: &impl Registration<P>,
         identity: crate::PhyCalibrationIdentity,
     ) -> crate::PhyCalibrationCache {
-        self.state.calibration_cache(identity)
+        self.state(registered).calibration_cache(identity)
     }
 
     /// Select the calibration tracking's thermal threshold for the next
-    /// passes.
-    pub fn set_calibration_threshold(&mut self, threshold: crate::CalibrationThreshold) {
+    /// passes of this registration.
+    pub fn set_calibration_threshold(
+        &mut self,
+        _registered: &impl Registration<P>,
+        threshold: crate::CalibrationThreshold,
+    ) {
         self.state.set_calibration_threshold(threshold);
     }
 
-    /// The registered state, for an operation of this crate.
+    /// The state, for an operation of this crate lent the handle with its
+    /// proof.
     #[cfg(any(target_arch = "riscv32", test))]
     pub(crate) fn state_mut(&mut self) -> &mut PhyState {
         &mut self.state
     }
+}
 
-    /// Empty the place, with the right a failed operation left: the place
-    /// is the owner's for the next registration.
-    pub fn vacate(self, failed: Vacate) -> PhyPlace<'s> {
-        let Vacate { sealed: () } = failed;
-        let Self { state, right } = self;
-        let (_state, memory) = state.vacate();
-        PhyPlace { memory, right }
-    }
+mod sealed {
+    pub trait Registration<P> {}
+}
+
+/// A proof of a registration: `RfOpen` or `RfClosed`, never `RfCold`.
+pub trait Registration<P>: sealed::Registration<P> {}
+impl<P> sealed::Registration<P> for RfOpen<P> {}
+impl<P> Registration<P> for RfOpen<P> {}
+impl<P> sealed::Registration<P> for RfClosed<P> {}
+impl<P> Registration<P> for RfClosed<P> {}
+
+/// Proof that RF is cold: the place is filled and no register is written.
+/// Made by the fill and given back by a registration refused before its
+/// acceptance point.
+#[derive(Debug)]
+#[must_use = "only a registration or the place's emptying takes this proof"]
+pub struct RfCold<P> {
+    brand: PhantomData<P>,
 }
 
 /// The one right a failed operation leaves its owner: to empty the place.
-/// Only a failure that consumed its proof of RF makes it.
 #[derive(Debug)]
-#[must_use = "the place stays registered until this right empties it"]
-pub struct Vacate {
-    sealed: (),
-}
-
-impl Vacate {
-    #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) const fn failed() -> Self {
-        Self { sealed: () }
-    }
+#[must_use = "the place stays filled until this right empties it"]
+pub struct Vacate<P> {
+    brand: PhantomData<P>,
 }
 
 /// Proof that RF is open: made by a registration's and a wake's end.
 #[derive(Debug)]
 #[must_use = "RF stays open until a close takes this proof"]
-pub struct RfOpen {
-    sealed: (),
+pub struct RfOpen<P> {
+    brand: PhantomData<P>,
 }
 
 /// Proof that RF is closed while the registration stays: made by a close's
 /// end.
 #[derive(Debug)]
 #[must_use = "RF stays closed until a wake takes this proof"]
-pub struct RfClosed {
-    sealed: (),
+pub struct RfClosed<P> {
+    brand: PhantomData<P>,
 }
 
-impl RfOpen {
+impl<P> RfCold<P> {
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) const fn opened() -> Self {
-        Self { sealed: () }
+    pub(crate) const fn registered(self) -> RfOpen<P> {
+        let Self { brand } = self;
+        RfOpen { brand }
     }
 
+    /// A failed registration consumed this proof: the right to empty the
+    /// place is what is left.
+    #[cfg(any(target_arch = "riscv32", test))]
+    pub(crate) const fn fail(self) -> Vacate<P> {
+        let Self { brand } = self;
+        Vacate { brand }
+    }
+}
+
+impl<P> RfOpen<P> {
     /// A failed operation consumed this proof: the right to empty the place
     /// is what is left.
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) const fn fail(self) -> Vacate {
-        let Self { sealed: () } = self;
-        Vacate::failed()
+    pub(crate) const fn fail(self) -> Vacate<P> {
+        let Self { brand } = self;
+        Vacate { brand }
     }
 
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) const fn close(self) -> RfClosed {
-        let Self { sealed } = self;
-        RfClosed { sealed }
+    pub(crate) const fn close(self) -> RfClosed<P> {
+        let Self { brand } = self;
+        RfClosed { brand }
     }
 }
 
-impl RfClosed {
+impl<P> RfClosed<P> {
     /// A failed wake consumed this proof: the right to empty the place is
     /// what is left.
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) const fn fail(self) -> Vacate {
-        let Self { sealed: () } = self;
-        Vacate::failed()
+    pub(crate) const fn fail(self) -> Vacate<P> {
+        let Self { brand } = self;
+        Vacate { brand }
     }
 
     #[cfg(any(target_arch = "riscv32", test))]
-    pub(crate) const fn open(self) -> RfOpen {
-        let Self { sealed } = self;
-        RfOpen { sealed }
+    pub(crate) const fn open(self) -> RfOpen<P> {
+        let Self { brand } = self;
+        RfOpen { brand }
     }
 }
 

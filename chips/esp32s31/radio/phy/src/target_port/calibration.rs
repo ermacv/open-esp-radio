@@ -219,7 +219,7 @@ fn terminal_event<T, E>(result: &Result<T, E>) -> crate::tracking::observation::
 #[inline(never)]
 pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
-    physical: &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
+    physical: &mut oer_chips_esp32s31_hal::radio::domain::PhyLoan<'_>,
     observer: &super::ObserverSlot<'_, O>,
     clock: &(
          impl oer_portable_cooperate::CooperativeTimer

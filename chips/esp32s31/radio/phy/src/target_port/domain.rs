@@ -6,8 +6,6 @@
 
 use super::*;
 
-use crate::executor::boundary::Boundary;
-
 /// Caller-owned inputs for one production common-PHY registration.
 ///
 /// A valid retained cache seeds cold partial calibration; the transition
@@ -100,36 +98,34 @@ where
     private_bounds,
     reason = "the sealed physical routes use the private shared engine"
 )]
-pub(super) fn register_state<'a, P, R, D, O>(
-    timer: &'a (
-            impl oer_portable_cooperate::CooperativeTimer
-            + oer_portable_settle::SettleCounter
-            + crate::executor::wait::WaitTally
-        ),
-    platform: &'a mut P,
-    registers: &'a mut R,
-    state: &'a mut PhyState,
+pub(super) async fn register_state<P, R, D, O>(
+    timer: &(
+         impl oer_portable_cooperate::CooperativeTimer
+         + oer_portable_settle::SettleCounter
+         + crate::executor::wait::WaitTally
+     ),
+    platform: &mut P,
+    registers: &mut R,
+    state: &mut PhyState,
     config: PhyRegisterConfig,
     observer: O,
-) -> impl core::future::Future<Output = Result<Registration, PhyRegisterFailed>> + 'a
+) -> Result<Registration, PhyRegisterFailed>
 where
     R: PhyInitializationAccess + crate::executor::step::Registers,
-    D: PhyShortDelay + 'a,
-    O: PhyTargetObserver + 'a,
+    D: PhyShortDelay,
+    O: PhyTargetObserver,
 {
-    Boundary::new(async move {
-        let mut transition = config.into_transition();
-        let (result, counters, witness) = execute_registration::<P, R, D, O>(
-            timer,
-            &mut transition,
-            state,
-            platform,
-            registers,
-            observer,
-        )
-        .await;
-        finish_registration(transition, result, counters, witness)
-    })
+    let mut transition = config.into_transition();
+    let (result, counters, witness) = execute_registration::<P, R, D, O>(
+        timer,
+        &mut transition,
+        state,
+        platform,
+        registers,
+        observer,
+    )
+    .await;
+    finish_registration(transition, result, counters, witness)
 }
 
 #[inline(never)]

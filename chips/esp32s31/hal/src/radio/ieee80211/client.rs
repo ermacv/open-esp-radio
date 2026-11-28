@@ -18,7 +18,6 @@
 //! runtime epoch back.
 
 use crate::power::PlatformClockBackend;
-#[cfg(test)]
 use crate::radio::ieee80211::channel::RadioChannelHal;
 
 use core::fmt;
@@ -113,7 +112,7 @@ pub struct MacFirstReset {
 /// therefore proves its clocks to the shared PHY while its registers belong
 /// to its datapath.
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// use oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn;
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<WifiClocksOn>();
@@ -319,29 +318,15 @@ impl WifiClocked {
         WifiMacHal::from_mac(&mut self.registers.mac)
     }
 
-    /// Borrow the channel HAL for one channel transaction, with the shared
-    /// PHY borrowed from the radio domain.
-    #[cfg(test)]
+    /// Lend one channel operation its registers: this client's MAC, the
+    /// platform and the shared PHY borrowed from the radio domain.
     pub fn channel_hal<'hal, B: PlatformClockBackend, P>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<B>,
+        radio: &'hal mut crate::radio::domain::RadioDomain<B>,
     ) -> RadioChannelHal<'hal, P> {
         let (phy, restore) = radio.phy_parts_mut();
         RadioChannelHal::from_leased(platform, &mut self.registers.mac, phy, restore)
-    }
-
-    /// Consume PHY custody for one channel operation, borrowing its MAC and platform.
-    pub fn channel_transaction<'hal, B: PlatformClockBackend, P>(
-        &'hal mut self,
-        platform: &'hal mut P,
-        radio: crate::radio::domain::transaction::RadioTransaction<B>,
-    ) -> crate::radio::ieee80211::channel::ChannelTransaction<'hal, B, P> {
-        crate::radio::ieee80211::channel::ChannelTransaction::new(
-            radio,
-            &mut self.registers.mac,
-            platform,
-        )
     }
 
     /// Split the clocked client into the task-side runtime owner and the

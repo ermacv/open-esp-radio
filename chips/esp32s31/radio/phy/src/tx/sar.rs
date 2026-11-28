@@ -115,7 +115,7 @@ async fn settle<D: PhyShortDelay, T: Timer + SettleCounter + WaitTally + ?Sized>
 }
 
 #[cfg(target_arch = "riscv32")]
-impl Io for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardware {
+impl Io for oer_chips_esp32s31_hal::radio::domain::PhyHardware<'_> {
     fn arm_tone(&mut self) {
         crate::hardware::arm_phy_power_detector_tone(self);
     }

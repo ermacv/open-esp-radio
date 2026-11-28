@@ -86,8 +86,8 @@ flowchart TD
 
 PHY supplies the algorithms and the state; its one owner runs registration,
 close, wake, the channel and tracking; coex supplies the hardware arbitration
-mechanism. Exclusive ownership of the PHY transaction serializes its register
-access. Tracking brackets RF-sensitive regions with a grant-protect request
+mechanism. The domain lent to an operation by `&mut` serializes the PHY's
+register access. Tracking brackets RF-sensitive regions with a grant-protect request
 instead of pausing protocols. A coex timer reply or PTI is never an ownership
 proof for the shared PHY, and the request bracket does not prove exclusive RF
 access.
@@ -132,54 +132,52 @@ started failure consumes the proof.
 ### The one owner
 
 The PHY's state has one owner, which holds its place (`owner::PhyPlace`):
-the one right the radio's split hands out (`PhyStateRight`, which the
-reunion takes back) and the owner's memory for the state. The radio domain beside it,
-`RadioDomain<B>`, holds the shared registers and the power and clock
-obligations; it carries no PHY state. `RadioDomain::detach(operation)`
-produces one owned `RadioTransaction`; its explicit reunion preserves
-registration epochs and pending restore obligations. The transaction can
-split into an inert return owner and a movable `PhyTransaction` carrying the
-hardware and grant-protect state. A split reunion rejects another domain's
-transaction without consuming either payload. The domain identity is affine
-and permanently claimed: equal registration epochs do not authorize a
-foreign return. Successful reunion consumes both halves, so a stale return
-token cannot remain live.
+the one right the radio's split hands out (`PhyStateRight<P>`, which the
+reunion takes back) and the owner's memory for the state. The owner fills
+the place once (`PhyPlace::fill`, which writes no register and cannot
+refuse) and holds the handle (`owner::PhyHandle`) for good; the fill also
+gives `RfCold`, the proof that nothing is registered. The radio domain
+beside it, `RadioDomain<B>`, holds the shared registers and the power and
+clock obligations; it carries no PHY state. The right, the place, the
+handle and every proof carry the PHY's brand `P` (`ChipPhy`), so a proof
+of one PHY cannot serve another's handle.
 
-The operations (`target_port::owner`) take the domain by value and give it
-back with their typed result:
+The operations (`target_port::owner`) are lent the domain and the handle
+by `&mut`; each takes the proof its life is in and gives the next:
 
-- `register` takes the place, fills it with `PhyState::new` once
-  (`Occupied::fill`) and lends the state to the registration's transitions.
-  As ESP-IDF's calibrating first `esp_phy_enable`, it enables the `PHY` and
-  `PHY_CALIBRATION` modem clock modules and releases `PHY_CALIBRATION`
-  after calibration. Its result is `Registered`: `RegisteredPhy`, the
-  handle of the filled place, and `RfOpen`. A failed registration empties
-  the place and returns it with its leaf cause;
+- `register` takes `RfCold` and gives `RfOpen`. As ESP-IDF's calibrating
+  first `esp_phy_enable`, it enables the `PHY` and `PHY_CALIBRATION` modem
+  clock modules, runs over the handle's state and releases
+  `PHY_CALIBRATION` after calibration. A clock refusal before any PHY
+  register gives `RfCold` back; a failure releases both modules and gives
+  its leaf cause and `Vacate`;
 - `close` takes `RfOpen` and gives `RfClosed`: `phy_close_rf` runs, the
   temperature sensor powers down and `PHY` is released, as the last
-  `esp_phy_disable` does. The registration stays;
+  `esp_phy_disable` does. Its acceptance point is the first RF edge: a
+  recoverable failure of the temperature observation before it gives
+  `RfOpen` back. The registration stays;
 - `wake` takes `RfClosed` and gives `RfOpen`: `PHY` and `PHY_CALIBRATION`
   are taken again, `phy_wakeup_init` restores the retained registration
-  without calibration and `PHY_CALIBRATION` is released;
+  without calibration and `PHY_CALIBRATION` is released; a clock refusal
+  gives `RfClosed` back;
 - `select_channel` and `switch_channel` take `RfOpen` and give it back,
-  through the HAL Wi-Fi client's channel HAL; the switch stops and restarts
+  over the HAL Wi-Fi client's channel HAL; the switch stops and restarts
   the Wi-Fi MAC around the retune;
 - `track` takes `RfOpen` and gives it back: one pass of
   `phy_param_track_tot`, Wi-Fi's only. As the vendor's periodic timer, it
-  runs under the PHY lock alone (the owned transaction) and brackets its
+  runs under the PHY lock alone (the lent domain) and brackets its
   RF-sensitive regions with the grant-protect request. The pass's instant
   is recorded in the state;
 - `enable_wifi_rx` and `disable_wifi_rx` need `RfOpen`.
 
-Neither proof is `Copy` nor `Clone`, and only the operations' ends make them.
-A failed operation returns its leaf cause and has consumed its proof; its
-value carries `Vacate`, the one right `RegisteredPhy::vacate` takes, and the
-place is empty again and nothing more: the clock modules stay held, so a
-registration into it ends in `RegistrationCause::Clock`. A registered place
-has no way back but a failure; an empty place gives its right back for the
-reunion (`PhyPlace::into_right`). A registration that does not complete
-releases both modules (`RegistrationCause::Failed { clocks, .. }`) and
-gives its place back empty.
+No proof is `Copy` nor `Clone`, and only the fill and the operations' ends
+make them. The handle's state is read with a proof of a registration only
+(`&RfOpen` or `&RfClosed`). A failed operation returns its leaf cause and
+has consumed its proof; its value carries `Vacate`, the one right
+`PhyHandle::vacate` takes, and the place is empty again and nothing more:
+the clock modules stay held as the failure left them. A filled place not
+registered empties with its `RfCold` (`PhyHandle::empty`); an empty place
+gives its right back for the reunion (`PhyPlace::into_right`).
 
 `owner::tracking_due(&PhyState, now)` answers whether a pass is due: at once
 after a registration, and otherwise once more than `TRACKING_PERIOD`
@@ -187,23 +185,15 @@ after a registration, and otherwise once more than `TRACKING_PERIOD`
 pass. The owner asks after every registration and every wake, as the vendor
 asks at every enable, and keeps its own timer for the next instant.
 
-Registration, RF wake and RF close construct their async state directly in
-their enclosing place and use `executor::boundary::Boundary`. Owned
-lifecycle futures pin their borrowed PHY children in their retained state
-and await pinned references. Completed child results remain in placed
-fields of that retained state; only their exclusive `Placed` loans cross
-the poll boundary.
-
-Dropping either half of a transaction, or a pending lifecycle or tracking
-future even before its first poll, quarantines all payloads without
-dropping their owners or restoring registers. Its named fault retains the
-cancelled operation and registration observation. Firmware binds the fault
-directly at link time through the HAL's `phy_fault_reporter!` macro to the
-chip composition's `phy_fault::reset` (`oer-chips-esp32s31-platform-runtime`),
-which calls `fatal::reset_recording`; a 16-byte record naming the operation
-and epoch is printed on the next boot and cleared only after successful
-output. Host tests use an independent seat and catch their own
-never-returning reporter.
+An operation is a plain `async fn`. Letting its future go, even before its
+first poll, ends its borrows: the domain and the handle are the owner's at
+once, the proof it took is gone with it, and the hardware is as far as the
+last atom left it; the owner has nothing to call. A
+proof let go is the same; the handle let go loses the place. No function of
+the PHY's path fails to return. The chip UI cases
+(`tests/chip-ui`) show that an operation cannot keep the registers past its
+end, that a proof of another PHY serves no handle, and that a cold place has
+no state to read.
 
 ## Conditions and cadence
 
@@ -297,7 +287,7 @@ settle. T7's named answer window is our 100 µs budget from completed command
 publication. The bus is sampled before judging the deadline: a completed
 answer is accepted even after a late resume; only a still-busy bus times out.
 The existing temperature graph owns conversion, range writes and dated commit.
-Cancellation quarantines the owned transaction until reset.
+Letting it go ends its borrows; the operation's proof is gone with it.
 At `Runnable`, the driver continues while CPU admission allows; otherwise it
 self-wakes and returns `Pending` without a timer. A future `WaitAt` constructs
 and polls the timer; an already reached `WaitAt` still yields once before
@@ -405,9 +395,9 @@ baseband writes inside calibration cannot manufacture a resumable protocol
 epoch. Release checks and the exact RX/IRQ handoff establish that boundary.
 
 A pending demand wait is cancellable without starting hardware work. An
-abandoned consuming execution quarantines its owners and records a named
-fault before reset. A failed execution returns its typed failure and has
-consumed its proof, without automatic rollback. Restoration failure also requires reset. Holding
+abandoned execution ends its borrows and loses the proof it took; the owner
+has nothing to call. A failed execution returns its
+typed failure and has consumed its proof, without automatic rollback. Holding
 a CPU critical section across async waits is not the exclusion model.
 
 Calibration completion, restoration completion and measured RF quality are

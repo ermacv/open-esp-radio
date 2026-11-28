@@ -3,17 +3,15 @@
 //! (`oer-hil-services-radio-pair`'s `Radio` endpoints).
 
 use oer_chips_esp32s31_hal::{
-    radio::domain::transaction::Operation,
     radio::ieee80211::dma::receive::{NextAt, Standing},
+    radio::phy::power_words::RadioPowerWords,
     system::owner::RadioAccess,
 };
-use oer_chips_esp32s31_radio_phy::{
-    PhyCalibrationIdentity, PhyCalibrationSnapshot, owner::RegisteredPhy,
-};
+use oer_chips_esp32s31_radio_phy::{PhyCalibrationIdentity, PhyCalibrationSnapshot};
 use oer_hil_services_radio_pair as service;
 use service::{Item, PAGE_READINGS, Reading, Refusal, SnapshotPage, Value};
 
-use crate::radio::Radio;
+use crate::radio::{Phy, Radio, RfOpen};
 use oer_chips_esp32s31_hal::power::ChipClocks;
 use oer_chips_esp32s31_hal::radio::phy::power_words::ModemBus;
 
@@ -45,10 +43,14 @@ pub(crate) fn page(readings: &[Reading], page: u8) -> SnapshotPage {
 /// The snapshot before the bring-up: the reset cause, and the radio's and
 /// the platform clocks' power, clock and reset words as the previous run
 /// left them.
-pub(crate) fn cold(reset_cause: u32, radio: &Radio, clocks: &ChipClocks) -> Readings {
+pub(crate) fn cold(
+    reset_cause: u32,
+    observed: (RadioPowerWords, ModemBus<'_>),
+    clocks: &ChipClocks,
+) -> Readings {
     let mut readings = Readings::new();
     push(&mut readings, Item::ResetCause, 0, Value::Word(reset_cause));
-    power(&mut readings, radio, clocks);
+    power(&mut readings, observed, clocks);
     readings
 }
 
@@ -56,8 +58,8 @@ pub(crate) fn cold(reset_cause: u32, radio: &Radio, clocks: &ChipClocks) -> Read
 /// the platform clocks' ([`ChipClocks::observe`]): a modem block's word
 /// unreadable while its register bus is closed, the platform clocks' while
 /// another context holds them.
-fn power(readings: &mut Readings, radio: &Radio, clocks: &ChipClocks) {
-    let (words, bus) = radio.observe_power();
+fn power(readings: &mut Readings, observed: (RadioPowerWords, ModemBus<'_>), clocks: &ChipClocks) {
+    let (words, bus) = observed;
     let platform = clocks.observe(&bus);
     let (pll, lpcon) = match platform {
         Ok(platform) => (
@@ -132,26 +134,25 @@ fn power(readings: &mut Readings, radio: &Radio, clocks: &ChipClocks) {
 
 /// The snapshot after the bring-up: the cold snapshot's words again, the
 /// temperature code, the RF PLL's frequency block and the PHY's calibration
-/// results the registered state holds now, the first two read in one PHY
-/// transaction over the radio in `slot`.
-///
-/// # Errors
-/// [`Refusal::NotUp`] when no radio is in `slot`.
+/// results the registered state holds now, the first two read over the
+/// PHY's registers lent from `radio`.
 pub(crate) fn up(
-    slot: &mut Option<Radio>,
+    radio: &mut Radio,
     clocks: &ChipClocks,
     reset_cause: u32,
-    phy: &RegisteredPhy<'_>,
+    phy: &Phy<'_>,
+    open: &RfOpen,
     identity: PhyCalibrationIdentity,
-) -> Result<Readings, Refusal> {
-    let calibration = Some(phy.calibration_cache(identity).into_snapshot());
-    let mut readings = cold(reset_cause, slot.as_ref().ok_or(Refusal::NotUp)?, clocks);
-    let radio = slot.take().ok_or(Refusal::NotUp)?;
-    let mut transaction = radio.detach(Operation::Maintain);
-    let hardware = transaction.hardware_mut();
-    let temperature = oer_chips_esp32s31_hal::radio::phy::temperature::read_code(hardware);
-    let frequency = oer_chips_esp32s31_hal::radio::phy::frequency::observe(hardware);
-    *slot = Some(transaction.reunite());
+) -> Readings {
+    let calibration = Some(phy.calibration_cache(open, identity).into_snapshot());
+    let mut readings = cold(reset_cause, radio.observe_power(), clocks);
+    let (temperature, frequency) = {
+        let mut hardware = radio.phy_hardware();
+        (
+            oer_chips_esp32s31_hal::radio::phy::temperature::read_code(&hardware),
+            oer_chips_esp32s31_hal::radio::phy::frequency::observe(&mut hardware),
+        )
+    };
     push(
         &mut readings,
         Item::TemperatureCode,
@@ -199,7 +200,7 @@ pub(crate) fn up(
     if let Some(snapshot) = calibration {
         calibration_readings(&mut readings, &snapshot);
     }
-    Ok(readings)
+    readings
 }
 
 fn push(readings: &mut Readings, item: Item, index: usize, value: Value) {

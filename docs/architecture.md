@@ -320,7 +320,7 @@ preparation; HAL keeps ownership, fatal election/quarantine and the final
 system-reset trigger.
 `oer-chips-esp32s31-platform-runtime` is the chip's side of an image's platform: the
 executor's binding `Esp32s31`, which images name in every executor type
-(`Executor<Esp32s31, 0>`), and the PHY transaction and Wi-Fi fault records,
+(`Executor<Esp32s31, 0>`), and the Wi-Fi fault records,
 which need both the HAL's types and the runtime's retained memory and fatal
 path. Its `platform` boundary supplies typed interrupt parts, runtime preparation,
 factory identity, entropy and timer installation. The reusable console
@@ -1169,8 +1169,8 @@ its leases. The radio family also owns common-power membership, registration
 epoch policy, module lease slots, and the low-power/external-coexistence edge
 order. The S31 HAL binding retains
 affine public proofs and clock guards and lends its register atoms to those
-drivers. PHY transactions retain the complete family state with their exact
-seat and both cancellation guards. Neither family depends on a chip or protocol
+drivers. The PHY's registers are lent from the domain for the length of one
+operation. Neither family depends on a chip or protocol
 driver.
 
 The family `oer-chips-family-radio-phy` owns analog-I2C power/reset decisions,
@@ -1211,21 +1211,21 @@ successor; this section describes what the build holds.
   the bound's comparison, so a late wake that finds the conversion finished
   succeeds; an unready end reads no result. No interrupt handler and no
   hardware timer of its own take part; TIMG0 is free.
-  Registration, tracking, RF close and retained wake take the domain by value
-  and return it with their typed result. `RadioDomain::detach` owns a PHY
-  transaction containing the registers, restore slots, registration epoch
-  and grant-protect state. Its return owner retains the common
-  power/clock obligations, without register access. Splitting that
-  pair permits transfer; reunion accepts only the exact affine domain
-  identity, independently of registration-epoch equality. Cancellation,
-  including before the first poll, retains both payloads in quarantine and
-  resets through a named retained fault; the next boot prints the reason.
-  Channel selection and retune also hold an owned transaction across every
-  wait; their future owns `ChannelTransaction`, whose channel HAL lends
-  its registers within that custody. The retained
-  cancellation payload names the operation and epoch in the common fault
-  envelope. A pass runs under the owned transaction alone; there is no
-  RF-window calendar. Grant-protect requests bracket RF-sensitive work
+  Every operation is lent the domain and the handle of the PHY's place
+  and takes the proof of RF its life is in: the place is filled once by its
+  owner (`PhyPlace::fill`, giving the handle and `RfCold`); a registration
+  takes `RfCold` and gives `RfOpen`, the close `RfOpen` and gives `RfClosed`,
+  the wake the reverse, and the channel and a tracking pass take `RfOpen`
+  and give it back. A refusal before an operation's acceptance point gives
+  its proof back; a failure gives its leaf cause and `Vacate`. The right,
+  the place, the handle and every proof carry the PHY's brand. Letting an
+  operation's future go ends its borrows: the domain and the handle are the
+  owner's, and the proof it took is gone, so the owner has nothing to call.
+  The domain is built once in the place its owner
+  gives (`RadioHardware::split`) and the reunion empties that place. No
+  function of the PHY's path fails to return. The channel's registers are
+  the client's `RadioChannelHal`, a borrow of the domain and the MAC. There
+  is no RF-window calendar. Grant-protect requests bracket RF-sensitive work
   without proving an exclusive RF grant. Calibration
   matches the vendor when each field stays within the vendor's spread for
   that field, measured in the same run on the same board; the comparison

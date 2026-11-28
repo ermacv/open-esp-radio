@@ -6,8 +6,8 @@
 //! (`amsdu`) or cell E's (`ccmp`).
 use crate::pair;
 use crate::radio::{
-    Brought, Cooperative, CooperativeTimer, Failure, SessionParts, apart, begin, bring_up,
-    held as held_radio, phase, prepare, stop,
+    Brought, Cooperative, CooperativeTimer, Failure, SessionParts, apart, begin, bring_up, phase,
+    prepare, stop,
 };
 use crate::usb;
 use core::mem::MaybeUninit;
@@ -20,7 +20,6 @@ use oer_chips_esp32s31_hal::{
         software_interrupt::{FromCpu0Irq, FromCpu2Irq},
         system_timer::{SystimerAlarm0, SystimerAlarm1},
     },
-    power::ChipClocks,
     radio::ieee80211::{
         dma::{
             receive::{RxDescriptors, RxRing, RxRingParts, RxTable},
@@ -86,7 +85,6 @@ oer_chips_family_platform_executor::tasks! {
     }
 }
 oer_chips_family_platform_executor::time_driver!(Esp32s31);
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime::phy_fault::reset);
 oer_chips_family_platform_runtime::entry!(
     main,
     oer_chips_esp32s31_hal::system::platform::Port,
@@ -126,7 +124,7 @@ fn main(
         root.into_runtime(),
         InterruptTable,
         board::BootstrapPsram,
-        oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
+        || {},
         |hardware| {
             let reset_causes =
                 oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
@@ -160,13 +158,6 @@ fn main(
     };
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
-    let (radio, partitions) = runtime_radio
-        .split::<ChipClocks>(oer_chips_esp32s31_platform_runtime::phy_fault::identity())
-        .unwrap_or_else(|failure| {
-            let fault = failure.fault();
-            let _owners = failure;
-            oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault)
-        });
     let timer = runtime_system_timer;
     let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
@@ -201,11 +192,8 @@ fn main(
         _ => fail(name!("entropy"; 32)),
     };
     let parts = SessionParts {
-        radio,
+        radio: runtime_radio,
         clocks: runtime_clocks,
-        wifi: partitions.wifi,
-        coex: partitions.wifi_coex,
-        phy: partitions.phy,
         identity,
         mac_irq: wifi_irqs.mac,
         power_irq: wifi_irqs.power,
@@ -224,7 +212,11 @@ fn main(
     // The owner's cold snapshot, read before the radio's parts go to the
     // radio level's task.
     let observing = Observing {
-        cold: pair::cold(u32::from(reset_cause.code()), &parts.radio, &parts.clocks),
+        cold: pair::cold(
+            u32::from(reset_cause.code()),
+            parts.radio.observe_power(),
+            &parts.clocks,
+        ),
     };
     let Some(handover) = RADIO.try_take() else {
         fail(name!("radio-handover"; 32));
@@ -587,7 +579,6 @@ async fn worker(
     mut inbox: crate::radio::Work<SenderCommand, Answer>,
     reset: u32,
 ) -> Result<core::convert::Infallible, Ended> {
-    let cold = pair::cold(reset, &parts.radio, &parts.clocks);
     let identity = parts.identity;
     let cycles = parts.cycles;
     let ap = parts.ap;
@@ -602,9 +593,16 @@ async fn worker(
     let book = crate::radio::WaitBook::default();
     let timer = CooperativeTimer::counted(&cooperative, cycles, &book);
     let mut platform = ();
+    let mut radio_memory = MaybeUninit::uninit();
     let mut phy_memory = MaybeUninit::uninit();
     let up = async {
-        let brought = apart!(bring_up(parts, &mut phy_memory, &timer, &mut platform))?;
+        let brought = apart!(bring_up(
+            parts,
+            &mut radio_memory,
+            &mut phy_memory,
+            &timer,
+            &mut platform
+        ))?;
         // The ring's parts: the table, the walker's registers, the arena
         // and its buffers.
         let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
@@ -615,7 +613,7 @@ async fn worker(
             .try_init(MaybeUninit::uninit())
             .ok_or((phase::RING, 5))?;
         let Brought {
-            mut slot,
+            mut radio,
             mut phy,
             open,
             register_micros,
@@ -633,13 +631,9 @@ async fn worker(
         } = brought;
         // S4 to S10: the first reset, the cold preparation and the channel,
         // the core, the publication, the walker, the MAC's receive.
-        let reset = held_radio(&mut slot)?.reset_wifi_mac_block(
-            clocked.clocks_on(),
-            first,
-            crate::radio::CBW,
-        );
+        let reset = radio.reset_wifi_mac_block(clocked.clocks_on(), first, crate::radio::CBW);
         let (prepared, open) = apart!(prepare(
-            &mut slot,
+            &mut radio,
             &mut clocked,
             &mut phy,
             open,
@@ -668,7 +662,7 @@ async fn worker(
         );
         let (frames, ordinary) = transmit::prepare(&sources)?;
         Ok((
-            slot,
+            radio,
             (phy, open, register_micros, waits),
             access,
             clocks_on,
@@ -683,9 +677,9 @@ async fn worker(
         ))
     };
     let (
-        mut slot,
+        mut radio,
         // The registered PHY with RF open stays held for the run.
-        (phy, _open, register_micros, waits),
+        (phy, open, register_micros, waits),
         mut access,
         clocks_on,
         mut ring,
@@ -715,10 +709,7 @@ async fn worker(
             waits,
         },
     );
-    let up = match pair::up(&mut slot, held.clocks(), reset, &phy, identity) {
-        Ok(readings) => readings,
-        Err(_) => cold.clone(),
-    };
+    let up = pair::up(&mut radio, held.clocks(), reset, &phy, &open, identity);
     // The receiver the host named, absent until its `target`.
     let mut receiver = None;
     let mut steps = Steps::Open;
@@ -908,26 +899,16 @@ async fn worker(
                 }
             }
             SenderCommand::Stop(_) => {
-                match held_radio(&mut slot) {
-                    Ok(radio) => {
-                        let began = EmbassyClock.now();
-                        let _stopped = stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
-                        let micros = u32::try_from(
-                            EmbassyClock
-                                .now()
-                                .saturating_duration_since(began)
-                                .as_micros(),
-                        )
-                        .unwrap_or(u32::MAX);
-                        answer(id, service::Stopped::Stopped { micros });
-                    }
-                    Err((phase, index)) => {
-                        answer(
-                            id,
-                            service::Stopped::Failed(service::Failure { phase, index }),
-                        );
-                    }
-                }
+                let began = EmbassyClock.now();
+                let _stopped = stop(&mut radio, &mut access, &clocks_on, ring, enabled, cycles);
+                let micros = u32::try_from(
+                    EmbassyClock
+                        .now()
+                        .saturating_duration_since(began)
+                        .as_micros(),
+                )
+                .unwrap_or(u32::MAX);
+                answer(id, service::Stopped::Stopped { micros });
                 return down(inbox).await;
             }
         }

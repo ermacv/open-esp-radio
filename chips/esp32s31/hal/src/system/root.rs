@@ -21,10 +21,12 @@
 //! # }
 //! ```
 
+use core::mem::MaybeUninit;
 use oer_chips_esp32s31_pac::ownership::{
     BootPeripherals, InterruptMatrixPeripherals, MacLocalTimePeripherals, Partitions,
     SocPeripherals,
 };
+use oer_portable_memory::Occupied;
 
 use crate::{
     peripherals::{
@@ -406,12 +408,14 @@ impl RadioPartitions {
 /// every partition and the domain have been reunited. Protocol-specific
 /// cached state is deliberately not retained in this neutral owner.
 ///
-/// ```compile_fail
-/// use oer_chips_esp32s31_hal::system::root::RadioHardware;
+/// ```compile_fail,E0382
+/// use core::mem::MaybeUninit;
+/// use oer_chips_esp32s31_hal::{power::PlatformClockBackend, radio::domain::RadioDomain, system::root::RadioHardware};
 ///
-/// # fn split_twice<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(hardware: RadioHardware, identity: oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity) {
-/// let _first = hardware.split::<B>(identity);
-/// let _second = hardware.split::<B>(identity);
+/// # fn split_twice<B: PlatformClockBackend>(hardware: RadioHardware) {
+/// let (mut first, mut second) = (MaybeUninit::<RadioDomain<B>>::uninit(), MaybeUninit::<RadioDomain<B>>::uninit());
+/// let _first = hardware.split::<B>(&mut first);
+/// let _second = hardware.split::<B>(&mut second);
 /// # }
 /// ```
 #[must_use = "dropping the radio root permanently loses the unique hardware capability"]
@@ -421,6 +425,18 @@ pub struct RadioHardware {
 }
 
 impl RadioHardware {
+    /// The radio's power, clock and reset words and the modem bus, as the
+    /// domain observes them ([`RadioDomain::observe_power`]), before the
+    /// split. Writes nothing.
+    pub fn observe_power(
+        &self,
+    ) -> (
+        crate::radio::phy::power_words::RadioPowerWords,
+        crate::radio::phy::power_words::ModemBus<'_>,
+    ) {
+        self.partitions.shared.radio_phy().observe_power()
+    }
+
     fn new(partitions: RadioPartitions) -> Self {
         Self {
             partitions,
@@ -519,7 +535,7 @@ pub struct ProtocolPartitions {
     pub wifi: WifiPartition,
     pub wifi_coex: CoexAbsent<WifiClient>,
     /// The right to the PHY's one state place.
-    pub phy: crate::radio::domain::PhyStateRight,
+    pub phy: crate::radio::domain::PhyStateRight<crate::radio::domain::ChipPhy>,
 }
 
 /// Why a split cannot become the neutral root again.
@@ -528,29 +544,29 @@ pub enum ReunionError {
     Shared(RadioDomainReleaseError),
 }
 
-/// Rejected reunion returning both unchanged owners.
+/// Rejected reunion: the domain stays in its place and every partition
+/// comes back.
 #[must_use = "a rejected reunion still owns the domain and every partition"]
-pub struct ReunionFailure<B: PlatformClockBackend> {
-    shared: RadioDomain<B>,
+pub struct ReunionFailure<'d, B: PlatformClockBackend> {
+    shared: Occupied<'d, RadioDomain<B>>,
     partitions: ProtocolPartitions,
     error: ReunionError,
 }
 
-impl<B: PlatformClockBackend> ReunionFailure<B> {
+impl<'d, B: PlatformClockBackend> ReunionFailure<'d, B> {
     pub const fn error(&self) -> ReunionError {
         self.error
     }
 
-    pub fn into_parts(self) -> (RadioDomain<B>, ProtocolPartitions) {
+    pub fn into_parts(self) -> (Occupied<'d, RadioDomain<B>>, ProtocolPartitions) {
         (self.shared, self.partitions)
     }
 }
 
-/// Refused split, retaining the exact hardware and PHY identity.
+/// Refused split, retaining the exact hardware; the place stays empty.
 #[must_use = "a refused split retains all input owners"]
 pub struct RadioSplitFailure {
     hardware: RadioHardware,
-    identity: crate::radio::domain::transaction::PhyIdentity,
     error: oer_chips_family_radio_modem_clock::IdentityExhausted,
 }
 
@@ -567,30 +583,25 @@ impl RadioSplitFailure {
         self.error
     }
 
-    pub fn into_parts(
-        self,
-    ) -> (
-        RadioHardware,
-        crate::radio::domain::transaction::PhyIdentity,
-    ) {
-        (self.hardware, self.identity)
-    }
-
-    /// Observation for the image's existing PHY fault reporter. No reset or MMIO occurs here.
-    pub const fn fault(&self) -> crate::radio::domain::transaction::Fault {
-        crate::radio::domain::transaction::Fault {
-            reason: crate::radio::domain::transaction::FaultReason::ModemClockIdentityExhausted,
-            registration: None,
-        }
+    pub fn into_hardware(self) -> RadioHardware {
+        self.hardware
     }
 }
 
+/// A test's place for a split's domain, its own memory for the test's
+/// length and after.
+#[cfg(test)]
+pub(crate) fn host_place<T>() -> &'static mut MaybeUninit<T> {
+    std::boxed::Box::leak(std::boxed::Box::new(MaybeUninit::uninit()))
+}
+
 impl RadioHardware {
-    /// Split the root for concurrently running protocols. This performs no
-    /// MMIO.
+    /// Split the root for concurrently running protocols into `place`. This
+    /// performs no MMIO.
     ///
-    /// The shared radio partitions and the shared PHY state go to the
-    /// returned [`RadioDomain`], and every protocol partition to
+    /// The shared radio partitions and the shared PHY state are built in
+    /// the place its owner gives, as the [`RadioDomain`] the returned
+    /// handle reaches, and every protocol partition goes to
     /// [`ProtocolPartitions`]. The two are separate owners, so a protocol
     /// driver takes its partition while the radio system owns the domain.
     ///
@@ -599,42 +610,41 @@ impl RadioHardware {
     ///
     /// # Errors
     ///
-    /// Identity exhaustion returns every input owner before any split or MMIO.
-    pub fn split<B: PlatformClockBackend>(
+    /// Identity exhaustion returns every input owner before any split or
+    /// MMIO; the place stays empty.
+    pub fn split<'d, B: PlatformClockBackend>(
         self,
-        identity: crate::radio::domain::transaction::PhyIdentity,
-    ) -> Result<(RadioDomain<B>, ProtocolPartitions), RadioSplitFailure> {
-        self.split_with_clock_identity(
-            identity,
-            crate::power::clock::ModemClockPlannerIdentity::new(),
-        )
+        place: &'d mut MaybeUninit<RadioDomain<B>>,
+    ) -> Result<(Occupied<'d, RadioDomain<B>>, ProtocolPartitions), RadioSplitFailure> {
+        self.split_with_clock_identity(place, crate::power::clock::ModemClockPlannerIdentity::new())
     }
 
-    fn split_with_clock_identity<B: PlatformClockBackend>(
+    fn split_with_clock_identity<'d, B: PlatformClockBackend>(
         self,
-        identity: crate::radio::domain::transaction::PhyIdentity,
+        place: &'d mut MaybeUninit<RadioDomain<B>>,
         clock_identity: Result<
             crate::power::clock::ModemClockPlannerIdentity,
             oer_chips_family_radio_modem_clock::IdentityExhausted,
         >,
-    ) -> Result<(RadioDomain<B>, ProtocolPartitions), RadioSplitFailure> {
+    ) -> Result<(Occupied<'d, RadioDomain<B>>, ProtocolPartitions), RadioSplitFailure> {
         let clock_identity = match clock_identity {
             Ok(identity) => identity,
             Err(error) => {
                 return Err(RadioSplitFailure {
                     hardware: self,
-                    identity,
                     error,
                 });
             }
         };
         let RadioPartitions { shared, wifi } = self.partitions;
         Ok((
-            RadioDomain::new(
-                shared,
-                PhyRouteState::new(self.phy_registration),
-                identity,
-                clock_identity,
+            Occupied::fill(
+                place,
+                RadioDomain::new(
+                    shared,
+                    PhyRouteState::new(self.phy_registration),
+                    clock_identity,
+                ),
             ),
             ProtocolPartitions {
                 wifi,
@@ -644,32 +654,34 @@ impl RadioHardware {
         ))
     }
 
-    /// Reunite a split into the neutral root. This performs no MMIO.
+    /// Reunite a split into the neutral root, emptying the domain's place.
+    /// This performs no MMIO.
     ///
     /// Leaving retires the PHY registration, as every route return does.
     ///
     /// # Errors
     ///
-    /// Returns both owners while a client holds common power or a PHY
-    /// calibration still owns a restore obligation.
+    /// Returns both owners, the domain in its place, while a client holds
+    /// common power or a PHY calibration still owns a restore obligation.
     #[allow(
         clippy::result_large_err,
-        reason = "rejection returns the domain and every partition without allocation"
+        reason = "rejection returns the domain's handle and every partition without allocation"
     )]
-    pub fn reunite<B: PlatformClockBackend>(
-        shared: RadioDomain<B>,
+    pub fn reunite<'d, B: PlatformClockBackend>(
+        shared: Occupied<'d, RadioDomain<B>>,
         partitions: ProtocolPartitions,
-    ) -> Result<Self, ReunionFailure<B>> {
-        let (registers, phy) = match shared.into_parts() {
-            Ok(parts) => parts,
-            Err((shared, error)) => {
-                return Err(ReunionFailure {
-                    shared,
-                    partitions,
-                    error: ReunionError::Shared(error),
-                });
-            }
-        };
+    ) -> Result<Self, ReunionFailure<'d, B>> {
+        if let Err(error) = shared.releasable() {
+            return Err(ReunionFailure {
+                shared,
+                partitions,
+                error: ReunionError::Shared(error),
+            });
+        }
+        // The domain leaves its place by value once, at the reunion: what
+        // it held becomes the root's again.
+        let (domain, _place) = shared.vacate();
+        let (registers, phy) = domain.into_released_parts();
         let ProtocolPartitions {
             wifi,
             wifi_coex: _,

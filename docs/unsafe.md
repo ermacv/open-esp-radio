@@ -558,42 +558,11 @@ whose section is checked to be `.dma.bss.<block>`; the runtime linker
 script's ASSERTs over the DMA range (from the generated `dma-window.x`) are
 the proof.
 
-The HAL's owned PHY transaction adds no unsafe code. A permanently claimed
-`TransactionSeat` supplies one affine domain identity. `RadioTransaction`
-keeps its PHY and inert return owner paired; after a consuming split,
-`DetachedRadioDomain::reunite` checks the exact seat identity and returns
-foreign inputs unchanged. Registration-epoch equality grants no reunion.
-`PhyHardware` owns its registers and restore state; shared accessors lend
-short borrows of that owner, without extending a lifetime. The transaction's
-grant-protect words remain with the movable PHY half. Neither half exposes
-register ownership from the other. Channel and retune futures own
-`ChannelTransaction`, containing the PHY custody and exclusive MAC/platform
-loans, and return the domain with their result.
-Both payloads stay in `ManuallyDrop` until consuming reunion. Both guards
-record `Cancelled(Operation)` with the registration observation, independently
-of field drop order. The operation names register, maintain, wake, close,
-channel or retune. `FaultHandle::require_owner` reports only a missing owner;
-a diagnostic handle cannot select another fault reason.
-
-The radio actor keeps lifecycle results in its parent future's storage;
-only exclusive `Placed` loans cross the result-poll boundary. Completion
-consumes the result loan before returning the same domain to its backend
-slot. Cancellation retains the existing transaction guards and performs no
-hardware restoration. This uses the memory crate's existing placement core.
-
-The HAL declares the direct `link_fn!` binding and exports
-`phy_fault_reporter!` to define that exact signature. Staged images bind it
-to `oer-chips-esp32s31-platform-runtime`'s `phy_fault::reset`, which calls
-`fatal::reset_recording`. Its common-format record preserves the source
-payload and is cleared only after successful next-boot output.
-Isolated comparison probes supply their own reporter through the same HAL
-macro, preserve their first named fault in session RAM and terminate through
-their own probe halt/panic path. They use verifier linker scripts and
-no staged runtime; the radio probe's staged hardware companion uses the
-normal runtime record/reset path. Host tests use separate seats and catch
-their own reporter's unwind; both payloads remain quarantined there too.
-No new unsafe block or sharing implementation is introduced.
-
+The PHY's registers are lent from the radio domain by borrow and add no
+unsafe code: `RadioDomain::phy_hardware` and `phy_loan` give `PhyHardware`
+and `PhyLoan`, short borrows of the domain's own fields; letting one go
+gives nothing back, because nothing left the domain. A channel operation's
+`RadioChannelHal` borrows the domain and the client's MAC the same way.
 `oer-portable-memory` holds the shared proofs for executor-crossing storage.
 `ExecutionContext` is the unsafe execution-identity contract; its `Sharing`
 marker distinguishes a globally exclusive context from each constructing
@@ -705,9 +674,6 @@ check the name, so a direct call cannot select another symbol. The former
 unrestricted `define fn` and string-named `export` forms are unavailable.
 `oer-portable-memory::TraceClockSlot` owns `__oer_trace_now_micros: fn() -> u64`;
 `oer-portable-trace` retains `forbid(unsafe_code)` and contains no unsafe site.
-The HAL's `domain::transaction::PhyFaultSlot` owns
-`__oer_phy_transaction_fault: fn(Fault) -> !`. This one narrow unsafe slot
-implementation is the HAL's permitted one-site caller-count exception.
 `oer-chips-family-platform-interrupt-table` owns its table, vector and exemption slot
 contracts; the memory home emits their attributes, preserving the image ABI.
 Duplicate strong definitions are rejected by the linker. A slot's unsafe owner

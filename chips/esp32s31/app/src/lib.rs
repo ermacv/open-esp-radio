@@ -107,7 +107,6 @@ oer_chips_family_platform_executor::tasks! {
 }
 
 oer_chips_family_platform_executor::time_driver!(Esp32s31);
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime::phy_fault::reset);
 
 /// The peripherals an application may take, each once.
 pub struct Peripherals {
@@ -544,7 +543,7 @@ pub fn start<S: Started, H: GroupStarted>(
             root.into_runtime(),
             InterruptTable,
             oer_chips_esp32s31_platform_board::BootstrapPsram,
-            oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
+            || {},
             |hardware| {
                 let causes =
                     oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);

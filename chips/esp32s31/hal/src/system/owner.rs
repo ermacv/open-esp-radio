@@ -1,8 +1,7 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
-use crate::power::PlatformClockBackend;
 #[cfg(test)]
-use crate::{radio::domain::RadioDomain, radio::ieee80211::channel};
+use crate::{power::PlatformClockBackend, radio::domain::RadioDomain, radio::ieee80211::channel};
 
 use crate::{
     radio::ieee80211::{mac as wifi_mac, station_wake::StationWakeState},
@@ -21,7 +20,7 @@ use crate::types::TxIqMismatchPolarity;
 
 pub use crate::radio::phy::registration::{PhyRegistrationEpoch, PhyRegistrationGrant};
 
-use crate::radio::domain::transaction::PhyHardware;
+use crate::radio::domain::PhyHardware;
 
 pub(crate) mod sealed {
 
@@ -45,7 +44,7 @@ pub(crate) mod sealed {
 
 /// Sealed protocol-neutral port accepted by named PHY HAL operations.
 ///
-/// External crates can borrow an owned [`PhyHardware`] or channel transaction but cannot implement this trait for an arbitrary owner or recover
+/// External crates can borrow a lent [`PhyHardware`] or channel HAL but cannot implement this trait for an arbitrary owner or recover
 /// the underlying PAC.
 pub trait SharedPhyAccess: sealed::SharedPhyAccess {
     /// The registration that currently describes this PHY partition.
@@ -291,28 +290,28 @@ pub trait PhyInitializationAccess: SharedPhyContext + sealed::PhyInitializationA
     }
 }
 
-impl sealed::SharedPhyAccess for PhyHardware {
+impl sealed::SharedPhyAccess for PhyHardware<'_> {
     fn pac(&self) -> &RadioPhyRegisters {
-        &self.registers
+        self.registers
     }
 
     fn route_state(&self) -> &PhyRouteState {
-        &self.restore
+        self.restore
     }
 
     fn parts_mut(&mut self) -> (&mut RadioPhyRegisters, &mut PhyRouteState) {
-        (&mut self.registers, &mut self.restore)
+        (self.registers, self.restore)
     }
 }
 
-impl sealed::SharedPhyContext for PhyHardware {}
+impl sealed::SharedPhyContext for PhyHardware<'_> {}
 
-impl SharedPhyAccess for PhyHardware {}
-impl SharedPhyContext for PhyHardware {}
+impl SharedPhyAccess for PhyHardware<'_> {}
+impl SharedPhyContext for PhyHardware<'_> {}
 
-impl sealed::PhyInitializationAccess for PhyHardware {}
+impl sealed::PhyInitializationAccess for PhyHardware<'_> {}
 
-impl PhyInitializationAccess for PhyHardware {}
+impl PhyInitializationAccess for PhyHardware<'_> {}
 
 pub(crate) fn phy_pac(access: &(impl SharedPhyAccess + ?Sized)) -> &RadioPhyRegisters {
     sealed::SharedPhyAccess::pac(access)
@@ -379,9 +378,7 @@ impl RadioAccess {
     #[doc(hidden)]
     pub fn claim_for_host_test() -> Self {
         let (_shared, partitions) = crate::system::root::RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend>(
-                crate::radio::domain::transaction::PhyIdentity::for_host_test(),
-            )
+            .split::<crate::power::test_clocks::CountingBackend>(crate::system::root::host_place())
             .expect("identity capacity");
         let clocked = crate::radio::ieee80211::client::WifiClocked::for_host_test(
             crate::radio::ieee80211::client::WifiCold::from_partition(partitions.wifi).0,
@@ -421,7 +418,7 @@ impl RadioAccess {
         self.wifi_mac_hal().set_station_tsf(value);
     }
 
-    /// Borrow the channel HAL for one channel transaction, with the shared
+    /// Borrow the channel HAL for one channel operation, with the shared
     /// PHY borrowed from the radio domain.
     #[cfg(test)]
     pub fn channel_hal<'hal, B: PlatformClockBackend, P>(
@@ -431,19 +428,6 @@ impl RadioAccess {
     ) -> channel::RadioChannelHal<'hal, P> {
         let (phy, restore) = radio.phy_parts_mut();
         channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore)
-    }
-
-    /// Consume PHY custody for one channel operation, borrowing its MAC and platform.
-    pub fn channel_transaction<'hal, B: PlatformClockBackend, P>(
-        &'hal mut self,
-        platform: &'hal mut P,
-        radio: crate::radio::domain::transaction::RadioTransaction<B>,
-    ) -> crate::radio::ieee80211::channel::ChannelTransaction<'hal, B, P> {
-        crate::radio::ieee80211::channel::ChannelTransaction::new(
-            radio,
-            &mut self.registers,
-            platform,
-        )
     }
 
     /// Read the calibrated baseband observation without exposing the PAC

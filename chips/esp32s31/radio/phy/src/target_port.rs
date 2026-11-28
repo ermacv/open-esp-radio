@@ -118,9 +118,8 @@ use crate::{
 
 mod owner;
 pub use owner::{
-    ChannelFailure, CloseFailure, Registered, RegistrationCause, RegistrationFailure,
-    TrackingFailure, WakeFailure, close, disable_wifi_rx, enable_wifi_rx, register, select_channel,
-    switch_channel, track, wake,
+    ChannelFailure, CloseFailure, Registered, RegistrationFailure, TrackingFailure, WakeFailure,
+    close, disable_wifi_rx, enable_wifi_rx, register, select_channel, switch_channel, track, wake,
 };
 mod domain;
 pub use domain::{PhyRegisterConfig, PhyRegisterFailed};
@@ -338,7 +337,7 @@ pub enum TargetPhyRegisterError {
     MissingCompletedModelOwner,
 }
 
-/// Private witness accepted by the sole [`crate::owner::RegisteredPhy`] constructor.
+/// Private witness a completed registration spends.
 ///
 /// The field is private to this module, so no sibling module can mint it even
 /// though the proof constructor can name the type through crate visibility.
@@ -372,18 +371,18 @@ pub struct TargetPhyRegisterPort<'a, P, R, D, T, O = NoopPhyTargetObserver> {
 /// It reuses the same leaf completer as cold registration, so periodic DCODE,
 /// RX gain, channel, TXDC and gain publication cannot drift into a second
 /// hardware implementation.
-pub struct TargetPhyCalibrationTrackingPort<'a, P, D, T, O = NoopPhyTargetObserver> {
+pub struct TargetPhyCalibrationTrackingPort<'a, 'l, P, D, T, O = NoopPhyTargetObserver> {
     platform: &'a mut P,
-    physical: &'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
+    physical: &'a mut oer_chips_esp32s31_hal::radio::domain::PhyLoan<'l>,
     observer: &'a mut O,
     timer: &'a T,
     short: PhantomData<D>,
 }
 
 /// Complete target port for one affine outer periodic-tracking request.
-pub struct TargetPhyParamTrackingPort<'a, P, D, T, O = NoopPhyTargetObserver> {
+pub struct TargetPhyParamTrackingPort<'a, 'l, P, D, T, O = NoopPhyTargetObserver> {
     platform: &'a mut P,
-    physical: &'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
+    physical: &'a mut oer_chips_esp32s31_hal::radio::domain::PhyLoan<'l>,
     observer: O,
     timer: &'a T,
     short: PhantomData<D>,
@@ -1735,7 +1734,7 @@ impl<
     async fn run_calibration_tx_dc_pwdet<O: PhyTargetObserver>(
         &self,
         mut child: PhyCalibrationTxDcPwdetTransition,
-        physical: &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
+        physical: &mut oer_chips_esp32s31_hal::radio::domain::PhyLoan<'_>,
         observer: &ObserverSlot<'_, O>,
     ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
         calibration::tx_dc_pwdet_init::<D, _>(
@@ -1848,10 +1847,10 @@ impl<'a, P, R, D, T, O> TargetPhyRegisterPort<'a, P, R, D, T, O> {
     }
 }
 
-impl<'a, P, D, T, O> TargetPhyCalibrationTrackingPort<'a, P, D, T, O> {
+impl<'a, 'l, P, D, T, O> TargetPhyCalibrationTrackingPort<'a, 'l, P, D, T, O> {
     pub fn new(
         platform: &'a mut P,
-        physical: &'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
+        physical: &'a mut oer_chips_esp32s31_hal::radio::domain::PhyLoan<'l>,
         timer: &'a T,
         observer: &'a mut O,
     ) -> Self {
@@ -1864,10 +1863,10 @@ impl<'a, P, D, T, O> TargetPhyCalibrationTrackingPort<'a, P, D, T, O> {
         }
     }
 }
-impl<'a, P, D, T, O> TargetPhyParamTrackingPort<'a, P, D, T, O> {
+impl<'a, 'l, P, D, T, O> TargetPhyParamTrackingPort<'a, 'l, P, D, T, O> {
     pub fn new(
         platform: &'a mut P,
-        physical: &'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
+        physical: &'a mut oer_chips_esp32s31_hal::radio::domain::PhyLoan<'l>,
         timer: &'a T,
         observer: O,
     ) -> Self {
@@ -1886,7 +1885,7 @@ impl<
     D: PhyShortDelay,
     T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
     O: PhyTargetObserver,
-> PhyCalibrationTrackingPort for TargetPhyCalibrationTrackingPort<'_, P, D, T, O>
+> PhyCalibrationTrackingPort for TargetPhyCalibrationTrackingPort<'_, '_, P, D, T, O>
 {
     type Error = PhyTargetPortError;
 
@@ -2077,7 +2076,7 @@ impl<
     D: PhyShortDelay,
     T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
     O: PhyTargetObserver,
-> PhyParamTrackingPort for TargetPhyParamTrackingPort<'_, P, D, T, O>
+> PhyParamTrackingPort for TargetPhyParamTrackingPort<'_, '_, P, D, T, O>
 {
     type Error = PhyParamTrackingPortError;
 

@@ -47,41 +47,9 @@ impl ChannelRegisters<'_> {
     }
 }
 
-/// A channel operation's owned PHY custody and exclusive MAC/platform loans.
-/// Its guard remains owned by the operation future, including before polling.
-#[must_use = "a channel operation must return its exact radio domain"]
-pub struct ChannelTransaction<'a, B: crate::power::PlatformClockBackend, P> {
-    radio: crate::radio::domain::transaction::RadioTransaction<B>,
-    mac: &'a mut WifiRadioRegisters,
-    platform: &'a mut P,
-}
-impl<'a, B: crate::power::PlatformClockBackend, P> ChannelTransaction<'a, B, P> {
-    pub(crate) fn new(
-        radio: crate::radio::domain::transaction::RadioTransaction<B>,
-        mac: &'a mut WifiRadioRegisters,
-        platform: &'a mut P,
-    ) -> Self {
-        Self {
-            radio,
-            mac,
-            platform,
-        }
-    }
-    /// Lend the channel port only while this operation retains its owned guard.
-    pub fn channel_mut(&mut self) -> RadioChannelHal<'_, P> {
-        let hardware = self.radio.hardware_mut();
-        RadioChannelHal::from_leased(
-            self.platform,
-            self.mac,
-            &mut hardware.registers,
-            &mut hardware.restore,
-        )
-    }
-    pub fn reunite(self) -> crate::radio::domain::RadioDomain<B> {
-        self.radio.reunite()
-    }
-}
-
+/// One channel operation's registers: the Wi-Fi client's MAC with the
+/// shared PHY and its route state borrowed from the radio domain, and the
+/// platform. Letting it go ends every borrow.
 pub struct RadioChannelHal<'radio, P> {
     #[cfg_attr(
         not(target_arch = "riscv32"),

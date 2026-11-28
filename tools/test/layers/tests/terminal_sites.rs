@@ -546,14 +546,7 @@ impl<'ast> Visit<'ast> for Scanner<'_> {
                 self.add(name.ident.span(), "panic-macro", &name.ident);
             } else if ["retained_static", "__retained_static"].contains(&text.as_str()) {
                 self.add(name.ident.span(), "retained-slot", &name.ident);
-            } else if [
-                "entry",
-                "panic_handler",
-                "phy_fault_reporter",
-                "__exception_handler",
-            ]
-            .contains(&text.as_str())
-            {
+            } else if ["entry", "panic_handler", "__exception_handler"].contains(&text.as_str()) {
                 self.add(name.ident.span(), "terminal-binding", &name.ident);
             }
         }

@@ -290,22 +290,17 @@ local timer0 pending. These stand facts do not qualify TBTT, beacon or opaque
 lanes, nor simultaneous set/clear priority.
 SOURCE: `HW8_S31_WIFI_TSF_MASK_20261026`.
 
-`RadioHardware::split` consumes a permanently claimed `PhyIdentity`. The
-radio domain carries no state of an upper layer: the PHY's state has its own
-owner. `RadioDomain::detach(operation)` returns an owned `RadioTransaction`:
-the movable PHY half owns its register partition, restore state, registration
-and grant-protect words; the inert return half retains common-power/clock
-obligations. A paired transaction reunites infallibly;
-reuniting split halves checks their exact identity and returns both unchanged
-on foreign input. Affine successful reunion leaves no stale return token.
-Both payloads use `ManuallyDrop` until explicit reunion. Cancellation retains
-them and reports `Cancelled(operation)` from either half. The HAL's
-`phy_fault_reporter!` macro binds the image's direct link-time reporter.
-Staged firmware retains operation/epoch and source observations in the common fault envelope and resets; hermetic host cancellation tests catch their own reporter.
-
-`WifiClocked` and `RadioAccess` consume PHY custody into a
-`ChannelTransaction`, which borrows their MAC and platform. Channel and retune
-futures own that custody and return the domain with their typed result.
+`RadioHardware::split` builds the radio domain in the place its owner gives
+and returns its handle (`Occupied<RadioDomain<B>>`) with the protocol
+partitions and the PHY's state right, `PhyStateRight<ChipPhy>`; the reunion
+takes the handle and every partition and empties the place. The radio domain
+carries no state of an upper layer: the PHY's state has its own owner. The
+PHY's registers are lent from the domain for one operation:
+`RadioDomain::phy_hardware` gives `PhyHardware` (the register partition and
+its route state) and `phy_loan` gives `PhyLoan` (the same with the
+grant-protect request). A channel operation takes the client's
+`channel_hal`, a borrow of the domain and the MAC. Letting a loan go gives
+nothing back, because nothing left the domain.
 
 ## Typical AES
 

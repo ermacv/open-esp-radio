@@ -1454,7 +1454,9 @@ dependencies = [
  "oer-portable-settle",
  "oer-portable-time",
  "oer-portable-time-virtual",
+ "oer-tools-test-ui-cases",
  "pin-project-lite",
+ "tempfile",
 ]
 
 [[package]]

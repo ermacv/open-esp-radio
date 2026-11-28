@@ -167,7 +167,7 @@ impl PhyTxDcPwdetSearchTransition {
              + oer_portable_settle::SettleCounter
              + crate::executor::wait::WaitTally
          ),
-        physical: &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
+        physical: &mut oer_chips_esp32s31_hal::radio::domain::PhyLoan<'_>,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
             u32,
@@ -839,7 +839,7 @@ impl PhyTxDcPwdetTransition {
              + oer_portable_settle::SettleCounter
              + crate::executor::wait::WaitTally
          ),
-        physical: &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
+        physical: &mut oer_chips_esp32s31_hal::radio::domain::PhyLoan<'_>,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
             u32,

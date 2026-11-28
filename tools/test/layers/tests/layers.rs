@@ -4735,8 +4735,6 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/phy/restore.rs", 371, PHY_DRIVER),
     ("radio/phy/temperature.rs", 171, PHY_DRIVER),
     ("radio/phy/temperature/", 79, PHY_DRIVER),
-    ("radio/domain/transaction.rs", 414, PHY_DRIVER),
-    ("radio/domain/transaction/", 142, PHY_DRIVER),
 ];
 
 /// Directories below the HAL's sources whose every production file is an
@@ -6532,11 +6530,6 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/app/src/lib.rs::_hart1", 1, BY_PUMP),
     ("chips/esp32s31/app/src/lib.rs::_note", 1, BY_PUMP),
     (
-        "chips/esp32s31/hal/src/radio/domain/transaction.rs::_first",
-        1,
-        BY_PHY_OWNER,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs::_leaked",
         1,
         BY_TRANSMIT,
@@ -6594,16 +6587,6 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/platform/runtime/src/exception.rs::_written",
-        1,
-        BY_EXCEPTION_PATH,
-    ),
-    (
-        "chips/esp32s31/platform/runtime/src/phy_fault.rs::_committed",
-        1,
-        BY_EXCEPTION_PATH,
-    ),
-    (
-        "chips/esp32s31/platform/runtime/src/phy_fault.rs::_reported",
         1,
         BY_EXCEPTION_PATH,
     ),
@@ -6861,11 +6844,6 @@ const NAMED_DISCARDS: &[(&str, usize, &str)] = &[
 const KEPT_OUT: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/hal/src/radio/domain.rs", 4, BY_PHY_OWNER),
     (
-        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
-        8,
-        BY_PHY_OWNER,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
         11,
         BY_TRANSMIT,
@@ -6941,11 +6919,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/app/src/console.rs", 1, BY_PUMP),
     ("chips/esp32s31/app/src/cpu.rs", 1, BY_PUMP),
     ("chips/esp32s31/app/src/lib.rs", 2, BY_PUMP),
-    (
-        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
-        1,
-        BY_PHY_OWNER,
-    ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
         1,
@@ -9004,30 +8977,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unsafe_code",
         1,
         "DMA storage is placed through the HAL macro",
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/domain.rs",
-        "clippy::result_large_err",
-        1,
-        "the parts, or the unchanged domain, are returned exactly as held",
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/domain.rs",
-        "clippy::type_complexity",
-        1,
-        "the parts, or the unchanged domain, are returned exactly as held",
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
-        "clippy::result_large_err",
-        1,
-        "refusal retains the exact affine inputs",
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
-        "unsafe_code",
-        1,
-        "the HAL owns its PHY fault reporter ABI",
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/channel.rs",

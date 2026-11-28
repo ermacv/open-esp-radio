@@ -17,8 +17,8 @@
 use crate::case_c::{CASES, Case, byte, word_padded};
 use crate::pair;
 use crate::radio::{
-    Brought, Cooperative, CooperativeTimer, Failure, Radio, SessionParts, apart, begin, bring_up,
-    held as held_radio, phase, prepare, stop, track_if_due,
+    Brought, Cooperative, CooperativeTimer, Failure, Phy, Radio, RfOpen, SessionParts, apart,
+    begin, bring_up, phase, prepare, stop, track_if_due,
 };
 use crate::usb;
 use core::mem::MaybeUninit;
@@ -48,7 +48,6 @@ use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_phy::{
     CalibrationThreshold, PhyCalibrationIdentity, PhyTargetObserver, RomShortDelay,
-    owner::{RegisteredPhy, RfOpen},
     phy_get_rf_cal_version,
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
@@ -111,7 +110,6 @@ oer_chips_family_platform_executor::tasks! {
     }
 }
 oer_chips_family_platform_executor::time_driver!(Esp32s31);
-oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime::phy_fault::reset);
 oer_chips_family_platform_runtime::entry!(
     main,
     oer_chips_esp32s31_hal::system::platform::Port,
@@ -151,7 +149,7 @@ fn main(
         root.into_runtime(),
         InterruptTable,
         board::BootstrapPsram,
-        oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
+        || {},
         |hardware| {
             let reset_causes =
                 oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
@@ -185,13 +183,6 @@ fn main(
     };
     let station = factory.address(Interface::Station);
     let ap = factory.address(Interface::AccessPoint);
-    let (radio, partitions) = runtime_radio
-        .split::<ChipClocks>(oer_chips_esp32s31_platform_runtime::phy_fault::identity())
-        .unwrap_or_else(|failure| {
-            let fault = failure.fault();
-            let _owners = failure;
-            oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault)
-        });
     let timer = runtime_system_timer;
     let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
@@ -226,11 +217,8 @@ fn main(
         _ => fail(name!("entropy"; 32)),
     };
     let parts = SessionParts {
-        radio,
+        radio: runtime_radio,
         clocks: runtime_clocks,
-        wifi: partitions.wifi,
-        coex: partitions.wifi_coex,
-        phy: partitions.phy,
         identity,
         mac_irq: wifi_irqs.mac,
         power_irq: wifi_irqs.power,
@@ -259,7 +247,11 @@ fn main(
     // The owner's cold snapshot, read before the radio's parts go to the
     // radio level's task.
     let observing = Observing {
-        cold: pair::cold(u32::from(reset_cause.code()), &parts.radio, &parts.clocks),
+        cold: pair::cold(
+            u32::from(reset_cause.code()),
+            parts.radio.observe_power(),
+            &parts.clocks,
+        ),
     };
     let Some(handover) = RADIO.try_take() else {
         fail(name!("radio-handover"; 32));
@@ -971,63 +963,41 @@ impl PhyTargetObserver for &mut ConversionTally {
 /// common and the transmit branches are due, then the vendor's threshold
 /// again: the pass's conversions and its time in microseconds.
 async fn track_now(
-    slot: &mut Option<Radio>,
-    phy: &mut RegisteredPhy<'_>,
+    radio: &mut Radio,
+    phy: &mut Phy<'_>,
     open: RfOpen,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
 ) -> Result<(RfOpen, u32, service::Conversions), Failure> {
     let mut tally = ConversionTally::default();
-    phy.set_calibration_threshold(CalibrationThreshold::Diagnostic(0));
+    phy.set_calibration_threshold(&open, CalibrationThreshold::Diagnostic(0));
     let began = timer.now();
-    let tracked = crate::radio::track(slot, phy, open, timer, platform, &mut tally).await;
+    let tracked = crate::radio::track(radio, phy, open, timer, platform, &mut tally).await;
     let track_micros = crate::radio::micros_between(began, timer.now());
-    phy.set_calibration_threshold(CalibrationThreshold::Vendor);
-    Ok((tracked?, track_micros, tally.conversions()))
+    let open = tracked?;
+    phy.set_calibration_threshold(&open, CalibrationThreshold::Vendor);
+    Ok((open, track_micros, tally.conversions()))
 }
 
 async fn close_and_wake(
-    slot: &mut Option<Radio>,
-    phy: &mut RegisteredPhy<'_>,
+    radio: &mut Radio,
+    phy: &mut Phy<'_>,
     open: RfOpen,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
     clocks: &ChipClocks,
 ) -> Result<(RfOpen, u32, u32), Failure> {
-    let radio = slot.take().ok_or((CLOSE, 1))?;
     let began = timer.now();
-    let (radio, closed) = {
-        let mut operation =
-            core::pin::pin!(oer_chips_esp32s31_radio_phy::close::<_, (), RomShortDelay>(
-                timer, radio, phy, open, platform
-            ));
-        let mut completion = MaybeUninit::uninit();
-        let (returned, result) =
-            oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
-                .await
-                .split();
-        (returned.read(), result.read())
-    };
+    let closed = apart!(oer_chips_esp32s31_radio_phy::close::<_, (), RomShortDelay>(
+        timer, radio, phy, open, platform
+    ));
     let close_micros = crate::radio::micros_between(began, timer.now());
-    let Ok(closed) = closed else {
-        *slot = Some(radio);
-        return Err((CLOSE, 0));
-    };
+    let closed = closed.map_err(|_| (CLOSE, 0))?;
     let began = timer.now();
-    let (radio, woken) = {
-        let mut operation =
-            core::pin::pin!(oer_chips_esp32s31_radio_phy::wake::<_, RomShortDelay>(
-                timer, radio, phy, closed, clocks
-            ));
-        let mut completion = MaybeUninit::uninit();
-        let (returned, result) =
-            oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
-                .await
-                .split();
-        (returned.read(), result.read())
-    };
+    let woken = apart!(oer_chips_esp32s31_radio_phy::wake::<_, RomShortDelay>(
+        timer, radio, phy, closed, clocks
+    ));
     let wake_micros = crate::radio::micros_between(began, timer.now());
-    *slot = Some(radio);
     let open = woken.map_err(|_| (WAKE, 0))?;
     Ok((open, close_micros, wake_micros))
 }
@@ -1036,8 +1006,8 @@ async fn close_and_wake(
 /// clocks' proof, the walker's interrupt banks, the cold start's inputs and
 /// the registered PHY.
 struct Turns<'a, 'p> {
-    slot: &'a mut Option<Radio>,
-    phy: &'a mut RegisteredPhy<'p>,
+    radio: &'a mut Radio,
+    phy: &'a mut Phy<'p>,
     access: Option<(RadioAccess, WifiClocksOn)>,
     mac_irq: &'a mut MacInterruptRegisters,
     power_irq: &'a mut MacPowerInterruptRegisters,
@@ -1095,7 +1065,6 @@ async fn worker(
     mut inbox: crate::radio::Work<ReceiverCommand, Outcome>,
     reset: u32,
 ) -> Result<core::convert::Infallible, Ended> {
-    let cold = pair::cold(reset, &parts.radio, &parts.clocks);
     let identity = parts.identity;
     let cycles = parts.cycles;
     let ap = parts.ap;
@@ -1110,9 +1079,16 @@ async fn worker(
     let book = crate::radio::WaitBook::default();
     let timer = CooperativeTimer::counted(&cooperative, cycles, &book);
     let mut platform = ();
+    let mut radio_memory = MaybeUninit::uninit();
     let mut phy_memory = MaybeUninit::uninit();
     let up = async {
-        let brought = apart!(bring_up(parts, &mut phy_memory, &timer, &mut platform))?;
+        let brought = apart!(bring_up(
+            parts,
+            &mut radio_memory,
+            &mut phy_memory,
+            &timer,
+            &mut platform
+        ))?;
         let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
         let table = RxTable::place::<ChipDma>(table).map_err(|_| (phase::RING, 1))?;
         let (arena, mut fresh) = Arena::<RingRx, BYTES>::claim().ok_or((phase::RING, 2))?;
@@ -1128,7 +1104,7 @@ async fn worker(
             .try_init(MaybeUninit::uninit())
             .ok_or((phase::RING, 6))?;
         let Brought {
-            mut slot,
+            mut radio,
             mut phy,
             open,
             register_micros,
@@ -1144,13 +1120,9 @@ async fn worker(
             station,
             held,
         } = brought;
-        let reset = held_radio(&mut slot)?.reset_wifi_mac_block(
-            clocked.clocks_on(),
-            first,
-            crate::radio::CBW,
-        );
+        let reset = radio.reset_wifi_mac_block(clocked.clocks_on(), first, crate::radio::CBW);
         let (prepared, open) = apart!(prepare(
-            &mut slot,
+            &mut radio,
             &mut clocked,
             &mut phy,
             open,
@@ -1178,7 +1150,7 @@ async fn worker(
             parts,
         );
         Ok((
-            slot,
+            radio,
             (phy, open, register_micros, waits),
             access,
             clocks_on,
@@ -1196,7 +1168,7 @@ async fn worker(
         ))
     };
     let (
-        mut slot,
+        mut radio,
         (mut phy, open, register_micros, waits),
         access,
         clocks_on,
@@ -1230,12 +1202,9 @@ async fn worker(
             waits,
         },
     );
-    let up = match pair::up(&mut slot, held.clocks(), reset, &phy, identity) {
-        Ok(readings) => readings,
-        Err(_) => cold.clone(),
-    };
+    let up = pair::up(&mut radio, held.clocks(), reset, &phy, &open, identity);
     let mut turns = Turns {
-        slot: &mut slot,
+        radio: &mut radio,
         phy: &mut phy,
         access: Some((access, clocks_on)),
         mac_irq: &mut mac_irq,
@@ -1289,24 +1258,14 @@ async fn worker(
                     answer(id, service::Stopped::Refused(Refusal::Down));
                     return down(inbox).await;
                 };
-                match held_radio(turns.slot) {
-                    Ok(radio) => {
-                        let began = EmbassyClock.now();
-                        let _stopped = stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
-                        answer(
-                            id,
-                            service::Stopped::Stopped {
-                                micros: micros_since(began),
-                            },
-                        );
-                    }
-                    Err((phase, index)) => {
-                        answer(
-                            id,
-                            service::Stopped::Failed(service::Failure { phase, index }),
-                        );
-                    }
-                }
+                let began = EmbassyClock.now();
+                let _stopped = stop(turns.radio, &mut access, &clocks_on, ring, enabled, cycles);
+                answer(
+                    id,
+                    service::Stopped::Stopped {
+                        micros: micros_since(began),
+                    },
+                );
                 return down(inbox).await;
             }
             ReceiverCommand::Turn(request) => {
@@ -1383,25 +1342,9 @@ async fn worker(
                         0x40
                     )
                 };
-                let radio = match held_radio(turns.slot) {
-                    Ok(radio) => radio,
-                    Err((phase, index)) => {
-                        turns.access = Some((access, clocks_on));
-                        failed!(
-                            Receiving::Up {
-                                ring,
-                                enabled,
-                                open,
-                                steps: Steps::Failed,
-                            },
-                            phase,
-                            index
-                        )
-                    }
-                };
                 let began = EmbassyClock.now();
                 let (reset, parts, place) =
-                    stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
+                    stop(turns.radio, &mut access, &clocks_on, ring, enabled, cycles);
                 let stopped = micros_since(began);
                 let handles = parts.ring.len() + spares.len();
                 // RF closed and woken, with the tracking pass when one is due,
@@ -1409,7 +1352,7 @@ async fn worker(
                 let rf = match request.kind {
                     service::TurnKind::Restart => Ok((open, service::TurnedRf::Kept)),
                     service::TurnKind::CloseAndWake => match apart!(close_and_wake(
-                        turns.slot,
+                        turns.radio,
                         turns.phy,
                         open,
                         &timer,
@@ -1417,7 +1360,7 @@ async fn worker(
                         held.clocks()
                     )) {
                         Ok((open, close_micros, wake_micros)) => apart!(track_if_due(
-                            turns.slot,
+                            turns.radio,
                             turns.phy,
                             open,
                             &timer,
@@ -1435,7 +1378,7 @@ async fn worker(
                         Err(failure) => Err(failure),
                     },
                     service::TurnKind::CloseWakeAndTrack => match apart!(close_and_wake(
-                        turns.slot,
+                        turns.radio,
                         turns.phy,
                         open,
                         &timer,
@@ -1443,7 +1386,7 @@ async fn worker(
                         held.clocks()
                     )) {
                         Ok((open, close_micros, wake_micros)) => apart!(track_now(
-                            turns.slot,
+                            turns.radio,
                             turns.phy,
                             open,
                             &timer,
@@ -1475,7 +1418,7 @@ async fn worker(
                 let mut clocked = WifiClocked::from_running(access, clocks_on);
                 let mut walker = parts.walker;
                 let prepared = apart!(prepare(
-                    turns.slot,
+                    turns.radio,
                     &mut clocked,
                     turns.phy,
                     open,

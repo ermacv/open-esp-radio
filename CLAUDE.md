@@ -351,7 +351,7 @@ A page never relaxes a rule above: where they differ, the rule above holds.
 
 | Subject | Contract |
 |---|---|
-| Unsafe homes and their exceptions (PHY-fault `LinkSlot`, trace clock slot, `ContextCell`), lint catalogues, panic budgets and `panic_const_async_fn_resumed` | [docs/unsafe.md](docs/unsafe.md) |
+| Unsafe homes and their exceptions (trace clock slot, `ContextCell`), lint catalogues, panic budgets and `panic_const_async_fn_resumed` | [docs/unsafe.md](docs/unsafe.md) |
 | Harts, executors, interrupt enable, signal raisers, the radio interrupt levels' handlers and lines | [Execution](docs/architecture.md#execution), [interrupt-table](chips/family/platform/interrupt-table/README.md), [executor](chips/family/platform/executor/README.md) |
 | Fatal policy, terminal-site classes and reset owners | [Fatal decisions and reset](docs/architecture.md#fatal-decisions-and-reset), [terminal-site registry](tools/test/layers/README.md#terminal-site-registry) |
 | WT/WTC triggers, `read-observed` and `zero-register-writes` words | [register model](tools/registers/model/README.md) |
