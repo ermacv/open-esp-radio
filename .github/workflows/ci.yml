@@ -172,7 +172,6 @@ jobs:
         # Build unconfigured and fixed configured images for analysis without a board.
         run: |
           cargo fw build esp32s31-boot-smoke
-          cargo fw build esp32s31-radio-root
       - name: HIL image builds
         # Every HIL image the workspace builds, with the linked image's checks;
         # one outside the workspace (its `exclude`) is not built.

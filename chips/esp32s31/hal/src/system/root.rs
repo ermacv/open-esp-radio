@@ -41,7 +41,6 @@ use crate::{
         usb_serial_jtag::ConsoleRegisters,
         watchdog::{Mwdt0Registers, RwdtRegisters, SwdRegisters, WatchdogRegisters},
     },
-    power::{ChipClocks, PlatformClockBackend},
     radio::domain::{CoexAbsent, RadioDomain, RadioDomainReleaseError, WifiClient},
     radio::ieee80211::registers::{MacLocalTime, WifiMacPartition, WifiRxDmaRegisters},
     radio::modem::SharedRadioRegisters,
@@ -251,7 +250,6 @@ impl Root {
                 boot.hp_alive_sys_pll_clock,
             )),
             console: ConsoleRegisters::new(usb_serial_jtag),
-            clocks: adoption::ClockParts(chip_clocks),
             core_control: adoption::CoreParts {
                 core: CoreControlRegisters::new(core_control),
                 uart0: Uart0ClockRegisters::new(uart0_clock),
@@ -298,6 +296,7 @@ impl Root {
                     coexistence,
                     shared_radio,
                     analog_bus,
+                    chip_clocks,
                 })),
             },
         }
@@ -350,6 +349,7 @@ struct RadioParts {
     coexistence: oer_chips_esp32s31_pac::ownership::CoexistencePeripherals,
     shared_radio: oer_chips_esp32s31_pac::ownership::SharedRadioPeripherals,
     analog_bus: oer_chips_esp32s31_pac::ownership::AnalogBusPeripherals,
+    chip_clocks: oer_chips_esp32s31_pac::ownership::ChipClockPeripherals,
 }
 
 /// The radio's owners: the shared radio owner and the protocol partitions.
@@ -384,12 +384,14 @@ impl RadioPartitions {
             coexistence,
             shared_radio,
             analog_bus,
+            chip_clocks,
         } = parts;
         let local_time = MacLocalTime::new(mac_local_time);
         let shared = SharedRadioRegisters::new(
             RadioPhyRegisters::new(radio_phy, analog_bus, local_time),
             coexistence,
             shared_radio,
+            chip_clocks,
         );
         Self {
             shared,
@@ -410,12 +412,12 @@ impl RadioPartitions {
 ///
 /// ```compile_fail,E0382
 /// use core::mem::MaybeUninit;
-/// use oer_chips_esp32s31_hal::{power::PlatformClockBackend, radio::domain::RadioDomain, system::root::RadioHardware};
+/// use oer_chips_esp32s31_hal::{radio::domain::RadioDomain, system::root::RadioHardware};
 ///
-/// # fn split_twice<B: PlatformClockBackend>(hardware: RadioHardware) {
-/// let (mut first, mut second) = (MaybeUninit::<RadioDomain<B>>::uninit(), MaybeUninit::<RadioDomain<B>>::uninit());
-/// let _first = hardware.split::<B>(&mut first);
-/// let _second = hardware.split::<B>(&mut second);
+/// # fn split_twice(hardware: RadioHardware) {
+/// let (mut first, mut second) = (MaybeUninit::<RadioDomain>::uninit(), MaybeUninit::<RadioDomain>::uninit());
+/// let _first = hardware.split(&mut first);
+/// let _second = hardware.split(&mut second);
 /// # }
 /// ```
 #[must_use = "dropping the radio root permanently loses the unique hardware capability"]
@@ -435,6 +437,16 @@ impl RadioHardware {
         crate::radio::phy::power_words::ModemBus<'_>,
     ) {
         self.partitions.shared.radio_phy().observe_power()
+    }
+
+    /// The platform clock words, as the domain observes them
+    /// ([`RadioDomain::observe_platform_clocks`]), before the split. Writes
+    /// nothing.
+    pub fn observe_platform_clocks(
+        &self,
+        bus: &crate::radio::phy::power_words::ModemBus<'_>,
+    ) -> crate::power::ChipClockWords {
+        self.partitions.shared.platform.observe(bus)
     }
 
     fn new(partitions: RadioPartitions) -> Self {
@@ -476,6 +488,7 @@ impl RadioHardware {
             coexistence,
             shared_radio,
             analog_bus,
+            chip_clocks,
             ..
         } = partitions;
         Self::new(RadioPartitions::compose(RadioParts {
@@ -487,6 +500,7 @@ impl RadioHardware {
             coexistence,
             shared_radio,
             analog_bus,
+            chip_clocks,
         }))
     }
 
@@ -547,18 +561,18 @@ pub enum ReunionError {
 /// Rejected reunion: the domain stays in its place and every partition
 /// comes back.
 #[must_use = "a rejected reunion still owns the domain and every partition"]
-pub struct ReunionFailure<'d, B: PlatformClockBackend> {
-    shared: Occupied<'d, RadioDomain<B>>,
+pub struct ReunionFailure<'d> {
+    shared: Occupied<'d, RadioDomain>,
     partitions: ProtocolPartitions,
     error: ReunionError,
 }
 
-impl<'d, B: PlatformClockBackend> ReunionFailure<'d, B> {
+impl<'d> ReunionFailure<'d> {
     pub const fn error(&self) -> ReunionError {
         self.error
     }
 
-    pub fn into_parts(self) -> (Occupied<'d, RadioDomain<B>>, ProtocolPartitions) {
+    pub fn into_parts(self) -> (Occupied<'d, RadioDomain>, ProtocolPartitions) {
         (self.shared, self.partitions)
     }
 }
@@ -612,21 +626,21 @@ impl RadioHardware {
     ///
     /// Identity exhaustion returns every input owner before any split or
     /// MMIO; the place stays empty.
-    pub fn split<'d, B: PlatformClockBackend>(
+    pub fn split<'d>(
         self,
-        place: &'d mut MaybeUninit<RadioDomain<B>>,
-    ) -> Result<(Occupied<'d, RadioDomain<B>>, ProtocolPartitions), RadioSplitFailure> {
+        place: &'d mut MaybeUninit<RadioDomain>,
+    ) -> Result<(Occupied<'d, RadioDomain>, ProtocolPartitions), RadioSplitFailure> {
         self.split_with_clock_identity(place, crate::power::clock::ModemClockPlannerIdentity::new())
     }
 
-    fn split_with_clock_identity<'d, B: PlatformClockBackend>(
+    fn split_with_clock_identity<'d>(
         self,
-        place: &'d mut MaybeUninit<RadioDomain<B>>,
+        place: &'d mut MaybeUninit<RadioDomain>,
         clock_identity: Result<
             crate::power::clock::ModemClockPlannerIdentity,
             oer_chips_family_radio_modem_clock::IdentityExhausted,
         >,
-    ) -> Result<(Occupied<'d, RadioDomain<B>>, ProtocolPartitions), RadioSplitFailure> {
+    ) -> Result<(Occupied<'d, RadioDomain>, ProtocolPartitions), RadioSplitFailure> {
         let clock_identity = match clock_identity {
             Ok(identity) => identity,
             Err(error) => {
@@ -667,10 +681,10 @@ impl RadioHardware {
         clippy::result_large_err,
         reason = "rejection returns the domain's handle and every partition without allocation"
     )]
-    pub fn reunite<'d, B: PlatformClockBackend>(
-        shared: Occupied<'d, RadioDomain<B>>,
+    pub fn reunite<'d>(
+        shared: Occupied<'d, RadioDomain>,
         partitions: ProtocolPartitions,
-    ) -> Result<Self, ReunionFailure<'d, B>> {
+    ) -> Result<Self, ReunionFailure<'d>> {
         if let Err(error) = shared.releasable() {
             return Err(ReunionFailure {
                 shared,

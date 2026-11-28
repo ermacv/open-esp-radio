@@ -168,6 +168,3 @@ pub use target_port::{
     PhyRegisterFailed, PhyRfBoundary, PhyTargetObserver, PhyTargetPortCounters,
     TargetPhyParamTrackingError, TargetPhyRegisterError,
 };
-
-#[cfg(test)]
-mod test_clocks;

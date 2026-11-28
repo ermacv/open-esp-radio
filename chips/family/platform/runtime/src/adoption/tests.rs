@@ -55,9 +55,8 @@ fn runtime_is_published_after_driver_arming_image_preparation_and_mapping() {
     .unwrap();
     let (mut hardware, mapping, mut adopted) = ready.into_parts();
     assert_eq!(mapping, 23);
-    assert_eq!(hardware.clock.id, 12);
     assert_eq!(hardware.resources.id, 15);
-    assert!(core::ptr::eq(hardware.clock.log, &log));
+    assert!(core::ptr::eq(hardware.resources.log, &log));
     adopted.router().verify().unwrap();
     let events = log.events.borrow();
     let armed = events

@@ -81,7 +81,7 @@ SRAM before the image can be encoded. It is never a reported-only failure.
 
 ## Boards
 
-`boot-smoke` and `radio-root` send typed boot diagnostics, including the
+`boot-smoke` sends typed boot diagnostics, including the
 previous panic, as `OER-DIAG:01…` lines. `run` and `monitor` decode these on
 the host; the rendered `OER-PANIC previous …`, handoff, clock and
 `OER-RESULT:` lines retain their earlier fields and order. The interrupt

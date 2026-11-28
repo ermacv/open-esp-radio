@@ -7749,7 +7749,7 @@ fn silences_a_bool_lint(source: &str) -> bool {
 /// register model gives a read value. A word decides nothing, so a new
 /// caller fails here; the developer's tools are aside.
 const RECORD_WORD_CALLERS: &[&str] = &[
-    "chips/esp32s31/hal/src/power/chip_clocks.rs",
+    "chips/esp32s31/hal/src/power/platform.rs",
     "chips/esp32s31/hal/src/radio/phy/power_words.rs",
     "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
 ];
@@ -9756,12 +9756,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "hil/probes/esp32s31-peer-overdue/src/main.rs",
         "clippy::arithmetic_side_effects",
-        1,
-        BY_PROBE,
-    ),
-    (
-        "hil/probes/esp32s31-radio-root/src/main.rs",
-        "clippy::let_underscore_must_use",
         1,
         BY_PROBE,
     ),

@@ -1,0 +1,177 @@
+
+*** chips/family/radio/power/src/power.rs:78:5: replace execute_owned -> Result<(), PowerError> with Ok(())
+
+*** mutation diff:
+--- chips/family/radio/power/src/power.rs
++++ replace execute_owned -> Result<(), PowerError> with Ok(())
+@@ -70,57 +70,17 @@
+     /// Observed semantic state.
+     pub observed: bool,
+ }
+ 
+ pub fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), PowerError> {
+     // Wi-Fi's combined BB+MAC reset belongs to its client entry. The BB-only
+     // pulse below is the PHY clock-enable prerequisite, repeated by the
+     // vendor modem clock manager; it preserves the MAC calibration window.
+-    registers.publish_modem_power_state();
+-    registers.enable_modem_register_bus_clock();
+-    registers.configure_wifi_power_clock_map();
+-    registers.prepare_shared_modem_clock_map();
+-    // The radio owner counts the 160 MHz gate; its reference replaces the
+-    // gate write that ESP-IDF's modem clock performs first for this source.
+-    registers.acquire_platform_clock(PowerClock::Pll160m);
+-    registers.configure_modem_source_clocks();
+-    registers.set_wifi_baseband_reset(true);
+-    registers.set_wifi_baseband_reset(false);
+-    registers.enable_phy_calibration_clocks();
+-    registers.select_phy_i2c_160mhz_source();
+-    registers.acquire_platform_clock(PowerClock::AnalogI2cMaster);
+-
+-    let readback = registers.power_readback();
+-    verify_state(PowerCheckpoint::ResetReleased, readback.reset_released)?;
+-    verify_state(
+-        PowerCheckpoint::HpActiveIcg,
+-        readback.hp_active_icg_selected,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::ModemBusClock,
+-        readback.modem_bus_clock_enabled,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::HpActiveClockMap,
+-        readback.hp_active_clock_map_configured,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::SharedClockMap,
+-        readback.shared_clock_map_configured,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::ModemClockSource,
+-        readback.modem_source_clocks_configured,
+-    )?;
+-    verify_state(
+-        PowerCheckpoint::PhyClocks,
+-        readback.phy_calibration_clocks_enabled,
+-    )?;
+-    verify_state(PowerCheckpoint::I2cSource, readback.phy_i2c_160mhz_selected)
++    Ok(()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ fn verify_state(checkpoint: PowerCheckpoint, observed: bool) -> Result<(), PowerError> {
+     if observed {
+         Ok(())
+     } else {
+         Err(PowerError {
+             checkpoint,
+
+
+*** /home/ermacv/.rustup/toolchains/1.97.1-x86_64-unknown-linux-gnu/bin/cargo test --no-run --verbose --package=oer-chips-family-radio-power@0.1.0
+       Fresh oer-portable-time v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/time)
+       Fresh oer-portable-clock v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/clock)
+       Fresh oer-portable-settle v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/settle)
+       Fresh oer-chips-family-radio-modem-clock v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/modem-clock)
+       Fresh oer-protocols-radio-coex v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/protocols/radio/coex)
+       Fresh oer-portable-time-virtual v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/time-virtual)
+       Dirty oer-chips-family-radio-power v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/power): the file `chips/family/radio/power/src/power.rs` has changed (1795871243.060577181s, 1s after last build at 1795871242.821576204s)
+   Compiling oer-chips-family-radio-power v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/power)
+     Running `/usr/bin/sccache /home/ermacv/.rustup/toolchains/1.97.1-x86_64-unknown-linux-gnu/bin/rustc --crate-name oer_chips_family_radio_power --edition=2024 chips/family/radio/power/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --emit=dep-info,link -C embed-bitcode=no -C debuginfo=line-tables-only '--deny=clippy::unwrap_used' --deny=unsafe_op_in_unsafe_fn '--deny=clippy::unreachable' '--deny=clippy::unimplemented' --warn=unexpected_cfgs '--deny=clippy::todo' '--deny=clippy::struct_excessive_bools' '--deny=clippy::panic' '--deny=clippy::let_underscore_must_use' '--deny=clippy::indexing_slicing' '--deny=clippy::fn_params_excessive_bools' '--deny=clippy::expect_used' '--deny=clippy::disallowed_methods' '--deny=clippy::disallowed_macros' '--deny=clippy::debug_assert_with_mut_call' '--deny=clippy::cast_sign_loss' '--deny=clippy::cast_possible_wrap' '--deny=clippy::cast_possible_truncation' '--deny=clippy::arithmetic_side_effects' --check-cfg 'cfg(oer_probe)' --check-cfg 'cfg(oer_trace)' --check-cfg 'cfg(oer_debug_control)' --check-cfg 'cfg(oer_fault_injection)' --check-cfg 'cfg(oer_cpu_load)' --test --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("test-support"))' -C metadata=64f4ed5bb040c5a5 -C extra-filename=-9765ca6508244daf --out-dir /mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps -C incremental=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/incremental -L dependency=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps --extern oer_chips_family_radio_modem_clock=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_chips_family_radio_modem_clock-ef0327271be4f0e5.rlib --extern oer_portable_clock=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_portable_clock-7a3dbe5891e70441.rlib --extern oer_portable_time=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_portable_time-ced74ff8f07ef8cf.rlib --extern oer_portable_time_virtual=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_portable_time_virtual-94e6cd23a741fa11.rlib --extern oer_protocols_radio_coex=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_protocols_radio_coex-0a90f1f277f62925.rlib`
+     Running `/usr/bin/sccache /home/ermacv/.rustup/toolchains/1.97.1-x86_64-unknown-linux-gnu/bin/rustc --crate-name oer_chips_family_radio_power --edition=2024 chips/family/radio/power/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=line-tables-only '--deny=clippy::unwrap_used' --deny=unsafe_op_in_unsafe_fn '--deny=clippy::unreachable' '--deny=clippy::unimplemented' --warn=unexpected_cfgs '--deny=clippy::todo' '--deny=clippy::struct_excessive_bools' '--deny=clippy::panic' '--deny=clippy::let_underscore_must_use' '--deny=clippy::indexing_slicing' '--deny=clippy::fn_params_excessive_bools' '--deny=clippy::expect_used' '--deny=clippy::disallowed_methods' '--deny=clippy::disallowed_macros' '--deny=clippy::debug_assert_with_mut_call' '--deny=clippy::cast_sign_loss' '--deny=clippy::cast_possible_wrap' '--deny=clippy::cast_possible_truncation' '--deny=clippy::arithmetic_side_effects' --check-cfg 'cfg(oer_probe)' --check-cfg 'cfg(oer_trace)' --check-cfg 'cfg(oer_debug_control)' --check-cfg 'cfg(oer_fault_injection)' --check-cfg 'cfg(oer_cpu_load)' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("test-support"))' -C metadata=d0d8da410bd1a57c -C extra-filename=-d8dc5ab4f6af15dd --out-dir /mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps -C incremental=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/incremental -L dependency=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps --extern oer_chips_family_radio_modem_clock=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_chips_family_radio_modem_clock-ef0327271be4f0e5.rmeta --extern oer_protocols_radio_coex=/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/liboer_protocols_radio_coex-0a90f1f277f62925.rmeta`
+warning: unused variable: `registers`
+  --> chips/family/radio/power/src/power.rs:74:22
+   |
+74 | pub fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), PowerError> {
+   |                      ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_registers`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `verify_state` is never used
+  --> chips/family/radio/power/src/power.rs:81:4
+   |
+81 | fn verify_state(checkpoint: PowerCheckpoint, observed: bool) -> Result<(), PowerError> {
+   |    ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `oer-chips-family-radio-power` (lib) generated 2 warnings (run `cargo fix --lib -p oer-chips-family-radio-power` to apply 1 suggestion)
+warning: `oer-chips-family-radio-power` (lib test) generated 2 warnings (2 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+  Executable `/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/oer_chips_family_radio_power-9765ca6508244daf`
+
+*** result: Success
+
+*** /home/ermacv/.rustup/toolchains/1.97.1-x86_64-unknown-linux-gnu/bin/cargo test --verbose --package=oer-chips-family-radio-power@0.1.0 --lib -- --skip tests::search
+       Fresh oer-portable-time v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/time)
+       Fresh oer-portable-settle v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/settle)
+       Fresh oer-portable-clock v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/clock)
+       Fresh oer-portable-time-virtual v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/portable/time-virtual)
+       Fresh oer-chips-family-radio-modem-clock v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/modem-clock)
+       Fresh oer-protocols-radio-coex v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/protocols/radio/coex)
+       Fresh oer-chips-family-radio-power v0.1.0 (/tmp/cargo-mutants-15-AsCRtn.tmp/chips/family/radio/power)
+warning: unused variable: `registers`
+  --> chips/family/radio/power/src/power.rs:74:22
+   |
+74 | pub fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), PowerError> {
+   |                      ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_registers`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `verify_state` is never used
+  --> chips/family/radio/power/src/power.rs:81:4
+   |
+81 | fn verify_state(checkpoint: PowerCheckpoint, observed: bool) -> Result<(), PowerError> {
+   |    ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `oer-chips-family-radio-power` (lib test) generated 2 warnings (run `cargo fix --lib -p oer-chips-family-radio-power --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running `/mnt/ymtc/cargo/12/591335d01fc7f3/debug/deps/oer_chips_family_radio_power-9765ca6508244daf --skip 'tests::search'`
+
+running 11 tests
+test epoch::tests::retirement_preserves_the_counter_and_wrap_skips_zero ... ok
+test clocks::tests::only_the_rtc_crystal_selector_chooses_wifi_xtal32k ... ok
+test power::tests::failed_semantic_readback_names_the_exact_checkpoint ... FAILED
+test power::tests::exact_semantic_sequence_is_finite_and_ordered ... FAILED
+test tests::failed_entry_retries_original_baseline_and_commits_reset_only_on_success ... ok
+test baseline::tests::each_readback_precedes_the_next_write_and_failure_retains_the_suffix ... ok
+test power::tests::power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure ... FAILED
+test tests::low_power_refusals_preserve_selector_order_and_the_exact_guard ... ok
+test tests::module_slots_hold_shared_edges_and_reject_duplicate_or_missing_leases_without_writes ... ok
+test tests::acquire_and_release_poison_keep_the_failed_owner_and_refuse_every_later_change ... ok
+test tests::last_leave_retains_membership_baseline_and_only_unreleased_references ... ok
+
+failures:
+
+---- power::tests::failed_semantic_readback_names_the_exact_checkpoint stdout ----
+
+thread 'power::tests::failed_semantic_readback_names_the_exact_checkpoint' (204560) panicked at chips/family/radio/power/src/power/tests.rs:172:5:
+assertion `left == right` failed
+  left: Ok(())
+ right: Err(PowerError { checkpoint: ModemClockSource, expected: true, observed: false })
+
+---- power::tests::exact_semantic_sequence_is_finite_and_ordered stdout ----
+
+thread 'power::tests::exact_semantic_sequence_is_finite_and_ordered' (204559) panicked at chips/family/radio/power/src/power/tests.rs:145:5:
+assertion `left == right` failed
+  left: []
+ right: [SelectHpActiveIcg, ApplyModemIcg, ApplySleepIcg, EnableModemBus, ConfigureHpActiveMap, PrepareSharedMap, Acquire(Pll160m), ConfigureModemSource, ResetBaseband(true), ResetBaseband(false), EnablePhyClocks, SelectI2c160Mhz, Acquire(AnalogI2cMaster)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- power::tests::power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure stdout ----
+
+thread 'power::tests::power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure' (204561) panicked at chips/family/radio/power/src/power/tests.rs:225:9:
+assertion `left == right` failed: the I2C reference belongs to the retained epoch
+  left: 0
+ right: 1
+
+
+failures:
+    power::tests::exact_semantic_sequence_is_finite_and_ordered
+    power::tests::failed_semantic_readback_names_the_exact_checkpoint
+    power::tests::power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure
+
+test result: FAILED. 8 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p oer-chips-family-radio-power --lib`
+
+*** result: Failure(101)

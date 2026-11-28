@@ -1,14 +1,12 @@
 //! Owned adapters of the family adoption driver. Startup order is not HAL policy.
 use super::*;
-use crate::{power::PsramMpll, system::cores};
-use oer_chips_esp32s31_pac::ownership::{ChipClockPeripherals, DebugPeripherals};
+use crate::system::cores;
+use oer_chips_esp32s31_pac::ownership::DebugPeripherals;
 use oer_chips_family_boot::adoption::{self, InitError, Port};
 
 /// The HAL's adoption port over the root's unique parts.
 pub struct RuntimePort;
 
-/// Uninstalled platform clock words; only the root supplies them.
-pub struct ClockParts(pub(super) ChipClockPeripherals);
 /// Uninstalled fatal/core-control owners.
 pub struct CoreParts {
     pub(super) core: CoreControlRegisters,
@@ -77,7 +75,6 @@ pub struct Hardware {
     /// wake-stub word and the cache bus observer.
     pub hart1: crate::system::cores::LaunchPermit,
     pub wifi_interrupts: WifiInterruptBanks,
-    pub clocks: ChipClocks,
     pub radio: RadioHardware,
     /// The settle counter at the adopted CPU rate: a copy for each driver
     /// that settles.
@@ -87,8 +84,6 @@ pub struct Hardware {
 impl Port for RuntimePort {
     type CpuClock = crate::system::boot::RuntimeCpuClock;
     type Console = ConsoleRegisters;
-    type ClockParts = ClockParts;
-    type Clocks = ChipClocks;
     type CoreControl = CoreParts;
     type Debug = DebugParts;
     type Resources = RuntimeResources;
@@ -107,9 +102,6 @@ impl Port for RuntimePort {
         crate::peripherals::usb_serial_jtag::install(console)
             .map_err(|_| InitError::ConsoleInstalled)
     }
-    fn adopt_clocks(parts: ClockParts) -> ChipClocks {
-        ChipClocks::install(parts.0, PsramMpll::adopted())
-    }
     fn install_core_control(parts: CoreParts) -> Result<(), InitError> {
         cores::install(parts.core, parts.uart0).map_err(|_| InitError::CoreControlInstalled)
     }
@@ -119,7 +111,6 @@ impl Port for RuntimePort {
     }
     fn finish(
         resources: RuntimeResources,
-        clocks: ChipClocks,
         watchdogs: adoption::Watchdogs<Self::Main0, Self::Main1, Self::Rtc, Self::Super>,
         cpu: adoption::CpuHz,
     ) -> PlatformParts {
@@ -159,7 +150,6 @@ impl Port for RuntimePort {
                 reset_cause,
                 hart1,
                 wifi_interrupts,
-                clocks,
                 radio,
                 cycles: crate::system::cycles::CycleCounter::new(cpu),
             },

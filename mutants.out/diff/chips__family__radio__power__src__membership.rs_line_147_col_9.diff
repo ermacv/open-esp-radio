@@ -1,0 +1,30 @@
+--- chips/family/radio/power/src/membership.rs
++++ replace PowerMembership<S>::exit -> Result<(), PowerError<P::RestoreError>> with Ok(())
+@@ -139,26 +139,17 @@
+         self.wifi_reset_completed = true;
+         Ok(())
+     }
+     pub fn exit<P: PowerPort<Baseline = S>>(
+         &mut self,
+         client: RadioClient,
+         port: &mut P,
+     ) -> Result<(), PowerError<P::RestoreError>> {
+-        if self.clients.only(client) {
+-            port.release(Clock::AnalogI2c);
+-            if let Some(baseline) = self.baseline {
+-                port.restore(baseline).map_err(PowerError::Restore)?;
+-                self.baseline = None;
+-            }
+-            port.release(Clock::Pll160m);
+-        }
+-        self.clients.leave(client);
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+     /// Seed only software accounting in a native ownership model.
+     #[doc(hidden)]
+     #[cfg(any(test, feature = "test-support"))]
+     pub fn hold_for_test(&mut self, client: RadioClient) {
+         self.clients.enter(client);
+     }
+ }

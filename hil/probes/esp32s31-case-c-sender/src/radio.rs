@@ -10,7 +10,6 @@ use core::mem::MaybeUninit;
 
 use oer_chips_esp32s31_hal::{
     layouts::DmaWindow,
-    power::ChipClocks,
     radio::domain::RadioDomain,
     radio::ieee80211::{
         client::{MacFirstReset, WifiClocked, WifiClocksOn, WifiCold, WifiInitialization},
@@ -47,7 +46,7 @@ pub(crate) const CHANNEL: u8 = 13;
 /// number and CBW 0 (`radio-system` `channel::lower_ghz2_4_channel`).
 pub(crate) const CBW: u8 = 0;
 
-pub(crate) type Radio = RadioDomain<ChipClocks>;
+pub(crate) type Radio = RadioDomain;
 /// The handle of the PHY's place, held by the session.
 pub(crate) type Phy<'p> = PhyHandle<'p, ChipPhy>;
 /// The proof that RF is open.
@@ -136,7 +135,6 @@ pub(crate) mod phase {
 pub(crate) struct SessionParts {
     /// The radio's root, which the session splits in its own frame.
     pub(crate) radio: oer_chips_esp32s31_hal::system::root::RadioHardware,
-    pub(crate) clocks: ChipClocks,
     pub(crate) identity: PhyCalibrationIdentity,
     pub(crate) mac_irq: MacInterruptRegisters,
     pub(crate) power_irq: MacPowerInterruptRegisters,
@@ -219,24 +217,19 @@ async fn register(
     cold: RfCold<ChipPhy>,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
-    clocks: &ChipClocks,
     identity: PhyCalibrationIdentity,
 ) -> Result<RfOpen, Failure> {
-    let registered = apart!(oer_chips_esp32s31_radio_phy::register::<
-        _,
-        (),
-        RomShortDelay,
-        _,
-    >(
-        timer,
-        radio,
-        phy,
-        cold,
-        platform,
-        clocks,
-        PhyRegisterConfig::new(identity),
-        NoopPhyTargetObserver,
-    ))
+    let registered = apart!(
+        oer_chips_esp32s31_radio_phy::register::<(), RomShortDelay, _>(
+            timer,
+            radio,
+            phy,
+            cold,
+            platform,
+            PhyRegisterConfig::new(identity),
+            NoopPhyTargetObserver,
+        )
+    )
     .map_err(|_| (phase::REGISTER, 0))?;
     Ok(registered.open)
 }
@@ -264,11 +257,9 @@ pub(crate) async fn track(
     platform: &mut (),
     observer: impl PhyTargetObserver,
 ) -> Result<RfOpen, Failure> {
-    let (open, _outcome) = apart!(
-        oer_chips_esp32s31_radio_phy::track::<_, (), RomShortDelay, _>(
-            timer, radio, phy, open, platform, observer
-        )
-    )
+    let (open, _outcome) = apart!(oer_chips_esp32s31_radio_phy::track::<(), RomShortDelay, _>(
+        timer, radio, phy, open, platform, observer
+    ))
     .map_err(|_| (phase::MAINTAIN, 0))?;
     Ok(open)
 }
@@ -301,8 +292,7 @@ async fn tune(
     .map_err(|_| (phase::CHANNEL, 1))
 }
 
-/// What stays held for the run beside the radio: coexistence, power and the
-/// platform's clocks.
+/// What stays held for the run beside the radio: coexistence and power.
 pub(crate) struct Held {
     _coex: Option<
         oer_chips_esp32s31_hal::radio::domain::Coexisting<
@@ -312,14 +302,6 @@ pub(crate) struct Held {
     _power: oer_chips_esp32s31_hal::radio::domain::CommonPower<
         oer_chips_esp32s31_hal::radio::domain::WifiClient,
     >,
-    clocks: ChipClocks,
-}
-
-impl Held {
-    /// The platform's clocks, for their words' snapshot.
-    pub(crate) const fn clocks(&self) -> &ChipClocks {
-        &self.clocks
-    }
 }
 
 /// Wi-Fi brought up to its first reset (S0 to S3): the clocked client with
@@ -347,7 +329,7 @@ pub(crate) struct Brought<'p> {
 }
 
 /// Bring Wi-Fi up in the radio system's order: the PHY's registration into
-/// the place made of `memory` and the split's right, coexistence, power, the clocks (and the first reset's proof),
+/// the place made of `memory` and the split's right, coexistence, power (and the first reset's proof),
 /// the tracking due, RX enable and the channel.
 pub(crate) async fn bring_up<'p>(
     parts: SessionParts,
@@ -358,7 +340,6 @@ pub(crate) async fn bring_up<'p>(
 ) -> Result<Brought<'p>, Failure> {
     let SessionParts {
         radio,
-        clocks,
         identity,
         mac_irq,
         power_irq,
@@ -369,9 +350,7 @@ pub(crate) async fn bring_up<'p>(
     } = parts;
     // A refused split is the bring-up's failure; its root is let go with
     // the session, which then serves only refusals.
-    let (mut radio, partitions) = radio
-        .split::<ChipClocks>(radio_memory)
-        .map_err(|_| (phase::SPLIT, 0))?;
+    let (mut radio, partitions) = radio.split(radio_memory).map_err(|_| (phase::SPLIT, 0))?;
     let oer_chips_esp32s31_hal::system::root::ProtocolPartitions {
         wifi,
         wifi_coex: coex,
@@ -380,19 +359,14 @@ pub(crate) async fn bring_up<'p>(
     let (mut phy, cold) = PhyPlace::new(right, memory).fill();
     let _before = timer.tally().take();
     let began = timer.now();
-    let open = register(
-        &mut radio, &mut phy, cold, timer, platform, &clocks, identity,
-    )
-    .await?;
+    let open = register(&mut radio, &mut phy, cold, timer, platform, identity).await?;
     let register_micros = micros_between(began, timer.now());
     let waits = timer.tally().take();
     let coexisting = radio.enter_coex(coex);
     let (cold, walker) = WifiCold::from_partition(wifi);
-    let (powered, power) = cold
-        .power_up(&mut radio, &clocks)
-        .map_err(|_| (phase::POWER, 0))?;
+    let (powered, power) = cold.power_up(&mut radio).map_err(|_| (phase::POWER, 0))?;
     let (mut clocked, first) = powered
-        .enable_clocks(&mut radio, &clocks)
+        .enable_clocks(&mut radio)
         .map_err(|_| (phase::CLOCKS, 0))?;
     clocked
         .set_initialized(&mut radio, WifiInitialization::Initialized)
@@ -463,7 +437,6 @@ pub(crate) async fn bring_up<'p>(
         held: Held {
             _coex: Some(coexisting),
             _power: power,
-            clocks,
         },
     })
 }

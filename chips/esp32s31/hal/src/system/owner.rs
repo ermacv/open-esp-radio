@@ -1,7 +1,7 @@
 //! Hardware ownership, capabilities, and affine lifecycle transitions.
 
 #[cfg(test)]
-use crate::{power::PlatformClockBackend, radio::domain::RadioDomain, radio::ieee80211::channel};
+use crate::{radio::domain::RadioDomain, radio::ieee80211::channel};
 
 use crate::{
     radio::ieee80211::{mac as wifi_mac, station_wake::StationWakeState},
@@ -378,7 +378,7 @@ impl RadioAccess {
     #[doc(hidden)]
     pub fn claim_for_host_test() -> Self {
         let (_shared, partitions) = crate::system::root::RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend>(crate::system::root::host_place())
+            .split(crate::system::root::host_place())
             .expect("identity capacity");
         let clocked = crate::radio::ieee80211::client::WifiClocked::for_host_test(
             crate::radio::ieee80211::client::WifiCold::from_partition(partitions.wifi).0,
@@ -421,10 +421,10 @@ impl RadioAccess {
     /// Borrow the channel HAL for one channel operation, with the shared
     /// PHY borrowed from the radio domain.
     #[cfg(test)]
-    pub fn channel_hal<'hal, B: PlatformClockBackend, P>(
+    pub fn channel_hal<'hal, P>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut RadioDomain<B>,
+        radio: &'hal mut RadioDomain,
     ) -> channel::RadioChannelHal<'hal, P> {
         let (phy, restore) = radio.phy_parts_mut();
         channel::RadioChannelHal::from_leased(platform, &mut self.registers, phy, restore)

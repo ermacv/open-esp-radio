@@ -19,8 +19,7 @@ struct Power {
     baseline: u8,
     power_fails: bool,
     restore_fails: bool,
-    release_fails: Option<Clock>,
-    refs: [bool; 3],
+    refs: [bool; 2],
 }
 impl Power {
     fn new() -> Self {
@@ -30,8 +29,7 @@ impl Power {
             baseline: 7,
             power_fails: false,
             restore_fails: false,
-            release_fails: None,
-            refs: [false; 3],
+            refs: [false; 2],
         }
     }
     fn record(&mut self, event: Event) {
@@ -55,27 +53,21 @@ impl PowerPort for Power {
     fn select_wifi_low_power_clock(&mut self) {
         self.record(Event::Select);
     }
-    fn release(&mut self, clock: Clock) -> Result<(), ReleaseRefused> {
-        if self.release_fails == Some(clock) {
-            return Err(ReleaseRefused);
-        }
+    fn release(&mut self, clock: Clock) {
         let index = match clock {
             Clock::AnalogI2c => 0,
             Clock::Pll160m => 1,
-            Clock::Mpll => 2,
         };
         if self.refs[index] {
             self.record(Event::Release(clock));
             self.refs[index] = false;
         }
-        Ok(())
     }
 }
 impl PowerEntryPort for Power {
     fn power_up(&mut self) -> Result<(), crate::power::PowerError> {
         self.record(Event::Power);
         self.refs[1] = true;
-        self.refs[2] = true;
         if self.power_fails {
             return Err(crate::power::PowerError {
                 checkpoint: crate::power::PowerCheckpoint::ModemClockSource,
@@ -125,10 +117,9 @@ fn failed_entry_retries_original_baseline_and_commits_reset_only_on_success() {
             Event::Release(Clock::AnalogI2c),
             Event::Restore(7),
             Event::Release(Clock::Pll160m),
-            Event::Release(Clock::Mpll)
         ]
     );
-    assert_eq!(port.time.now().as_micros(), 10);
+    assert_eq!(port.time.now().as_micros(), 9);
     state.enter_wifi(&mut port).unwrap();
     assert_eq!(port.events().last(), Some(&Event::Power));
     assert_eq!(
@@ -147,19 +138,12 @@ fn last_leave_retains_membership_baseline_and_only_unreleased_references() {
         Err(PowerError::Restore(9))
     );
     assert!(state.holds(Ieee802154));
-    assert_eq!(port.refs, [false, true, true]);
+    assert_eq!(port.refs, [false, true]);
     port.baseline = 88;
     port.restore_fails = false;
-    port.release_fails = Some(Clock::Pll160m);
-    assert_eq!(
-        state.exit(Ieee802154, &mut port),
-        Err(PowerError::Release(Clock::Pll160m))
-    );
-    assert!(state.holds(Ieee802154));
-    port.release_fails = None;
     state.exit(Ieee802154, &mut port).unwrap();
     assert!(!state.any_client());
-    assert_eq!(port.refs, [false; 3]);
+    assert_eq!(port.refs, [false; 2]);
     assert_eq!(
         port.events()
             .iter()

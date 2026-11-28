@@ -693,7 +693,7 @@ probe has one at each of P1 to P4).
   Compiler `panic_const_async_fn_resumed` sites have a separate row outside
   the budgets and target of 0, based on the executor's runtime `DONE` check
   (not a type guarantee) and `.await` never polling a completed child again.
-- The boot-smoke and radio-root images write diagnostic
+- The boot-smoke image writes diagnostic
   bytes directly, without `core::fmt` writer or argument dispatch. Host and
   test renderers may format values.
   Panic capture keeps static messages through `PanicMessage::as_str()`;

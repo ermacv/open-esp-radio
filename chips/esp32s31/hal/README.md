@@ -192,31 +192,39 @@ names the initial bounded check, before a `BootDeadline` exists. The reset
 bootstrap binding calls it after opening the timer clock; the runner starts its common
 deadline over the returned monotonic clock.
 
-`power::ChipClocks` is the one owner of the platform clock words the radio
-shares with the SoC (`MODEM_LPCON.CLK_CONF`, `HP_SYS_CLKRST.REF_160M_CTRL0`):
-the family adoption driver installs it through the HAL adapter. Its
-`oer-chips-family-radio-power::clocks::ClockCounts` counts the references of every user;
-the HAL retains the word claim and permanent `PsramMpll`. A refused acquire or
-release is the caller's typed error.
+The platform clock words the radio needs (`HP_SYS_CLKRST.REF_160M_CTRL0`
+and `MODEM_LPCON.CLK_CONF`) are the radio owner's alone at run time: the
+build's only writers of them are `power::platform`'s, on the radio's level
+(`research/449-report-2026-11-28.md`, §2, found by the compiler). The root
+gives their parts to the radio's shared registers; the split and the reunion
+write no register. The domain counts each platform clock's holders (common
+power and the one modem clock dependency that needs it, at most
+`platform::HOLDERS`), so a count can neither wrap nor be refused, and a hold
+is a value: only its release takes it. Wi-Fi's power gate is opened first by
+Wi-Fi's power-up and closed last by its power-down.
 
-Installation consumes the unique `ChipClockPeripherals` from the root by
-value. These fixed-placement PAC owners cannot be cloned or recovered after
-installation, so a second installation cannot be expressed. The paired UI
-case `chip_clocks_installed_once` checks that consuming `Root` produces the
-clock owner and prevents installing it again with that root.
+### The PLL chain's users
 
-- MPLL: the PSRAM mapping holds it for the whole image (`PsramMpll`), so a
-  radio reference is a count and no path powers MPLL down (ESP-IDF 4d80c1b2
-  `esp_clk_tree.c` `esp_clk_tree_mpll_acquire`; esp-hal 1f646c5
-  `soc/esp32s31/clocks.rs:265-321`, PSRAM's never-released reference).
+The bootstrap sets up the PLL chain (the PLLs, the CPU's clock, the cache's
+and PSRAM's clocks); nothing takes it down today. Its users and what each
+holds:
+
+| User | Holds | What dies without it | After a chip reset | `SOURCE:` |
+|---|---|---|---|---|
+| The USB Serial/JTAG console | the 48 MHz from the BBPLL (`CNNT_SYS.SYS_HP_USB_DEVICE_CTRL`, analog `0x66/05` `I2C_BBPLL_EN_USB`), and the 160 MHz reference's gate being open | the console: closing `REF_160M_CTRL0.REG_REF_160M_CLK_EN` takes it down, and opening it again does not bring it back | back: a reset over RTS (`CHIP_USB_UART_RESET`) brings the console back; a reset of the core alone was not tried | stand runs of `tasks/450`, run A against run B (`research/450-power-turn-2026-11-28.md`); the gates from `research/s31-clock-irq-block-linkage.md` and `research/analog-i2c-model.md` |
+| PSRAM | the MPLL, for the image's whole life: the bootstrap maps PSRAM over it and never unmaps it, and nothing writes its power fields at run time (`PMU.HP_ACTIVE_HP_CK_POWER`'s MPLL bits, kept by the radio's read-modify-write of its own fields there) | stage two's code and stacks, which run from PSRAM | set up again by the bootstrap | ESP-IDF 4d80c1b2 `esp_clk_tree.c` `esp_clk_tree_mpll_acquire`; esp-hal 1f646c5 `soc/esp32s31/clocks.rs:265-321`; the writers of `research/449-report-2026-11-28.md`, §2 |
+| The radio | the 160 MHz reference's gate and the analog-I2C master's clock, counted in its domain; both were open at boot (cold snapshot `0x102` and `0x5`) | the modem PLL source and the PHY's analog I2C | — | `power::platform`; the cold snapshot of `tasks/450` |
+
+The modem's code during sleep (`PMU.HP_SLEEP_ICG_MODEM`) is the one word a
+light sleep with the radio up asks of the radio's owner; it is the sleep
+owner's word today and no sleep runs with the radio up.
+
 - BBPLL, the 160 MHz output's parent, stays powered for the whole image
   (the flash clock and the USB Serial/JTAG console run on it; ESP-IDF
-  4d80c1b2 `esp_clk_tree.c:404-408`), so the 160 MHz edge is its gate only.
+  4d80c1b2 `esp_clk_tree.c:404-408`).
 - The analog-I2C master's reset is not pulsed: no ESP32-S31 ESP-IDF path
   calls `regi2c_ctrl_ll_master_reset` (ESP-IDF 4d80c1b2
   `esp_hal_regi2c/esp32s31/include/hal/regi2c_ctrl_ll.h:43-53`).
-- The Wi-Fi power gate opens once, at installation, and nothing closes it
-  (esp-hal 1f646c5 `rtc_cntl/rtc/esp32s31.rs:670`, `enable_wifi_power_clock`).
 
 ## TSENS and peripheral SAR-I2C
 

@@ -1845,21 +1845,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-probes-esp32s31-radio-root"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-platform-board",
- "oer-chips-esp32s31-platform-layout",
- "oer-chips-esp32s31-platform-runtime",
- "oer-chips-family-platform-executor",
- "oer-chips-family-platform-runtime",
- "oer-portable-diagnostics",
- "oer-portable-embassy-time",
- "oer-portable-time",
-]
-
-[[package]]
 name = "oer-hil-probes-esp32s31-rx-ring"
 version = "0.1.0"
 dependencies = [

@@ -553,9 +553,9 @@ implementations sharing a demangled name retain their sorted individual sizes.
 When a targeted image comparison is authorized, build its base and head in
 two output directories, with the same compiler,
 flags, image configuration and profile. For example, from clean main build
-`cargo fw build radio-root`, then copy `target/fw/radio-root` to
-`target/size-base/radio-root`. Switch to the PR head, repeat the build and copy
-the output to `target/size-head/radio-root`. Include the selected image's
+`cargo fw build esp32s31-boot-smoke`, then copy `target/fw/esp32s31-boot-smoke` to
+`target/size-base/esp32s31-boot-smoke`. Switch to the PR head, repeat the build and copy
+the output to `target/size-head/esp32s31-boot-smoke`. Include the selected image's
 bundles, or reuse captured bundles with matching provenance. Then run:
 
 ```console

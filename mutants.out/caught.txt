@@ -1,0 +1,2 @@
+chips/family/radio/power/src/membership.rs:147:9: replace PowerMembership<S>::exit -> Result<(), PowerError<P::RestoreError>> with Ok(())
+chips/family/radio/power/src/power.rs:78:5: replace execute_owned -> Result<(), PowerError> with Ok(())

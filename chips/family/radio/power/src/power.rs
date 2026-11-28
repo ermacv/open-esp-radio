@@ -3,20 +3,16 @@
 /// Upstream references needed by the common radio power sequence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PowerClock {
-    Mpll,
     Pll160m,
     AnalogI2cMaster,
 }
 
-/// The platform refused a reference without granting it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ReferenceRefused;
-
 pub trait PowerSequenceBackend {
     fn publish_modem_power_state(&mut self);
     fn enable_modem_register_bus_clock(&mut self);
-    /// Take one platform clock reference for common power.
-    fn acquire_platform_clock(&mut self, clock: PowerClock) -> Result<(), ReferenceRefused>;
+    /// Take one platform clock reference for common power, from the radio
+    /// owner's own counts: it cannot be refused.
+    fn acquire_platform_clock(&mut self, clock: PowerClock);
     fn configure_modem_source_clocks(&mut self);
     fn set_wifi_baseband_reset(&mut self, asserted: bool);
     fn configure_wifi_power_clock_map(&mut self);
@@ -46,8 +42,6 @@ pub struct PowerClockReadback {
 /// Read-back checkpoint following the finite prerequisite sequence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PowerCheckpoint {
-    /// The platform clock owner granted the MPLL reference.
-    Mpll,
     /// Both Wi-Fi reset lines were released.
     ResetReleased,
     /// PMU selects the HP-active modem ICG code.
@@ -58,16 +52,12 @@ pub enum PowerCheckpoint {
     HpActiveClockMap,
     /// Shared low-power modem clocks are ungated.
     SharedClockMap,
-    /// The platform clock owner granted the 160 MHz reference.
-    Reference160m,
     /// The modem PLL/XTAL source configuration is active.
     ModemClockSource,
     /// All PHY frontend and calibration clocks are enabled.
     PhyClocks,
     /// PHY-I²C uses the 160 MHz source.
     I2cSource,
-    /// The platform clock owner granted the PHY-I²C master clock.
-    I2cClock,
 }
 
 /// A prerequisite failed its bounded semantic read-back checkpoint.
@@ -85,28 +75,19 @@ pub fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), Po
     // Wi-Fi's combined BB+MAC reset belongs to its client entry. The BB-only
     // pulse below is the PHY clock-enable prerequisite, repeated by the
     // vendor modem clock manager; it preserves the MAC calibration window.
-    // The PHY writes front-end baseband power into the PMU word where the
-    // platform powers MPLL; holding MPLL keeps the platform from writing it.
-    registers
-        .acquire_platform_clock(PowerClock::Mpll)
-        .map_err(|ReferenceRefused| refused(PowerCheckpoint::Mpll))?;
     registers.publish_modem_power_state();
     registers.enable_modem_register_bus_clock();
     registers.configure_wifi_power_clock_map();
     registers.prepare_shared_modem_clock_map();
-    // The platform owns the 160 MHz gate; its reference replaces the gate
-    // write that ESP-IDF's modem clock performs first for this source.
-    registers
-        .acquire_platform_clock(PowerClock::Pll160m)
-        .map_err(|ReferenceRefused| refused(PowerCheckpoint::Reference160m))?;
+    // The radio owner counts the 160 MHz gate; its reference replaces the
+    // gate write that ESP-IDF's modem clock performs first for this source.
+    registers.acquire_platform_clock(PowerClock::Pll160m);
     registers.configure_modem_source_clocks();
     registers.set_wifi_baseband_reset(true);
     registers.set_wifi_baseband_reset(false);
     registers.enable_phy_calibration_clocks();
     registers.select_phy_i2c_160mhz_source();
-    registers
-        .acquire_platform_clock(PowerClock::AnalogI2cMaster)
-        .map_err(|ReferenceRefused| refused(PowerCheckpoint::I2cClock))?;
+    registers.acquire_platform_clock(PowerClock::AnalogI2cMaster);
 
     let readback = registers.power_readback();
     verify_state(PowerCheckpoint::ResetReleased, readback.reset_released)?;
@@ -135,15 +116,6 @@ pub fn execute_owned(registers: &mut impl PowerSequenceBackend) -> Result<(), Po
         readback.phy_calibration_clocks_enabled,
     )?;
     verify_state(PowerCheckpoint::I2cSource, readback.phy_i2c_160mhz_selected)
-}
-
-/// The platform clock owner refused a reference at `checkpoint`.
-const fn refused(checkpoint: PowerCheckpoint) -> PowerError {
-    PowerError {
-        checkpoint,
-        expected: true,
-        observed: false,
-    }
 }
 
 fn verify_state(checkpoint: PowerCheckpoint, observed: bool) -> Result<(), PowerError> {

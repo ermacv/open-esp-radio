@@ -1,103 +1,14 @@
 use super::*;
-use crate::power::clock::ModemClockPlanner;
 use crate::radio::phy::registration::PhyRegistration;
 use crate::system::root::RadioPartitions;
 
-fn radio_domain() -> RadioDomain<crate::power::test_clocks::CountingBackend> {
+fn radio_domain() -> RadioDomain {
     let RadioPartitions { shared, .. } = RadioPartitions::for_host_test();
     RadioDomain::new(
         shared,
         PhyRouteState::new(PhyRegistration::new()),
         crate::power::clock::ModemClockPlannerIdentity::new().expect("identity capacity"),
     )
-}
-
-fn refuse_poisoned_clock_changes(
-    mut radio: RadioDomain<crate::power::test_clocks::CountingBackend>,
-) -> RadioDomain<crate::power::test_clocks::CountingBackend> {
-    let platform = crate::power::test_clocks::CountingPlatformClocks::logging(|_| {
-        panic!("a poisoned domain must not change platform clocks")
-    });
-    let RadioPartitions { wifi, .. } = RadioPartitions::for_host_test();
-    let wifi = WifiRadioRegisters::new(wifi.into_parts().0);
-    assert!(radio.state().clocks.any_held());
-    assert_eq!(
-        radio.enable_slot(0, ModemClockModule::Phy, &platform),
-        Err(ModemClockError::Poisoned)
-    );
-    assert_eq!(radio.disable_slot(0), Err(ModemClockError::Poisoned));
-    assert_eq!(
-        radio.set_wifi_initialized(
-            &wifi,
-            crate::radio::ieee80211::client::WifiInitialization::Initialized,
-        ),
-        Err(ModemClockError::Poisoned)
-    );
-    let Err((radio, error)) = radio.into_parts() else {
-        panic!("the poisoned planner must retain its domain")
-    };
-    assert_eq!(error, RadioDomainReleaseError::ModemClocksHeld);
-    radio
-}
-
-#[test]
-fn poisoned_acquire_keeps_its_failed_edge_through_refused_changes_and_release() {
-    let mut radio = radio_domain();
-    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
-    let prepared = ModemClockPlanner::managed(identity)
-        .prepare_acquire(crate::power::clock::module_dependencies(
-            ModemClockModule::Phy,
-        ))
-        .unwrap();
-    let mut edges = 0;
-    let poisoned = oer_chips_family_radio_modem_clock::execute_acquire(prepared, |_| {
-        edges += 1;
-        if edges == 2 { Err(()) } else { Ok(()) }
-    })
-    .err()
-    .expect("the second acquire edge failed");
-    let failed = poisoned.dependency();
-    assert_eq!(poisoned.completed_edges(), 1);
-    radio.state_mut().clocks = ModemClocks::AcquirePoisoned { owner: poisoned };
-
-    let radio = refuse_poisoned_clock_changes(radio);
-    let ModemClocks::AcquirePoisoned { owner: retained } = &radio.state().clocks else {
-        panic!("the failed acquire owner must remain quarantined")
-    };
-    assert_eq!(retained.dependency(), failed);
-    assert_eq!(retained.completed_edges(), 1);
-}
-
-#[test]
-fn poisoned_release_keeps_its_failed_edge_through_refused_changes_and_release() {
-    let mut radio = radio_domain();
-    let identity = ModemClockPlannerIdentity::new().expect("identity capacity");
-    let prepared = ModemClockPlanner::managed(identity)
-        .prepare_acquire(crate::power::clock::module_dependencies(
-            ModemClockModule::Phy,
-        ))
-        .unwrap();
-    let (planner, lease) =
-        oer_chips_family_radio_modem_clock::execute_acquire(prepared, |_| Ok::<(), ()>(()))
-            .unwrap();
-    let prepared = planner.prepare_release(lease).unwrap();
-    let mut edges = 0;
-    let poisoned = oer_chips_family_radio_modem_clock::execute_release(prepared, |_| {
-        edges += 1;
-        if edges == 2 { Err(()) } else { Ok(()) }
-    })
-    .err()
-    .expect("the second release edge failed");
-    let failed = poisoned.dependency();
-    assert_eq!(poisoned.completed_edges(), 1);
-    radio.state_mut().clocks = ModemClocks::ReleasePoisoned { owner: poisoned };
-
-    let radio = refuse_poisoned_clock_changes(radio);
-    let ModemClocks::ReleasePoisoned { owner: retained } = &radio.state().clocks else {
-        panic!("the failed release owner must remain quarantined")
-    };
-    assert_eq!(retained.dependency(), failed);
-    assert_eq!(retained.completed_edges(), 1);
 }
 
 #[test]
@@ -272,7 +183,7 @@ fn wifi_initialization_reaches_the_planner_and_keeps_the_wifi_clocks() {
         let wifi = WifiRadioRegisters::new(RadioPartitions::for_host_test().wifi.into_parts().0);
         let mut radio = radio_domain();
         assert_eq!(radio.set_wifi_initialized(&wifi, initialization), Ok(()));
-        let platform = crate::power::test_clocks::CountingPlatformClocks::new();
+        let mut platform = crate::power::test_gates::RecordingGates::new();
         let mut port = Port::default();
         let state = radio.state_mut();
         let index = client_index(RadioClient::Wifi);
@@ -285,7 +196,7 @@ fn wifi_initialization_reaches_the_planner_and_keeps_the_wifi_clocks() {
                     &mut ModemExecution {
                         port: &mut port,
                         held: &mut state.modem_platform_clocks,
-                        platform: &platform,
+                        platform: &mut platform,
                     },
                 )
                 .is_ok()
@@ -299,7 +210,7 @@ fn wifi_initialization_reaches_the_planner_and_keeps_the_wifi_clocks() {
                     &mut ModemExecution {
                         port: &mut port,
                         held: &mut state.modem_platform_clocks,
-                        platform: (),
+                        platform: &mut platform,
                     },
                 )
                 .is_ok()

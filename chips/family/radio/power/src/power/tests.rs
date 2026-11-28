@@ -18,9 +18,7 @@ struct ModemSysconPowerObservation {
     phy_i2c_160mhz_selected: bool,
 }
 
-use super::{
-    PowerCheckpoint, PowerClock, PowerError, PowerSequenceBackend, ReferenceRefused, execute_owned,
-};
+use super::{PowerCheckpoint, PowerClock, PowerError, PowerSequenceBackend, execute_owned};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Operation {
@@ -40,8 +38,6 @@ enum Operation {
 struct FakeShared {
     operations: Rc<RefCell<Vec<Operation>>>,
     prepare_calls: u8,
-    /// The platform clock owner refuses this reference.
-    refused: Option<PowerCheckpoint>,
     platform: PowerClockPowerObservation,
     modem: ModemSysconPowerObservation,
     observation: SharedModemClockObservation,
@@ -52,7 +48,6 @@ impl FakeShared {
         Self {
             operations,
             prepare_calls: 0,
-            refused: None,
             platform: PowerClockPowerObservation {
                 hp_active_icg_selected: true,
                 modem_register_bus_clock_enabled: true,
@@ -100,18 +95,8 @@ impl PowerSequenceBackend for FakeShared {
         self.operations.borrow_mut().push(Operation::EnableModemBus);
     }
 
-    fn acquire_platform_clock(&mut self, clock: PowerClock) -> Result<(), ReferenceRefused> {
+    fn acquire_platform_clock(&mut self, clock: PowerClock) {
         self.operations.borrow_mut().push(Operation::Acquire(clock));
-        let refused = match clock {
-            PowerClock::Mpll => PowerCheckpoint::Mpll,
-            PowerClock::Pll160m => PowerCheckpoint::Reference160m,
-            _ => PowerCheckpoint::I2cClock,
-        };
-        if self.refused == Some(refused) {
-            Err(ReferenceRefused)
-        } else {
-            Ok(())
-        }
     }
 
     fn configure_modem_source_clocks(&mut self) {
@@ -160,7 +145,6 @@ fn exact_semantic_sequence_is_finite_and_ordered() {
     assert_eq!(
         operations.borrow().as_slice(),
         [
-            Operation::Acquire(PowerClock::Mpll),
             Operation::SelectHpActiveIcg,
             Operation::ApplyModemIcg,
             Operation::ApplySleepIcg,
@@ -226,11 +210,6 @@ fn power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure()
                 }
                 PowerCheckpoint::PhyClocks => &mut shared.modem.phy_calibration_clocks_enabled,
                 PowerCheckpoint::I2cSource => &mut shared.modem.phy_i2c_160mhz_selected,
-                PowerCheckpoint::Mpll
-                | PowerCheckpoint::Reference160m
-                | PowerCheckpoint::I2cClock => {
-                    unreachable!("platform references are not read back")
-                }
             } = false;
         }
         let result = super::execute_owned(&mut shared);
@@ -264,33 +243,5 @@ fn power_sequence_takes_the_i2c_reference_on_success_and_each_readback_failure()
             .position(|op| *op == Operation::SelectI2c160Mhz)
             .unwrap();
         assert!(reset < clocks && clocks < source);
-    }
-}
-
-#[test]
-fn a_refused_platform_reference_stops_the_sequence_at_its_edge() {
-    for (refused, last) in [
-        (PowerCheckpoint::Mpll, Operation::Acquire(PowerClock::Mpll)),
-        (
-            PowerCheckpoint::Reference160m,
-            Operation::Acquire(PowerClock::Pll160m),
-        ),
-        (
-            PowerCheckpoint::I2cClock,
-            Operation::Acquire(PowerClock::AnalogI2cMaster),
-        ),
-    ] {
-        let operations = Rc::new(RefCell::new(Vec::new()));
-        let mut shared = FakeShared::ready(operations.clone());
-        shared.refused = Some(refused);
-        assert_eq!(
-            execute_owned(&mut shared),
-            Err(PowerError {
-                checkpoint: refused,
-                expected: true,
-                observed: false,
-            })
-        );
-        assert_eq!(operations.borrow().last(), Some(&last));
     }
 }

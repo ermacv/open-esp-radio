@@ -155,8 +155,6 @@ where
 pub trait Port: Sized {
     type CpuClock: CpuClock;
     type Console;
-    type ClockParts;
-    type Clocks;
     type CoreControl;
     type Debug;
     type Resources;
@@ -169,14 +167,12 @@ pub trait Port: Sized {
     const WATCHDOGS: WatchdogProfile;
 
     fn install_console(console: Self::Console) -> Result<(), InitError>;
-    fn adopt_clocks(parts: Self::ClockParts) -> Self::Clocks;
     fn install_core_control(core: Self::CoreControl) -> Result<(), InitError>;
     fn publish_debug_status(debug: Self::Debug) -> Result<(), InitError>;
     /// Publish the interrupt observers/configuration and assemble the remaining
     /// owners after watchdog arming. No cold-start register owner is returned.
     fn finish(
         resources: Self::Resources,
-        clocks: Self::Clocks,
         watchdogs: Watchdogs<Self::Main0, Self::Main1, Self::Rtc, Self::Super>,
         cpu: CpuHz,
     ) -> Self::Output;
@@ -187,7 +183,6 @@ pub trait Port: Sized {
 pub struct Owners<P: Port> {
     pub cpu_clock: P::CpuClock,
     pub console: P::Console,
-    pub clocks: P::ClockParts,
     pub core_control: P::CoreControl,
     pub debug: P::Debug,
     pub watchdogs: WatchdogParts<P::Main0, P::Main1, P::Rtc, P::Super>,
@@ -223,7 +218,6 @@ pub fn initialize<P: Port>(owners: Owners<P>) -> Result<P::Output, InitError> {
     let Owners {
         cpu_clock,
         console,
-        clocks,
         core_control,
         debug,
         watchdogs,
@@ -231,11 +225,10 @@ pub fn initialize<P: Port>(owners: Owners<P>) -> Result<P::Output, InitError> {
     } = owners;
     let cpu = adopt_cpu_clock(cpu_clock).map_err(InitError::CpuClock)?;
     P::install_console(console)?;
-    let clocks = P::adopt_clocks(clocks);
     P::install_core_control(core_control)?;
     P::publish_debug_status(debug)?;
     let watchdogs = arm_watchdogs(watchdogs, P::WATCHDOGS);
-    Ok(P::finish(resources, clocks, watchdogs, cpu))
+    Ok(P::finish(resources, watchdogs, cpu))
 }
 
 #[cfg(test)]

@@ -360,7 +360,7 @@ Build the same app/analysis and HIL configurations on main and on the PR head,
 copying all bundles into `target/size-base` and `target/size-head` respectively.
 Keep compiler/profile/flags/configuration identical. Run
 `cargo fw sizes target/size-base target/size-head` and put the table in the PR;
-a `stop` requires a question to the owner. The build README gives a radio-root example.
+a `stop` requires a question to the owner. The build README gives a boot-smoke example.
 
 ## Reachability reports
 

@@ -1,8 +1,8 @@
 #![no_std]
 use oer_chips_esp32s31_hal::{radio::domain::RadioDomain, radio::ieee80211::client::WifiClocked};
-pub fn release<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
+pub fn release(
     clocked: WifiClocked,
-    radio: &mut RadioDomain<B>,
+    radio: &mut RadioDomain,
 ) {
     let first = clocked.release_clocks(radio);
     #[cfg(ui_reject)]
