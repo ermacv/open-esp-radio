@@ -5,7 +5,7 @@ use crate::system::root::RadioHardware;
 #[test]
 fn a_cold_client_returns_its_partition() {
     let (_radio, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend>(crate::system::root::host_place())
+        .split(crate::system::root::host_place())
         .expect("identity capacity");
     let (cold, rx_dma) = WifiCold::from_partition(partitions.wifi);
     let _partition = cold.into_partition(rx_dma);
@@ -16,7 +16,7 @@ fn a_cold_client_returns_its_partition() {
 #[test]
 fn a_running_epoch_reunites_with_its_clocked_client() {
     let (_radio, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend>(crate::system::root::host_place())
+        .split(crate::system::root::host_place())
         .expect("identity capacity");
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0);
     let (runtime, clocks) = clocked.into_running();
@@ -32,7 +32,7 @@ fn a_running_epoch_reunites_with_its_clocked_client() {
 #[test]
 fn the_runtime_channel_capability_borrows_the_lease() {
     let (mut radio, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend>(crate::system::root::host_place())
+        .split(crate::system::root::host_place())
         .expect("identity capacity");
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0);
     let (mut runtime, _clocks) = clocked.into_running();
@@ -46,7 +46,7 @@ fn the_runtime_channel_capability_borrows_the_lease() {
 #[test]
 fn clock_release_consumes_the_obligation_only_on_success() {
     let (_radio, partitions) = RadioHardware::for_host_test()
-        .split::<crate::power::test_clocks::CountingBackend>(crate::system::root::host_place())
+        .split(crate::system::root::host_place())
         .expect("identity capacity");
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0);
     let released = match clocked.finish_clock_release(Ok(())) {
@@ -65,7 +65,7 @@ fn every_clock_release_failure_retains_stopped_custody_and_exact_obligation() {
         super::ModemClockError::Poisoned,
     ] {
         let (_radio, partitions) = RadioHardware::for_host_test()
-            .split::<crate::power::test_clocks::CountingBackend>(crate::system::root::host_place())
+            .split(crate::system::root::host_place())
             .expect("identity capacity");
         let clocked =
             super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0);

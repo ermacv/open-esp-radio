@@ -7,10 +7,7 @@
 //! borrows: the domain and the handle are the owner's at once, and the
 //! proof it took is gone with it ([`crate::owner`]).
 
-use oer_chips_esp32s31_hal::power::PlatformClockBackend;
-use oer_chips_esp32s31_hal::radio::domain::{
-    ModemClockError, PhyClockModule, PlatformClockProvider, RadioDomain,
-};
+use oer_chips_esp32s31_hal::radio::domain::{ModemClockError, PhyClockModule, RadioDomain};
 use oer_chips_esp32s31_hal::radio::ieee80211::channel::RadioChannelHal;
 
 use super::domain::{PhyRegisterFailed, register_state};
@@ -99,12 +96,9 @@ pub struct ChannelFailure {
 
 /// Take `PHY`, then `PHY_CALIBRATION`, as `esp_phy_enable` does before
 /// calibration or RF wake.
-fn enable_phy_clocks<B: PlatformClockBackend>(
-    radio: &mut RadioDomain<B>,
-    clocks: &impl PlatformClockProvider<Backend = B>,
-) -> Result<(), ModemClockError> {
-    radio.enable_phy_modem_clocks(PhyClockModule::Phy, clocks)?;
-    if let Err(error) = radio.enable_phy_modem_clocks(PhyClockModule::Calibration, clocks) {
+fn enable_phy_clocks(radio: &mut RadioDomain) -> Result<(), ModemClockError> {
+    radio.enable_phy_modem_clocks(PhyClockModule::Phy)?;
+    if let Err(error) = radio.enable_phy_modem_clocks(PhyClockModule::Calibration) {
         return Err(match radio.disable_phy_modem_clocks(PhyClockModule::Phy) {
             Ok(()) => error,
             Err(rollback) => rollback,
@@ -114,9 +108,7 @@ fn enable_phy_clocks<B: PlatformClockBackend>(
 }
 
 /// Release both modules after a registration that did not complete.
-fn release_phy_clocks<B: PlatformClockBackend>(
-    radio: &mut RadioDomain<B>,
-) -> Result<(), ModemClockError> {
+fn release_phy_clocks(radio: &mut RadioDomain) -> Result<(), ModemClockError> {
     let calibration = radio.disable_phy_modem_clocks(PhyClockModule::Calibration);
     let phy = radio.disable_phy_modem_clocks(PhyClockModule::Phy);
     calibration.and(phy)
@@ -130,21 +122,20 @@ fn release_phy_clocks<B: PlatformClockBackend>(
 /// runs over the handle's state; `PHY_CALIBRATION` is released after it and
 /// `PHY` stays held while RF is open.
 #[must_use = "PHY registration must be driven to a terminal result"]
-pub async fn register<B: PlatformClockBackend, P, D: PhyShortDelay, O: PhyTargetObserver>(
+pub async fn register<P, D: PhyShortDelay, O: PhyTargetObserver>(
     timer: &(
          impl oer_portable_cooperate::CooperativeTimer
          + oer_portable_settle::SettleCounter
          + crate::executor::wait::WaitTally
      ),
-    radio: &mut RadioDomain<B>,
+    radio: &mut RadioDomain,
     phy: &mut PhyHandle<'_, ChipPhy>,
     cold: RfCold<ChipPhy>,
     platform: &mut P,
-    clocks: &impl PlatformClockProvider<Backend = B>,
     config: PhyRegisterConfig,
     observer: O,
 ) -> Result<Registered, RegistrationFailure> {
-    if let Err(error) = enable_phy_clocks(radio, clocks) {
+    if let Err(error) = enable_phy_clocks(radio) {
         return Err(RegistrationFailure::Clock(cold, error));
     }
     let result = register_state::<P, _, D, O>(
@@ -184,13 +175,13 @@ pub async fn register<B: PlatformClockBackend, P, D: PhyShortDelay, O: PhyTarget
 /// The acceptance point is the first RF edge: the temperature observation
 /// before it changes nothing of what `RfOpen` says, and its recoverable
 /// failure gives the proof back.
-pub async fn close<B: PlatformClockBackend, P, D: PhyShortDelay>(
+pub async fn close<P, D: PhyShortDelay>(
     timer: &(
          impl oer_portable_cooperate::CooperativeTimer
          + oer_portable_settle::SettleCounter
          + crate::executor::wait::WaitTally
      ),
-    radio: &mut RadioDomain<B>,
+    radio: &mut RadioDomain,
     phy: &mut PhyHandle<'_, ChipPhy>,
     open: RfOpen<ChipPhy>,
     platform: &mut P,
@@ -235,18 +226,17 @@ pub async fn close<B: PlatformClockBackend, P, D: PhyShortDelay>(
 /// `phy_wakeup_init` restores the registration without calibration and
 /// `PHY_CALIBRATION` is released. The owner asks [`crate::owner::tracking_due`]
 /// after it.
-pub async fn wake<B: PlatformClockBackend, D: PhyShortDelay>(
+pub async fn wake<D: PhyShortDelay>(
     timer: &(
          impl oer_portable_cooperate::CooperativeTimer
          + oer_portable_settle::SettleCounter
          + crate::executor::wait::WaitTally
      ),
-    radio: &mut RadioDomain<B>,
+    radio: &mut RadioDomain,
     phy: &mut PhyHandle<'_, ChipPhy>,
     closed: RfClosed<ChipPhy>,
-    clocks: &impl PlatformClockProvider<Backend = B>,
 ) -> Result<RfOpen<ChipPhy>, WakeFailure> {
-    if let Err(error) = enable_phy_clocks(radio, clocks) {
+    if let Err(error) = enable_phy_clocks(radio) {
         return Err(WakeFailure::StillClosed(closed, error));
     }
     let woken = radio_lifecycle::execute_rf_wake_with_hal::<D>(
@@ -334,14 +324,14 @@ pub async fn switch_channel<D: PhyShortDelay, P, O: PhyTargetObserver>(
 /// serializes the radio, and the tracking graph brackets its RF-sensitive
 /// regions with the grant-protect request. The pass's instant is the
 /// state's last tracking.
-pub async fn track<B: PlatformClockBackend, P, D: PhyShortDelay, O: PhyTargetObserver>(
+pub async fn track<P, D: PhyShortDelay, O: PhyTargetObserver>(
     timer: &(
          impl oer_portable_cooperate::CooperativeTimer
          + oer_portable_settle::SettleCounter
          + oer_portable_clock::Clock
          + crate::executor::wait::WaitTally
      ),
-    radio: &mut RadioDomain<B>,
+    radio: &mut RadioDomain,
     phy: &mut PhyHandle<'_, ChipPhy>,
     open: RfOpen<ChipPhy>,
     platform: &mut P,
@@ -374,18 +364,12 @@ pub async fn track<B: PlatformClockBackend, P, D: PhyShortDelay, O: PhyTargetObs
 /// Enable the Wi-Fi baseband receive path: the vendor `phy_wifi_enable_set`
 /// with `true`, which ESP-IDF's `enable_phy_with_wifi_rx` runs after the PHY
 /// is enabled.
-pub fn enable_wifi_rx<B: PlatformClockBackend>(
-    radio: &mut RadioDomain<B>,
-    _open: &RfOpen<ChipPhy>,
-) {
+pub fn enable_wifi_rx(radio: &mut RadioDomain, _open: &RfOpen<ChipPhy>) {
     radio.enable_wifi_rx();
 }
 
 /// Disable the Wi-Fi baseband receive path: `phy_wifi_enable_set` with
 /// `false`, before Wi-Fi leaves the PHY.
-pub fn disable_wifi_rx<B: PlatformClockBackend>(
-    radio: &mut RadioDomain<B>,
-    _open: &RfOpen<ChipPhy>,
-) {
+pub fn disable_wifi_rx(radio: &mut RadioDomain, _open: &RfOpen<ChipPhy>) {
     radio.disable_wifi_rx();
 }

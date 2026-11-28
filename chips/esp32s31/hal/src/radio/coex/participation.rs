@@ -21,8 +21,8 @@ use crate::power::radio::RadioClientKind;
 /// use oer_chips_esp32s31_hal::radio::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
 /// use oer_chips_esp32s31_hal::radio::ieee80211::registers::WifiRadioRegisters;
 ///
-/// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
-///     radio: &mut RadioDomain<B>,
+/// fn leave(
+///     radio: &mut RadioDomain,
 ///     wifi: &WifiRadioRegisters,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &CoexAbsent<WifiClient>,
@@ -37,8 +37,8 @@ use crate::power::radio::RadioClientKind;
 /// use oer_chips_esp32s31_hal::radio::domain::{CommonPower, Coexisting, RadioDomain, WifiClient};
 /// use oer_chips_esp32s31_hal::radio::ieee80211::registers::WifiRadioRegisters;
 ///
-/// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
-///     radio: &mut RadioDomain<B>,
+/// fn leave(
+///     radio: &mut RadioDomain,
 ///     wifi: &WifiRadioRegisters,
 ///     power: CommonPower<WifiClient>,
 ///     coex: &Coexisting<WifiClient>,

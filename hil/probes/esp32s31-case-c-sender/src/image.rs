@@ -104,7 +104,6 @@ fn main(
             reset_cause,
             runtime_efuse,
             runtime_radio,
-            runtime_clocks,
             runtime_system_timer,
             runtime_wifi_interrupts,
             runtime_software_interrupts,
@@ -132,7 +131,6 @@ fn main(
                 reset_causes.of(oer_chips_esp32s31_hal::system::platform::BOOT_HART),
                 hardware.efuse,
                 hardware.radio,
-                hardware.clocks,
                 hardware.system_timer,
                 hardware.wifi_interrupts,
                 hardware.software_interrupts,
@@ -192,7 +190,6 @@ fn main(
     };
     let parts = SessionParts {
         radio: runtime_radio,
-        clocks: runtime_clocks,
         identity,
         mac_irq: wifi_irqs.mac,
         power_irq: wifi_irqs.power,
@@ -211,11 +208,11 @@ fn main(
     // The owner's cold snapshot, read before the radio's parts go to the
     // radio level's task.
     let observing = Observing {
-        cold: pair::cold(
-            u32::from(reset_cause.code()),
-            parts.radio.observe_power(),
-            &parts.clocks,
-        ),
+        cold: {
+            let observed = parts.radio.observe_power();
+            let platform = parts.radio.observe_platform_clocks(&observed.1);
+            pair::cold(u32::from(reset_cause.code()), observed, platform)
+        },
     };
     let Some(handover) = RADIO.try_take() else {
         fail(name!("radio-handover"; 32));
@@ -708,7 +705,7 @@ async fn worker(
             waits,
         },
     );
-    let up = pair::up(&mut radio, held.clocks(), reset, &phy, &open, identity);
+    let up = pair::up(&mut radio, reset, &phy, &open, identity);
     // The receiver the host named, absent until its `target`.
     let mut receiver = None;
     let mut steps = Steps::Open;

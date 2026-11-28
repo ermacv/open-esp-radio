@@ -16,8 +16,9 @@
 //! Modem clocks are reference-counted per dependency by the shared modem clock
 //! planner inside the domain: each client's module clocks are enabled and
 //! disabled through it, and a client leaving never disables a clock another
-//! client still holds. The platform clock provider supplies the upstream
-//! 160 MHz source and the analog-I2C master clock.
+//! client still holds. The domain's own platform clocks
+//! ([`crate::power::platform`]) give the upstream 160 MHz source, the
+//! analog-I2C master clock and coexistence's clock.
 //!
 //! The domain is not a coexistence grant: it serializes register access, not
 //! air time.
@@ -30,10 +31,6 @@ use crate::power::clock::{
 pub use crate::power::radio::{
     CommonPower, CommonPowerExitFailure, CommonRadioPowerError, RadioClient, RadioClientKind,
     WifiClient,
-};
-pub use crate::power::{
-    PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
-    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider,
 };
 #[cfg(test)]
 use crate::radio::coex::PhyGrantProtectError;
@@ -69,25 +66,22 @@ impl RadioClientOwner for WifiRadioRegisters {
 }
 
 /// Shared registers and the PHY and power state that must stay with them.
-struct SharedRadioState<B: PlatformClockBackend> {
+struct SharedRadioState {
     registers: SharedRadioRegisters,
     phy: PhyRouteState,
-    power: CommonRadioPower<B>,
+    power: CommonRadioPower,
     clocks: ModemClocks,
     /// Platform references of the modem clock planner's enabled
     /// dependencies; a poisoned planner keeps them held.
-    modem_platform_clocks: ModemPlatformClocks<B>,
+    modem_platform_clocks: ModemPlatformClocks,
     phy_grant_protected: bool,
 }
 
-impl<B: PlatformClockBackend> SharedRadioState<B> {
-    /// The platform clock references the radio holds: common power and the
-    /// modem clock dependencies (also while poisoned).
-    fn platform_clock_holds(&self) -> PlatformClockHolds {
-        let mut holds = PlatformClockHolds::default();
-        self.power.count_platform_clocks(&mut holds);
-        self.modem_platform_clocks.count_into(&mut holds);
-        holds
+impl SharedRadioState {
+    /// Whether any platform clock has a holder: common power or a modem
+    /// clock dependency (also while poisoned).
+    fn platform_clocks_held(&self) -> bool {
+        self.registers.platform.any_held()
     }
 }
 
@@ -210,24 +204,16 @@ impl PhyStateRight<ChipPhy> {
 /// software state and common radio power, owned by value.
 ///
 /// ```compile_fail,E0277
-/// use oer_chips_esp32s31_hal::{radio::domain::RadioDomain, power::PlatformClockBackend};
+/// use oer_chips_esp32s31_hal::radio::domain::RadioDomain;
 /// fn requires_clone<T: Clone>() {}
-/// fn cannot_clone<B: PlatformClockBackend>() {
-///     requires_clone::<RadioDomain<B>>();
-/// }
+/// requires_clone::<RadioDomain>();
 /// ```
-///
-/// `B` binds every platform clock reference to one backend. Providers used
-/// with this domain must have `Backend = B`.
-///
-/// `T` is state an upper layer keeps with the domain, such as the PHY
-/// layer's registered domain. The HAL never interprets it.
 #[must_use = "dropping the radio domain permanently loses the shared registers"]
-pub struct RadioDomain<B: PlatformClockBackend> {
-    state: SharedRadioState<B>,
+pub struct RadioDomain {
+    state: SharedRadioState,
 }
 
-impl<B: PlatformClockBackend> RadioDomain<B> {
+impl RadioDomain {
     /// Place the shared owner and its PHY state in one domain. This performs
     /// no MMIO.
     pub(crate) fn new(
@@ -269,7 +255,7 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
         if let Err(error) = crate::system::root::check_phy_restore_complete(&state.phy) {
             return Err(RadioDomainReleaseError::Restore(error));
         }
-        if !state.platform_clock_holds().is_empty() {
+        if state.platform_clocks_held() {
             return Err(RadioDomainReleaseError::PlatformClocksHeld);
         }
         Ok(())
@@ -329,31 +315,6 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
         self.state.phy_grant_protected = true;
     }
 
-    /// Keep every platform clock reference the radio holds on until a chip
-    /// reset, and forget them: the explicit end of a terminal validation
-    /// image or test that drops its radio domain. Each guard ends with
-    /// `abandon`, so none is dropped.
-    #[cfg(test)]
-    #[doc(hidden)]
-    pub fn abandon_platform_clocks(&mut self) {
-        let state = &mut self.state;
-        state.power.abandon_platform_clocks();
-        core::mem::take(&mut state.modem_platform_clocks).abandon();
-    }
-
-    /// Take a platform reference into common power as a failed power
-    /// sequence leaves it.
-    #[cfg(test)]
-    pub(crate) fn hold_platform_clock_for_test(
-        &mut self,
-        clock: PlatformClock,
-        platform: &impl PlatformClockProvider<Backend = B>,
-    ) {
-        self.state
-            .power
-            .hold_platform_clock_for_test(clock, platform);
-    }
-
     #[cfg(test)]
     pub(crate) fn hold_common_power_for_test(&mut self, client: RadioClient) {
         self.state.power.hold_for_test(client);
@@ -378,12 +339,12 @@ pub enum RadioDomainReleaseError {
     Restore(crate::system::root::RadioPhyReleaseError),
 }
 
-impl<B: PlatformClockBackend> RadioDomain<B> {
-    fn state(&self) -> &SharedRadioState<B> {
+impl RadioDomain {
+    fn state(&self) -> &SharedRadioState {
         &self.state
     }
 
-    fn state_mut(&mut self) -> &mut SharedRadioState<B> {
+    fn state_mut(&mut self) -> &mut SharedRadioState {
         &mut self.state
     }
 
@@ -397,10 +358,14 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
         self.state().power.holds(client)
     }
 
-    /// The platform clock references the radio holds: common power and the
-    /// modem clock dependencies (also while poisoned).
-    pub fn platform_clock_holds(&self) -> PlatformClockHolds {
-        self.state().platform_clock_holds()
+    /// The platform clock words as the hardware has them, the modem
+    /// low-power word only behind the open modem register bus `bus`
+    /// ([`Self::observe_power`]). Writes nothing.
+    pub fn observe_platform_clocks(
+        &self,
+        bus: &crate::radio::phy::power_words::ModemBus<'_>,
+    ) -> crate::power::ChipClockWords {
+        self.state().registers.platform.observe(bus)
     }
 
     /// Enter common radio power as the protocol that owns `owner`.
@@ -408,9 +373,8 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
     /// Only the first client runs the modem/PHY power sequence. Common power
     /// does not reset the Wi-Fi MAC; that reset belongs to Wi-Fi's own entry.
     ///
-    /// The first client also takes the platform's 160 MHz, MPLL and
-    /// analog-I2C references from `clocks`; ESP-HAL alone writes those shared
-    /// gates.
+    /// The first client also takes the domain's 160 MHz and analog-I2C
+    /// platform clocks.
     ///
     /// The returned proof is the client's membership; only
     /// [`Self::exit_common_power`] consumes it.
@@ -418,16 +382,16 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
     /// # Errors
     ///
     /// The client already holds power, or the first client's sequence failed
-    /// a read-back checkpoint or a platform reference and admitted no client.
+    /// a read-back checkpoint and admitted no client.
     pub fn enter_common_power<O: RadioClientOwner>(
         &mut self,
         _owner: &O,
-        clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<CommonPower<O::Client>, CommonRadioPowerError> {
         let state = self.state_mut();
+        let registers = &mut state.registers;
         state
             .power
-            .enter::<O::Client>(state.registers.radio_phy_mut(), clocks)
+            .enter::<O::Client>(&mut registers.radio_phy, &mut registers.platform)
     }
 
     /// Wi-Fi's checked cold-reset edge followed by common power. The whole
@@ -435,12 +399,12 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
     pub(crate) fn enter_wifi_power(
         &mut self,
         _owner: &WifiRadioRegisters,
-        clocks: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<CommonPower<WifiClient>, CommonRadioPowerError> {
         let state = self.state_mut();
+        let registers = &mut state.registers;
         state
             .power
-            .enter_wifi(state.registers.radio_phy_mut(), clocks)
+            .enter_wifi(&mut registers.radio_phy, &mut registers.platform)
     }
 
     /// Enter client `K` into coexistence. The shared radio's owner applies
@@ -456,15 +420,14 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
 
     /// Leave common radio power as the protocol that owns `owner`.
     ///
-    /// The last client gives back the platform's analog-I2C reference,
-    /// restores the cold-power baseline captured before the first power edge
-    /// and then gives back the 160 MHz and MPLL references.
+    /// The last client gives back the analog-I2C hold, restores the
+    /// cold-power baseline captured before the first power edge and then
+    /// gives back the 160 MHz hold.
     ///
     /// # Errors
     ///
     /// The baseline did not read back; the client then stays entered and the
-    /// proof is returned so the exit can be retried. Releasing a platform
-    /// reference gives its guard back explicitly and cannot fail.
+    /// proof is returned so the exit can be retried.
     pub fn exit_common_power<O: RadioClientOwner>(
         &mut self,
         _owner: &O,
@@ -472,7 +435,10 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
         _coex: &CoexAbsent<O::Client>,
     ) -> Result<(), CommonPowerExitFailure<O::Client>> {
         let state = self.state_mut();
-        state.power.exit(state.registers.radio_phy_mut(), power)
+        let registers = &mut state.registers;
+        state
+            .power
+            .exit(&mut registers.radio_phy, &mut registers.platform, power)
     }
 
     /// Borrow the shared PHY registers with the route restore state, for a
@@ -492,7 +458,7 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
     /// This is ESP-IDF's reference-counted `modem_clock_module_enable` for the
     /// client's module: the monotonic modem ICG maps are ORed in, then only
     /// dependencies at zero references are enabled. The upstream 160 MHz
-    /// source and the analog-I2C master clock go through `platform`.
+    /// source and the analog-I2C master clock are the domain's platform clocks.
     ///
     /// # Errors
     ///
@@ -502,9 +468,8 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
     pub fn enable_modem_clocks<O: RadioClientOwner>(
         &mut self,
         _owner: &O,
-        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), ModemClockError> {
-        self.enable_slot(client_index(O::CLIENT), client_module(O::CLIENT), platform)
+        self.enable_slot(client_index(O::CLIENT), client_module(O::CLIENT))
     }
 
     /// Disable the modem clocks of the protocol that owns `owner`; only
@@ -555,9 +520,8 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
     pub fn enable_phy_modem_clocks(
         &mut self,
         module: PhyClockModule,
-        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), ModemClockError> {
-        self.enable_slot(phy_index(module), phy_module(module), platform)
+        self.enable_slot(phy_index(module), phy_module(module))
     }
 
     /// Disable a modem clock module of the shared PHY domain.
@@ -576,7 +540,6 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
         &mut self,
         index: usize,
         module: ModemClockModule,
-        platform: &impl PlatformClockProvider<Backend = B>,
     ) -> Result<(), ModemClockError> {
         let state = self.state_mut();
         state
@@ -585,9 +548,9 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
                 index,
                 crate::power::clock::module_dependencies(module),
                 &mut ModemExecution {
-                    port: state.registers.radio_phy_mut(),
+                    port: &mut state.registers.radio_phy,
                     held: &mut state.modem_platform_clocks,
-                    platform,
+                    platform: &mut state.registers.platform,
                 },
             )
             .map_err(modem_error)
@@ -600,9 +563,9 @@ impl<B: PlatformClockBackend> RadioDomain<B> {
             .disable(
                 index,
                 &mut ModemExecution {
-                    port: state.registers.radio_phy_mut(),
+                    port: &mut state.registers.radio_phy,
                     held: &mut state.modem_platform_clocks,
-                    platform: (),
+                    platform: &mut state.registers.platform,
                 },
             )
             .map_err(modem_error)

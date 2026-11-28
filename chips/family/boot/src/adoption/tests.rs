@@ -14,15 +14,13 @@ use support::{Log, Op};
 fn adoption_preserves_order_owners_watchdog_words_and_the_unarmed_window() {
     let log = Log::new(None);
     let mut ready = initialize(log.owners()).unwrap();
-    assert_eq!(ready.clock.id, 12);
     assert_eq!(ready.resources.id, 15);
-    assert!(core::ptr::eq(ready.clock.log, &log));
+    assert!(core::ptr::eq(ready.resources.log, &log));
     assert_eq!(
         log.operations(),
         [
             Op::Cpu,
             Op::Console,
-            Op::Clocks,
             Op::Cores,
             Op::Debug,
             Op::Timer0Clock,
@@ -45,14 +43,14 @@ fn adoption_preserves_order_owners_watchdog_words_and_the_unarmed_window() {
         ]
     );
     let events = log.events.borrow();
-    let clock_adoption = events.iter().find(|(_, op)| *op == Op::Clocks).unwrap().0;
+    let console = events.iter().find(|(_, op)| *op == Op::Console).unwrap().0;
     let rtc_enable = events
         .iter()
         .find(|(_, op)| *op == Op::Running(2, true, false))
         .unwrap()
         .0;
     assert_eq!(
-        rtc_enable.checked_duration_since(clock_adoption),
+        rtc_enable.checked_duration_since(console),
         Some(Duration::from_micros(17))
     );
     drop(events);
@@ -70,11 +68,11 @@ fn refused_installation_stops_at_its_original_step_before_any_watchdog_write() {
         (InitError::ConsoleInstalled, vec![Op::Cpu, Op::Console]),
         (
             InitError::CoreControlInstalled,
-            vec![Op::Cpu, Op::Console, Op::Clocks, Op::Cores],
+            vec![Op::Cpu, Op::Console, Op::Cores],
         ),
         (
             InitError::DebugStatusPublished,
-            vec![Op::Cpu, Op::Console, Op::Clocks, Op::Cores, Op::Debug],
+            vec![Op::Cpu, Op::Console, Op::Cores, Op::Debug],
         ),
     ] {
         let log = Log::new(Some(error));

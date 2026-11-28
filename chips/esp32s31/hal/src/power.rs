@@ -1,16 +1,19 @@
 //! Owned S31 register and reference adapter for the family power driver.
-use crate::{power::radio::PlatformClockRefs, radio::phy::RadioPhyRegisters};
+use crate::{
+    power::{platform::PlatformGates, radio::PlatformClockRefs},
+    radio::phy::RadioPhyRegisters,
+};
 
-/// Power-sequence port over one route's shared PHY, its platform clock
-/// references and the platform clock owner.
-pub(crate) struct RoutePower<'route, P: PlatformClockProvider> {
+/// Power-sequence port over one route's shared PHY, common power's platform
+/// holds and the domain's platform clocks.
+pub(crate) struct RoutePower<'route, G> {
     pub(crate) phy: &'route mut RadioPhyRegisters,
-    pub(crate) refs: &'route mut PlatformClockRefs<P::Backend>,
-    pub(crate) platform: &'route P,
+    pub(crate) refs: &'route mut PlatformClockRefs,
+    pub(crate) platform: &'route mut G,
 }
 
-impl<P: PlatformClockProvider> oer_chips_family_radio_power::power::PowerSequenceBackend
-    for RoutePower<'_, P>
+impl<G: PlatformGates> oer_chips_family_radio_power::power::PowerSequenceBackend
+    for RoutePower<'_, G>
 {
     fn publish_modem_power_state(&mut self) {
         self.phy.publish_modem_power_state();
@@ -18,19 +21,8 @@ impl<P: PlatformClockProvider> oer_chips_family_radio_power::power::PowerSequenc
     fn enable_modem_register_bus_clock(&mut self) {
         self.phy.enable_modem_register_bus_clock();
     }
-    fn acquire_platform_clock(
-        &mut self,
-        clock: oer_chips_family_radio_power::power::PowerClock,
-    ) -> Result<(), oer_chips_family_radio_power::power::ReferenceRefused> {
-        use oer_chips_family_radio_power::power::{PowerClock, ReferenceRefused};
-        let clock = match clock {
-            PowerClock::Mpll => PlatformClock::Mpll,
-            PowerClock::Pll160m => PlatformClock::Pll160m,
-            PowerClock::AnalogI2cMaster => PlatformClock::AnalogI2cMaster,
-        };
-        self.refs
-            .acquire(clock, self.platform)
-            .map_err(|_| ReferenceRefused)
+    fn acquire_platform_clock(&mut self, clock: oer_chips_family_radio_power::power::PowerClock) {
+        self.refs.acquire(clock, self.platform);
     }
     fn configure_modem_source_clocks(&mut self) {
         self.phy.configure_modem_source_clocks();
@@ -71,14 +63,10 @@ impl<P: PlatformClockProvider> oer_chips_family_radio_power::power::PowerSequenc
     }
 }
 
-mod chip_clocks;
 pub(crate) mod clock;
+pub(crate) mod platform;
 pub(crate) mod radio;
 pub mod sleep;
 #[cfg(test)]
-pub(crate) mod test_clocks;
-pub use chip_clocks::{ChipClockWords, ChipClocks, PsramMpll};
-pub use clock::{
-    PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
-    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider, PlatformClockReleaseRefused,
-};
+pub(crate) mod test_gates;
+pub use platform::ChipClockWords;

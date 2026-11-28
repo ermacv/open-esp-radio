@@ -12,7 +12,7 @@ use oer_hil_services_radio_pair as service;
 use service::{Item, PAGE_READINGS, Reading, Refusal, SnapshotPage, Value};
 
 use crate::radio::{Phy, Radio, RfOpen};
-use oer_chips_esp32s31_hal::power::ChipClocks;
+use oer_chips_esp32s31_hal::power::ChipClockWords;
 use oer_chips_esp32s31_hal::radio::phy::power_words::ModemBus;
 
 /// The most readings a snapshot holds: the bring-up's registers, the
@@ -46,30 +46,27 @@ pub(crate) fn page(readings: &[Reading], page: u8) -> SnapshotPage {
 pub(crate) fn cold(
     reset_cause: u32,
     observed: (RadioPowerWords, ModemBus<'_>),
-    clocks: &ChipClocks,
+    platform: ChipClockWords,
 ) -> Readings {
     let mut readings = Readings::new();
     push(&mut readings, Item::ResetCause, 0, Value::Word(reset_cause));
-    power(&mut readings, observed, clocks);
+    power(&mut readings, observed, platform);
     readings
 }
 
 /// The radio's power, clock and reset words ([`Radio::observe_power`]) and
-/// the platform clocks' ([`ChipClocks::observe`]): a modem block's word
-/// unreadable while its register bus is closed, the platform clocks' while
-/// another context holds them.
-fn power(readings: &mut Readings, observed: (RadioPowerWords, ModemBus<'_>), clocks: &ChipClocks) {
+/// the platform clocks' ([`Radio::observe_platform_clocks`]): a modem
+/// block's word unreadable while its register bus is closed.
+fn power(
+    readings: &mut Readings,
+    observed: (RadioPowerWords, ModemBus<'_>),
+    platform: ChipClockWords,
+) {
     let (words, bus) = observed;
-    let platform = clocks.observe(&bus);
-    let (pll, lpcon) = match platform {
-        Ok(platform) => (
-            Value::Word(platform.hp_sys_clkrst_ref_160m_ctrl0),
-            platform
-                .modem_lpcon_clk_conf
-                .map_or(Value::Unreadable, Value::Word),
-        ),
-        Err(_) => (Value::Unreadable, Value::Unreadable),
-    };
+    let pll = Value::Word(platform.hp_sys_clkrst_ref_160m_ctrl0);
+    let lpcon = platform
+        .modem_lpcon_clk_conf
+        .map_or(Value::Unreadable, Value::Word);
     push(readings, Item::HpSysClkrstRef160mCtrl0, 0, pll);
     push(readings, Item::ModemLpconClkConf, 0, lpcon);
     for (item, word) in [
@@ -138,14 +135,17 @@ fn power(readings: &mut Readings, observed: (RadioPowerWords, ModemBus<'_>), clo
 /// PHY's registers lent from `radio`.
 pub(crate) fn up(
     radio: &mut Radio,
-    clocks: &ChipClocks,
     reset_cause: u32,
     phy: &Phy<'_>,
     open: &RfOpen,
     identity: PhyCalibrationIdentity,
 ) -> Readings {
     let calibration = Some(phy.calibration_cache(open, identity).into_snapshot());
-    let mut readings = cold(reset_cause, radio.observe_power(), clocks);
+    let mut readings = {
+        let observed = radio.observe_power();
+        let platform = radio.observe_platform_clocks(&observed.1);
+        cold(reset_cause, observed, platform)
+    };
     let (temperature, frequency) = {
         let mut hardware = radio.phy_hardware();
         (

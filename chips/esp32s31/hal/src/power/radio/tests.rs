@@ -3,8 +3,9 @@ use std::{cell::RefCell, rc::Rc, vec::Vec};
 use crate::radio::modem::WifiPowerBaseline;
 use oer_chips_family_radio_power::baseline::PowerRestoreCheckpoint;
 
-use crate::power::test_clocks::{ClockEvent, CountingPlatformClocks, abandoned, held, holding};
-use crate::power::{PlatformClock, PlatformClockBackend, PlatformClockProvider};
+use crate::power::platform::PlatformClock;
+use crate::power::test_gates::{GateEvent, RecordingGates};
+use oer_chips_family_radio_power::power::PowerClock;
 
 use super::{
     ClockPort, CommonPower, CommonRadioPower, CommonRadioPowerError, PlatformClockRefs,
@@ -15,7 +16,7 @@ use super::{
 enum Operation {
     Acquire(PlatformClock),
     Release(PlatformClock),
-    Abandon(PlatformClock, crate::power::PlatformClockAbandonment),
+    WifiPower(bool),
     RestorePower(WifiPowerBaseline),
     SelectWifiLowPowerClock,
     PowerSequence,
@@ -68,19 +69,17 @@ impl ClockPort for Port {
             .push(Operation::RestorePower(baseline));
         self.power_readback
     }
-    fn run_common_power_sequence<B: PlatformClockBackend>(
+    fn run_common_power_sequence(
         &mut self,
-        refs: &mut PlatformClockRefs<B>,
-        platform: &impl PlatformClockProvider<Backend = B>,
+        refs: &mut PlatformClockRefs,
+        platform: &mut impl crate::power::platform::PlatformGates,
     ) -> Result<(), oer_chips_family_radio_power::power::PowerError> {
         self.log.borrow_mut().push(Operation::PowerSequence);
-        refs.acquire(PlatformClock::Mpll, platform).unwrap();
-        refs.acquire(PlatformClock::Pll160m, platform).unwrap();
+        refs.acquire(PowerClock::Pll160m, platform);
         if let Some(error) = self.power_sequence_failure {
             return Err(error);
         }
-        refs.acquire(PlatformClock::AnalogI2cMaster, platform)
-            .unwrap();
+        refs.acquire(PowerClock::AnalogI2cMaster, platform);
         Ok(())
     }
 }
@@ -96,18 +95,18 @@ impl crate::radio::ieee80211::client::WifiPowerPort for Port {
 }
 
 fn try_enter<K: RadioClientKind>(
-    power: &mut CommonRadioPower<crate::power::test_clocks::CountingBackend>,
+    power: &mut CommonRadioPower,
     port: &mut Port,
-    platform: &CountingPlatformClocks,
+    platform: &mut RecordingGates,
 ) -> Result<CommonPower<K>, CommonRadioPowerError> {
     power.enter::<K>(port, platform)
 }
 
 /// Enter `K`, which the test expects to succeed.
 fn entered<K: RadioClientKind>(
-    power: &mut CommonRadioPower<crate::power::test_clocks::CountingBackend>,
+    power: &mut CommonRadioPower,
     port: &mut Port,
-    platform: &CountingPlatformClocks,
+    platform: &mut RecordingGates,
 ) -> CommonPower<K> {
     try_enter::<K>(power, port, platform)
         .unwrap_or_else(|error| panic!("common power entered: {error:?}"))
@@ -115,84 +114,80 @@ fn entered<K: RadioClientKind>(
 
 /// Leave with `proof`, which the test expects to succeed.
 fn left<K: RadioClientKind>(
-    power: &mut CommonRadioPower<crate::power::test_clocks::CountingBackend>,
+    power: &mut CommonRadioPower,
     port: &mut Port,
+    platform: &mut RecordingGates,
     proof: CommonPower<K>,
 ) {
-    if let Err(failure) = power.exit(port, proof) {
+    if let Err(failure) = power.exit(port, platform, proof) {
         panic!("common power left: {:?}", failure.error);
     }
 }
 
-fn setup() -> (Log, Port, CountingPlatformClocks) {
+fn setup() -> (Log, Port, RecordingGates) {
     let log = Log::default();
     let port = Port::new(&log);
     let sink = log.clone();
-    let platform = CountingPlatformClocks::logging(move |event| {
+    let platform = RecordingGates::logging(move |event| {
         sink.borrow_mut().push(match event {
-            ClockEvent::Acquire(clock) => Operation::Acquire(clock),
-            ClockEvent::Release(clock) => Operation::Release(clock),
-            ClockEvent::Abandon(clock, how) => Operation::Abandon(clock, how),
+            GateEvent::Acquire(clock) => Operation::Acquire(clock),
+            GateEvent::Release(clock) => Operation::Release(clock),
+            GateEvent::OpenWifiPower => Operation::WifiPower(true),
+            GateEvent::CloseWifiPower => Operation::WifiPower(false),
         });
     });
     (log, port, platform)
 }
 
-const COMMON: [PlatformClock; 3] = [
-    PlatformClock::Mpll,
-    PlatformClock::Pll160m,
-    PlatformClock::AnalogI2cMaster,
-];
+const COMMON: [PlatformClock; 2] = [PlatformClock::Pll160m, PlatformClock::AnalogI2cMaster];
 
 #[test]
 fn common_power_holds_one_platform_reference_of_each_shared_gate() {
     let cold = WifiPowerBaseline::for_host_test(
         oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Disabled,
     );
-    let (log, mut port, platform) = setup();
+    let (log, mut port, mut platform) = setup();
     port.power = cold;
     let mut power = CommonRadioPower::default();
 
-    let wifi = entered::<WifiClient>(&mut power, &mut port, &platform);
+    let wifi = entered::<WifiClient>(&mut power, &mut port, &mut platform);
     assert_eq!(
         *log.borrow(),
         [
+            Operation::WifiPower(true),
             Operation::SelectWifiLowPowerClock,
             Operation::PowerSequence,
-            Operation::Acquire(PlatformClock::Mpll),
             Operation::Acquire(PlatformClock::Pll160m),
             Operation::Acquire(PlatformClock::AnalogI2cMaster),
         ]
     );
     assert!(matches!(
-        try_enter::<WifiClient>(&mut power, &mut port, &platform),
+        try_enter::<WifiClient>(&mut power, &mut port, &mut platform),
         Err(CommonRadioPowerError::AlreadyEntered)
     ));
-    assert_eq!(held(), holding(&COMMON));
-    let mut counted = crate::power::PlatformClockHolds::default();
-    power.count_platform_clocks(&mut counted);
-    assert_eq!(counted, held());
+    assert_eq!(platform.held(), COMMON);
 
     log.borrow_mut().clear();
-    left(&mut power, &mut port, wifi);
+    left(&mut power, &mut port, &mut platform, wifi);
     // The last client closes the analog-I2C gate, restores the baseline
-    // captured before the first edge, then gives back the 160 MHz source and MPLL.
+    // captured before the first edge, gives back the 160 MHz source and
+    // closes Wi-Fi's power gate last.
     assert_eq!(
         *log.borrow(),
         [
             Operation::Release(PlatformClock::AnalogI2cMaster),
             Operation::RestorePower(cold),
             Operation::Release(PlatformClock::Pll160m),
-            Operation::Release(PlatformClock::Mpll),
+            Operation::WifiPower(false),
         ]
     );
-    assert!(held().is_empty());
+    assert!(platform.held().is_empty());
     assert!(!power.any_client());
 }
 
 #[test]
 fn a_failed_power_sequence_admits_no_client_and_retries_without_a_second_reference() {
-    let (log, mut port, platform) = setup();
+    let (log, mut port, mut platform) = setup();
     let error = oer_chips_family_radio_power::power::PowerError {
         checkpoint: oer_chips_family_radio_power::power::PowerCheckpoint::ModemClockSource,
         expected: true,
@@ -201,29 +196,28 @@ fn a_failed_power_sequence_admits_no_client_and_retries_without_a_second_referen
     port.power_sequence_failure = Some(error);
     let mut power = CommonRadioPower::default();
     assert!(matches!(
-        try_enter::<WifiClient>(&mut power, &mut port, &platform),
+        try_enter::<WifiClient>(&mut power, &mut port, &mut platform),
         Err(CommonRadioPowerError::Power(failed)) if failed == error
     ));
     assert!(!power.holds(RadioClient::Wifi));
 
     port.power_sequence_failure = None;
-    let _wifi = entered::<WifiClient>(&mut power, &mut port, &platform);
+    let _wifi = entered::<WifiClient>(&mut power, &mut port, &mut platform);
     let acquisitions = log
         .borrow()
         .iter()
         .filter(|operation| **operation == Operation::Acquire(PlatformClock::Pll160m))
         .count();
     assert_eq!(acquisitions, 1);
-    power.abandon_for_test();
 }
 
 #[test]
 fn a_failed_restore_keeps_the_last_client_for_retry() {
-    let (log, mut port, platform) = setup();
+    let (log, mut port, mut platform) = setup();
     let mut power = CommonRadioPower::default();
-    let wifi = entered::<WifiClient>(&mut power, &mut port, &platform);
+    let wifi = entered::<WifiClient>(&mut power, &mut port, &mut platform);
     port.power_readback = Err(PowerRestoreCheckpoint::ModemSyscon);
-    let Err(failure) = power.exit(&mut port, wifi) else {
+    let Err(failure) = power.exit(&mut port, &mut platform, wifi) else {
         panic!("the restore failed");
     };
     assert_eq!(
@@ -231,83 +225,55 @@ fn a_failed_restore_keeps_the_last_client_for_retry() {
         CommonRadioPowerError::Restore(WifiPowerRestoreCheckpoint::ModemSyscon)
     );
     assert!(power.holds(RadioClient::Wifi));
-    // The analog-I2C gate closed before the restore; the sources stay held.
-    assert_eq!(
-        held(),
-        holding(&[PlatformClock::Mpll, PlatformClock::Pll160m])
-    );
+    // The analog-I2C gate closed before the restore; the source stays held.
+    assert_eq!(platform.held(), [PlatformClock::Pll160m]);
     port.power_readback = Ok(());
-    left(&mut power, &mut port, failure.power);
+    left(&mut power, &mut port, &mut platform, failure.power);
     let releases = log
         .borrow()
         .iter()
         .filter(|operation| **operation == Operation::Release(PlatformClock::AnalogI2cMaster))
         .count();
     assert_eq!(releases, 1);
-    assert!(held().is_empty());
+    assert!(platform.held().is_empty());
 }
 
 #[test]
-fn a_refused_release_keeps_the_last_client_and_its_reference_for_retry() {
-    let (_, mut port, platform) = setup();
-    let mut power = CommonRadioPower::default();
-    let wifi = entered::<WifiClient>(&mut power, &mut port, &platform);
-    platform.set_release_refused(PlatformClock::Pll160m, true);
-    let Err(failure) = power.exit(&mut port, wifi) else {
-        panic!("the platform refused the release");
-    };
-    assert_eq!(
-        failure.error,
-        CommonRadioPowerError::Release(PlatformClock::Pll160m)
-    );
-    assert!(power.holds(RadioClient::Wifi));
-    assert_eq!(
-        held(),
-        holding(&[PlatformClock::Mpll, PlatformClock::Pll160m]),
-        "the analog-I2C reference went back before the refused one"
-    );
-    platform.set_release_refused(PlatformClock::Pll160m, false);
-    left(&mut power, &mut port, failure.power);
-    assert!(held().is_empty());
-}
-
-#[test]
-fn a_failed_power_sequence_is_abandoned_with_its_references_on() {
-    let (_, mut port, platform) = setup();
+fn a_failed_power_sequence_keeps_its_sources_for_the_retry() {
+    let (_, mut port, mut platform) = setup();
     port.power_sequence_failure = Some(oer_chips_family_radio_power::power::PowerError {
         checkpoint: oer_chips_family_radio_power::power::PowerCheckpoint::ModemClockSource,
         expected: true,
         observed: false,
     });
     let mut power = CommonRadioPower::default();
-    assert!(try_enter::<WifiClient>(&mut power, &mut port, &platform).is_err());
-    // The retry reuses the sources taken before the failed checkpoint.
-    assert_eq!(
-        held(),
-        holding(&[PlatformClock::Mpll, PlatformClock::Pll160m])
-    );
-    // Abandoning the failed owner gives nothing back: the sequence stays
-    // fail-stop with its sources on, and the abandonment is recorded.
-    power.abandon_for_test();
-    assert_eq!(
-        held(),
-        holding(&[PlatformClock::Mpll, PlatformClock::Pll160m])
-    );
-    let (abandoned, dropped) = abandoned();
-    assert_eq!(
-        abandoned,
-        holding(&[PlatformClock::Mpll, PlatformClock::Pll160m])
-    );
-    assert!(dropped.is_empty());
+    assert!(try_enter::<WifiClient>(&mut power, &mut port, &mut platform).is_err());
+    // The retry reuses the source taken before the failed checkpoint.
+    assert_eq!(platform.held(), [PlatformClock::Pll160m]);
+    port.power_sequence_failure = None;
+    let wifi = entered::<WifiClient>(&mut power, &mut port, &mut platform);
+    assert_eq!(platform.held(), COMMON);
+    left(&mut power, &mut port, &mut platform, wifi);
+    assert!(platform.held().is_empty());
+}
+
+#[test]
+fn the_wifi_power_gate_opens_first_and_closes_last() {
+    let (log, mut port, mut platform) = setup();
+    let mut power = CommonRadioPower::default();
+    let wifi = power.enter_wifi(&mut port, &mut platform).unwrap();
+    assert_eq!(log.borrow().first(), Some(&Operation::WifiPower(true)));
+    left(&mut power, &mut port, &mut platform, wifi);
+    assert_eq!(log.borrow().last(), Some(&Operation::WifiPower(false)));
 }
 
 #[test]
 fn repeated_common_power_does_not_repeat_global_clock_selection() {
-    let (log, mut port, platform) = setup();
+    let (log, mut port, mut platform) = setup();
     let mut power = CommonRadioPower::default();
-    let first = entered::<WifiClient>(&mut power, &mut port, &platform);
-    left(&mut power, &mut port, first);
-    let _second = entered::<WifiClient>(&mut power, &mut port, &platform);
+    let first = entered::<WifiClient>(&mut power, &mut port, &mut platform);
+    left(&mut power, &mut port, &mut platform, first);
+    let _second = entered::<WifiClient>(&mut power, &mut port, &mut platform);
     let observed = log.borrow().clone();
     assert_eq!(
         observed
@@ -323,21 +289,20 @@ fn repeated_common_power_does_not_repeat_global_clock_selection() {
             .count(),
         1
     );
-    power.abandon_for_test();
 }
 
 #[test]
 fn a_failed_initial_domain_entry_retries_the_clock_selection() {
-    let (log, mut port, platform) = setup();
+    let (log, mut port, mut platform) = setup();
     port.power_sequence_failure = Some(oer_chips_family_radio_power::power::PowerError {
         checkpoint: oer_chips_family_radio_power::power::PowerCheckpoint::ResetReleased,
         expected: true,
         observed: false,
     });
     let mut power = CommonRadioPower::default();
-    assert!(try_enter::<WifiClient>(&mut power, &mut port, &platform).is_err());
+    assert!(try_enter::<WifiClient>(&mut power, &mut port, &mut platform).is_err());
     port.power_sequence_failure = None;
-    let _wifi = entered::<WifiClient>(&mut power, &mut port, &platform);
+    let _wifi = entered::<WifiClient>(&mut power, &mut port, &mut platform);
     let observed = log.borrow().clone();
     assert_eq!(
         observed
@@ -353,7 +318,6 @@ fn a_failed_initial_domain_entry_retries_the_clock_selection() {
             .count(),
         2
     );
-    power.abandon_for_test();
 }
 
 fn calibrated(port: &mut Port) -> oer_portable_time::Instant {
@@ -370,24 +334,25 @@ fn calibrated(port: &mut Port) -> oer_portable_time::Instant {
 
 #[test]
 fn wifi_entry_resets_after_calibration_before_domain_power_and_only_once() {
-    let (log, mut port, platform) = setup();
+    let (log, mut port, mut platform) = setup();
     let mut power = CommonRadioPower::default();
     let at = calibrated(&mut port);
-    let first = power.enter_wifi(&mut port, &platform).unwrap();
+    let first = power.enter_wifi(&mut port, &mut platform).unwrap();
     assert!(!port.calibrated_window);
     assert_eq!(
-        &log.borrow()[..4],
+        &log.borrow()[..5],
         &[
             Operation::CalibrationComplete(at),
+            Operation::WifiPower(true),
             Operation::SelectWifiLowPowerClock,
             Operation::ResetWifi(at),
             Operation::PowerSequence,
         ]
     );
-    left(&mut power, &mut port, first);
+    left(&mut power, &mut port, &mut platform, first);
     // A retained wake republishes PHY state before a repeated client entry.
     calibrated(&mut port);
-    let _second = power.enter_wifi(&mut port, &platform).unwrap();
+    let _second = power.enter_wifi(&mut port, &mut platform).unwrap();
     assert!(port.calibrated_window);
     assert_eq!(
         log.borrow()
@@ -396,12 +361,11 @@ fn wifi_entry_resets_after_calibration_before_domain_power_and_only_once() {
             .count(),
         1
     );
-    power.abandon_for_test();
 }
 
 #[test]
 fn wifi_reset_is_retried_after_power_failure_but_not_on_duplicate_admission() {
-    let (log, mut port, platform) = setup();
+    let (log, mut port, mut platform) = setup();
     let mut power = CommonRadioPower::default();
     calibrated(&mut port);
     port.power_sequence_failure = Some(oer_chips_family_radio_power::power::PowerError {
@@ -409,12 +373,12 @@ fn wifi_reset_is_retried_after_power_failure_but_not_on_duplicate_admission() {
         expected: true,
         observed: false,
     });
-    assert!(power.enter_wifi(&mut port, &platform).is_err());
+    assert!(power.enter_wifi(&mut port, &mut platform).is_err());
     port.power_sequence_failure = None;
-    let _entered = power.enter_wifi(&mut port, &platform).unwrap();
+    let _entered = power.enter_wifi(&mut port, &mut platform).unwrap();
     let before = log.borrow().len();
     assert!(matches!(
-        power.enter_wifi(&mut port, &platform),
+        power.enter_wifi(&mut port, &mut platform),
         Err(CommonRadioPowerError::AlreadyEntered)
     ));
     assert_eq!(log.borrow().len(), before);
@@ -425,5 +389,4 @@ fn wifi_reset_is_retried_after_power_failure_but_not_on_duplicate_admission() {
             .count(),
         2
     );
-    power.abandon_for_test();
 }

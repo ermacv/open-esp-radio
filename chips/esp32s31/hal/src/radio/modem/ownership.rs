@@ -43,6 +43,8 @@ pub struct SharedRadioRegisters {
     pub(crate) radio_phy: RadioPhyRegisters,
     pub(crate) coexistence: CoexistencePeripherals,
     pub(crate) shared_radio: SharedBasebandParts,
+    /// The platform clocks' words, which the radio owner alone writes.
+    pub(crate) platform: crate::power::platform::PlatformClocks,
 }
 impl SharedRadioRegisters {
     /// Assemble the unique shared parts without accessing registers. The
@@ -53,6 +55,7 @@ impl SharedRadioRegisters {
         radio_phy: RadioPhyRegisters,
         coexistence: CoexistencePeripherals,
         shared_radio: SharedRadioPeripherals,
+        chip_clocks: oer_chips_esp32s31_pac::ownership::ChipClockPeripherals,
     ) -> Self {
         let SharedRadioPeripherals {
             bt_v32_baseband: _,
@@ -68,6 +71,7 @@ impl SharedRadioRegisters {
             shared_radio: SharedBasebandParts {
                 shared_radio_init_control,
             },
+            platform: crate::power::platform::PlatformClocks::new(chip_clocks),
         }
     }
 

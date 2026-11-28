@@ -17,7 +17,6 @@
 //! task-side [`RadioAccess`]; [`WifiClocked::from_running`] takes a stopped
 //! runtime epoch back.
 
-use crate::power::PlatformClockBackend;
 use crate::radio::ieee80211::channel::RadioChannelHal;
 
 use core::fmt;
@@ -28,7 +27,7 @@ use crate::{
     power::radio::ClockPort,
     radio::domain::{
         CoexAbsent, CommonPower, CommonPowerExitFailure, CommonRadioPowerError, ModemClockError,
-        PlatformClockProvider, RadioDomain, WifiClient,
+        RadioDomain, WifiClient,
     },
     radio::ieee80211::{
         mac::{WifiMacColdHal, WifiMacHal},
@@ -181,15 +180,14 @@ impl WifiCold {
     ///
     /// The client already holds power, or the first client's sequence failed
     /// a read-back checkpoint; the unchanged owner is returned.
-    pub fn power_up<B: PlatformClockBackend>(
+    pub fn power_up(
         self,
-        radio: &mut RadioDomain<B>,
-        clocks: &impl PlatformClockProvider<Backend = B>,
+        radio: &mut RadioDomain,
     ) -> Result<
         (WifiPowered, CommonPower<WifiClient>),
         WifiTransitionFailure<Self, CommonRadioPowerError>,
     > {
-        match radio.enter_wifi_power(&self.registers.mac, clocks) {
+        match radio.enter_wifi_power(&self.registers.mac) {
             Ok(power) => Ok((
                 WifiPowered {
                     registers: self.registers,
@@ -213,9 +211,9 @@ impl WifiPowered {
         clippy::type_complexity,
         reason = "the failure returns the owner beside its power proof"
     )]
-    pub fn power_down<B: PlatformClockBackend>(
+    pub fn power_down(
         self,
-        radio: &mut RadioDomain<B>,
+        radio: &mut RadioDomain,
         power: CommonPower<WifiClient>,
         coex: &CoexAbsent<WifiClient>,
     ) -> Result<
@@ -241,12 +239,11 @@ impl WifiPowered {
     ///
     /// The planner rejected the request before any access, or a platform
     /// request failed and poisoned the modem clocks.
-    pub fn enable_clocks<B: PlatformClockBackend>(
+    pub fn enable_clocks(
         self,
-        radio: &mut RadioDomain<B>,
-        platform: &impl PlatformClockProvider<Backend = B>,
+        radio: &mut RadioDomain,
     ) -> Result<(WifiClocked, MacFirstReset), WifiTransitionFailure<Self, ModemClockError>> {
-        match radio.enable_modem_clocks(&self.registers.mac, platform) {
+        match radio.enable_modem_clocks(&self.registers.mac) {
             Ok(()) => Ok((
                 WifiClocked {
                     registers: self.registers,
@@ -269,9 +266,9 @@ impl WifiClocked {
     /// # Errors
     ///
     /// The modem clocks are poisoned.
-    pub fn set_initialized<B: PlatformClockBackend>(
+    pub fn set_initialized(
         &mut self,
-        radio: &mut RadioDomain<B>,
+        radio: &mut RadioDomain,
         initialized: WifiInitialization,
     ) -> Result<(), ModemClockError> {
         radio.set_wifi_initialized(&self.registers.mac, initialized)?;
@@ -320,10 +317,10 @@ impl WifiClocked {
 
     /// Lend one channel operation its registers: this client's MAC, the
     /// platform and the shared PHY borrowed from the radio domain.
-    pub fn channel_hal<'hal, B: PlatformClockBackend, P>(
+    pub fn channel_hal<'hal, P>(
         &'hal mut self,
         platform: &'hal mut P,
-        radio: &'hal mut crate::radio::domain::RadioDomain<B>,
+        radio: &'hal mut crate::radio::domain::RadioDomain,
     ) -> RadioChannelHal<'hal, P> {
         let (phy, restore) = radio.phy_parts_mut();
         RadioChannelHal::from_leased(platform, &mut self.registers.mac, phy, restore)
@@ -371,9 +368,9 @@ impl WifiClocked {
         clippy::result_large_err,
         reason = "failure must retain both stopped registers and the clock obligation"
     )]
-    pub fn release_clocks<B: PlatformClockBackend>(
+    pub fn release_clocks(
         mut self,
-        radio: &mut RadioDomain<B>,
+        radio: &mut RadioDomain,
     ) -> Result<ClockReleased, (StoppedInstallation, ClockPoisoned)> {
         let release = self
             .set_initialized(radio, WifiInitialization::Uninitialized)

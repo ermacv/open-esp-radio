@@ -39,8 +39,7 @@ fn an_instant_before_the_last_pass_waits_for_the_period() {
     );
 }
 
-type Radio =
-    oer_chips_esp32s31_hal::radio::domain::RadioDomain<crate::test_clocks::TestClockBackend>;
+type Radio = oer_chips_esp32s31_hal::radio::domain::RadioDomain;
 
 /// A test's own memory for a split's domain.
 fn domain_place() -> &'static mut MaybeUninit<Radio> {
@@ -53,7 +52,7 @@ fn split() -> (
     oer_chips_esp32s31_hal::system::root::ProtocolPartitions,
 ) {
     oer_chips_esp32s31_hal::system::root::RadioHardware::for_host_test()
-        .split::<crate::test_clocks::TestClockBackend>(domain_place())
+        .split(domain_place())
         .unwrap_or_else(|_| panic!("identity capacity"))
 }
 
@@ -171,7 +170,7 @@ fn the_right_goes_back_to_the_reunion_and_the_next_split_hands_it_out_again() {
     )
     .unwrap_or_else(|_| panic!("an idle split reunites"));
     let (_radio, partitions) = hardware
-        .split::<crate::test_clocks::TestClockBackend>(domain_place())
+        .split(domain_place())
         .unwrap_or_else(|_| panic!("identity capacity"));
     let _place = PhyPlace::new(partitions.phy, &mut memory);
 }

@@ -15,7 +15,6 @@ use std::{cell::RefCell, marker::PhantomData, vec::Vec};
 pub enum Op {
     Cpu,
     Console,
-    Clocks,
     Cores,
     Debug,
     Timer0Clock,
@@ -61,7 +60,6 @@ impl Log {
         Owners {
             cpu_clock: part(10),
             console: part(11),
-            clocks: part(12),
             core_control: part(13),
             debug: part(14),
             watchdogs: WatchdogParts {
@@ -81,7 +79,6 @@ pub struct Part<'a> {
 }
 pub struct Fake<'a>(PhantomData<&'a ()>);
 pub struct Hardware<'a> {
-    pub clock: Part<'a>,
     pub cpu: adoption::CpuHz,
     pub resources: Part<'a>,
     pub watchdogs: adoption::Watchdogs<Part<'a>, Part<'a>, Part<'a>, Part<'a>>,
@@ -89,8 +86,6 @@ pub struct Hardware<'a> {
 impl<'a> Port for Fake<'a> {
     type CpuClock = Part<'a>;
     type Console = Part<'a>;
-    type ClockParts = Part<'a>;
-    type Clocks = Part<'a>;
     type CoreControl = Part<'a>;
     type Debug = Part<'a>;
     type Resources = Part<'a>;
@@ -114,10 +109,6 @@ impl<'a> Port for Fake<'a> {
             Ok(())
         }
     }
-    fn adopt_clocks(part: Part<'a>) -> Part<'a> {
-        part.log.push(Op::Clocks);
-        part
-    }
     fn install_core_control(part: Part<'a>) -> Result<(), InitError> {
         part.log.push(Op::Cores);
         if part.log.refusal == Some(InitError::CoreControlInstalled) {
@@ -136,14 +127,12 @@ impl<'a> Port for Fake<'a> {
     }
     fn finish(
         resources: Part<'a>,
-        clock: Part<'a>,
         watchdogs: adoption::Watchdogs<Part<'a>, Part<'a>, Part<'a>, Part<'a>>,
         cpu: adoption::CpuHz,
     ) -> Hardware<'a> {
         resources.log.push(Op::Finish);
         Hardware {
             resources,
-            clock,
             cpu,
             watchdogs,
         }

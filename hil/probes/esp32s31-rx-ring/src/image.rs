@@ -31,7 +31,6 @@ use oer_chips_esp32s31_hal::{
         software_interrupt::{FromCpu0Irq, FromCpu2Irq},
         system_timer::{SystimerAlarm0, SystimerAlarm1},
     },
-    power::ChipClocks,
     radio::ieee80211::{
         client::{WifiClocked, WifiClocksOn},
         dma::{
@@ -129,7 +128,6 @@ fn main(
             reset_cause,
             runtime_efuse,
             runtime_radio,
-            runtime_clocks,
             runtime_system_timer,
             runtime_wifi_interrupts,
             runtime_software_interrupts,
@@ -157,7 +155,6 @@ fn main(
                 reset_causes.of(oer_chips_esp32s31_hal::system::platform::BOOT_HART),
                 hardware.efuse,
                 hardware.radio,
-                hardware.clocks,
                 hardware.system_timer,
                 hardware.wifi_interrupts,
                 hardware.software_interrupts,
@@ -217,7 +214,6 @@ fn main(
     };
     let parts = SessionParts {
         radio: runtime_radio,
-        clocks: runtime_clocks,
         identity,
         mac_irq: wifi_irqs.mac,
         power_irq: wifi_irqs.power,
@@ -246,11 +242,11 @@ fn main(
     // The owner's cold snapshot, read before the radio's parts go to the
     // radio level's task.
     let observing = Observing {
-        cold: pair::cold(
-            u32::from(reset_cause.code()),
-            parts.radio.observe_power(),
-            &parts.clocks,
-        ),
+        cold: {
+            let observed = parts.radio.observe_power();
+            let platform = parts.radio.observe_platform_clocks(&observed.1);
+            pair::cold(u32::from(reset_cause.code()), observed, platform)
+        },
     };
     let Some(handover) = RADIO.try_take() else {
         fail(name!("radio-handover"; 32));
@@ -984,17 +980,16 @@ async fn close_and_wake(
     open: RfOpen,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
-    clocks: &ChipClocks,
 ) -> Result<(RfOpen, u32, u32), Failure> {
     let began = timer.now();
-    let closed = apart!(oer_chips_esp32s31_radio_phy::close::<_, (), RomShortDelay>(
+    let closed = apart!(oer_chips_esp32s31_radio_phy::close::<(), RomShortDelay>(
         timer, radio, phy, open, platform
     ));
     let close_micros = crate::radio::micros_between(began, timer.now());
     let closed = closed.map_err(|_| (CLOSE, 0))?;
     let began = timer.now();
-    let woken = apart!(oer_chips_esp32s31_radio_phy::wake::<_, RomShortDelay>(
-        timer, radio, phy, closed, clocks
+    let woken = apart!(oer_chips_esp32s31_radio_phy::wake::<RomShortDelay>(
+        timer, radio, phy, closed
     ));
     let wake_micros = crate::radio::micros_between(began, timer.now());
     let open = woken.map_err(|_| (WAKE, 0))?;
@@ -1201,7 +1196,7 @@ async fn worker(
             waits,
         },
     );
-    let up = pair::up(&mut radio, held.clocks(), reset, &phy, &open, identity);
+    let up = pair::up(&mut radio, reset, &phy, &open, identity);
     let mut turns = Turns {
         radio: &mut radio,
         phy: &mut phy,
@@ -1355,8 +1350,7 @@ async fn worker(
                         turns.phy,
                         open,
                         &timer,
-                        &mut platform,
-                        held.clocks()
+                        &mut platform
                     )) {
                         Ok((open, close_micros, wake_micros)) => apart!(track_if_due(
                             turns.radio,
@@ -1381,8 +1375,7 @@ async fn worker(
                         turns.phy,
                         open,
                         &timer,
-                        &mut platform,
-                        held.clocks()
+                        &mut platform
                     )) {
                         Ok((open, close_micros, wake_micros)) => apart!(track_now(
                             turns.radio,

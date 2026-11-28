@@ -6,12 +6,7 @@ use oer_protocols_radio_coex::RadioClient;
 pub enum Clock {
     AnalogI2c,
     Pll160m,
-    Mpll,
 }
-
-/// A refused release leaves the exact reference held in its chip-owned slot.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ReleaseRefused;
 
 /// Chip-owned atoms and references borrowed for one membership transition.
 pub trait PowerPort {
@@ -20,8 +15,8 @@ pub trait PowerPort {
     fn capture(&self) -> Self::Baseline;
     fn restore(&mut self, baseline: Self::Baseline) -> Result<(), Self::RestoreError>;
     fn select_wifi_low_power_clock(&mut self);
-    /// A refusal leaves the exact reference in its chip-owned slot.
-    fn release(&mut self, clock: Clock) -> Result<(), ReleaseRefused>;
+    /// Give back common power's reference to `clock`: it cannot be refused.
+    fn release(&mut self, clock: Clock);
 }
 
 /// Entry additionally borrows the platform provider for the power sequence.
@@ -38,7 +33,6 @@ pub enum PowerError<R> {
     AlreadyEntered,
     Power(crate::power::PowerError),
     Restore(R),
-    Release(Clock),
 }
 
 /// Software membership, separate from the chip's affine public proofs.
@@ -151,16 +145,12 @@ impl<S: Copy> PowerMembership<S> {
         port: &mut P,
     ) -> Result<(), PowerError<P::RestoreError>> {
         if self.clients.only(client) {
-            port.release(Clock::AnalogI2c)
-                .map_err(|ReleaseRefused| PowerError::Release(Clock::AnalogI2c))?;
+            port.release(Clock::AnalogI2c);
             if let Some(baseline) = self.baseline {
                 port.restore(baseline).map_err(PowerError::Restore)?;
                 self.baseline = None;
             }
-            for clock in [Clock::Pll160m, Clock::Mpll] {
-                port.release(clock)
-                    .map_err(|ReleaseRefused| PowerError::Release(clock))?;
-            }
+            port.release(Clock::Pll160m);
         }
         self.clients.leave(client);
         Ok(())

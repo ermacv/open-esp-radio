@@ -8,8 +8,8 @@ use crate::radio::coex::{PHY_GRANT_PROTECT_EVENT, PhyGrantProtect};
 /// calibration restore slots), lent from the domain.
 ///
 /// ```compile_fail,E0499
-/// use oer_chips_esp32s31_hal::{power::PlatformClockBackend, radio::domain::RadioDomain};
-/// fn kept<B: PlatformClockBackend>(radio: &mut RadioDomain<B>) {
+/// use oer_chips_esp32s31_hal::radio::domain::RadioDomain;
+/// fn kept(radio: &mut RadioDomain) {
 ///     let phy = radio.phy_hardware();
 ///     let _also = radio.phy_hardware();
 ///     drop(phy);
@@ -58,7 +58,7 @@ impl<'a> PhyLoan<'a> {
     }
 }
 
-impl<B: PlatformClockBackend> RadioDomain<B> {
+impl RadioDomain {
     /// Lend the PHY's registers and route state.
     pub fn phy_hardware(&mut self) -> PhyHardware<'_> {
         let state = &mut self.state;

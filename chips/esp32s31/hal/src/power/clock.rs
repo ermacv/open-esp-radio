@@ -81,10 +81,6 @@ mod executor;
 pub(crate) use executor::ModemClockPort;
 pub(crate) use executor::ModemExecution;
 pub(crate) use executor::ModemPlatformClocks;
-pub use executor::{
-    PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
-    PlatformClockGuard, PlatformClockHolds, PlatformClockProvider, PlatformClockReleaseRefused,
-};
 
 #[cfg(test)]
 mod tests;
