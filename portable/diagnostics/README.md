@@ -2,7 +2,7 @@
 
 `oer-portable-diagnostics` is a portable, chip-independent codec shared by applications,
 HIL images and the host decoder. It has two layers: raw typed records and the
-synchronous line frame used by the pilot apps. It installs no queue, retained
+synchronous line frame the S31 images write. It installs no queue, retained
 storage, transport singleton or trace clock. The platform still owns panic
 capture and retained memory; `platform-runtime::diagnostics::previous_panic` is
 the shared conversion of its unchanged `PanicRecord` to `PreviousPanic`.
@@ -110,8 +110,7 @@ damaged or unknown line as an `OER-DIAG-ERROR` line with the raw text.
 `Console` wraps the record codec. It runs only on CPU0 after USB initialization;
 it is not a concurrent task/IRQ logging backend. Its writer is a concrete
 closure which accepts the complete supplied slice or returns an error.
-The root exports `Console`, `PreviousPanic`, `Record` and the line `decode`
-remain available for the pilot's existing callers.
+The root exports `Console`, `PreviousPanic`, `Record` and the line `decode`.
 
 Each frame starts on a fresh line: CR LF, ASCII `OER-DIAG:01`, then lowercase
 hex bytes, and CR LF. Hex escaping keeps embedded NULs and newlines out of the
@@ -131,7 +130,7 @@ sequence gap before that verdict. A partial final record cannot pass.
 `console::decode` (also exported as root `decode`) uses caller-owned scratch
 space, checks version, hex and CRC, then delegates the raw record to
 `record::decode`. Its existing error categories remain unchanged. The host
-owns event interpretation, sequence checking and text rendering. The pilot's
+owns event interpretation, sequence checking and text rendering. The images'
 host is [`cargo fw`](../../tools/image/cli/README.md).
 
 ```console
@@ -139,4 +138,4 @@ cargo test -p oer-portable-diagnostics
 ```
 
 Tests cover the raw codec independently, the line frame, and byte-exact frame
-fixtures from the saved pilot stand logs.
+fixtures from saved stand logs.

@@ -1128,14 +1128,6 @@ topics! {
          "invalid" invalid: flag);
     HoldRoot = 77, hold_root, "OPEN_RADIO_HIL hold-root"
         ("tick" tick: dec, "poll-us" poll_us: wide, "max-poll-us" max_poll_us: wide);
-    /// Diagnostic image only: inclusive public pilot service, corrected by
-    /// that event's empty cycle-read pair; not the private SAR engine atom.
-    PilotService = 78, pilot_service, "OPEN_RADIO_HIL pilot-service"
-        ("tick" tick: dec, "event" event: dec, "entry-to-call-cycles" entry: wide,
-         "service-cycles" service: wide, "empty-pair-cycles" cost: wide);
-    PilotWindow = 79, pilot_window, "OPEN_RADIO_HIL pilot-window"
-        ("tick" tick: dec, "events" events: dec, "lost" lost: dec, "cpu-hz" hz: dec,
-         "capacity" capacity: dec);
     /// The trap vector registers an exception hook read after the trap of
     /// `terminal` (its `fatal_terminal`), whose `mepc` it repeats; the
     /// hook's other observations follow it.
