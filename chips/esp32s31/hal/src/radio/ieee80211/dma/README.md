@@ -63,6 +63,17 @@ place (`copy_in_place`), or a unit is dropped and stays, ending the view.
 Each re-armed descriptor is linked behind the tail as it is armed; after
 `f` the ring rings the doorbell once if anything was re-armed, and again
 when NEXT stayed zero short of the tail, each wait within `RELOAD_SETTLE`.
+The walker writes the tail too, with frames nobody acknowledges
+(`HW_RX_UNACKNOWLEDGED_TAIL_WRITTEN_20261127`), and then stands at LAST with
+NEXT zero; re-arming LAST as the tail would erase its one way on
+(`HW_RX_WHOLE_SERVICE_STANDS_20261127`). LAST's unit is given only after a
+cursor read of this service showed NEXT off zero: a service that reads NEXT
+zero gives it last, and reaching it the unit waits while LAST is still the
+tail; otherwise the view rings the doorbell, reads the cursor within the
+same settle and gives the unit once NEXT has left zero
+(`HW_RX_WITHHELD_LAST_LEAVES_ZERO_20261127`). A unit not given waits for the
+next service, with no anomaly. The caller sees one view. The
+tests' model walker follows the links as those records do.
 A length the walker must not write and a doorbell it does not accept are
 its anomalies (`RingAnomaly`): the view stops at the first, `serve` returns
 it with `f`'s result, and the keeper raises the one indication. A unit's header is read from the

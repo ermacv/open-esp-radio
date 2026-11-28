@@ -229,35 +229,97 @@ fn complete(
     })
 }
 
-/// One non-QoS Data frame of `length` octets (without its FCS) from
-/// `station` to `peer`, awaited: its completion's status.
+/// A frame's three addresses (IEEE 802.11-2020 9.3.2.1): Address 1 the
+/// receiver (the peer, or a group address), Address 2 the transmitter,
+/// Address 3 the BSSID (the peer).
+#[derive(Clone, Copy)]
+pub(super) struct Addresses {
+    pub(super) receiver: [u8; 6],
+    pub(super) transmitter: [u8; 6],
+    pub(super) bssid: [u8; 6],
+}
+
+/// One non-QoS Data frame of `length` octets (without its FCS) with
+/// `addresses`, awaited: its completion's status.
 ///
 /// IEEE 802.11-2020 9.3.2.1: Frame Control (type Data, subtype Data),
-/// Duration, Address 1 the receiver, Address 2 the transmitter, Address 3
-/// the receiver as BSSID, Sequence Control, then the body.
+/// Duration, the three addresses, Sequence Control, then the body.
 pub(super) async fn single(
     frames: &Frames,
     ordinary: &mut Descriptor,
     access: &mut RadioAccess,
-    station: [u8; 6],
-    peer: [u8; 6],
+    addresses: Addresses,
     length: usize,
 ) -> Result<Ended, Failure> {
     let mut header = [0_u8; 24];
     header[0] = 0x08;
-    for (cell, byte) in header[4..10].iter_mut().zip(peer) {
+    for (cell, byte) in header[4..10].iter_mut().zip(addresses.receiver) {
         *cell = byte;
     }
-    for (cell, byte) in header[10..16].iter_mut().zip(station) {
+    for (cell, byte) in header[10..16].iter_mut().zip(addresses.transmitter) {
         *cell = byte;
     }
-    for (cell, byte) in header[16..22].iter_mut().zip(peer) {
+    for (cell, byte) in header[16..22].iter_mut().zip(addresses.bssid) {
         *cell = byte;
     }
     let lease = frames.lease_frame(ORDINARY_SLOT, length, |offset| {
         header.get(offset).copied().unwrap_or(offset as u8)
     })?;
     start(access, ordinary, lease, length, frames.power, TIMEOUT)?;
+    await_completion(access, ordinary).await
+}
+
+/// The octets of a [`probe_request`]: its header and its two elements.
+const PROBE_LENGTH: usize = 24 + 2 + service::PROBE_SSID.len() + 3;
+/// Where the Supported Rates element begins.
+const PROBE_RATES: usize = 26 + service::PROBE_SSID.len();
+/// The SSID element's length octet.
+const PROBE_SSID_LENGTH: u8 = {
+    let length = service::PROBE_SSID.len();
+    if length > 32 {
+        panic!("an SSID holds at most 32 octets");
+    }
+    length as u8
+};
+
+/// One broadcast Probe Request from `station`, awaited: its completion's
+/// status.
+///
+/// IEEE 802.11-2020 9.3.3.9: Frame Control (type Management, subtype Probe
+/// Request), Duration, Address 1 and Address 3 the broadcast address,
+/// Address 2 the transmitter, Sequence Control; then the SSID element
+/// (9.4.2.2, element ID 0) of [`service::PROBE_SSID`], never the wildcard,
+/// and the Supported Rates element (9.4.2.3, element ID 1) with 6 Mb/s.
+pub(super) async fn probe_request(
+    frames: &Frames,
+    ordinary: &mut Descriptor,
+    access: &mut RadioAccess,
+    station: [u8; 6],
+) -> Result<Ended, Failure> {
+    let mut frame = [0_u8; PROBE_LENGTH];
+    frame[0] = 0x40;
+    for (cell, byte) in frame[4..10].iter_mut().zip([0xff; 6]) {
+        *cell = byte;
+    }
+    for (cell, byte) in frame[10..16].iter_mut().zip(station) {
+        *cell = byte;
+    }
+    for (cell, byte) in frame[16..22].iter_mut().zip([0xff; 6]) {
+        *cell = byte;
+    }
+    let ssid = service::PROBE_SSID;
+    frame[24] = 0;
+    frame[25] = PROBE_SSID_LENGTH;
+    for (cell, byte) in frame[26..].iter_mut().zip(ssid) {
+        *cell = *byte;
+    }
+    frame[PROBE_RATES] = 1;
+    frame[PROBE_RATES + 1] = 1;
+    frame[PROBE_RATES + 2] = 0x0c;
+    let lease = frames.lease_frame(ORDINARY_SLOT, PROBE_LENGTH, |offset| {
+        frame.get(offset).copied().unwrap_or(0)
+    })?;
+    start(access, ordinary, lease, PROBE_LENGTH, frames.power, TIMEOUT)?;
     await_completion(access, ordinary).await
 }
 

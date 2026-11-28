@@ -8,6 +8,8 @@ use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use std::boxed::Box;
 use std::collections::VecDeque;
+use std::format;
+use std::string::String;
 use std::vec;
 use std::vec::Vec;
 
@@ -29,9 +31,12 @@ use crate::radio::ieee80211::mac::MacCoreOpen;
 use crate::system::memory::dma_static::Placed;
 
 /// The walker's registers as the ring uses them: what it was told, and the
-/// cursor each read reports (the last one again when none is queued).
+/// cursor each read reports (the last one again when none is queued); or,
+/// once [`Bench::follow_links`] gave it the table, the walker of the stand
+/// records, whose cursor is its own ([`Links`]).
 #[derive(Default)]
 pub(crate) struct ModelWalker {
+    links: Option<Links>,
     base: Option<u32>,
     prefix: bool,
     window: bool,
@@ -41,10 +46,16 @@ pub(crate) struct ModelWalker {
     cursor: (u32, u32),
     /// The walker never accepts the doorbell.
     stuck: bool,
+    /// Doorbells the walker accepts without moving NEXT, before it follows
+    /// them again ([`Links`] only).
+    inert: usize,
 }
 
 impl Walker for ModelWalker {
     fn cursor(&mut self) -> (u32, u32) {
+        if let Some(links) = &self.links {
+            return links.cursor();
+        }
         if let Some(cursor) = self.cursors.pop_front() {
             self.cursor = cursor;
         }
@@ -58,15 +69,36 @@ impl Walker for ModelWalker {
     }
     fn write_base(&mut self, head: DmaRef<WifiRxDmaDescriptor>) {
         self.base = Some(head.address().get());
+        if let Some(links) = &mut self.links
+            && links.next.is_none()
+        {
+            links.next = links.index(head.address().get());
+        }
     }
     fn enable(&mut self) {
         self.enabled = true;
+        if let (Some(links), Some(base)) = (&mut self.links, self.base) {
+            links.next = links.index(base);
+        }
     }
     fn disable(&mut self) {
         self.enabled = false;
     }
     fn ring(&mut self) {
         self.rings += 1;
+        if self.stuck {
+            return;
+        }
+        if self.inert > 0 {
+            self.inert -= 1;
+            return;
+        }
+        if let Some(links) = &mut self.links
+            && links.next.is_none()
+            && let Some(last) = links.last
+        {
+            links.next = links.link(last);
+        }
     }
     fn reload(&mut self) -> Reload {
         if self.stuck {
@@ -76,6 +108,136 @@ impl Walker for ModelWalker {
         }
     }
     fn fence(&mut self) {}
+}
+
+/// The walker of the stand records, over the ring's descriptors: it begins
+/// at BASE (`HW_RX_BASE_HEAD_20261122`), goes on at `LAST.next` and reads
+/// BASE again only when NEXT is zero; a doorbell with NEXT zero resumes it at
+/// `LAST.next`; it stands with NEXT zero at a zero link. A frame no station
+/// acknowledges is written into a descriptor whose link is zero; one
+/// addressed to the receiver is not written there, nor acknowledged
+/// (`tasks/444`'s stand runs).
+pub(crate) struct Links {
+    descriptors: &'static RxDescriptors<RING>,
+    base: u32,
+    last: Option<usize>,
+    next: Option<usize>,
+    /// What the walker wrote and the ring has not re-armed: a chain's
+    /// continuation reads as an armed word (`0x80400100` on the stand), so
+    /// the word alone does not tell.
+    written: [bool; RING],
+}
+
+/// What a frame on the air needs of the receiver.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Air {
+    /// A group or management frame: nobody acknowledges it.
+    Unacknowledged,
+    /// A frame addressed to the receiver, which acknowledges it.
+    Addressed,
+}
+
+/// What became of a frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Landed {
+    Written,
+    Refused,
+}
+
+impl Links {
+    fn address(&self, index: usize) -> u32 {
+        self.base + 12 * index as u32
+    }
+    fn index(&self, address: u32) -> Option<usize> {
+        crate::radio::ieee80211::dma::descriptor::descriptor_ring_index(address, self.base, RING)
+    }
+    fn link(&self, index: usize) -> Option<usize> {
+        match self.descriptors.ring[index].next_address() {
+            0 => None,
+            address => self.index(address),
+        }
+    }
+    /// Armed for the walker: not written since the ring armed it.
+    fn armed(&self, index: usize) -> bool {
+        !self.written[index]
+    }
+    /// The ring re-armed the descriptors from `from` up to `to`, excluded;
+    /// the whole ring when it went round (`to == from` with a unit given).
+    fn rearmed(&mut self, from: usize, to: usize, given: usize) {
+        let count = match (to + RING - from) % RING {
+            0 if given > 0 => RING,
+            count => count,
+        };
+        for offset in 0..count {
+            self.written[(from + offset) % RING] = false;
+        }
+    }
+    fn cursor(&self) -> (u32, u32) {
+        let low = |index: Option<usize>| index.map_or(0, |index| self.address(index));
+        (low(self.last), low(self.next))
+    }
+    /// A frame of `count` descriptors, its last holding `length` bytes.
+    fn arrive(&mut self, air: Air, count: usize, length: u32) -> Landed {
+        let Some(mut at) = self.next else {
+            return Landed::Refused;
+        };
+        let mut path = Vec::new();
+        for position in 0..count {
+            if !self.armed(at) || path.contains(&at) {
+                return Landed::Refused;
+            }
+            path.push(at);
+            if position + 1 < count {
+                match self.link(at) {
+                    Some(next) => at = next,
+                    None => return Landed::Refused,
+                }
+            }
+        }
+        if air == Air::Addressed && path.iter().any(|index| self.link(*index).is_none()) {
+            return Landed::Refused;
+        }
+        for (position, index) in path.iter().enumerate() {
+            self.written[*index] = true;
+            let terminal = position + 1 == count;
+            let bytes = if terminal { length } else { SIZE as u32 };
+            self.descriptors.ring[*index].write_word0(rx_landed_word(SIZE as u32, bytes, terminal));
+        }
+        let last = *path.last().unwrap();
+        self.last = Some(last);
+        self.next = self.link(last);
+        Landed::Written
+    }
+    /// After a service: the walker's way on reaches every armed descriptor,
+    /// or it stands at LAST, whose unit the ring withheld.
+    fn reaches_every_armed(&self) -> Result<(), String> {
+        let armed: Vec<usize> = (0..RING).filter(|index| self.armed(*index)).collect();
+        match self.next {
+            None => match self.last {
+                Some(last) if !self.armed(last) => Ok(()),
+                other => Err(format!("NEXT zero, LAST {other:?} re-armed")),
+            },
+            Some(mut at) => {
+                let mut reached = Vec::new();
+                for _ in 0..RING {
+                    if !self.armed(at) || reached.contains(&at) {
+                        break;
+                    }
+                    reached.push(at);
+                    match self.link(at) {
+                        Some(next) => at = next,
+                        None => break,
+                    }
+                }
+                reached.sort_unstable();
+                if reached == armed {
+                    Ok(())
+                } else {
+                    Err(format!("way on {reached:?}, armed {armed:?}"))
+                }
+            }
+        }
+    }
 }
 
 /// A host placement whose place the test writes as the hardware: its first
@@ -210,6 +372,23 @@ impl<B: Brand<Window = DmaWindow> + 'static> Bench<B> {
         let low = |index: Option<usize>| index.map_or(0, |index| self.descriptor_address(index));
         let cursor = (low(last), low(next));
         self.ring.walker.cursors.push_back(cursor);
+    }
+
+    /// The walker from here on is the records' ([`Links`]); before its
+    /// start.
+    fn follow_links(&mut self) {
+        let links = Links {
+            descriptors: self.ring.table.descriptors,
+            base: self.ring.table.base,
+            last: None,
+            next: None,
+            written: [false; RING],
+        };
+        self.ring.walker.links = Some(links);
+    }
+
+    fn links(&mut self) -> &mut Links {
+        self.ring.walker.links.as_mut().unwrap()
     }
 
     fn arm_word(&self) -> crate::layouts::WifiRxDmaDescriptorControl {
@@ -665,4 +844,196 @@ fn a_chain_shows_its_continuations_words_as_the_walker_left_them() {
         .flatten()
         .unwrap();
     assert_eq!(seen, (vec![first, middle], 3));
+}
+
+/// Serve the ring, copying every unit in place up to `take` units (all with
+/// `None`), the next one dropped: the units given.
+fn serve_copying<B: Brand<Window = DmaWindow> + 'static>(
+    bench: &mut Bench<B>,
+    take: Option<usize>,
+) -> usize {
+    match serve_copying_or_anomaly(bench, take) {
+        Ok(given) => given,
+        Err((anomaly, _)) => panic!("{anomaly:?}"),
+    }
+}
+
+/// As [`serve_copying`], the anomaly with the units given. The counter moves
+/// 5 cycles at every sample, so a settle that never holds ends.
+fn serve_copying_or_anomaly<B: Brand<Window = DmaWindow> + 'static>(
+    bench: &mut Bench<B>,
+    take: Option<usize>,
+) -> Result<usize, (RingAnomaly, usize)> {
+    let clock = VirtualCounter::new(0, 5);
+    let from = bench.ring.start.get();
+    let served = bench.ring.serve(&clock, |view| {
+        let mut given = 0;
+        while let Some(unit) = view.next_unit() {
+            if take == Some(given) {
+                drop(unit);
+                break;
+            }
+            let mut copy = [0_u8; 4 * SIZE];
+            match unit {
+                Unit::Single(single) => {
+                    single.copy_in_place(|frame| frame.copy_to(&mut copy));
+                }
+                Unit::Chain(chain) => {
+                    chain.copy_in_place(|frame| frame.copy_to(&mut copy));
+                }
+            }
+            given += 1;
+        }
+        given
+    });
+    let to = bench.ring.start.get();
+    let given = match served {
+        Ok(given) | Err((_, given)) => given,
+    };
+    if let Some(links) = bench.ring.walker.links.as_mut() {
+        links.rearmed(from, to, given);
+    }
+    served
+}
+
+brand!(written_whole);
+/// `tasks/444`'s defect: the walker wrote every descriptor, the tail too,
+/// before the first service. One service gives every unit, LAST's last,
+/// once the walker has left it; the walker goes on.
+#[test]
+fn a_ring_written_whole_is_given_whole_in_one_service_and_goes_on() {
+    let mut bench = bench::<written_whole::Rx>();
+    bench.follow_links();
+    let _enabled = bench.enable();
+    for _ in 0..RING {
+        assert_eq!(
+            bench.links().arrive(Air::Unacknowledged, 1, 80),
+            Landed::Written
+        );
+    }
+    assert_eq!(
+        (bench.links().last, bench.links().next),
+        (Some(RING - 1), None),
+        "the tail written, nowhere to go on"
+    );
+    assert_eq!(serve_copying(&mut bench, None), RING, "every unit");
+    assert_eq!(bench.links().next, Some(0), "the walker goes on at d0");
+    assert_eq!(bench.links().reaches_every_armed(), Ok(()));
+    assert_eq!(
+        bench.links().arrive(Air::Unacknowledged, 1, 80),
+        Landed::Written,
+        "the next frame lands"
+    );
+    assert_eq!(serve_copying(&mut bench, None), 1);
+}
+
+brand!(addressed_tail);
+/// An addressed frame is not written into the descriptor whose link is
+/// zero: the walker stops before the tail, and the ring goes on.
+#[test]
+fn addressed_frames_stop_before_the_tail_and_the_ring_goes_on() {
+    let mut bench = bench::<addressed_tail::Rx>();
+    bench.follow_links();
+    let _enabled = bench.enable();
+    let landed: Vec<Landed> = (0..RING)
+        .map(|_| bench.links().arrive(Air::Addressed, 1, 80))
+        .collect();
+    assert_eq!(
+        landed.iter().filter(|l| **l == Landed::Written).count(),
+        RING - 1
+    );
+    assert_eq!(serve_copying(&mut bench, None), RING - 1);
+    assert_eq!(bench.links().reaches_every_armed(), Ok(()));
+}
+
+brand!(every_order);
+/// In every order of arrivals (both kinds, singles and chains of two) and
+/// services (all units, or some and then one dropped): after each service
+/// the walker's way on reaches every armed descriptor, or it stands at LAST,
+/// whose unit is withheld; and every service but those ends with the walker
+/// able to go on.
+#[test]
+fn after_every_service_the_walker_s_way_on_reaches_every_armed_descriptor() {
+    let mut bench = bench::<every_order::Rx>();
+    bench.follow_links();
+    let _enabled = bench.enable();
+    // A fixed linear congruential sequence: the same orders every run.
+    let mut seed: u32 = 0x444;
+    let mut draw = |bound: u32| {
+        seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        (seed >> 16) % bound
+    };
+    let mut services = 0;
+    for step in 0..20_000 {
+        match draw(6) {
+            0..=3 => {
+                let air = if draw(2) == 0 {
+                    Air::Unacknowledged
+                } else {
+                    Air::Addressed
+                };
+                let count = 1 + draw(2) as usize;
+                let _ = bench.links().arrive(air, count, 80);
+            }
+            _ => {
+                let take = match draw(3) {
+                    0 => None,
+                    taken => Some(taken as usize - 1),
+                };
+                serve_copying(&mut bench, take);
+                services += 1;
+                if let Err(found) = bench.links().reaches_every_armed() {
+                    panic!("step {step}, take {take:?}: {found}");
+                }
+            }
+        }
+    }
+    assert!(services > 5_000);
+}
+
+/// A ring written whole, its tail too, by frames nobody acknowledges.
+fn written_whole<B: Brand<Window = DmaWindow> + 'static>(bench: &mut Bench<B>) {
+    bench.follow_links();
+    let _enabled = bench.enable();
+    for _ in 0..RING {
+        assert_eq!(
+            bench.links().arrive(Air::Unacknowledged, 1, 80),
+            Landed::Written
+        );
+    }
+}
+
+brand!(inert_doorbell);
+/// The view's doorbell accepted, NEXT left zero: LAST's unit is not given in
+/// that service. The next service reads NEXT zero again, rings, gives the
+/// unit once NEXT has left zero, and the ring goes on.
+#[test]
+fn a_doorbell_that_leaves_next_zero_withholds_last_until_a_service_reads_it_off_zero() {
+    let mut bench = bench::<inert_doorbell::Rx>();
+    written_whole(&mut bench);
+    bench.ring.walker.inert = 1;
+    assert_eq!(serve_copying(&mut bench, None), RING - 1, "LAST withheld");
+    assert_eq!(bench.links().next, None);
+    assert!(!bench.links().armed(RING - 1), "LAST not re-armed");
+    assert_eq!(serve_copying(&mut bench, None), 1, "LAST's unit, given");
+    assert_eq!(bench.links().reaches_every_armed(), Ok(()));
+    assert_ne!(bench.links().next, None, "the walker goes on");
+    assert_eq!(
+        bench.links().arrive(Air::Unacknowledged, 1, 80),
+        Landed::Written
+    );
+    assert_eq!(serve_copying(&mut bench, None), 1);
+}
+
+brand!(pending_last);
+/// The tail written and the walker never accepts the view's doorbell: the
+/// view stops at the anomaly, and LAST's unit is not given.
+#[test]
+fn a_view_s_doorbell_never_accepted_stops_at_the_anomaly_with_last_withheld() {
+    let mut bench = bench::<pending_last::Rx>();
+    written_whole(&mut bench);
+    bench.ring.walker.stuck = true;
+    let served = serve_copying_or_anomaly(&mut bench, None);
+    assert_eq!(served, Err((RingAnomaly::DoorbellPending, RING - 1)));
+    assert!(!bench.links().armed(RING - 1), "LAST not re-armed");
 }

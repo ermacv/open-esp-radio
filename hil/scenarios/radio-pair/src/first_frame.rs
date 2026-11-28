@@ -138,7 +138,7 @@ enum Boot {
 }
 
 /// The ring's state in a counters answer.
-fn ring(counted: &Counters) -> Result<&service::RingState, Failure> {
+pub(crate) fn ring(counted: &Counters) -> Result<&service::RingState, Failure> {
     match counted {
         Counters::Counted {
             ring: Some(ring), ..
@@ -151,7 +151,7 @@ fn ring(counted: &Counters) -> Result<&service::RingState, Failure> {
 
 /// The receiver on a fresh boot, brought up and told its sender; its
 /// station's address.
-fn fresh_receiver(cx: &mut Cx<'_>, sender: [u8; 6]) -> Result<[u8; 6], Failure> {
+pub(crate) fn fresh_receiver(cx: &mut Cx<'_>, sender: [u8; 6]) -> Result<[u8; 6], Failure> {
     let receiver = cx.device(RECEIVER)?;
     receiver.reset()?;
     let station = match receiver.call(BringUp, BRING_UP)? {
@@ -166,7 +166,7 @@ fn fresh_receiver(cx: &mut Cx<'_>, sender: [u8; 6]) -> Result<[u8; 6], Failure> 
 
 /// The sender on a fresh boot, brought up and told its receiver; its
 /// station's address.
-fn fresh_sender(cx: &mut Cx<'_>, receiver: Option<[u8; 6]>) -> Result<[u8; 6], Failure> {
+pub(crate) fn fresh_sender(cx: &mut Cx<'_>, receiver: Option<[u8; 6]>) -> Result<[u8; 6], Failure> {
     let device = cx.device(SENDER)?;
     device.reset()?;
     let station = match device.call(BringUp, BRING_UP)? {
@@ -179,7 +179,7 @@ fn fresh_sender(cx: &mut Cx<'_>, receiver: Option<[u8; 6]>) -> Result<[u8; 6], F
     Ok(station)
 }
 
-fn target(cx: &mut Cx<'_>, receiver: [u8; 6]) -> Result<(), Failure> {
+pub(crate) fn target(cx: &mut Cx<'_>, receiver: [u8; 6]) -> Result<(), Failure> {
     match cx.device(SENDER)?.call(Target { receiver }, STEP)? {
         Targeted::Targeted => Ok(()),
         other => Err(Failure::Fail(format!("sender: target: {other:?}"))),
@@ -236,7 +236,7 @@ fn boot(cx: &mut Cx<'_>, length: u16, sender: [u8; 6]) -> Result<Boot, Failure> 
     ))
 }
 
-fn stop_receiver(cx: &mut Cx<'_>) -> Result<(), Failure> {
+pub(crate) fn stop_receiver(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let _stopped = cx.device(RECEIVER)?.call(Stop, STEP)?;
     Ok(())
 }

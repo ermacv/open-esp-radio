@@ -61,6 +61,8 @@ oer_protocols_hil_protocol::messages! {
     topic Stood = "radio-pair/stood";
     endpoint Turn = "radio-pair/turn" => Turned;
     topic Turned = "radio-pair/turned";
+    endpoint Burst = "radio-pair/burst" => Bursted;
+    topic Bursted = "radio-pair/bursted";
     endpoint HandOver = "radio-pair/hand-over" => HandedOver;
     topic HandedOver = "radio-pair/handed-over";
 }
@@ -492,6 +494,39 @@ pub enum SentOne {
     Refused(Refusal),
 }
 
+/// Send `frames` frames to `to`, each awaited, `gap_micros` apart (zero:
+/// back to back).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Burst {
+    pub to: To,
+    pub frames: u16,
+    pub gap_micros: u32,
+}
+
+/// What a [`Burst`]'s frames are.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum To {
+    /// Non-QoS Data frames of `length` octets (without their FCS) to the
+    /// receiver the host named ([`Target`]), which acknowledges each.
+    Receiver { length: u16 },
+    /// Broadcast Probe Requests of [`PROBE_SSID`]: management frames no
+    /// station acknowledges, and which no access point answers.
+    ProbeRequest,
+}
+
+/// The SSID of [`To::ProbeRequest`]: fixed, no access point's, never the
+/// wildcard.
+pub const PROBE_SSID: &[u8] = b"oer-444-no-such-network";
+
+/// The answer to [`Burst`]: how many frames ended, and how many of them
+/// acknowledged (status 0).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Bursted {
+    Sent { ended: u16, acknowledged: u16 },
+    Failed(Failure),
+    Refused(Refusal),
+}
+
 /// One case's ends by the frame before it: acknowledged (status 0), ACK
 /// timeouts (status 5), and every other end in all.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -680,6 +715,7 @@ oer_protocols_hil_agent::service! {
         Target(Target) => command target,
         Round(Round) => command round,
         Single(Single) => command single,
+        Burst(Burst) => command burst,
     }
 }
 

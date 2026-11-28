@@ -162,6 +162,13 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         ("failed rounds", encoded_length(&failed)),
         ("windowed", encoded_length(&windowed)),
         ("turned", encoded_length(&turned)),
+        (
+            "bursted",
+            encoded_length(&Bursted::Sent {
+                ended: u16::MAX,
+                acknowledged: u16::MAX,
+            }),
+        ),
     ] {
         assert!(
             length <= MAX_POSTCARD_BYTES,
@@ -191,6 +198,11 @@ fn every_request_fits_the_images_payload_bound() {
             kind: TurnKind::CloseAndWake,
         }),
         encoded_length(&HandOver),
+        encoded_length(&Burst {
+            to: To::Receiver { length: u16::MAX },
+            frames: u16::MAX,
+            gap_micros: u32::MAX,
+        }),
     ] {
         assert!(length <= usize::from(MAXIMUM_PAYLOAD_BYTES));
     }
@@ -204,8 +216,8 @@ fn both_images_share_the_radio_s_endpoints_and_keep_their_own_apart() {
     // Five endpoints (two snapshots, the bring-up, the counters, the stop)
     // and their four answers: the two snapshots share their page.
     assert_eq!(shared.len(), 9);
-    // Each side's own: the sender three endpoints and three answers, the
+    // Each side's own: the sender four endpoints and four answers, the
     // receiver five and five (the hand-over's among them).
-    assert_eq!(sender.len(), 9 + 6);
+    assert_eq!(sender.len(), 9 + 8);
     assert_eq!(receiver.len(), 9 + 10);
 }

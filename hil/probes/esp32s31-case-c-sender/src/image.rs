@@ -330,6 +330,7 @@ pub(crate) enum Answer {
     Targeted(service::Targeted),
     Sent(service::Sent),
     SentOne(service::SentOne),
+    Bursted(service::Bursted),
 }
 
 impl From<service::SnapshotPage> for Answer {
@@ -374,6 +375,12 @@ impl From<service::SentOne> for Answer {
     }
 }
 
+impl From<service::Bursted> for Answer {
+    fn from(answer: service::Bursted) -> Self {
+        Self::Bursted(answer)
+    }
+}
+
 impl oer_hil_agent::serve::Answer for Answer {
     fn write<'f>(
         &self,
@@ -387,6 +394,7 @@ impl oer_hil_agent::serve::Answer for Answer {
             Self::Targeted(answer) => frame.write(answer),
             Self::Sent(answer) => frame.write(answer),
             Self::SentOne(answer) => frame.write(answer),
+            Self::Bursted(answer) => frame.write(answer),
         }
     }
 }
@@ -560,6 +568,7 @@ fn refuse(identity: Reply<'_>, request: SenderCommand, refusal: Refusal) {
         SenderCommand::Target(_) => answer(identity, service::Targeted::Refused(refusal)),
         SenderCommand::Round(_) => answer(identity, service::Sent::Refused(refusal)),
         SenderCommand::Single(_) => answer(identity, service::SentOne::Refused(refusal)),
+        SenderCommand::Burst(_) => answer(identity, service::Bursted::Refused(refusal)),
     }
 }
 
@@ -748,6 +757,76 @@ async fn worker(
             SenderCommand::Single(_) if matches!(steps, Steps::Failed) => {
                 answer(id, service::SentOne::Refused(Refusal::StepFailed));
             }
+            SenderCommand::Burst(_) if matches!(steps, Steps::Failed) => {
+                answer(id, service::Bursted::Refused(Refusal::StepFailed));
+            }
+            SenderCommand::Burst(request) => {
+                let Some(peer) = receiver else {
+                    answer(id, service::Bursted::Refused(Refusal::NoReceiver));
+                    continue;
+                };
+                if let service::To::Receiver { length } = request.to
+                    && !service::SINGLE_LENGTHS.contains(&length)
+                {
+                    answer(id, service::Bursted::Refused(Refusal::LengthOutOfRange));
+                    continue;
+                }
+                let (mut ended, mut acknowledged) = (0_u16, 0_u16);
+                let mut failure = None;
+                for frame in 0..request.frames {
+                    if frame != 0 && request.gap_micros != 0 {
+                        wait_micros(u64::from(request.gap_micros)).await;
+                    }
+                    let sent = match request.to {
+                        service::To::Receiver { length } => {
+                            transmit::single(
+                                &frames,
+                                &mut ordinary,
+                                &mut access,
+                                transmit::Addresses {
+                                    receiver: peer,
+                                    transmitter: station,
+                                    bssid: peer,
+                                },
+                                usize::from(length),
+                            )
+                            .await
+                        }
+                        service::To::ProbeRequest => {
+                            transmit::probe_request(&frames, &mut ordinary, &mut access, station)
+                                .await
+                        }
+                    };
+                    match sent {
+                        Ok(end) => {
+                            ended = ended.saturating_add(1);
+                            acknowledged = acknowledged.saturating_add(u16::from(end.status == 0));
+                        }
+                        Err(failed) => {
+                            failure = Some(failed);
+                            break;
+                        }
+                    }
+                }
+                match failure {
+                    None => answer(
+                        id,
+                        service::Bursted::Sent {
+                            ended,
+                            acknowledged,
+                        },
+                    ),
+                    Some((phase, index)) => {
+                        answer(
+                            id,
+                            service::Bursted::Failed(service::Failure { phase, index }),
+                        );
+                        // As after a failed single: the frame may still be
+                        // the hardware's.
+                        steps = Steps::Failed;
+                    }
+                }
+            }
             SenderCommand::Single(request) => {
                 let Some(peer) = receiver else {
                     answer(id, service::SentOne::Refused(Refusal::NoReceiver));
@@ -761,8 +840,11 @@ async fn worker(
                     &frames,
                     &mut ordinary,
                     &mut access,
-                    station,
-                    peer,
+                    transmit::Addresses {
+                        receiver: peer,
+                        transmitter: station,
+                        bssid: peer,
+                    },
                     usize::from(request.length),
                 )
                 .await
