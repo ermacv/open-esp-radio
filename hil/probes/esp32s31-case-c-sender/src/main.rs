@@ -50,7 +50,6 @@ mod image;
 #[cfg(target_arch = "riscv32")]
 mod pair;
 #[cfg(target_arch = "riscv32")]
-mod phy_pilot;
 #[cfg(target_arch = "riscv32")]
 mod radio;
 #[cfg(target_arch = "riscv32")]

@@ -372,18 +372,18 @@ pub struct TargetPhyRegisterPort<'a, P, R, D, T, O = NoopPhyTargetObserver> {
 /// It reuses the same leaf completer as cold registration, so periodic DCODE,
 /// RX gain, channel, TXDC and gain publication cannot drift into a second
 /// hardware implementation.
-pub struct TargetPhyCalibrationTrackingPort<'a, 's, P, S, D, T, O = NoopPhyTargetObserver> {
+pub struct TargetPhyCalibrationTrackingPort<'a, P, D, T, O = NoopPhyTargetObserver> {
     platform: &'a mut P,
-    physical: &'a mut crate::sar_pilot::Physical<'s, S>,
+    physical: &'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
     observer: &'a mut O,
     timer: &'a T,
     short: PhantomData<D>,
 }
 
 /// Complete target port for one affine outer periodic-tracking request.
-pub struct TargetPhyParamTrackingPort<'a, 's, P, S, D, T, O = NoopPhyTargetObserver> {
+pub struct TargetPhyParamTrackingPort<'a, P, D, T, O = NoopPhyTargetObserver> {
     platform: &'a mut P,
-    physical: &'a mut crate::sar_pilot::Physical<'s, S>,
+    physical: &'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
     observer: O,
     timer: &'a T,
     short: PhantomData<D>,
@@ -1735,7 +1735,7 @@ impl<
     async fn run_calibration_tx_dc_pwdet<O: PhyTargetObserver>(
         &self,
         mut child: PhyCalibrationTxDcPwdetTransition,
-        physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
+        physical: &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
         observer: &ObserverSlot<'_, O>,
     ) -> Result<PhyCalibrationTrackingCompletion, PhyTargetPortError> {
         calibration::tx_dc_pwdet_init::<D, _>(
@@ -1848,10 +1848,10 @@ impl<'a, P, R, D, T, O> TargetPhyRegisterPort<'a, P, R, D, T, O> {
     }
 }
 
-impl<'a, 's, P, S, D, T, O> TargetPhyCalibrationTrackingPort<'a, 's, P, S, D, T, O> {
+impl<'a, P, D, T, O> TargetPhyCalibrationTrackingPort<'a, P, D, T, O> {
     pub fn new(
         platform: &'a mut P,
-        physical: &'a mut crate::sar_pilot::Physical<'s, S>,
+        physical: &'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
         timer: &'a T,
         observer: &'a mut O,
     ) -> Self {
@@ -1864,10 +1864,10 @@ impl<'a, 's, P, S, D, T, O> TargetPhyCalibrationTrackingPort<'a, 's, P, S, D, T,
         }
     }
 }
-impl<'a, 's, P, S, D, T, O> TargetPhyParamTrackingPort<'a, 's, P, S, D, T, O> {
+impl<'a, P, D, T, O> TargetPhyParamTrackingPort<'a, P, D, T, O> {
     pub fn new(
         platform: &'a mut P,
-        physical: &'a mut crate::sar_pilot::Physical<'s, S>,
+        physical: &'a mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
         timer: &'a T,
         observer: O,
     ) -> Self {
@@ -1883,11 +1883,10 @@ impl<'a, 's, P, S, D, T, O> TargetPhyParamTrackingPort<'a, 's, P, S, D, T, O> {
 
 impl<
     P,
-    S: crate::sar_pilot::Service,
     D: PhyShortDelay,
     T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
     O: PhyTargetObserver,
-> PhyCalibrationTrackingPort for TargetPhyCalibrationTrackingPort<'_, '_, P, S, D, T, O>
+> PhyCalibrationTrackingPort for TargetPhyCalibrationTrackingPort<'_, P, D, T, O>
 {
     type Error = PhyTargetPortError;
 
@@ -1911,7 +1910,6 @@ impl<
         let completion = match transition.action() {
             PhyCalibrationTrackingAction::SetGrantProtect { enabled } => {
                 self.physical
-                    .transaction()
                     .hardware_and_grant()
                     .1
                     .set_grant_protect(enabled)?;
@@ -1923,7 +1921,7 @@ impl<
                     transition
                         .begin_pbus_clear()
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                    self.physical.hardware(),
+                    self.physical.hardware_mut(),
                     &mut *self.observer,
                 )?;
                 completed
@@ -1940,7 +1938,7 @@ impl<
                     self.timer,
                     &mut child,
                     self.platform,
-                    self.physical.hardware(),
+                    self.physical.hardware_mut(),
                     |locked| self.observer.dcode_pll_lock(locked),
                     O::OBSERVE_ENGINE_POLLS.then_some(&mut timing),
                 )
@@ -1968,7 +1966,7 @@ impl<
                 let result = calibration::rx_gain_init::<D, _>(
                     self.timer,
                     child.transition_mut(),
-                    self.physical.hardware(),
+                    self.physical.hardware_mut(),
                     |operation, event| {
                         if operation.is_rx_gain_region() {
                             observer.with(|observer| observer.tracking_operation(operation, event));
@@ -1997,7 +1995,7 @@ impl<
                     self.timer,
                     &mut child,
                     self.platform,
-                    self.physical.hardware(),
+                    self.physical.hardware_mut(),
                     &mut *self.observer,
                 )
                 .await?;
@@ -2010,7 +2008,7 @@ impl<
                     transition
                         .begin_force_txrx()
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                    self.physical.hardware(),
+                    self.physical.hardware_mut(),
                 )?
             }
             PhyCalibrationTrackingAction::CalibrateTxDcPwdet => {
@@ -2036,11 +2034,11 @@ impl<
             PhyCalibrationTrackingAction::PublishWifiTxGain { .. } => transition
                 .begin_tx_gain_publication()
                 .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
-                .execute_target(self.physical.hardware()),
+                .execute_target(self.physical.hardware_mut()),
             PhyCalibrationTrackingAction::AwaitSoftwareFrequencySettle => {
                 D::settle(self.timer, crate::executor::wait::SETTLE_TWO_MICROS);
                 oer_chips_esp32s31_hal::radio::phy::frequency::observe_software_frequency_boundary(
-                    self.physical.hardware(),
+                    self.physical.hardware_mut(),
                 );
                 crate::tracking::calibration::PhyCalibrationTrackingCompletion::SoftwareFrequencySettled
             }
@@ -2055,10 +2053,10 @@ impl<
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
                 {
                     PhyCalibrationTrackingExternalBinding::Register(binding) => {
-                        binding.execute_target(self.physical.hardware())
+                        binding.execute_target(self.physical.hardware_mut())
                     }
                     PhyCalibrationTrackingExternalBinding::MacBaseband(binding) => {
-                        binding.execute_target(self.physical.hardware())
+                        binding.execute_target(self.physical.hardware_mut())
                     }
                 }
             }
@@ -2076,11 +2074,10 @@ impl<
 
 impl<
     P,
-    S: crate::sar_pilot::Service,
     D: PhyShortDelay,
     T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
     O: PhyTargetObserver,
-> PhyParamTrackingPort for TargetPhyParamTrackingPort<'_, '_, P, S, D, T, O>
+> PhyParamTrackingPort for TargetPhyParamTrackingPort<'_, P, D, T, O>
 {
     type Error = PhyParamTrackingPortError;
 
@@ -2102,7 +2099,7 @@ impl<
             PhyParamTrackingAction::EnterCritical => PhyParamTrackingCompletion::EnteredCritical,
             PhyParamTrackingAction::ExitCritical => PhyParamTrackingCompletion::ExitedCritical,
             PhyParamTrackingAction::RfpllCapTrack { .. } => {
-                let (registers, mut grant) = self.physical.transaction().hardware_and_grant();
+                let (registers, mut grant) = self.physical.hardware_and_grant();
                 TargetCompleter::<D, T>::new(self.timer)
                     .run_param_rfpll(
                         pending
@@ -2124,7 +2121,7 @@ impl<
                         pending
                             .begin_tx_power_tracking(state)
                             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                        self.physical.hardware(),
+                        self.physical.hardware_mut(),
                         O::OBSERVE_ENGINE_POLLS,
                     )
                     .await;
@@ -2138,7 +2135,7 @@ impl<
                 let mut child = pending
                     .begin_calibration_tracking(state)
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                let mut port = TargetPhyCalibrationTrackingPort::<_, _, D, _, _>::new(
+                let mut port = TargetPhyCalibrationTrackingPort::<_, D, _, _>::new(
                     self.platform,
                     self.physical,
                     self.timer,
@@ -2158,7 +2155,7 @@ impl<
                         pending
                             .begin_wifi_i2c_tracking(state)
                             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                        self.physical.hardware(),
+                        self.physical.hardware_mut(),
                         O::OBSERVE_ENGINE_POLLS,
                     )
                     .await;
@@ -2174,7 +2171,7 @@ impl<
                     pending
                         .begin_temperature_read(state)
                         .map_err(|_| PhyTargetPortError::UnexpectedBinding)?,
-                    self.physical.hardware(),
+                    self.physical.hardware_mut(),
                     O::OBSERVE_ENGINE_POLLS,
                     self.observer.readiness_trace(),
                 )

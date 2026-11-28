@@ -213,13 +213,13 @@ fn terminal_event<T, E>(result: &Result<T, E>) -> crate::tracking::observation::
 }
 
 /// Execute the complete TX-DC/PWDET root as one admitted transaction,
-/// including measurement and restoration. SAR conversions move physical
-/// custody through the timer service; every other child remains local. Returning a target error or a
+/// including measurement and restoration. SAR conversions run inline
+/// on the caller's timer; every other child remains local. Returning a target error or a
 /// typed failed action does not establish a safe RF state.
 #[inline(never)]
 pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
     child: &mut crate::tx::dc_power_detector::PhyTxDcPwdetTransition,
-    physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
+    physical: &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
     observer: &super::ObserverSlot<'_, O>,
     clock: &(
          impl oer_portable_cooperate::CooperativeTimer
@@ -228,7 +228,7 @@ pub async fn tx_dc_pwdet_init<D: PhyShortDelay, O: PhyTargetObserver>(
      ),
 ) -> Result<(), PhyTargetPortError> {
     child
-        .execute_target_direct(
+        .execute_target_direct::<D>(
             clock,
             physical,
             |scope, micros| tx_settle::<D, O>(observer, clock, scope, micros),

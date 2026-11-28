@@ -1,5 +1,5 @@
 //! The PHY source payload in the common diagnostic envelope. No storage owner.
-use super::{Fault, FaultReason, Operation, SarSetupFault, SarTransferFault};
+use super::{Fault, FaultReason, Operation};
 use core::fmt;
 use oer_portable_diagnostics::fault::{Class, Domain, Error, Record};
 /// Encode every source observation without truncation.
@@ -14,76 +14,13 @@ pub fn encode_fault(fault: Fault) -> Result<Record, Error> {
         FaultReason::IdentityClaimed => 7,
         FaultReason::ModemClockIdentityExhausted => 19,
         FaultReason::OwnerUnavailable => 8,
-        FaultReason::SarTransfer { operation, fault } => {
-            let kind = match fault {
-                SarTransferFault::RequestOccupied { .. } => 9,
-                SarTransferFault::ProgramUnavailable => 10,
-                SarTransferFault::InvalidDelay { .. } => 11,
-                SarTransferFault::ReplyOccupied { .. } => 12,
-                SarTransferFault::ForeignSignal => 14,
-                SarTransferFault::ForeignReunion { .. } => 15,
-            };
-            kind | (operation_code(operation) << 8)
-        }
-        FaultReason::SarSetup(SarSetupFault::Storage(_)) => 16,
-        FaultReason::SarAlarmWithoutBundle(_) => 18,
     };
     let epoch = fault.registration.map_or(0, |epoch| epoch.get());
-    let mut words = [epoch, 0, 0, 0, 0];
+    let words = [epoch, 0, 0, 0, 0];
     let class = match fault.reason {
         FaultReason::Cancelled(_) => Class::Cancellation,
         FaultReason::ModemClockIdentityExhausted => Class::Exhaustion,
-        FaultReason::SarSetup(SarSetupFault::Storage(storage)) => {
-            let [_, a, _, _, _] = &mut words;
-            *a = match storage {
-                super::SarSetupStorage::Cells => 1,
-                super::SarSetupStorage::State => 2,
-                super::SarSetupStorage::Handler => 3,
-            };
-            Class::ConfigurationBoot
-        }
-        FaultReason::SarAlarmWithoutBundle(sample) => {
-            words = [
-                epoch,
-                u32::from(sample.observation.pending),
-                u32::from(sample.observation.asserted),
-                u32::try_from(sample.requests).map_err(|_| Error::Overflow {
-                    length: sample.requests,
-                })?,
-                u32::try_from(sample.replies).map_err(|_| Error::Overflow {
-                    length: sample.replies,
-                })?,
-            ];
-            Class::UnexpectedHardware
-        }
-        FaultReason::SarTransfer { fault, .. } => {
-            let [_, a, b, _, _] = &mut words;
-            match fault {
-                SarTransferFault::RequestOccupied { queued }
-                | SarTransferFault::ReplyOccupied { queued } => {
-                    *a = u32::try_from(queued).map_err(|_| Error::Overflow { length: queued })?;
-                }
-                SarTransferFault::InvalidDelay { requested } => {
-                    let ticks = requested.as_micros();
-                    *a = ticks as u32;
-                    *b = (ticks >> 32) as u32;
-                }
-                SarTransferFault::ForeignReunion {
-                    expected_owner,
-                    received_owner,
-                } => {
-                    *a = u32::try_from(expected_owner).map_err(|_| Error::Overflow {
-                        length: expected_owner,
-                    })?;
-                    *b = u32::try_from(received_owner).map_err(|_| Error::Overflow {
-                        length: received_owner,
-                    })?;
-                }
-                _ => {}
-            }
-            Class::SoftwareInvariant
-        }
-        _ => Class::SoftwareInvariant,
+        FaultReason::IdentityClaimed | FaultReason::OwnerUnavailable => Class::SoftwareInvariant,
     };
     Record::encode(
         class,
@@ -103,7 +40,7 @@ pub fn report_fault(record: &mut Record, mut write: impl FnMut(&[u8]) -> bool) -
         .report(|view| -> fmt::Result {
             let words: [u32; 5] = view.decode(Domain::Phy).map_err(|_| fmt::Error)?;
             let [registration, ..] = words;
-            let (reason, mut operation) = match view.reason & 0xff {
+            let (reason, operation) = match view.reason & 0xff {
                 1 => ("Cancelled", "register"),
                 2 => ("Cancelled", "maintain"),
                 3 => ("Cancelled", "wake"),
@@ -113,27 +50,8 @@ pub fn report_fault(record: &mut Record, mut write: impl FnMut(&[u8]) -> bool) -
                 7 => ("IdentityClaimed", "none"),
                 19 => ("ModemClockIdentityExhausted", "none"),
                 8 => ("OwnerUnavailable", "none"),
-                9 => ("SarRequestOccupied", "maintain"),
-                10 => ("SarProgramUnavailable", "maintain"),
-                11 => ("SarInvalidDelay", "maintain"),
-                12 => ("SarReplyOccupied", "maintain"),
-                14 => ("SarForeignSignal", "maintain"),
-                15 => ("SarForeignReunion", "maintain"),
-                16 => ("SarSetupStorage", "none"),
-                18 => ("SarAlarmWithoutBundle", "none"),
                 _ => return Err(fmt::Error),
             };
-            if (9..=15).contains(&(view.reason & 0xff)) {
-                operation = match view.reason >> 8 {
-                    1 => "register",
-                    2 => "maintain",
-                    3 => "wake",
-                    4 => "close",
-                    5 => "channel",
-                    6 => "retune",
-                    _ => return Err(fmt::Error),
-                };
-            }
             // Keep every output call static: `core::fmt::write` erases both the
             // writer and argument formatters, leaving unresolved boot-stack calls.
             let mut emit = |bytes: &[u8]| {
@@ -176,49 +94,6 @@ pub fn report_fault(record: &mut Record, mut write: impl FnMut(&[u8]) -> bool) -
         })
         .map_err(|_| fmt::Error)
 }
-const fn operation_code(operation: Operation) -> u32 {
-    match operation {
-        Operation::Register => 1,
-        Operation::Maintain => 2,
-        Operation::Wake => 3,
-        Operation::Close => 4,
-        Operation::Channel => 5,
-        Operation::Retune => 6,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn sar_snapshot_and_epoch_survive_refused_output() {
-        let fault = Fault {
-            reason: FaultReason::SarAlarmWithoutBundle(super::super::SarAlarmWithoutBundle {
-                observation: crate::peripherals::timg0_alarm::Observation {
-                    pending: true,
-                    asserted: false,
-                },
-                requests: 0,
-                replies: 1,
-            }),
-            registration: None,
-        };
-        let mut record = encode_fault(fault).unwrap();
-        assert_eq!(
-            record
-                .peek()
-                .unwrap()
-                .decode::<[u32; 5]>(Domain::Phy)
-                .unwrap(),
-            [0, 1, 0, 0, 1]
-        );
-        assert!(report_fault(&mut record, |_| false).is_err());
-        assert!(record.peek().is_ok());
-        report_fault(&mut record, |_| true).unwrap();
-        assert!(record.peek().is_err());
-    }
-}
-
 #[cfg(test)]
 mod source_tests {
     use super::*;
@@ -262,60 +137,6 @@ mod source_tests {
                 epoch.get()
             )));
             assert!(record.peek().is_err());
-        }
-    }
-
-    #[test]
-    fn sar_transfer_retains_queue_lengths_delay_and_numeric_reunion_observations() {
-        let cases = [
-            (
-                SarTransferFault::RequestOccupied {
-                    queued: u32::MAX as usize,
-                },
-                [u32::MAX, 0],
-            ),
-            (SarTransferFault::ReplyOccupied { queued: 1 }, [1, 0]),
-            (
-                SarTransferFault::InvalidDelay {
-                    requested: oer_portable_time::Duration::from_micros(u64::MAX),
-                },
-                [u32::MAX, u32::MAX],
-            ),
-            (
-                SarTransferFault::ForeignReunion {
-                    expected_owner: 0x12345678,
-                    received_owner: 0xfedcba98,
-                },
-                [0x12345678, 0xfedcba98],
-            ),
-        ];
-        for (fault, expected) in cases {
-            let record = encode_fault(Fault {
-                reason: FaultReason::SarTransfer {
-                    operation: Operation::Retune,
-                    fault,
-                },
-                registration: None,
-            })
-            .unwrap();
-            let [epoch, a, b, c, d] = record
-                .peek()
-                .unwrap()
-                .decode::<[u32; 5]>(Domain::Phy)
-                .unwrap();
-            assert_eq!([a, b], expected);
-            assert_eq!([epoch, c, d], [0; 3]);
-        }
-    }
-
-    #[test]
-    fn an_unrepresentable_host_observation_is_refused_without_truncation() {
-        if let Some(queued) = (u32::MAX as usize).checked_add(1) {
-            assert!(
-                matches!(encode_fault(Fault { reason: FaultReason::SarTransfer {
-                operation: Operation::Maintain, fault: SarTransferFault::RequestOccupied { queued },
-            }, registration: None }), Err(Error::Overflow { length }) if length == queued)
-            );
         }
     }
 }

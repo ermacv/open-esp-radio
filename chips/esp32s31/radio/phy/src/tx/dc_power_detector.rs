@@ -160,14 +160,14 @@ impl PhyTxDcPwdetSearchTransition {
     /// PBus writes and the search settle stay direct; the semantic transition
     /// remains available for host verification.
     #[cfg(target_arch = "riscv32")]
-    pub(crate) async fn execute_target_direct(
+    pub(crate) async fn execute_target_direct<D: crate::executor::wait::PhyShortDelay>(
         &mut self,
         clock: &(
              impl oer_portable_clock::Timer
              + oer_portable_settle::SettleCounter
              + crate::executor::wait::WaitTally
          ),
-        physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
+        physical: &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
             u32,
@@ -186,7 +186,7 @@ impl PhyTxDcPwdetSearchTransition {
             match self.step {
                 SearchStep::ProgramDco { transaction, kind } => {
                     let command = self.dco_transaction(transaction);
-                    if !force_pbus_direct(clock, physical.hardware(), command) {
+                    if !force_pbus_direct(clock, physical.hardware_mut(), command) {
                         return Ok(Err(PhyTxDcPwdetSearchFailure::PbusTimedOut(command)));
                     }
                     self.step = if transaction == 3 {
@@ -207,26 +207,31 @@ impl PhyTxDcPwdetSearchTransition {
                         .wrapping_add(self.total_measurements);
                     let mut sum = 0_u32;
                     for sample in 0..2_u8 {
-                        let sampled =
-                            match physical.sample(self.request.clear_tone_after_ready).await {
-                                Ok(sampled) => sampled,
-                                Err(crate::sar_pilot::Error::NotReady(readiness)) => {
-                                    observe_wait(
-                                        readiness.elapsed_micros,
-                                        readiness.observations,
-                                        false,
-                                    );
-                                    return Ok(Err(PhyTxDcPwdetSearchFailure::ToneSar(
-                                        PhyToneSarFailure::ReadyDeadlineExceeded {
-                                            measurement,
-                                            sample,
-                                        },
-                                    )));
-                                }
-                                Err(crate::sar_pilot::Error::DeadlineOverflow) => {
-                                    return Err(PhyTargetPortError::DeadlineOverflow);
-                                }
-                            };
+                        let sampled = match crate::tx::sar::convert::<D, _>(
+                            physical.hardware_mut(),
+                            clock,
+                            self.request.clear_tone_after_ready,
+                        )
+                        .await
+                        {
+                            Ok(sampled) => sampled,
+                            Err(crate::tx::sar::Error::NotReady(readiness)) => {
+                                observe_wait(
+                                    readiness.elapsed_micros,
+                                    readiness.observations,
+                                    false,
+                                );
+                                return Ok(Err(PhyTxDcPwdetSearchFailure::ToneSar(
+                                    PhyToneSarFailure::ReadyDeadlineExceeded {
+                                        measurement,
+                                        sample,
+                                    },
+                                )));
+                            }
+                            Err(crate::tx::sar::Error::DeadlineOverflow) => {
+                                return Err(PhyTargetPortError::DeadlineOverflow);
+                            }
+                        };
                         sum = sum.wrapping_add(u32::from(sampled.value));
                         observe_wait(
                             sampled.readiness.elapsed_micros,
@@ -248,7 +253,7 @@ impl PhyTxDcPwdetSearchTransition {
                 }
                 SearchStep::CommitDco { transaction } => {
                     let command = self.dco_transaction(transaction);
-                    if !force_pbus_direct(clock, physical.hardware(), command) {
+                    if !force_pbus_direct(clock, physical.hardware_mut(), command) {
                         return Ok(Err(PhyTxDcPwdetSearchFailure::PbusTimedOut(command)));
                     }
                     self.step = if transaction == 3 {
@@ -827,14 +832,14 @@ impl PhyTxDcPwdetTransition {
     /// The semantic transition is retained for host verification; other direct
     /// hardware edges do not materialize per-edge action/completion values.
     #[cfg(target_arch = "riscv32")]
-    pub(crate) async fn execute_target_direct(
+    pub(crate) async fn execute_target_direct<D: crate::executor::wait::PhyShortDelay>(
         &mut self,
         clock: &(
              impl oer_portable_clock::Timer
              + oer_portable_settle::SettleCounter
              + crate::executor::wait::WaitTally
          ),
-        physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
+        physical: &mut oer_chips_esp32s31_hal::radio::domain::transaction::PhyTransaction,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
             u32,
@@ -847,23 +852,25 @@ impl PhyTxDcPwdetTransition {
             return Err(PhyTargetPortError::UnexpectedBinding);
         }
         oer_chips_esp32s31_hal::radio::phy::power_detector::prepare_txdc_calibration(
-            physical.hardware(),
+            physical.hardware_mut(),
         )
         .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
 
         oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-            physical.hardware(),
+            physical.hardware_mut(),
             oer_chips_esp32s31_hal::types::PhyClockPair::Enabled,
         );
-        oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(physical.hardware());
+        oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(
+            physical.hardware_mut(),
+        );
         oer_chips_family_radio_phy::pbus::configure_debug_mode(
-            &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware()),
+            &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware_mut()),
         );
 
         let mut terminal = RootTerminal::Complete;
         for index in 0..5 {
             let transaction = tx_off(index);
-            if !force_pbus_direct(clock, physical.hardware(), transaction) {
+            if !force_pbus_direct(clock, physical.hardware_mut(), transaction) {
                 terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                 break;
             }
@@ -871,7 +878,7 @@ impl PhyTxDcPwdetTransition {
         if terminal == RootTerminal::Complete {
             for index in 0..3 {
                 let transaction = rx_off(index);
-                if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                if !force_pbus_direct(clock, physical.hardware_mut(), transaction) {
                     terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                     break;
                 }
@@ -879,7 +886,7 @@ impl PhyTxDcPwdetTransition {
         }
         if terminal == RootTerminal::Complete {
             crate::hardware::configure_phy_calibration_tone_wide(
-                physical.hardware(),
+                physical.hardware_mut(),
                 true,
                 0x200,
                 0x78,
@@ -887,7 +894,7 @@ impl PhyTxDcPwdetTransition {
             settle(crate::executor::wait::tx::Scope::Root, 1)?;
             for index in 0..11 {
                 let transaction = tx_on(index);
-                if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                if !force_pbus_direct(clock, physical.hardware_mut(), transaction) {
                     terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                     break;
                 }
@@ -897,7 +904,7 @@ impl PhyTxDcPwdetTransition {
             && let PhyTxDcPwdetMode::Bluetooth { tx_path_value } = self.mode
         {
             let value = require_pbus_result(oer_chips_esp32s31_hal::radio::phy::pbus::read_result(
-                physical.hardware(),
+                physical.hardware_mut(),
                 1,
                 1,
             ))
@@ -906,7 +913,7 @@ impl PhyTxDcPwdetTransition {
                 PhyPbusForceTest::new(1, 1, value | 2),
                 PhyPbusForceTest::new(4, 2, u16::from(tx_path_value) << 3),
             ] {
-                if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                if !force_pbus_direct(clock, physical.hardware_mut(), transaction) {
                     terminal = RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                     break;
                 }
@@ -914,7 +921,7 @@ impl PhyTxDcPwdetTransition {
         }
         if terminal == RootTerminal::Complete {
             oer_chips_esp32s31_hal::radio::phy::power_detector::configure_txdc_sar(
-                physical.hardware(),
+                physical.hardware_mut(),
             );
             let mut next_row = Some(Row::FIRST);
             while let Some(row) = next_row {
@@ -923,7 +930,7 @@ impl PhyTxDcPwdetTransition {
                     PhyPbusForceTest::new(5, 1, if row.next().is_none() { 0x1e7 } else { 0x1ef }),
                     PhyPbusForceTest::new(1, 2, row.at(&TX_BB_GAIN)),
                 ] {
-                    if !force_pbus_direct(clock, physical.hardware(), transaction) {
+                    if !force_pbus_direct(clock, physical.hardware_mut(), transaction) {
                         terminal =
                             RootTerminal::Failed(PhyTxDcPwdetFailure::PbusTimedOut(transaction));
                         break;
@@ -938,7 +945,7 @@ impl PhyTxDcPwdetTransition {
                     clear_tone_after_ready: self.parameters.clear_tone_after_ready,
                 });
                 match search
-                    .execute_target_direct(clock, physical, &mut settle, &mut observe_wait)
+                    .execute_target_direct::<D>(clock, physical, &mut settle, &mut observe_wait)
                     .await?
                 {
                     Ok(outcome) => {
@@ -959,35 +966,35 @@ impl PhyTxDcPwdetTransition {
         // failure. Its PBus writes are best effort, but the register restore
         // remains a hard epoch invariant.
         for index in 0..4 {
-            let _ = force_pbus_direct(clock, physical.hardware(), default_dco(index));
+            let _ = force_pbus_direct(clock, physical.hardware_mut(), default_dco(index));
         }
         for index in 0..5 {
-            let _ = force_pbus_direct(clock, physical.hardware(), tx_off(index));
+            let _ = force_pbus_direct(clock, physical.hardware_mut(), tx_off(index));
         }
         crate::hardware::configure_phy_calibration_tone_wide(
-            physical.hardware(),
+            physical.hardware_mut(),
             false,
             0x80,
             0x78,
         );
         if oer_chips_family_radio_phy::pbus::configure_work_mode(
-            &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware()),
+            &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware_mut()),
         ) {
             settle(crate::executor::wait::tx::Scope::Root, 1)?;
             oer_chips_esp32s31_hal::radio::phy::agc::configure_pbus_work_mode_pulse(
-                physical.hardware(),
+                physical.hardware_mut(),
             );
             settle(crate::executor::wait::tx::Scope::Root, 2)?;
             oer_chips_esp32s31_hal::radio::phy::agc::clear_pbus_work_mode_pulse(
-                physical.hardware(),
+                physical.hardware_mut(),
             );
         }
         oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-            physical.hardware(),
+            physical.hardware_mut(),
             oer_chips_esp32s31_hal::types::PhyClockPair::Disabled,
         );
         oer_chips_esp32s31_hal::radio::phy::power_detector::restore_txdc_calibration(
-            physical.hardware(),
+            physical.hardware_mut(),
         )
         .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
         self.step = match terminal {

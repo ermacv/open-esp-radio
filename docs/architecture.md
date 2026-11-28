@@ -323,8 +323,8 @@ executor's binding `Esp32s31`, which images name in every executor type
 (`Executor<Esp32s31, 0>`), and the PHY transaction and Wi-Fi fault records,
 which need both the HAL's types and the runtime's retained memory and fatal
 path. Its `platform` boundary supplies typed interrupt parts, runtime preparation,
-factory identity, entropy and timer installation. The reusable console and
-SAR/PWDET bindings keep the existing driver/handler ownership. Trace clocks
+factory identity, entropy and timer installation. The reusable console
+binding keeps the existing driver/handler ownership. Trace clocks
 and unanswered request resets bind through that same platform.
 
 The application entry is three crates. `oer` is what an image uses: the
@@ -1008,8 +1008,7 @@ The current mechanisms have narrower guarantees than the policy:
   console serves what the boot read before that. A refused output retains the record.
 - Payloads preserve panic text, Wi-Fi RAW, HIL
   failure records, the S31 exception observations, and RX-chain observations.
-  PHY retains operation/epoch, SAR RAW/ST, queue lengths, invalid delay and
-  numeric foreign-reunion identities. None of these values grants ownership.
+  PHY retains operation and epoch. None of these values grants ownership.
   Every S31 image on the staged runtime, the SDK's included, binds one
   exception hook (`oer-chips-esp32s31-platform-runtime::exception`). It repeats none of the
   frame's registers: after the stop it samples the trapping hart's pending
@@ -1203,39 +1202,15 @@ successor; this section describes what the build holds.
   `PHY_TRACK_PLL_PERIOD_IN_US`. A failed operation returns its leaf cause
   and has consumed its proof. SYSTIMER Alarm0 at P4 (`radio`) acknowledges
   and pends P2; the P2 executor dispatches timers and polls the owner's
-  task. The direct maintenance TXDC/PWDET path submits
-  each SAR/PWDET conversion to TIMG0 T0's P2 handler. Its explicit machine
-  performs tone arm, the vendor's minimum 1 µs wait, SAR trigger, the minimum
-  2 µs wait and timer-driven readiness samples. Edge steps return fixed relative
-  1/2 µs intervals, reloaded after the hardware action without subtracting a
-  later clock reading. A microsecond boundary cannot consume part of a minimum;
-  interrupt latency and programming overhead can lengthen it. It judges ready before checking
-  the 40 µs not-ready limit. It never polls a future. Other PHY leaves and the
-  registration graph remain async.
-  The task arms before depositing an affine bundle into an `oer-portable-memory`
-  one-slot request cell. The bundle holds `PhyTransaction` (registers, restore
-  slots, epoch and grant-protect state), `Timg0AlarmProgram`, its binding proof
-  and the machine. The waiting future keeps `DetachedRadioDomain`; its drop
-  guard therefore still records cancellation while the handler holds the PHY.
-  The handler retains `Timg0AlarmInterrupt` for the image's lifetime,
-  acknowledges RAW through CLR before every step, and returns custody through
-  a one-slot reply cell and an `IrqSignal` declared with `FromExecutorLevel`.
-  Startup stops/masks T0 and explicitly clears stale RAW before unmasking;
-  rearming alone does not clear it. A pending event without a bundle is a named
-  `SarAlarmWithoutBundle` fault retaining RAW/ST and request/reply lengths;
-  `service` returns the fault in a `Result`, and the image keeps the owners
-  quarantined while its direct retained reset call records the reason.
-  Cancellation of the lifecycle future likewise retains any in-flight alarm until reset;
-  terminal completion already stops/masks it before reply. The leaf's async
-  suspension count is unchanged: a reply wait replaces its timer wait.
-  `Client::sample` validates/registers its receiving context in one `poll_fn`
-  and waits for the reply in another. The image uses the measured S31 hart0 P2
-  pair, line 17 before 16 (HW23_S31_P2_ARBITRATION_20261027), and moves P1
-  entries to lines 40–42 preserving their relative order. This observation
-  qualifies only the P2 pair, not the other lines or levels. A higher-priority
-  pending executor round runs first; there is no bound on starvation under
-  continuously pending P2 executor work. Handler latency and RF quality with
-  these event gaps are not measured.
+  task. The power detector's
+  conversions run inside the tracking pass, in the radio level's task, lent
+  the PHY's registers (`tx::sar::convert`): the tone armed, a named settle of
+  at least 1 µs, the SAR triggered, a named settle of at least 2 µs, then
+  readiness read, with a 1 µs wait on the level's timer between unready
+  reads up to the 40 µs bound from the second settle's end. A read precedes
+  the bound's comparison, so a late wake that finds the conversion finished
+  succeeds; an unready end reads no result. No interrupt handler and no
+  hardware timer of its own take part; TIMG0 is free.
   Registration, tracking, RF close and retained wake take the domain by value
   and return it with their typed result. `RadioDomain::detach` owns a PHY
   transaction containing the registers, restore slots, registration epoch
