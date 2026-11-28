@@ -68,20 +68,19 @@ fn run(results: &str, elf: &str) -> Result<Value, String> {
             .ok_or_else(|| format!("no measurement {name}"))
     };
     let summary = measured("receiver/register-profile")?;
-    let samples: Vec<(u32, u8)> =
-        serde_json::from_value::<Vec<[u32; 2]>>(measured("receiver/register-samples")?)
-            .map_err(|error| format!("the samples: {error}"))?
-            .into_iter()
-            .map(|[pc, level]| (pc, u8::try_from(level).unwrap_or(u8::MAX)))
-            .collect();
+    let samples = samples_of(&measured("receiver/register-samples")?)?;
     let symbolizer = oer_tools_analysis_elf::dwarf::Symbolizer::read(std::path::Path::new(elf))
         .map_err(|error| format!("{elf}: {error}"))?;
     let mut places = HashMap::new();
-    for &(pc, _) in &samples {
-        if let std::collections::hash_map::Entry::Vacant(entry) = places.entry(pc) {
+    let addresses = samples
+        .iter()
+        .flat_map(|sample| [Some(sample.pc), sample.ra.and_then(|ra| ra.checked_sub(1))])
+        .flatten();
+    for address in addresses {
+        if let std::collections::hash_map::Entry::Vacant(entry) = places.entry(address) {
             let frames = symbolizer
-                .frames(u64::from(pc))
-                .map_err(|error| format!("{pc:#x}: {error}"))?;
+                .frames(u64::from(address))
+                .map_err(|error| format!("{address:#x}: {error}"))?;
             entry.insert(place(&frames));
         }
     }
@@ -93,6 +92,34 @@ fn run(results: &str, elf: &str) -> Result<Value, String> {
         measured("receiver/register-waits").ok(),
         elf,
     ))
+}
+
+/// One kept sample: its program counter, raw level byte and, in a trace
+/// build, its interrupted return address.
+#[derive(Clone, Copy, Debug)]
+struct Sample {
+    pc: u32,
+    level: u8,
+    ra: Option<u32>,
+}
+
+/// The samples of a results file: `[pc, level]` or `[pc, level, ra]`.
+fn samples_of(value: &Value) -> Result<Vec<Sample>, String> {
+    value
+        .as_array()
+        .ok_or("the samples are no array")?
+        .iter()
+        .map(|sample| {
+            let field = |index: usize| sample.get(index).and_then(Value::as_u64);
+            let pc = field(0).and_then(|pc| u32::try_from(pc).ok());
+            let level = field(1).and_then(|level| u8::try_from(level).ok());
+            let ra = field(2).and_then(|ra| u32::try_from(ra).ok());
+            match (pc, level) {
+                (Some(pc), Some(level)) => Ok(Sample { pc, level, ra }),
+                _ => Err(format!("a sample: {sample}")),
+            }
+        })
+        .collect()
 }
 
 /// Where one address lies: the function its code is in and the innermost
@@ -116,6 +143,13 @@ fn place(frames: &[oer_tools_analysis_elf::dwarf::Frame]) -> Place {
     }
 }
 
+/// `counts` by count, most first, then by name.
+fn sorted(counts: HashMap<String, u64>) -> Vec<(String, u64)> {
+    let mut counts: Vec<_> = counts.into_iter().collect();
+    counts.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    counts
+}
+
 /// One more in `count`.
 fn bump(count: &mut u64) {
     *count = count.saturating_add(1);
@@ -132,21 +166,34 @@ fn memory(pc: u32) -> &'static str {
     }
 }
 
-/// What the image's levels are (`esp32s31-rx-ring`'s table): 0 thread
-/// mode, 1 the application's executor and its handlers, 2 the radio's
-/// level task, 3 the radio's alarm handler.
-fn level_name(level: u8) -> &'static str {
-    match level {
+/// The level a raw `clicintctl`-form byte names under the family's three
+/// level bits (`chips/family/facts/layers/family.toml`, level-bits = 3):
+/// level `n` is `(n - 1) << 5 | 0x1f` (`oer_portable_riscv::clic`), and 0
+/// is thread mode.
+fn level_of(raw: u8) -> u8 {
+    if raw == 0 {
+        0
+    } else {
+        (raw >> 5).saturating_add(1)
+    }
+}
+
+/// What the image's levels are (`esp32s31-rx-ring`'s table): thread mode,
+/// 1 the application's executor and its handlers, 2 the radio's level
+/// task, 3 the radio's alarm handler, 5 the sampler.
+fn level_name(raw: u8) -> &'static str {
+    match level_of(raw) {
         0 => "thread",
         1 => "application",
         2 => "radio task",
         3 => "radio alarm handler",
+        5 => "sampler",
         _ => "other",
     }
 }
 
 fn report(
-    samples: &[(u32, u8)],
+    samples: &[Sample],
     places: &HashMap<u32, Place>,
     summary: &Value,
     micros: Option<Value>,
@@ -159,16 +206,28 @@ fn report(
     let mut levels = BTreeMap::<u8, u64>::new();
     let mut memories = BTreeMap::<&str, u64>::new();
     let mut copying = 0_u64;
-    for &(pc, level) in samples {
+    for &Sample { pc, level, .. } in samples {
         bump(levels.entry(level).or_default());
         bump(memories.entry(memory(pc)).or_default());
         if oer_tools_image_checks::copies::copy_entry(&place_of(pc).function) {
             bump(&mut copying);
         }
     }
+    // A copy's caller: the function the byte before its `ra` lies in.
+    let mut callers = HashMap::<String, u64>::new();
+    for sample in samples {
+        if !oer_tools_image_checks::copies::copy_entry(&place_of(sample.pc).function) {
+            continue;
+        }
+        let caller = sample
+            .ra
+            .and_then(|ra| ra.checked_sub(1))
+            .map_or_else(|| "(no ra)".to_owned(), |call| place_of(call).function);
+        bump(callers.entry(caller).or_default());
+    }
     let table = |name: &dyn Fn(&Place) -> String, of_level: Option<u8>| {
         let mut counts = HashMap::<(String, &str), u64>::new();
-        for &(pc, level) in samples {
+        for &Sample { pc, level, .. } in samples {
             if of_level.is_some_and(|wanted| wanted != level) {
                 continue;
             }
@@ -204,7 +263,8 @@ fn report(
         "levels": levels
             .iter()
             .map(|(level, count)| json!({
-                "level": level,
+                "raw": level,
+                "level": level_of(*level),
                 "name": level_name(*level),
                 "samples": count,
                 "percent": percent(*count),
@@ -214,13 +274,20 @@ fn report(
             .iter()
             .map(|(memory, count)| json!({ "memory": memory, "samples": count, "percent": percent(*count) }))
             .collect::<Vec<_>>(),
-        "copies": { "samples": copying, "percent": percent(copying) },
+        "copies": {
+            "samples": copying,
+            "percent": percent(copying),
+            "callers": sorted(callers)
+                .into_iter()
+                .map(|(caller, count)| json!({ "caller": caller, "samples": count, "percent": percent(count) }))
+                .collect::<Vec<_>>(),
+        },
         "functions": table(&|place| place.function.clone(), None),
         "inlined": table(&|place| place.inlined.clone(), None),
         "by_level": levels
             .keys()
             .map(|level| json!({
-                "level": level,
+                "raw": level,
                 "name": level_name(*level),
                 "functions": table(&|place| place.function.clone(), Some(*level)),
             }))
@@ -233,6 +300,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_raw_level_byte_names_its_level() {
+        assert_eq!(level_of(0), 0);
+        assert_eq!(level_of(0x1f), 1);
+        assert_eq!(level_of(0x3f), 2);
+        assert_eq!(level_of(0x5f), 3);
+        assert_eq!(level_of(0x9f), 5);
+    }
+
+    #[test]
     fn addresses_are_classed_by_the_chip_s_map() {
         assert_eq!(memory(0x4000_0000), "flash");
         assert_eq!(memory(0x43ff_fffc), "flash");
@@ -242,11 +318,12 @@ mod tests {
 
     #[test]
     fn the_report_splits_samples_by_level_memory_and_function() {
+        let sample = |pc, level, ra| Sample { pc, level, ra };
         let samples = [
-            (0x4000_0010, 2),
-            (0x4000_0010, 2),
-            (0x2ff0_0000, 2),
-            (0x2ff0_0000, 3),
+            sample(0x4000_0010, 63, None),
+            sample(0x4000_0010, 63, None),
+            sample(0x2ff0_0000, 63, Some(0x4000_0011)),
+            sample(0x2ff0_0000, 95, None),
         ];
         let places = HashMap::from([
             (
@@ -284,5 +361,8 @@ mod tests {
         assert_eq!(report["sampler"]["micros"], 10);
         assert_eq!(report["sampler"]["percent_of_registration"], 1.0);
         assert_eq!(report["by_level"][1]["functions"][0]["name"], "memcpy");
+        assert_eq!(report["levels"][0]["name"], "radio task");
+        assert_eq!(report["copies"]["callers"][0]["caller"], "(no ra)");
+        assert_eq!(report["copies"]["callers"][1]["caller"], "step");
     }
 }

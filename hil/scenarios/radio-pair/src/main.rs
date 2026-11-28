@@ -235,7 +235,8 @@ fn bring_up(cx: &mut Cx<'_>) -> Result<(), Failure> {
 }
 
 /// The registration's profile (`tasks/448`), page by page: its summary
-/// and every kept sample as `[pc, level]`; nothing when the image samples
+/// and every kept sample as `[pc, level, ra]` (`ra` null outside a trace
+/// build); nothing when the image samples
 /// nothing. `radio-pair-profile` names the samples with the image's ELF.
 fn profile(cx: &mut Cx<'_>, role: &str) -> Result<(), Failure> {
     let mut samples = Vec::new();
@@ -251,7 +252,7 @@ fn profile(cx: &mut Cx<'_>, role: &str) -> Result<(), Failure> {
                     || samples.len().saturating_add(page.len()) >= usize::from(summary.kept);
                 samples.extend(
                     page.iter()
-                        .map(|sample| [sample.pc, u32::from(sample.level)]),
+                        .map(|sample| serde_json::json!([sample.pc, sample.level, sample.ra])),
                 );
                 if last {
                     keep(cx, role, "register-profile", &summary);

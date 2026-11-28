@@ -71,7 +71,7 @@ oer_protocols_hil_protocol::messages! {
 
 /// The most samples a profile page holds: few enough that a page is no
 /// large variant of its answer.
-pub const PROFILE_PAGE: usize = 14;
+pub const PROFILE_PAGE: usize = 10;
 
 /// A page of the registration's program-counter samples, from sample
 /// `from` on (`tasks/448`).
@@ -80,12 +80,14 @@ pub struct Profile {
     pub from: u16,
 }
 
-/// One kept sample: the interrupted program counter and the interrupted
-/// code's raw CLIC level (0 for thread mode).
+/// One kept sample: the interrupted program counter, the interrupted
+/// code's raw CLIC level byte (0 for thread mode) and, in a trace build,
+/// the interrupted return address, which names a leaf's caller.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct ProfileSample {
     pub pc: u32,
     pub level: u8,
+    pub ra: Option<u32>,
 }
 
 /// The cache's counts of one bus over the registration.

@@ -227,6 +227,7 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
             ProfileSample {
                 pc: u32::MAX,
                 level: u8::MAX,
+                ra: Some(u32::MAX),
             },
             PROFILE_PAGE,
         )

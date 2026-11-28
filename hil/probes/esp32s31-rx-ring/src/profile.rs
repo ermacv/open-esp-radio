@@ -41,7 +41,12 @@ static CYCLES: AtomicU32 = AtomicU32::new(0);
 pub(crate) fn on_sampler(part: &mut Timg1AlarmInterrupt) {
     let began = oer_portable_riscv::cycle64();
     SAMPLER.interrupt_into(part, |tick| {
-        let _ = KEPT.lend(|buffer| buffer.record(tick.sample));
+        let _ = KEPT.lend(|buffer| {
+            buffer.record(tick.sample);
+            if let Some(ret) = tick.ret {
+                buffer.record_return(ret);
+            }
+        });
     });
     let spent = oer_portable_riscv::cycle64().wrapping_sub(began);
     ENTRIES.store(
@@ -152,11 +157,12 @@ impl Profiler {
         };
         let samples = KEPT.lend(|buffer| {
             (usize::from(from)..buffer.len())
-                .filter_map(|slot| buffer.get(slot))
+                .filter_map(|slot| Some((buffer.get(slot)?, buffer.return_address(slot))))
                 .take(service::PROFILE_PAGE)
-                .map(|sample| service::ProfileSample {
+                .map(|(sample, ra)| service::ProfileSample {
                     pc: sample.pc(),
                     level: sample.level(),
+                    ra,
                 })
                 .collect()
         });
