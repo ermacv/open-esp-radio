@@ -1,6 +1,6 @@
 //! Direct typed RX leaves and one retained poll loop, without per-leaf futures.
 mod hardware;
-use super::wait::PhyShortDelay;
+use super::wait::{PhyShortDelay, Waited};
 use crate::{
     analog::{
         pbus::PhyPbusForceTest,
@@ -233,6 +233,8 @@ pin_project_lite::pin_project! {
         execution:&'a mut RxGainExecution,timing:Option<&'a mut EngineTiming>,
         observe:O,phase:Option<RxPhase>,seen:u64,
         #[pin] wait:Option<F>,wait_at:Instant,wait_ready:bool,make_wait:M,
+        // When the engine last gave the executor up, for a counting timer.
+        waited_from:Instant,
         entered:bool,finished:bool,
         delay:core::marker::PhantomData<D>,
     }
@@ -255,7 +257,7 @@ fn operation(phase: RxPhase) -> Operation {
 impl<
     'a,
     R: Hardware,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: PhyShortDelay,
@@ -266,9 +268,14 @@ impl<
     #[inline(never)]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
+        let resumed_from_yield = *this.entered && this.wait.is_none();
         *this.entered = true;
         let clock = &super::step::rfpll::OutlinedClock(*this.timer);
         let started = clock.now();
+        if T::COUNTS && resumed_from_yield {
+            let taken = started.saturating_duration_since(*this.waited_from);
+            this.timer.waited(Waited::Yield, 0, taken.as_micros());
+        }
         let mut resumed = None;
         let mut ready = None;
         let mut tag = 0;
@@ -280,6 +287,12 @@ impl<
                 }
                 *this.wait_ready = false;
                 resumed = Some((*this.wait_at, clock.now()));
+                if T::COUNTS {
+                    let asked = this.wait_at.saturating_duration_since(*this.waited_from);
+                    let taken = clock.now().saturating_duration_since(*this.waited_from);
+                    this.timer
+                        .waited(Waited::EngineRetry, asked.as_micros(), taken.as_micros());
+                }
                 this.wait.as_mut().set(None);
             }
             let phase = this.program.phase();
@@ -344,6 +357,9 @@ impl<
                         break Poll::Ready(Err(RxError::Hardware));
                     };
                     *this.wait_at = at;
+                    if T::COUNTS {
+                        *this.waited_from = clock.now();
+                    }
                     this.wait
                         .as_mut()
                         .set(Some((this.make_wait)(*this.timer, at)));
@@ -366,6 +382,9 @@ impl<
                         continue;
                     }
                 }
+            }
+            if T::COUNTS {
+                *this.waited_from = clock.now();
             }
             cx.waker().wake_by_ref();
             break Poll::Pending;
@@ -406,7 +425,7 @@ pub(crate) fn drive<
     'a,
     D: PhyShortDelay + 'a,
     R: Hardware,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
     O: FnMut(Operation, Event) + 'a,
 >(
     program: &'a mut RxProgram,
@@ -427,6 +446,7 @@ pub(crate) fn drive<
         seen: 0,
         wait: None,
         wait_at: Instant::EPOCH,
+        waited_from: Instant::EPOCH,
         wait_ready: false,
         make_wait: |timer: &'a T, at| timer.wait_until(at),
         entered: false,

@@ -162,7 +162,11 @@ impl PhyTxDcPwdetSearchTransition {
     #[cfg(target_arch = "riscv32")]
     pub(crate) async fn execute_target_direct(
         &mut self,
-        clock: &(impl oer_portable_clock::Timer + oer_portable_settle::SettleCounter),
+        clock: &(
+             impl oer_portable_clock::Timer
+             + oer_portable_settle::SettleCounter
+             + crate::executor::wait::WaitTally
+         ),
         physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,
@@ -825,7 +829,11 @@ impl PhyTxDcPwdetTransition {
     #[cfg(target_arch = "riscv32")]
     pub(crate) async fn execute_target_direct(
         &mut self,
-        clock: &(impl oer_portable_clock::Timer + oer_portable_settle::SettleCounter),
+        clock: &(
+             impl oer_portable_clock::Timer
+             + oer_portable_settle::SettleCounter
+             + crate::executor::wait::WaitTally
+         ),
         physical: &mut crate::sar_pilot::Physical<'_, impl crate::sar_pilot::Service>,
         mut settle: impl FnMut(
             crate::executor::wait::tx::Scope,

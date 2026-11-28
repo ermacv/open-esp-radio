@@ -47,7 +47,7 @@ use oer_chips_esp32s31_hal::{
 use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_phy::{
-    PhyCalibrationIdentity, RomShortDelay,
+    CalibrationThreshold, PhyCalibrationIdentity, PhyTargetObserver, RomShortDelay,
     owner::{RegisteredPhy, RfOpen},
     phy_get_rf_cal_version,
 };
@@ -947,6 +947,57 @@ const WAKE: u32 = 14;
 /// RF closed and woken again over the radio in `slot`, as the vendor's last
 /// `esp_phy_disable` and next `esp_phy_enable`: RF's proof again and the
 /// close's and the wake's times in microseconds.
+/// The power detector's conversions a tracking pass reads.
+#[derive(Default)]
+struct ConversionTally(service::Conversions);
+
+impl ConversionTally {
+    const fn conversions(&self) -> service::Conversions {
+        self.0
+    }
+}
+
+impl PhyTargetObserver for &mut ConversionTally {
+    fn tx_sar_wait(&mut self, elapsed_micros: u64, observations: u16, ready: bool) {
+        let conversions = &mut self.0;
+        conversions.most_observations = conversions.most_observations.max(observations);
+        if !ready {
+            conversions.not_ready = conversions.not_ready.saturating_add(1);
+            return;
+        }
+        let elapsed = crate::radio::saturated(elapsed_micros);
+        if conversions.ready == 0 {
+            conversions.earliest_micros = elapsed;
+            conversions.latest_micros = elapsed;
+        } else {
+            conversions.earliest_micros = conversions.earliest_micros.min(elapsed);
+            conversions.latest_micros = conversions.latest_micros.max(elapsed);
+        }
+        conversions.ready = conversions.ready.saturating_add(1);
+    }
+}
+
+/// A tracking pass now, with the calibration threshold at zero so that the
+/// common and the transmit branches are due, then the vendor's threshold
+/// again: the pass's conversions and its time in microseconds.
+async fn track_now(
+    slot: &mut Option<Radio>,
+    phy: &mut RegisteredPhy<'_>,
+    open: RfOpen,
+    timer: &CooperativeTimer<'_>,
+    platform: &mut (),
+    power_detector: &mut phy_pilot::Client,
+) -> Result<(RfOpen, u32, service::Conversions), Failure> {
+    let mut tally = ConversionTally::default();
+    phy.set_calibration_threshold(CalibrationThreshold::Diagnostic(0));
+    let began = timer.now();
+    let tracked =
+        crate::radio::track(slot, phy, open, timer, platform, power_detector, &mut tally).await;
+    let track_micros = crate::radio::micros_between(began, timer.now());
+    phy.set_calibration_threshold(CalibrationThreshold::Vendor);
+    Ok((tracked?, track_micros, tally.conversions()))
+}
+
 async fn close_and_wake(
     slot: &mut Option<Radio>,
     phy: &mut RegisteredPhy<'_>,
@@ -1068,7 +1119,8 @@ async fn worker(
         }
     };
     let cooperative = Cooperative::new(EmbassyClock);
-    let timer = CooperativeTimer::new(&cooperative, cycles);
+    let book = crate::radio::WaitBook::default();
+    let timer = CooperativeTimer::counted(&cooperative, cycles, &book);
     let mut platform = ();
     let mut phy_memory = MaybeUninit::uninit();
     let up = async {
@@ -1092,6 +1144,7 @@ async fn worker(
             mut phy,
             open,
             register_micros,
+            waits,
             power_detector,
             mut clocked,
             first,
@@ -1139,7 +1192,7 @@ async fn worker(
         );
         Ok((
             slot,
-            (phy, open, register_micros, power_detector),
+            (phy, open, register_micros, waits, power_detector),
             access,
             clocks_on,
             ring,
@@ -1157,7 +1210,7 @@ async fn worker(
     };
     let (
         mut slot,
-        (mut phy, open, register_micros, mut power_detector),
+        (mut phy, open, register_micros, waits, mut power_detector),
         access,
         clocks_on,
         ring,
@@ -1187,6 +1240,7 @@ async fn worker(
             station,
             ap,
             register_micros,
+            waits,
         },
     );
     let up = match pair::up(&mut slot, held.clocks(), reset, &phy, identity) {
@@ -1389,6 +1443,35 @@ async fn worker(
                                 service::TurnedRf::ClosedAndWoken {
                                     close_micros,
                                     wake_micros,
+                                },
+                            )
+                        }),
+                        Err(failure) => Err(failure),
+                    },
+                    service::TurnKind::CloseWakeAndTrack => match apart!(close_and_wake(
+                        turns.slot,
+                        turns.phy,
+                        open,
+                        &timer,
+                        &mut platform,
+                        held.clocks()
+                    )) {
+                        Ok((open, close_micros, wake_micros)) => apart!(track_now(
+                            turns.slot,
+                            turns.phy,
+                            open,
+                            &timer,
+                            &mut platform,
+                            &mut power_detector
+                        ))
+                        .map(|(open, track_micros, conversions)| {
+                            (
+                                open,
+                                service::TurnedRf::Tracked {
+                                    close_micros,
+                                    wake_micros,
+                                    track_micros,
+                                    conversions,
                                 },
                             )
                         }),

@@ -10,7 +10,7 @@ use oer_portable_cooperate::CooperativeTimer as Timer;
 pub(crate) async fn run_param_wifi_i2c<
     D: crate::executor::wait::PhyShortDelay,
     R: Registers,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
 >(
     timer: &T,
     mut child: PhyParamTrackingWifiI2cTransition<'_>,

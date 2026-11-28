@@ -494,6 +494,20 @@ fn registered_policy_projects_cold_facts_and_live_tracking_state() {
 }
 
 #[test]
+fn a_diagnostic_calibration_threshold_reaches_the_policy_and_leaves_rfpll_alone() {
+    let mut state = crate::state::PhyState::new(crate::state::PhyConfig::production());
+    state.set_calibration_threshold(crate::CalibrationThreshold::Diagnostic(0));
+    let forced = PhyParamTrackingPolicy::for_registered_state(&state);
+    assert_eq!(forced.calibration_tracking_threshold, Some(0));
+    assert_eq!(forced.rfpll_cap_tracking_threshold, None);
+
+    state.set_calibration_threshold(crate::CalibrationThreshold::Vendor);
+    let vendor = PhyParamTrackingPolicy::for_registered_state(&state);
+    assert_eq!(vendor.calibration_tracking_threshold, None);
+    assert_eq!(vendor.rfpll_cap_tracking_threshold, None);
+}
+
+#[test]
 fn temperature_to_power_matches_all_signed_16_bit_deltas() {
     for raw_delta in 0..=u16::MAX {
         let delta = raw_delta as i16;

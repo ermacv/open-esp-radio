@@ -190,42 +190,119 @@ pub trait PhyShortDelay {
     fn settle<K: SettleCounter + ?Sized>(counter: &K, limit: SettleLimit);
 }
 
+/// What a counted wait was, by how it ran.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Waited {
+    /// A [`Kind::Settle`] short enough to complete synchronously: spun.
+    SettleSpun,
+    /// A [`Kind::Settle`] longer than a short settle: on the timer.
+    SettleTimed,
+    /// A [`Kind::Completion`] wait on the timer.
+    Completion,
+    /// A [`Kind::BusBusy`] wait on the timer.
+    BusBusy,
+    /// A step engine's wait before its next observation, on the timer.
+    EngineRetry,
+    /// A cooperative yield to the executor: nothing is asked, its time is
+    /// until the engine is polled again.
+    Yield,
+}
+
+/// Where a timer's waits are counted: each wait's kind, the time it asked
+/// and the time it took, both in microseconds.
+pub trait WaitTally {
+    /// Whether this tally counts: one that does not reads no clock.
+    const COUNTS: bool;
+    fn waited(&self, kind: Waited, asked_micros: u64, taken_micros: u64);
+}
+
+/// A tally that counts nothing.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Uncounted;
+
+impl WaitTally for Uncounted {
+    const COUNTS: bool = false;
+    fn waited(&self, _kind: Waited, _asked_micros: u64, _taken_micros: u64) {}
+}
+
+impl<W: WaitTally + ?Sized> WaitTally for &W {
+    const COUNTS: bool = W::COUNTS;
+    fn waited(&self, kind: Waited, asked_micros: u64, taken_micros: u64) {
+        (**self).waited(kind, asked_micros, taken_micros);
+    }
+}
+
 /// The PHY's timer beside its settle counter: what an executor gives the
 /// PHY's operations, so that a short settle counts cycles at the adopted CPU
 /// rate and every other wait ends on the timer.
+///
+/// `W` is where its waits are counted: [`Uncounted`] unless an image asks
+/// what its operations waited for ([`PhyTimer::counted`]).
 #[derive(Clone, Copy, Debug)]
-pub struct PhyTimer<'t, T: ?Sized, K> {
+pub struct PhyTimer<'t, T: ?Sized, K, W = Uncounted> {
     timer: &'t T,
     counter: K,
+    tally: W,
 }
 
 impl<'t, T: ?Sized, K> PhyTimer<'t, T, K> {
     pub const fn new(timer: &'t T, counter: K) -> Self {
-        Self { timer, counter }
+        Self {
+            timer,
+            counter,
+            tally: Uncounted,
+        }
     }
 }
 
-impl<T: oer_portable_clock::Clock + ?Sized, K> oer_portable_clock::Clock for PhyTimer<'_, T, K> {
+impl<'t, T: ?Sized, K, W: WaitTally> PhyTimer<'t, T, K, W> {
+    /// The timer whose every wait is counted in `tally`.
+    pub const fn counted(timer: &'t T, counter: K, tally: W) -> Self {
+        Self {
+            timer,
+            counter,
+            tally,
+        }
+    }
+}
+
+impl<T: ?Sized, K, W> PhyTimer<'_, T, K, W> {
+    /// Where this timer's waits are counted.
+    pub const fn tally(&self) -> &W {
+        &self.tally
+    }
+}
+
+impl<T: ?Sized, K, W: WaitTally> WaitTally for PhyTimer<'_, T, K, W> {
+    const COUNTS: bool = W::COUNTS;
+    fn waited(&self, kind: Waited, asked_micros: u64, taken_micros: u64) {
+        self.tally.waited(kind, asked_micros, taken_micros);
+    }
+}
+
+impl<T: oer_portable_clock::Clock + ?Sized, K, W> oer_portable_clock::Clock
+    for PhyTimer<'_, T, K, W>
+{
     fn now(&self) -> oer_portable_time::Instant {
         self.timer.now()
     }
 }
 
-impl<T: Timer + ?Sized, K> Timer for PhyTimer<'_, T, K> {
+impl<T: Timer + ?Sized, K, W> Timer for PhyTimer<'_, T, K, W> {
     fn wait_until(&self, deadline: oer_portable_time::Instant) -> impl Future<Output = ()> {
         self.timer.wait_until(deadline)
     }
 }
 
-impl<T: oer_portable_cooperate::CooperativeTimer + ?Sized, K>
-    oer_portable_cooperate::CooperativeTimer for PhyTimer<'_, T, K>
+impl<T: oer_portable_cooperate::CooperativeTimer + ?Sized, K, W>
+    oer_portable_cooperate::CooperativeTimer for PhyTimer<'_, T, K, W>
 {
     fn should_yield(&self) -> bool {
         self.timer.should_yield()
     }
 }
 
-impl<T: ?Sized, K: SettleCounter> SettleCounter for PhyTimer<'_, T, K> {
+impl<T: ?Sized, K: SettleCounter, W> SettleCounter for PhyTimer<'_, T, K, W> {
     fn cycles(&self, limit: SettleLimit) -> u32 {
         self.counter.cycles(limit)
     }
@@ -283,20 +360,37 @@ pub enum PhyWaitRefused {
 /// # Errors
 ///
 /// The wait did not run its length; the caller must not act as if it had.
-pub fn delay<S: PhyShortDelay, T: Timer + SettleCounter + ?Sized>(
+pub fn delay<S: PhyShortDelay, T: Timer + SettleCounter + WaitTally + ?Sized>(
     timer: &T,
     kind: Kind,
     micros: u64,
 ) -> impl Future<Output = Result<(), PhyWaitRefused>> + '_ {
     let settle = synchronous_settle::<S>(kind, micros);
-    let deadline = settle
-        .is_none()
-        .then(|| timer.now().checked_add(Duration::from_micros(micros)));
+    // A spun settle reads the clock only for a tally that counts.
+    let start = (T::COUNTS || settle.is_none()).then(|| timer.now());
+    let deadline = match (settle, start) {
+        (None, Some(start)) => Some(start.checked_add(Duration::from_micros(micros))),
+        _ => None,
+    };
     async move {
-        match (settle, deadline) {
-            (Some(limit), _) => S::settle(timer, limit),
-            (None, Some(Some(deadline))) => timer.wait_until(deadline).await,
+        let waited = match (settle, deadline) {
+            (Some(limit), _) => {
+                S::settle(timer, limit);
+                Waited::SettleSpun
+            }
+            (None, Some(Some(deadline))) => {
+                timer.wait_until(deadline).await;
+                match kind {
+                    Kind::Settle => Waited::SettleTimed,
+                    Kind::Completion => Waited::Completion,
+                    Kind::BusBusy => Waited::BusBusy,
+                }
+            }
             (None, _) => return Err(PhyWaitRefused::Deadline),
+        };
+        if let (true, Some(start)) = (T::COUNTS, start) {
+            let taken = timer.now().saturating_duration_since(start).as_micros();
+            timer.waited(waited, micros, taken);
         }
         Ok(())
     }
@@ -306,7 +400,7 @@ pub fn delay<S: PhyShortDelay, T: Timer + SettleCounter + ?Sized>(
 /// the first poll and, on completion, the time elapsed since this was called
 /// and the lateness past `micros`, measured on `timer`. The completion is
 /// observed after the wait ends, so observer work cannot shorten it.
-pub fn delay_observed<'t, S: PhyShortDelay, T: Timer + SettleCounter + ?Sized>(
+pub fn delay_observed<'t, S: PhyShortDelay, T: Timer + SettleCounter + WaitTally + ?Sized>(
     timer: &'t T,
     kind: Kind,
     micros: u64,

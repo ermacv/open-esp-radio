@@ -543,6 +543,17 @@ pub struct PhyDot11pConfiguration {
     pub configuration: u8,
 }
 
+/// The calibration tracking's thermal threshold, in PHY sensor units.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CalibrationThreshold {
+    /// The vendor's: a branch is due when the temperature left its
+    /// reference by 30 units.
+    Vendor,
+    /// A diagnostic threshold. Zero makes the common and the transmit
+    /// branches due at every pass, the temperature unchanged.
+    Diagnostic(u8),
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyTemperatureTrackingDebug {
     pub first: u8,
@@ -906,6 +917,17 @@ impl PhyState {
 
     pub fn set_temperature_tracking_debug(&mut self, first: u8, second: u8) {
         self.common.temperature_debug = [first, second];
+    }
+
+    /// Select the calibration tracking's thermal threshold: the debug
+    /// policy's second flag with its value. The RFPLL flag is kept; the two
+    /// children share the value, as the policy's one byte does.
+    pub fn set_calibration_threshold(&mut self, threshold: CalibrationThreshold) {
+        let [first, second] = self.common.temperature_debug;
+        self.common.temperature_debug = match threshold {
+            CalibrationThreshold::Vendor => [first & !2, second],
+            CalibrationThreshold::Diagnostic(value) => [first | 2, value],
+        };
     }
 
     pub const fn temperature_tracking_debug(&self) -> PhyTemperatureTrackingDebug {

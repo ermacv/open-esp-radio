@@ -162,6 +162,12 @@ impl<'s> RegisteredPhy<'s> {
         self.state.calibration_cache(identity)
     }
 
+    /// Select the calibration tracking's thermal threshold for the next
+    /// passes.
+    pub fn set_calibration_threshold(&mut self, threshold: crate::CalibrationThreshold) {
+        self.state.set_calibration_threshold(threshold);
+    }
+
     /// The registered state, for an operation of this crate.
     #[cfg(any(target_arch = "riscv32", test))]
     pub(crate) fn state_mut(&mut self) -> &mut PhyState {

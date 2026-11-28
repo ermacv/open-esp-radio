@@ -29,7 +29,7 @@ pub(crate) fn sample<
     'a,
     D: crate::executor::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
 >(
     transition: &'a mut PhyTemperatureTransition,
     registers: &'a mut R,

@@ -29,9 +29,11 @@ use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_radio_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig, PhyState,
-    PhyTxTargetPowerProfile, RomShortDelay, enable_wifi_rx,
+    PhyTargetObserver, PhyTxTargetPowerProfile, RomShortDelay, enable_wifi_rx,
+    executor::wait::{WaitTally, Waited},
     owner::{PhyPlace, PhyStateRight, RegisteredPhy, RfOpen, Tracking, tracking_due},
 };
+use oer_hil_services_radio_pair as service;
 use oer_portable_clock::Clock as _;
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::Occupied;
@@ -51,12 +53,50 @@ pub(crate) type Radio = RadioDomain<ChipClocks>;
 pub(crate) type Cooperative =
     oer_chips_family_platform_executor::Cooperative<Esp32s31, EmbassyClock>;
 /// The executor's cooperative timer beside the settle counter at the adopted
-/// CPU rate: what the PHY's operations take.
+/// CPU rate, counting its waits in the session's book: what the PHY's
+/// operations take.
 pub(crate) type CooperativeTimer<'t> = oer_chips_esp32s31_radio_phy::executor::wait::PhyTimer<
     't,
     Cooperative,
     oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+    &'t WaitBook,
 >;
+
+/// The session's waits since it was last read, by kind.
+#[derive(Default)]
+pub(crate) struct WaitBook(core::cell::Cell<service::Waits>);
+
+impl WaitBook {
+    /// The waits since the last read, and an empty book.
+    pub(crate) fn take(&self) -> service::Waits {
+        self.0.take()
+    }
+}
+
+impl WaitTally for WaitBook {
+    const COUNTS: bool = true;
+    fn waited(&self, kind: Waited, asked_micros: u64, taken_micros: u64) {
+        let mut waits = self.0.get();
+        let wait = match kind {
+            Waited::SettleSpun => &mut waits.settle_spun,
+            Waited::SettleTimed => &mut waits.settle_timed,
+            Waited::Completion => &mut waits.completion,
+            Waited::BusBusy => &mut waits.bus_busy,
+            Waited::EngineRetry => &mut waits.engine_retry,
+            Waited::Yield => &mut waits.yields,
+        };
+        wait.count = wait.count.saturating_add(1);
+        wait.asked_micros = wait.asked_micros.saturating_add(saturated(asked_micros));
+        wait.taken_micros = wait.taken_micros.saturating_add(saturated(taken_micros));
+        self.0.set(waits);
+    }
+}
+
+/// `micros` as a counter's `u32`, saturating.
+pub(crate) fn saturated(micros: u64) -> u32 {
+    u32::try_from(micros).unwrap_or(u32::MAX)
+}
+
 /// A failure: its phase and its index.
 pub(crate) type Failure = (u32, u32);
 
@@ -212,6 +252,28 @@ pub(crate) async fn track_if_due(
     if let Tracking::NotBefore(_) = tracking_due(phy.state(), timer.now()) {
         return Ok(open);
     }
+    track(
+        slot,
+        phy,
+        open,
+        timer,
+        platform,
+        power_detector,
+        NoopPhyTargetObserver,
+    )
+    .await
+}
+
+/// The PHY's tracking pass over the radio in `slot`, observed by `observer`.
+pub(crate) async fn track(
+    slot: &mut Option<Radio>,
+    phy: &mut RegisteredPhy<'_>,
+    open: RfOpen,
+    timer: &CooperativeTimer<'_>,
+    platform: &mut (),
+    power_detector: &mut phy_pilot::Client,
+    observer: impl PhyTargetObserver,
+) -> Result<RfOpen, Failure> {
     let radio = slot.take().ok_or((phase::MAINTAIN, 1))?;
     let mut operation =
         core::pin::pin!(
@@ -221,7 +283,7 @@ pub(crate) async fn track_if_due(
                 phy,
                 open,
                 platform,
-                NoopPhyTargetObserver,
+                observer,
                 power_detector,
             )
         );
@@ -302,6 +364,8 @@ pub(crate) struct Brought<'p> {
     pub(crate) open: RfOpen,
     /// The registration's time, in microseconds.
     pub(crate) register_micros: u32,
+    /// The registration's waits, by kind.
+    pub(crate) waits: service::Waits,
     /// The power detector's conversion, which a tracking pass takes.
     pub(crate) power_detector: phy_pilot::Client,
     pub(crate) clocked: WifiClocked,
@@ -341,6 +405,7 @@ pub(crate) async fn bring_up<'p>(
         cycles: _,
     } = parts;
     let mut slot = Some(radio);
+    let _before = timer.tally().take();
     let began = timer.now();
     let (mut phy, open) = apart!(register(
         &mut slot,
@@ -351,6 +416,7 @@ pub(crate) async fn bring_up<'p>(
         identity
     ))?;
     let register_micros = micros_between(began, timer.now());
+    let waits = timer.tally().take();
     let radio = held(&mut slot)?;
     let coexisting = radio.enter_coex(coex);
     let (cold, walker) = WifiCold::from_partition(wifi);
@@ -424,6 +490,7 @@ pub(crate) async fn bring_up<'p>(
         phy,
         open,
         register_micros,
+        waits,
         power_detector,
         clocked,
         first,

@@ -285,7 +285,7 @@ impl oer_portable_diagnostics::DiagnosticPath for PhyTargetPortError {
 /// error. Applications must not reinterpret a write action or select another
 /// polling bound at this boundary.
 pub async fn complete_final_i2c<D: PhyShortDelay>(
-    timer: &(impl Timer + oer_portable_settle::SettleCounter),
+    timer: &(impl Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally),
     mut binding: PhyRegisterFinalI2cBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<PhyRegisterCompletion, PhyTargetPortError> {
@@ -442,7 +442,7 @@ define_i2c_executor!(
     PhyTxPowerCompletion
 );
 pub async fn complete_bluetooth_i2c<D: PhyShortDelay>(
-    timer: &(impl Timer + oer_portable_settle::SettleCounter),
+    timer: &(impl Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally),
     mut binding: PhyBluetoothI2cBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<PhyBluetoothTxPowerCompletion, PhyTargetPortError> {
@@ -473,7 +473,7 @@ pub async fn complete_bluetooth_i2c<D: PhyShortDelay>(
 }
 
 pub async fn complete_i2c_configuration<D: PhyShortDelay>(
-    timer: &(impl Timer + oer_portable_settle::SettleCounter),
+    timer: &(impl Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally),
     mut binding: PhyColdI2cConfigurationBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<crate::analog::i2c::PhyRfInitPrefixCompletion, PhyTargetPortError> {

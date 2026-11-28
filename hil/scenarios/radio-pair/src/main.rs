@@ -86,8 +86,8 @@ const STEP: Duration = Duration::from_secs(5);
 /// The bring-up: the PHY's registration and calibration, the MAC's cold
 /// start, the channel.
 const BRING_UP: Duration = Duration::from_secs(30);
-/// Case C's rounds, and how long they may take: about 75 s, past R5's end
-/// (about 60 s); R1 to R5 take their counts inside their own windows.
+/// Case C's rounds, and how long they may take: about 75 s, past R6's end
+/// (about 65 s); R1 to R6 take their counts inside their own windows.
 const ROUNDS: u32 = 10_000;
 const ROUNDS_TIMEOUT: Duration = Duration::from_secs(300);
 /// The receiver's windows (`tasks/277`, `281`).
@@ -97,6 +97,8 @@ const STALL_MS: u32 = 100;
 const DRAIN_MS: u32 = 100;
 const EXIT_MS: u32 = 1_000;
 const TURNS: u32 = 50;
+/// R6's turns: each runs a tracking pass with both branches due.
+const TRACKED_TURNS: u32 = 10;
 const TURN_MS: u32 = 200;
 /// The pass thresholds of `tasks/277` and `281`.
 const R1_UNITS: u32 = 1_000;
@@ -208,10 +210,12 @@ fn bring_up(cx: &mut Cx<'_>) -> Result<(), Failure> {
             BroughtUp::Up {
                 station: up,
                 register_micros,
+                waits,
                 ..
             } => {
                 *station = up;
                 keep(cx, role, "register-micros", &register_micros);
+                keep(cx, role, "register-waits", &waits);
             }
             other => return Err(Failure::Fail(format!("{role}: bring-up: {other:?}"))),
         }
@@ -305,18 +309,20 @@ const fn anomalies(counts: &service::Counts) -> u32 {
         .saturating_add(counts.doorbell_anomalies)
 }
 
-/// `TURNS` turns of `kind` on the receiver, kept as `<name>-turns`, then the
-/// receiver's counters as `counters-<name>`. Each turn passes R4's
-/// thresholds, whatever its kind.
+/// `count` turns of `kind` on the receiver, kept as `<name>-turns`, then
+/// the receiver's counters as `counters-<name>`. Each turn passes R4's
+/// thresholds, whatever its kind; a tracked turn's conversions were all
+/// read ready, and there was at least one.
 fn turns(
     cx: &mut Cx<'_>,
     timeline: &mut Timeline,
     failed: &mut Vec<String>,
     kind: TurnKind,
+    count: u32,
     name: &str,
 ) -> Result<(), Failure> {
     let mut turns = Vec::new();
-    for turn in 0..TURNS {
+    for turn in 0..count {
         let began = timeline.now();
         let turned = cx.device(RECEIVER)?.call(
             Turn {
@@ -340,11 +346,14 @@ fn turns(
                     && after.mismatched == 0
                     && anomalies(before) == 0
                     && anomalies(after) == 0
-                    && matches!(
-                        (kind, rf),
+                    && match (kind, rf) {
                         (TurnKind::Restart, TurnedRf::Kept)
-                            | (TurnKind::CloseAndWake, TurnedRf::ClosedAndWoken { .. })
-                    )
+                        | (TurnKind::CloseAndWake, TurnedRf::ClosedAndWoken { .. }) => true,
+                        (TurnKind::CloseWakeAndTrack, TurnedRf::Tracked { conversions, .. }) => {
+                            conversions.ready > 0 && conversions.not_ready == 0
+                        }
+                        _ => false,
+                    }
             }
             _ => false,
         };
@@ -361,7 +370,7 @@ fn turns(
     counters(cx, RECEIVER, &format!("counters-{name}"))
 }
 
-/// Case C's rounds on the sender while the receiver serves R1 to R5; each
+/// Case C's rounds on the sender while the receiver serves R1 to R6; each
 /// R's verdict is recorded, and the case fails naming every R that did.
 fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
     // R0: the ring served once before the rounds, so that R1 begins with it
@@ -456,9 +465,32 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
         }
         (stood, exit) => failed.push(format!("R3: {stood:?}, {exit:?}")),
     }
-    // R4: the turns, RF kept open; R5: the turns with RF closed and woken.
-    turns(cx, &mut timeline, &mut failed, TurnKind::Restart, "r4")?;
-    turns(cx, &mut timeline, &mut failed, TurnKind::CloseAndWake, "r5")?;
+    // R4: the turns, RF kept open; R5: the turns with RF closed and woken;
+    // R6: R5's with a tracking pass whose both branches are due.
+    turns(
+        cx,
+        &mut timeline,
+        &mut failed,
+        TurnKind::Restart,
+        TURNS,
+        "r4",
+    )?;
+    turns(
+        cx,
+        &mut timeline,
+        &mut failed,
+        TurnKind::CloseAndWake,
+        TURNS,
+        "r5",
+    )?;
+    turns(
+        cx,
+        &mut timeline,
+        &mut failed,
+        TurnKind::CloseWakeAndTrack,
+        TRACKED_TURNS,
+        "r6",
+    )?;
     // The sender's rounds.
     let sent = cx.device(SENDER)?.wait(rounds, ROUNDS_TIMEOUT)?;
     keep(cx, SENDER, "rounds", &sent);

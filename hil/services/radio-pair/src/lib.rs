@@ -247,14 +247,57 @@ pub struct BringUp;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum BroughtUp {
     /// Up and receiving: the station's and the access point's addresses,
-    /// and the PHY's registration's time in microseconds.
+    /// the PHY's registration's time in microseconds and what it waited.
     Up {
         station: [u8; 6],
         ap: [u8; 6],
         register_micros: u32,
+        waits: Waits,
     },
     Failed(Failure),
     Refused(Refusal),
+}
+
+/// One kind of the waits of an operation: how many, the time they asked and
+/// the time they took, in microseconds. Each sum saturates.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Wait {
+    pub count: u32,
+    pub asked_micros: u32,
+    pub taken_micros: u32,
+}
+
+/// An operation's waits by kind (the PHY's `executor::wait::Waited`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Waits {
+    /// Short settles, spun.
+    pub settle_spun: Wait,
+    /// Settles longer than a short one, on the timer.
+    pub settle_timed: Wait,
+    /// Completion waits, on the timer.
+    pub completion: Wait,
+    /// Waits for a busy bus, on the timer.
+    pub bus_busy: Wait,
+    /// The step engines' waits before their next observation.
+    pub engine_retry: Wait,
+    /// Cooperative yields: none asks time.
+    pub yields: Wait,
+}
+
+/// The power detector's conversions of a tracking pass, each read from the
+/// end of its 2 µs settle.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Conversions {
+    /// Conversions read ready.
+    pub ready: u32,
+    /// Conversions that ended unready at their bound.
+    pub not_ready: u32,
+    /// The earliest and the latest a ready conversion was read, in
+    /// microseconds; zero when none was.
+    pub earliest_micros: u32,
+    pub latest_micros: u32,
+    /// The most readiness observations one conversion made.
+    pub most_observations: u16,
 }
 
 /// The receive path's counters now.
@@ -676,6 +719,10 @@ pub enum TurnKind {
     Restart,
     /// The PHY closes RF and wakes it, with the tracking pass when one is due.
     CloseAndWake,
+    /// The PHY closes RF, wakes it and runs a tracking pass with the
+    /// calibration threshold at zero, so that the common and the transmit
+    /// branches are due; then the vendor's threshold again.
+    CloseWakeAndTrack,
 }
 
 /// What became of RF in a turn.
@@ -685,6 +732,14 @@ pub enum TurnedRf {
     Kept,
     /// RF was closed and woken, in these microseconds each.
     ClosedAndWoken { close_micros: u32, wake_micros: u32 },
+    /// RF was closed, woken and tracked, in these microseconds each, with
+    /// the pass's conversions.
+    Tracked {
+        close_micros: u32,
+        wake_micros: u32,
+        track_micros: u32,
+        conversions: Conversions,
+    },
 }
 
 /// The answer to [`Turn`].

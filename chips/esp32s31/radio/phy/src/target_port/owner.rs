@@ -144,7 +144,11 @@ fn release_phy_clocks<B: PlatformClockBackend>(
 /// transaction and records its fault before reset.
 #[must_use = "PHY registration must be driven to a terminal result"]
 pub fn register<'a, 'p: 'a, B: PlatformClockBackend + 'a, P, D, O>(
-    timer: &'a (impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
+    timer: &'a (
+            impl oer_portable_cooperate::CooperativeTimer
+            + oer_portable_settle::SettleCounter
+            + crate::executor::wait::WaitTally
+        ),
     radio: RadioDomain<B>,
     place: PhyPlace<'p>,
     platform: &'a mut P,
@@ -228,7 +232,11 @@ where
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
 pub fn close<'a, B: PlatformClockBackend + 'a, P, D>(
-    timer: &'a (impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
+    timer: &'a (
+            impl oer_portable_cooperate::CooperativeTimer
+            + oer_portable_settle::SettleCounter
+            + crate::executor::wait::WaitTally
+        ),
     radio: RadioDomain<B>,
     phy: &'a mut RegisteredPhy<'_>,
     open: RfOpen,
@@ -287,7 +295,11 @@ where
 /// Cancellation, including before the first poll, quarantines the owned
 /// transaction and records its fault before reset.
 pub fn wake<'a, B: PlatformClockBackend + 'a, D>(
-    timer: &'a (impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
+    timer: &'a (
+            impl oer_portable_cooperate::CooperativeTimer
+            + oer_portable_settle::SettleCounter
+            + crate::executor::wait::WaitTally
+        ),
     radio: RadioDomain<B>,
     phy: &'a RegisteredPhy<'_>,
     closed: RfClosed,
@@ -334,7 +346,11 @@ pub async fn select_channel<
     P,
     O: PhyTargetObserver,
 >(
-    timer: &'a (impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
+    timer: &'a (
+            impl oer_portable_cooperate::CooperativeTimer
+            + oer_portable_settle::SettleCounter
+            + crate::executor::wait::WaitTally
+        ),
     channel_or_frequency: u16,
     cbw: u8,
     mut transaction: oer_chips_esp32s31_hal::radio::ieee80211::channel::ChannelTransaction<
@@ -381,7 +397,11 @@ pub async fn switch_channel<
     P,
     O: PhyTargetObserver,
 >(
-    timer: &'a (impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
+    timer: &'a (
+            impl oer_portable_cooperate::CooperativeTimer
+            + oer_portable_settle::SettleCounter
+            + crate::executor::wait::WaitTally
+        ),
     channel_or_frequency: u16,
     cbw: u8,
     mut transaction: oer_chips_esp32s31_hal::radio::ieee80211::channel::ChannelTransaction<
@@ -430,6 +450,7 @@ pub fn track<'a, B: PlatformClockBackend + 'a, P, D, O>(
             impl oer_portable_cooperate::CooperativeTimer
             + oer_portable_settle::SettleCounter
             + oer_portable_clock::Clock
+            + crate::executor::wait::WaitTally
         ),
     radio: RadioDomain<B>,
     phy: &'a mut RegisteredPhy<'_>,

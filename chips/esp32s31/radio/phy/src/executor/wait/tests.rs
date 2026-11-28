@@ -280,4 +280,58 @@ mod delays {
         );
         assert_eq!(observed, 0);
     }
+
+    /// A tally that keeps every wait it is told of.
+    #[derive(Default)]
+    struct Kept(core::cell::RefCell<Vec<(super::super::Waited, u64, u64)>>);
+
+    impl super::super::WaitTally for Kept {
+        const COUNTS: bool = true;
+        fn waited(&self, kind: super::super::Waited, asked: u64, taken: u64) {
+            self.0.borrow_mut().push((kind, asked, taken));
+        }
+    }
+
+    #[test]
+    fn a_counted_timer_names_each_wait_with_what_it_asked_and_took() {
+        use super::super::{PhyTimer, Waited};
+        let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(100));
+        let kept = Kept::default();
+        let timer = PhyTimer::counted(&clock, &clock, &kept);
+        assert_eq!(
+            poll(pin!(delay::<Short, _>(&timer, Kind::Settle, 20))),
+            Poll::Ready(Ok(()))
+        );
+        for (kind, micros, late) in [
+            (Kind::Settle, 21, 4),
+            (Kind::Completion, 1, 2),
+            (Kind::BusBusy, 2, 0),
+        ] {
+            let mut wait = pin!(delay::<Short, _>(&timer, kind, micros));
+            assert_eq!(poll(wait.as_mut()), Poll::Pending);
+            clock.advance(Duration::from_micros(micros + late)).unwrap();
+            assert_eq!(poll(wait.as_mut()), Poll::Ready(Ok(())));
+        }
+        assert_eq!(
+            *kept.0.borrow(),
+            [
+                (Waited::SettleSpun, 20, 0),
+                (Waited::SettleTimed, 21, 25),
+                (Waited::Completion, 1, 3),
+                (Waited::BusBusy, 2, 2),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_refused_wait_is_not_counted() {
+        let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(u64::MAX - 1));
+        let kept = Kept::default();
+        let timer = super::super::PhyTimer::counted(&clock, &clock, &kept);
+        assert_eq!(
+            poll(pin!(delay::<Short, _>(&timer, Kind::Completion, 2))),
+            Poll::Ready(Err(super::super::PhyWaitRefused::Deadline))
+        );
+        assert!(kept.0.borrow().is_empty());
+    }
 }

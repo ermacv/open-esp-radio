@@ -66,7 +66,11 @@ pub struct PhyRegisterFailed {
 }
 
 pub(super) async fn execute_registration<P, R, D, O>(
-    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
+    timer: &(
+         impl oer_portable_cooperate::CooperativeTimer
+         + oer_portable_settle::SettleCounter
+         + crate::executor::wait::WaitTally
+     ),
     transition: &mut PhyRegisterTransition,
     state: &mut PhyState,
     platform: &mut P,
@@ -97,7 +101,11 @@ where
     reason = "the sealed physical routes use the private shared engine"
 )]
 pub(super) fn register_state<'a, P, R, D, O>(
-    timer: &'a (impl oer_portable_cooperate::CooperativeTimer + oer_portable_settle::SettleCounter),
+    timer: &'a (
+            impl oer_portable_cooperate::CooperativeTimer
+            + oer_portable_settle::SettleCounter
+            + crate::executor::wait::WaitTally
+        ),
     platform: &'a mut P,
     registers: &'a mut R,
     state: &'a mut PhyState,

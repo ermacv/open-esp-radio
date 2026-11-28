@@ -9,6 +9,7 @@ pub(crate) mod wifi_i2c;
 pub(crate) use io::Registers;
 use oer_portable_cooperate::CooperativeTimer as Timer;
 
+use crate::executor::wait::Waited;
 use crate::{
     analog::pbus::{
         PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusClearOutcome, PhyPbusClearTransition,
@@ -589,6 +590,9 @@ pin_project_lite::pin_project! {
             #[pin]
             wait: Option<F>,
             wait_at: Instant,
+            // When the engine last gave the executor up, for a timer that
+            // counts its waits.
+            waited_from: Instant,
         },
         Power {
             child: Option<crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'a>>,
@@ -639,7 +643,7 @@ trait Engine: Future<Output = Result<(), Failure>> {
 impl<
     'a,
     R: Registers,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: super::wait::PhyShortDelay,
@@ -694,7 +698,7 @@ impl<
 impl<
     'a,
     R: Registers,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: super::wait::PhyShortDelay,
@@ -726,6 +730,12 @@ impl<
                         );
                     }
                 }
+                if T::COUNTS {
+                    if let RouteProj::Transport { waited_from, .. } = &route {
+                        let taken = clock.now().saturating_duration_since(**waited_from);
+                        this.timer.waited(Waited::Yield, 0, taken.as_micros());
+                    }
+                }
                 *this.gate = Gate::Idle;
             }
             if *this.gate != Gate::Idle {
@@ -755,6 +765,17 @@ impl<
                     break Poll::Pending;
                 }
                 resumed = Some((at, clock.now()));
+                if T::COUNTS {
+                    if let RouteProj::Transport { waited_from, .. } = &route {
+                        let asked = at.saturating_duration_since(**waited_from);
+                        let taken = clock.now().saturating_duration_since(**waited_from);
+                        this.timer.waited(
+                            Waited::EngineRetry,
+                            asked.as_micros(),
+                            taken.as_micros(),
+                        );
+                    }
+                }
                 *this.gate = Gate::Idle;
             }
             let (step, now) = match &mut route {
@@ -846,6 +867,11 @@ impl<
                             **wait_at = clock.now();
                         }
                     }
+                    if T::COUNTS {
+                        if let RouteProj::Transport { waited_from, .. } = &mut route {
+                            **waited_from = clock.now();
+                        }
+                    }
                     break Poll::Pending;
                 }
                 Step::WaitAt(at) => {
@@ -863,10 +889,18 @@ impl<
                     }
                 }
             };
-            let RouteProj::Transport { wait_at, .. } = &mut route else {
+            let RouteProj::Transport {
+                wait_at,
+                waited_from,
+                ..
+            } = &mut route
+            else {
                 break Poll::Ready(Err(Failure::Binding));
             };
             **wait_at = at;
+            if T::COUNTS {
+                **waited_from = clock.now();
+            }
             if at <= clock.now() {
                 *this.gate = Gate::Ready;
             } else {
@@ -934,7 +968,7 @@ fn driver<
     'j,
     D: super::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
 >(
     input: Input<'a, 'j>,
     registers: &'a mut R,
@@ -950,6 +984,7 @@ fn driver<
                 stats,
                 wait: None,
                 wait_at: Instant::EPOCH,
+                waited_from: Instant::EPOCH,
             }
         }
         Input::Power { child, measured } => Route::Power {
@@ -975,7 +1010,7 @@ pub(crate) fn drive<
     'j,
     D: super::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
 >(
     job: &'a mut Job<'j>,
     registers: &'a mut R,
@@ -1011,7 +1046,7 @@ pub(crate) fn drive_calibration<
     'j,
     D: super::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer + oer_portable_settle::SettleCounter,
+    T: Timer + oer_portable_settle::SettleCounter + crate::executor::wait::WaitTally,
 >(
     job: &'a mut Job<'j>,
     registers: &'a mut R,
