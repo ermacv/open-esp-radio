@@ -960,36 +960,48 @@ async fn power_turn(
 ) -> Result<PowerTurned, Failure> {
     use oer_chips_esp32s31_hal::radio::ieee80211::client::WifiInitialization;
     let began = timer.now();
+    crate::diagnostic::phase(0x4500 + 1);
     let closed = apart!(oer_chips_esp32s31_radio_phy::close::<_, (), RomShortDelay>(
         timer, radio, phy, open, platform
     ))
     .map_err(|_| (POWER_TURN, 0))?;
+    crate::diagnostic::phase(0x4500 + 2);
     let close_micros = crate::radio::micros_between(began, timer.now());
     let began = timer.now();
+    crate::diagnostic::phase(0x4500 + 3);
     let powered = WifiClocked::from_running(access, clocks_on)
         .release_clocks(radio)
         .map_err(|_| (POWER_TURN, 1))?
         .into_powered();
+    crate::diagnostic::phase(0x4500 + 4);
     let absent = radio.leave_coex(held.coex.take().ok_or((POWER_TURN, 2))?);
+    crate::diagnostic::phase(0x4500 + 5);
     let power = held.power.take().ok_or((POWER_TURN, 3))?;
+    crate::diagnostic::phase(0x4500 + 6);
     let cold = powered
         .power_down(radio, power, &absent)
         .map_err(|_| (POWER_TURN, 4))?;
+    crate::diagnostic::phase(0x4500 + 7);
     let down = pair::power_words(radio.observe_power(), held.clocks());
+    crate::diagnostic::phase(0x4500 + 8);
     let (powered, power) = cold
         .power_up(radio, held.clocks())
         .map_err(|_| (POWER_TURN, 5))?;
+    crate::diagnostic::phase(0x4500 + 9);
     let (mut clocked, first) = powered
         .enable_clocks(radio, held.clocks())
         .map_err(|_| (POWER_TURN, 6))?;
+    crate::diagnostic::phase(0x4520);
     clocked
         .set_initialized(radio, WifiInitialization::Initialized)
         .map_err(|_| (POWER_TURN, 7))?;
     held.power = Some(power);
     held.coex = Some(radio.enter_coex(absent));
+    crate::diagnostic::phase(0x4500 + 10);
     let up = pair::power_words(radio.observe_power(), held.clocks());
     let power_micros = crate::radio::micros_between(began, timer.now());
     let began = timer.now();
+    crate::diagnostic::phase(0x4500 + 11);
     let open = apart!(oer_chips_esp32s31_radio_phy::wake::<_, RomShortDelay>(
         timer,
         radio,
@@ -999,7 +1011,9 @@ async fn power_turn(
     ))
     .map_err(|_| (POWER_TURN, 8))?;
     let wake_micros = crate::radio::micros_between(began, timer.now());
+    crate::diagnostic::phase(0x4500 + 12);
     let open = apart!(track_if_due(radio, phy, open, timer, platform))?;
+    crate::diagnostic::phase(0x4500 + 13);
     let reset = radio.reset_wifi_mac_block(clocked.clocks_on(), first, crate::radio::CBW);
     Ok(PowerTurned {
         open,
