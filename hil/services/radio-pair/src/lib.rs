@@ -65,6 +65,73 @@ oer_protocols_hil_protocol::messages! {
     topic Bursted = "radio-pair/bursted";
     endpoint HandOver = "radio-pair/hand-over" => HandedOver;
     topic HandedOver = "radio-pair/handed-over";
+    endpoint Profile = "radio-pair/profile" => Profiled;
+    topic Profiled = "radio-pair/profiled";
+}
+
+/// The most samples a profile page holds: few enough that a page is no
+/// large variant of its answer.
+pub const PROFILE_PAGE: usize = 14;
+
+/// A page of the registration's program-counter samples, from sample
+/// `from` on (`tasks/448`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Profile {
+    pub from: u16,
+}
+
+/// One kept sample: the interrupted program counter and the interrupted
+/// code's raw CLIC level (0 for thread mode).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct ProfileSample {
+    pub pc: u32,
+    pub level: u8,
+}
+
+/// The cache's counts of one bus over the registration.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct BusCounts {
+    pub hits: u32,
+    pub misses: u32,
+    pub next_level_reads: u32,
+    /// A count overflowed: the counts are not exact.
+    pub overflowed: bool,
+}
+
+/// What the registration's sampling session saw besides its samples.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct ProfileSummary {
+    pub period_us: u32,
+    /// The ticks the session reported.
+    pub ticks: u32,
+    /// The keep-stride after the buffer's normalize.
+    pub stride: u32,
+    /// The samples kept in all.
+    pub kept: u16,
+    /// Ticks that found no session.
+    pub stray: u32,
+    /// The alarm refused a target before the stop.
+    pub cut: bool,
+    /// The sampler's handler's entries and the cycles spent inside them.
+    pub handler_entries: u32,
+    pub handler_cycles: u32,
+    /// The adopted CPU rate's cycles of one microsecond.
+    pub cycles_per_micro: u32,
+    /// Instruction bus 0 (hart 0's fetches) and data bus 0.
+    pub ibus0: BusCounts,
+    pub dbus0: BusCounts,
+}
+
+/// The answer to [`Profile`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Profiled {
+    Page {
+        summary: ProfileSummary,
+        samples: heapless::Vec<ProfileSample, PROFILE_PAGE>,
+    },
+    /// The image samples nothing, or the session was not taken back.
+    NoProfile,
+    Refused(Refusal),
 }
 
 /// Why an endpoint answered without acting: the step it needs is not the
@@ -813,6 +880,7 @@ oer_protocols_hil_agent::service! {
         Stall(Stall) => command stall,
         Turn(Turn) => command turn,
         HandOver(HandOver) => command hand_over,
+        Profile(Profile) => command profile,
     }
 }
 

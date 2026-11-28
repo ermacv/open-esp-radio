@@ -27,9 +27,9 @@ use std::{
 
 use oer_hil_services_radio_pair::{
     self as service, BringUp, BroughtUp, Counters, Expect, Expecting, HandOver, HandedOver,
-    ReceiveCounters, ReceiverRequest, Record, Round, SenderRequest, Sent, SnapshotCold,
-    SnapshotPage, SnapshotUp, Stall, Stood, Stop, Stopped, Target, Targeted, Turn, TurnKind,
-    Turned, TurnedRf, Window, Windowed,
+    Profile, Profiled, ReceiveCounters, ReceiverRequest, Record, Round, SenderRequest, Sent,
+    SnapshotCold, SnapshotPage, SnapshotUp, Stall, Stood, Stop, Stopped, Target, Targeted, Turn,
+    TurnKind, Turned, TurnedRf, Window, Windowed,
 };
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{Case, Cx, Failure, Role, Scenario, check};
@@ -216,6 +216,9 @@ fn bring_up(cx: &mut Cx<'_>) -> Result<(), Failure> {
                 *station = up;
                 keep(cx, role, "register-micros", &register_micros);
                 keep(cx, role, "register-waits", &waits);
+                if role == RECEIVER {
+                    profile(cx, role)?;
+                }
             }
             other => return Err(Failure::Fail(format!("{role}: bring-up: {other:?}"))),
         }
@@ -229,6 +232,39 @@ fn bring_up(cx: &mut Cx<'_>) -> Result<(), Failure> {
         counters(cx, role, "counters-up")?;
     }
     Ok(())
+}
+
+/// The registration's profile (`tasks/448`), page by page: its summary
+/// and every kept sample as `[pc, level]`; nothing when the image samples
+/// nothing. `radio-pair-profile` names the samples with the image's ELF.
+fn profile(cx: &mut Cx<'_>, role: &str) -> Result<(), Failure> {
+    let mut samples = Vec::new();
+    loop {
+        let from = u16::try_from(samples.len())
+            .map_err(|_| Failure::Fail(format!("{role}: too many samples")))?;
+        match cx.device(role)?.call(Profile { from }, STEP)? {
+            Profiled::Page {
+                summary,
+                samples: page,
+            } => {
+                let last = page.is_empty()
+                    || samples.len().saturating_add(page.len()) >= usize::from(summary.kept);
+                samples.extend(
+                    page.iter()
+                        .map(|sample| [sample.pc, u32::from(sample.level)]),
+                );
+                if last {
+                    keep(cx, role, "register-profile", &summary);
+                    keep(cx, role, "register-samples", &samples);
+                    return Ok(());
+                }
+            }
+            Profiled::NoProfile => return Ok(()),
+            Profiled::Refused(refusal) => {
+                return Err(Failure::Fail(format!("{role}: profile: {refusal:?}")));
+            }
+        }
+    }
 }
 
 fn addresses() -> Result<Addresses, Failure> {

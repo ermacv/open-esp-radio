@@ -90,17 +90,18 @@ static RING_PLACE: static_cell::StaticCell<MaybeUninit<Ring>> = static_cell::Sta
 oer_chips_family_platform_interrupt_table::interrupt_table! {
     lines: oer_chips_family_platform_runtime::interrupts::LINES,
     handler_attributes: [];
-    contexts { app: 1; radio_exec: 2; radio_irq: 3; }
+    contexts { app: 1; radio_exec: 2; radio_irq: 3; profile: 5; }
     wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
     radio: RadioToken = FromCpu2Irq => oer_chips_family_platform_executor::Round<RadioTasks>, line 17, context radio_exec, hart 0, Executor;
     radio_alarm: RadioAlarm = SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
     console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
     app_alarm: AppAlarm = SystimerAlarm1 => oer_chips_family_platform_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
+    sampler: SamplerToken = oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmInterrupt => crate::profile::on_sampler, line 19, context profile, hart 0, Hardware;
 }
 
 oer_chips_family_platform_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
-        session(parts: SessionParts, work: crate::radio::Work<ReceiverCommand, Outcome>, reset: u32) = session_task;
+        session(parts: SessionParts, work: crate::radio::Work<ReceiverCommand, Outcome>, reset: u32, profiler: crate::profile::Profiler) = session_task;
     }
 }
 oer_chips_family_platform_executor::tasks! {
@@ -136,6 +137,8 @@ fn main(
             runtime_entropy,
             runtime_watchdogs,
             runtime_cycles,
+            runtime_timg1,
+            runtime_cache,
         ),
         _psram,
         mut adopted,
@@ -164,6 +167,8 @@ fn main(
                 hardware.entropy,
                 hardware.watchdogs,
                 hardware.cycles,
+                hardware.timg1_alarm,
+                hardware.cache_counters,
             )
         },
     ) {
@@ -200,6 +205,14 @@ fn main(
         timer.alarm1,
     )
     .unwrap_or_else(|failure| failure.reset());
+    let Some(profiler) = crate::profile::Profiler::new(
+        runtime_timg1,
+        runtime_cache,
+        adopted.router(),
+        interrupts.sampler,
+    ) else {
+        fail(name!("profiler"; 32));
+    };
     // No Wi-Fi interrupt consumer is installed: the session polls.
     let mut wifi_irqs = runtime_wifi_interrupts;
     wifi_irqs.mac.mask_all_mac_interrupts();
@@ -275,7 +288,15 @@ fn main(
             cycles_per_micro,
         },
     };
-    if RadioTasks::session(&radio_executor, parts, work, u32::from(reset_cause.code())).is_err() {
+    if RadioTasks::session(
+        &radio_executor,
+        parts,
+        work,
+        u32::from(reset_cause.code()),
+        profiler,
+    )
+    .is_err()
+    {
         fail(name!("session-task"; 32));
     }
     let (mut router, hart) = match adopted.enable_interrupts() {
@@ -678,6 +699,13 @@ pub(crate) enum Answer {
     Stood(service::Stood),
     Turned(service::Turned),
     HandedOver(service::HandedOver),
+    Profiled(service::Profiled),
+}
+
+impl From<service::Profiled> for Answer {
+    fn from(answer: service::Profiled) -> Self {
+        Self::Profiled(answer)
+    }
 }
 
 impl From<service::SnapshotPage> for Answer {
@@ -768,6 +796,7 @@ impl oer_hil_agent::serve::Answer for Answer {
             Self::Stood(answer) => frame.write(answer),
             Self::Turned(answer) => frame.write(answer),
             Self::HandedOver(answer) => frame.write(answer),
+            Self::Profiled(answer) => frame.write(answer),
         }
     }
 }
@@ -891,9 +920,10 @@ fn session_future(
     parts: SessionParts,
     inbox: crate::radio::Work<ReceiverCommand, Outcome>,
     reset: u32,
+    profiler: crate::profile::Profiler,
 ) -> SessionRun {
     async move {
-        match worker(parts, inbox, reset).await {
+        match worker(parts, inbox, reset, profiler).await {
             Ok(never) => match never {},
             Err(Ended::Console) => fail(name!("console"; 32)),
         }
@@ -904,11 +934,14 @@ async fn session_task(
     parts: SessionParts,
     inbox: crate::radio::Work<ReceiverCommand, Outcome>,
     reset: u32,
+    profiler: crate::profile::Profiler,
 ) {
     let Some(place) = SESSION.try_take() else {
         fail(name!("session-place"; 32));
     };
-    place.future(|| session_future(parts, inbox, reset)).await;
+    place
+        .future(|| session_future(parts, inbox, reset, profiler))
+        .await;
 }
 
 /// The first `N` items of `items`, or `None` when it has fewer.
@@ -1044,6 +1077,7 @@ fn refuse(identity: Reply<'_>, request: ReceiverCommand, refusal: Refusal) {
         ReceiverCommand::Stall(_) => answer(identity, service::Stood::Refused(refusal)),
         ReceiverCommand::Turn(_) => answer(identity, service::Turned::Refused(refusal)),
         ReceiverCommand::HandOver(_) => answer(identity, service::HandedOver::Refused(refusal)),
+        ReceiverCommand::Profile(_) => answer(identity, service::Profiled::Refused(refusal)),
     }
 }
 
@@ -1063,6 +1097,7 @@ async fn worker(
     parts: SessionParts,
     mut inbox: crate::radio::Work<ReceiverCommand, Outcome>,
     reset: u32,
+    mut profiler: crate::profile::Profiler,
 ) -> Result<core::convert::Infallible, Ended> {
     let identity = parts.identity;
     let cycles = parts.cycles;
@@ -1086,7 +1121,8 @@ async fn worker(
             &mut radio_memory,
             &mut phy_memory,
             &timer,
-            &mut platform
+            &mut platform,
+            &mut profiler
         ))?;
         let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
         let table = RxTable::place::<ChipDma>(table).map_err(|_| (phase::RING, 1))?;
@@ -1183,7 +1219,12 @@ async fn worker(
         station,
         held,
     ) = match up.await {
-        Ok(up) => up,
+        Ok(up) => {
+            let cycles_per_micro = oer_portable_settle::SettleLimit::new(Duration::from_micros(1))
+                .map_or(0, |micro| cycles.cycles(micro));
+            profiler.end(cycles_per_micro).await;
+            up
+        }
         Err((phase, index)) => {
             answer(
                 bring,
@@ -1230,6 +1271,7 @@ async fn worker(
                 id.answer(Outcome::Marks(Marks { taken, answering }));
             }
             ReceiverCommand::SnapshotUp(request) => answer(id, pair::page(&up, request.page)),
+            ReceiverCommand::Profile(request) => answer(id, profiler.page(request.from)),
             ReceiverCommand::BringUp(_) => {
                 answer(id, service::BroughtUp::Refused(Refusal::AlreadyUp));
             }
@@ -1594,7 +1636,8 @@ async fn worker(
                     | ReceiverCommand::ReceiveCounters(_)
                     | ReceiverCommand::Stop(_)
                     | ReceiverCommand::Turn(_)
-                    | ReceiverCommand::HandOver(_) => {}
+                    | ReceiverCommand::HandOver(_)
+                    | ReceiverCommand::Profile(_) => {}
                 }
             }
         }

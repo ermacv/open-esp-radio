@@ -113,6 +113,19 @@ pub(crate) fn saturated(micros: u64) -> u32 {
     u32::try_from(micros).unwrap_or(u32::MAX)
 }
 
+/// What the image does right before and right after the PHY's
+/// registration: the receiver's profile (`tasks/448`), nothing in the
+/// sender.
+pub(crate) trait AroundRegister {
+    fn before(&mut self);
+    fn after(&mut self);
+}
+
+impl AroundRegister for () {
+    fn before(&mut self) {}
+    fn after(&mut self) {}
+}
+
 /// A failure: its phase and its index.
 pub(crate) type Failure = (u32, u32);
 
@@ -355,6 +368,7 @@ pub(crate) async fn bring_up<'p>(
     memory: &'p mut MaybeUninit<PhyState>,
     timer: &CooperativeTimer<'_>,
     platform: &mut (),
+    around: &mut impl AroundRegister,
 ) -> Result<Brought<'p>, Failure> {
     let SessionParts {
         radio,
@@ -379,12 +393,16 @@ pub(crate) async fn bring_up<'p>(
     } = partitions;
     let (mut phy, cold) = PhyPlace::new(right, memory).fill();
     let _before = timer.tally().take();
+    around.before();
     let began = timer.now();
     let open = register(
         &mut radio, &mut phy, cold, timer, platform, &clocks, identity,
     )
-    .await?;
-    let register_micros = micros_between(began, timer.now());
+    .await;
+    let ended = timer.now();
+    around.after();
+    let open = open?;
+    let register_micros = micros_between(began, ended);
     let waits = timer.tally().take();
     let coexisting = radio.enter_coex(coex);
     let (cold, walker) = WifiCold::from_partition(wifi);

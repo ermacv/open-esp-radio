@@ -15,6 +15,8 @@ oer-tools-hil-harness = { path = "../../../tools/hil/harness" }
 oer-hil-services-radio-pair = { path = "../../services/radio-pair" }
 serde_json = "1.0"
 serde = "1.0"
+oer-tools-analysis-elf = { path = "../../../tools/analysis/elf" }
+oer-tools-image-checks = { path = "../../../tools/image/checks" }
 
 [[bin]]
 name = "oer-hil-scenarios-radio-pair"
@@ -23,6 +25,10 @@ path = "src/main.rs"
 [[bin]]
 name = "radio-pair-compare"
 path = "src/bin/compare.rs"
+
+[[bin]]
+name = "radio-pair-profile"
+path = "src/bin/profile.rs"
 
 [lints]
 workspace = true

@@ -203,6 +203,35 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
             hang,
         },
     });
+    let bus = BusCounts {
+        hits: u32::MAX,
+        misses: u32::MAX,
+        next_level_reads: u32::MAX,
+        overflowed: true,
+    };
+    let profiled = Profiled::Page {
+        summary: ProfileSummary {
+            period_us: u32::MAX,
+            ticks: u32::MAX,
+            stride: u32::MAX,
+            kept: u16::MAX,
+            stray: u32::MAX,
+            cut: true,
+            handler_entries: u32::MAX,
+            handler_cycles: u32::MAX,
+            cycles_per_micro: u32::MAX,
+            ibus0: bus,
+            dbus0: bus,
+        },
+        samples: core::iter::repeat_n(
+            ProfileSample {
+                pc: u32::MAX,
+                level: u8::MAX,
+            },
+            PROFILE_PAGE,
+        )
+        .collect(),
+    };
     for (name, length) in [
         ("snapshot page", encoded_length(&page)),
         ("counters", encoded_length(&counters)),
@@ -212,6 +241,7 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         ("turned", encoded_length(&turned)),
         ("tracked", encoded_length(&tracked)),
         ("brought up", encoded_length(&up)),
+        ("profiled", encoded_length(&profiled)),
         (
             "bursted",
             encoded_length(&Bursted::Sent {
@@ -232,6 +262,7 @@ fn every_request_fits_the_images_payload_bound() {
     for length in [
         encoded_length(&SnapshotCold { page: u8::MAX }),
         encoded_length(&SnapshotUp { page: u8::MAX }),
+        encoded_length(&Profile { from: u16::MAX }),
         encoded_length(&Round { rounds: u32::MAX }),
         encoded_length(&Single { length: u16::MAX }),
         encoded_length(&Expect { sender: [0xff; 6] }),
@@ -267,7 +298,7 @@ fn both_images_share_the_radio_s_endpoints_and_keep_their_own_apart() {
     // and their four answers: the two snapshots share their page.
     assert_eq!(shared.len(), 9);
     // Each side's own: the sender four endpoints and four answers, the
-    // receiver five and five (the hand-over's among them).
+    // receiver six and six (the hand-over's and the profile's among them).
     assert_eq!(sender.len(), 9 + 8);
-    assert_eq!(receiver.len(), 9 + 10);
+    assert_eq!(receiver.len(), 9 + 12);
 }

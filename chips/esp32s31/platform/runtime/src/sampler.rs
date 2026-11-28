@@ -496,6 +496,25 @@ mod chip {
             ))
         }
 
+        /// The interrupt, its tick given to `record` in every build: the
+        /// image's table entry calls it with its part.
+        pub fn interrupt_into(&self, part: &mut T::Interrupt, record: impl FnOnce(super::Tick)) {
+            // SOURCE: as in `interrupt`.
+            let pc = oer_portable_riscv::read_mepc() as u32;
+            let level = (oer_portable_riscv::read_mcause() >> 16) as u8;
+            #[cfg(oer_trace)]
+            let ra = oer_chips_family_platform_runtime::stacks::interrupted_ra();
+            #[cfg(not(oer_trace))]
+            let ra = None;
+            let pending = T::acknowledge(part);
+            if let Some(Some(tick)) = self
+                .handler
+                .with(|handler| handler.tick(&self.shared, pending, pc, level, ra))
+            {
+                record(tick);
+            }
+        }
+
         /// The interrupt: the image's table entry calls it with its part.
         #[cfg_attr(
             not(oer_trace),

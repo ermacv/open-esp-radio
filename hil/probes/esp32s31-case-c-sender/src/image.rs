@@ -595,12 +595,15 @@ async fn worker(
     let mut radio_memory = MaybeUninit::uninit();
     let mut phy_memory = MaybeUninit::uninit();
     let up = async {
+        // The sender does nothing around the registration.
+        let mut around = ();
         let brought = apart!(bring_up(
             parts,
             &mut radio_memory,
             &mut phy_memory,
             &timer,
-            &mut platform
+            &mut platform,
+            &mut around
         ))?;
         // The ring's parts: the table, the walker's registers, the arena
         // and its buffers.
