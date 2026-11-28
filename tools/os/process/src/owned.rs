@@ -9,12 +9,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Owned children one process keeps alive at once: [`Child::spawn`] fails
-/// beyond this, since the guardian that stops them after a lost owner tracks
-/// no more.
-#[cfg(unix)]
-pub const MAX_LIVE_CHILDREN: usize = super::guardian::CAPACITY;
-
 pub struct Child {
     child: std::process::Child,
     pub stdin: Option<ChildStdin>,
@@ -127,9 +121,6 @@ impl Child {
     pub fn kill(&mut self) -> std::io::Result<()> {
         self.cleanup();
         Ok(())
-    }
-    pub fn wait_with_output(self) -> Result<Output> {
-        self.wait_with_output_timeout(None)
     }
     pub fn wait_with_output_timeout(self, timeout: Option<Duration>) -> Result<Output> {
         super::collect_output(self, timeout)

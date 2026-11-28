@@ -23,21 +23,6 @@ pub fn start_ticks(pid: u32) -> Option<u64> {
     field(&stat_fields(pid)?, 22)
 }
 
-/// When the live process `pid` started, in Unix milliseconds, to the
-/// resolution of the kernel's boot time (one second).
-pub fn started_unix_millis(pid: u32) -> Option<u64> {
-    let ticks = start_ticks(pid)?;
-    let boot_seconds: u64 = std::fs::read_to_string("/proc/stat")
-        .ok()?
-        .lines()
-        .find_map(|line| line.strip_prefix("btime "))?
-        .trim()
-        .parse()
-        .ok()?;
-    let ticks_per_second = rustix::param::clock_ticks_per_second();
-    Some(boot_seconds * 1000 + ticks * 1000 / ticks_per_second)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

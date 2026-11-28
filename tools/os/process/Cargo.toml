@@ -8,9 +8,8 @@ publish = false
 
 [features]
 clap = ["dep:clap"]
-# The Linux socket addresses and options rustix does not model
-# (`linux_socket`); the HIL fixtures enable it, the root fixture installer
-# does not.
+# The Linux socket address rustix does not model (`linux_socket`); the HIL
+# fixtures enable it, the root fixture installer does not.
 linux-socket = ["rustix/net"]
 # Child setup only tests use: the unprivileged user namespace.
 
@@ -21,7 +20,7 @@ serde_json = "=1.0.151"
 [target.'cfg(unix)'.dependencies]
 signal-hook = "=0.3.18"
 libc = "=0.2.189"
-rustix = { version = "=1.1.6", features = ["fs", "param", "process"] }
+rustix = { version = "=1.1.6", features = ["fs", "process"] }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

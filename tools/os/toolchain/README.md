@@ -4,9 +4,8 @@
 builds run and record which ones ran.
 
 - `program(Tool)` / `command(Tool)`: a non-empty override variable names the
-  program (`CARGO`, `RUSTC`, `ESPFLASH`, `LLVM_NM`, `LLVM_OBJCOPY`,
-  `LLVM_OBJDUMP`). Otherwise Cargo, `rustc` and `espflash` come from `PATH`,
-  and the LLVM tools from the `llvm-tools` component of the active Rust
+  program (`CARGO`, `RUSTC`, `LLVM_NM`, `LLVM_OBJCOPY`, `LLVM_OBJDUMP`).
+  Otherwise Cargo and `rustc` come from `PATH`, and the LLVM tools from the `llvm-tools` component of the active Rust
   toolchain (`<sysroot>/lib/rustlib/<host>/bin`, the toolchain
   `rust-toolchain.toml` pins), never from an unrelated LLVM on `PATH`.
 - `require(Tool)` fails unless the tool runs; `versions()` lists every tool

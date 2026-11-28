@@ -131,31 +131,6 @@ pub fn install_signal_handlers() -> Result<SignalGuard> {
     Err("host process-group cancellation is unsupported on this host".into())
 }
 
-fn output_log() -> &'static std::sync::Mutex<Option<std::fs::File>> {
-    static LOG: OnceLock<std::sync::Mutex<Option<std::fs::File>>> = OnceLock::new();
-    LOG.get_or_init(|| std::sync::Mutex::new(None))
-}
-
-/// Sends the output of every later [`run`] and [`run_with_timeout`] command
-/// to `file` instead of the terminal, or back to the terminal with `None`.
-/// Captures are unaffected.
-pub fn log_output_to(file: Option<std::fs::File>) {
-    *output_log()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = file;
-}
-
-fn route(command: &mut Command) -> Result<()> {
-    if let Some(file) = output_log()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .as_ref()
-    {
-        command.stdout(file.try_clone()?).stderr(file.try_clone()?);
-    }
-    Ok(())
-}
-
 /// The exit code a wrapper returns for its child's `status`: the child's
 /// own code, or `128 + signal` for a child a signal ended (on Unix).
 pub fn exit_code(status: std::process::ExitStatus) -> std::process::ExitCode {
@@ -178,42 +153,12 @@ pub fn run(command: &mut Command) -> Result<()> {
     run_with_shutdown_grace(command, std::time::Duration::from_secs(1))
 }
 
-/// [`run`], stopping the command's whole process group once `timeout`
-/// elapses.
-pub fn run_with_timeout(command: &mut Command, timeout: std::time::Duration) -> Result<()> {
-    route(command)?;
-    let status = owned::Child::spawn(command)?
-        .with_timeout(timeout)
-        .wait()
-        .map_err(|error| {
-            if error.is::<owned::DeadlineExceeded>() {
-                format!(
-                    "{} exceeded its {} s limit",
-                    command.get_program().to_string_lossy(),
-                    timeout.as_secs()
-                )
-                .into()
-            } else {
-                error
-            }
-        })?;
-    if !status.success() {
-        return Err(format!(
-            "{} failed with {status}",
-            command.get_program().to_string_lossy()
-        )
-        .into());
-    }
-    Ok(())
-}
-
 /// Give a nested supervisor time to clean up the sessions or services it owns.
 /// This bounds shutdown only; it does not limit command runtime or resources.
 pub fn run_with_shutdown_grace(
     command: &mut Command,
     shutdown_grace: std::time::Duration,
 ) -> Result<()> {
-    route(command)?;
     let mut child = owned::Child::spawn_with_shutdown_grace(command, shutdown_grace)?;
     let status = child.wait()?;
     if !status.success() {
@@ -287,22 +232,14 @@ pub(crate) fn collect_output(
     })
 }
 
-/// Bounded, cancellable equivalents of Command's blocking operations.
+/// The bounded, cancellable equivalent of Command's blocking output.
 /// Long builds and captures should use an explicit workload-derived timeout.
 pub trait CommandExt {
     fn supervised_output(&mut self) -> Result<Output>;
-    fn supervised_status(&mut self) -> Result<std::process::ExitStatus>;
-    fn spawn_owned(&mut self) -> Result<owned::Child>;
 }
 
 impl CommandExt for Command {
     fn supervised_output(&mut self) -> Result<Output> {
         output(self, Some(std::time::Duration::from_secs(120)))
-    }
-    fn supervised_status(&mut self) -> Result<std::process::ExitStatus> {
-        owned::Child::spawn(self)?.wait_timeout(Some(std::time::Duration::from_secs(120)))
-    }
-    fn spawn_owned(&mut self) -> Result<owned::Child> {
-        owned::Child::spawn(self)
     }
 }

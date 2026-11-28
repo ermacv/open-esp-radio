@@ -6,12 +6,7 @@
   file in the same directory, synced, renamed, then the directory synced);
   a replacement that fails removes its temporary, and its error names one
   it could not remove;
-- `atomic_write_private` uses the same durable sequence with a mode-0600
-  temporary and replacement; callers own directory permissions;
-- `sha256_file` and `sha256_bytes`, lowercase hex; `digests::DigestCache`
-  remembers a file's digest by its identity and times (device, inode, size,
-  modification and status-change time) in a cache file, so an immutable
-  file is hashed once across processes;
+- `sha256_file` and `sha256_bytes`, lowercase hex;
 - `unix_millis` and `unix_seconds`, wall-clock time;
 - `xdg`: the user's state directories. Every cache, store, lock directory and
   configuration a tool keeps outside a checkout lies below

@@ -20,10 +20,9 @@ tracks every owned process group through a close-on-exec pipe, and when the
 pipe closes with the owner it terminates the groups still registered (SIGTERM,
 then SIGKILL after a second). No owned group runs unguarded: a spawn fails,
 stopping its child, when the guardian did not start, no longer reads, or
-already tracks `owned::MAX_LIVE_CHILDREN` (256) live groups. `run_with_timeout` bounds a command's whole
-lifetime.
+already tracks 256 live groups.
 
-`CommandExt` provides bounded status/output probes and owned background children.
+`CommandExt` provides a bounded output probe.
 Captured stdout and stderr are drained concurrently. Background captures should
 set `Child::with_timeout` from the workload duration; waiting later does not
 restart that lifetime. `run` preserves the caller's unlimited runtime, with
@@ -60,9 +59,8 @@ Four more jobs have their one owner here:
   cancellably (`wait`, `wait_any`) or converted in place (`convert`), and
   released explicitly on drop. Every advisory file lock of the host tools
   goes through it.
-- `proc`: a live process's start time (`start_ticks`, `started_unix_millis`)
-  from Linux `/proc`, which tells a recycled PID from the process that held
-  it.
+- `proc`: a live process's start time (`start_ticks`) from Linux `/proc`,
+  which tells a recycled PID from the process that held it.
 
 The implementation supports Unix process groups. Processes that create
 another group or session, and processes on a remote SSH host, need their own

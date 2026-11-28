@@ -11376,8 +11376,8 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "tools/os/process/src/linux_socket.rs",
         "unsafe_code",
-        6,
-        "rustix binds foreign address types through SocketAddrArg / rustix has no Bluetooth socket options / rustix has no SO_BINDTODEVICE option / rustix has no SO_MEMINFO option",
+        1,
+        "rustix binds foreign address types through SocketAddrArg",
     ),
     (
         "tools/os/serial/src/lib.rs",

@@ -38,20 +38,6 @@ pub fn inherit(command: &mut Command, descriptors: Vec<OwnedFd>) {
     }
 }
 
-/// The child leads a new session and process group of its own, so a signal
-/// to that group reaches it and its descendants only.
-pub fn new_session(command: &mut Command) {
-    // SAFETY: after fork the closure only calls setsid on the new child,
-    // which is not a group leader yet; it allocates nothing and takes no lock.
-    unsafe {
-        std::os::unix::process::CommandExt::pre_exec(command, || {
-            rustix::process::setsid()
-                .map(|_| ())
-                .map_err(std::io::Error::from)
-        });
-    }
-}
-
 /// Ignore terminal and broken-pipe signals in a freshly forked helper.
 ///
 /// # Safety

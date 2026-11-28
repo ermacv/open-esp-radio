@@ -51,8 +51,8 @@ where
         .collect())
 }
 
-/// Run `git -C directory arguments…` with its output on the terminal (or the
-/// log [`crate::log_output_to`] chose), failing unless it succeeds.
+/// Run `git -C directory arguments…` with its output on the terminal,
+/// failing unless it succeeds.
 pub fn run<I, S>(directory: &Path, arguments: I) -> Result<()>
 where
     I: IntoIterator<Item = S>,
